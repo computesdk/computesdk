@@ -10,6 +10,7 @@
  */
 
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
+import { RunnerClient, isConnectFailure } from "@miosa/sdk";
 
 import type {
   CommandResult,
@@ -873,18 +874,10 @@ async function regionalCreateDeclined(error: unknown): Promise<boolean> {
       return true;
     }
   }
-  try {
-    const { isConnectFailure } = await import("@miosa/sdk");
-    return isConnectFailure(error);
-  } catch {
-    return false;
-  }
+  return isConnectFailure(error);
 }
 
-/** `InstanceType<RunnerClient>` without a static import - see runner-sdk.d.ts. */
-type MiosaRunnerClient = InstanceType<
-  (typeof import("@miosa/sdk"))["RunnerClient"]
->;
+type MiosaRunnerClient = InstanceType<typeof RunnerClient>;
 
 const runnerClients = new Map<string, Promise<MiosaRunnerClient>>();
 
@@ -917,27 +910,25 @@ async function getRunnerClient(auth: MiosaAuth): Promise<MiosaRunnerClient> {
   const cacheKey = runnerClientCacheKey(auth);
   let pending = runnerClients.get(cacheKey);
   if (!pending) {
-    pending = import("@miosa/sdk").then(
-      ({ RunnerClient }) =>
-        new RunnerClient({
-          apiKey: auth.apiKey,
-          ...(routing.baseDomain ? { baseDomain: routing.baseDomain } : {}),
-          // Hand creates the regional endpoint does not serve to the account
-          // API instead of failing, so callers keep working for every shape.
-          fallbackCreate: async (params: Record<string, unknown>) => {
-            try {
-              const record = await createSandboxOnAccountApi(auth, params);
-              return { id: record.id ?? "", runnerUrl: "", data: record };
-            } catch (error) {
-              throw markAccountApiCreateFailure(error);
-            }
-          },
-        }),
+    // Static import: the SDK is loaded with this module, in the process's
+    // initial module graph, so a burst of creates never pays for loading it.
+    pending = Promise.resolve(
+      new RunnerClient({
+        apiKey: auth.apiKey,
+        ...(routing.baseDomain ? { baseDomain: routing.baseDomain } : {}),
+        // Hand creates the regional endpoint does not serve to the account
+        // API instead of failing, so callers keep working for every shape.
+        fallbackCreate: async (params: Record<string, unknown>) => {
+          try {
+            const record = await createSandboxOnAccountApi(auth, params);
+            return { id: record.id ?? "", runnerUrl: "", data: record };
+          } catch (error) {
+            throw markAccountApiCreateFailure(error);
+          }
+        },
+      }),
     );
     runnerClients.set(cacheKey, pending);
-    // A failed import (package not installed/published yet) must not poison
-    // the cache for a later retry.
-    pending.catch(() => runnerClients.delete(cacheKey));
   }
   return pending;
 }
