@@ -349,12 +349,30 @@ function canUseNodeHttp2(url: URL): boolean {
   );
 }
 
+// Loaded once per process. A fresh `import()` on every request pays the module
+// loader's resolve and load hooks each time, which is measurable when a
+// TypeScript loader such as tsx is registered: at 100 concurrent requests it
+// adds tens of milliseconds to every first request. Awaiting a cached promise
+// is a microtask. The import stays dynamic so environments without
+// `node:http2` never evaluate it (see canUseNodeHttp2).
+function importNodeHttp2Modules() {
+  return Promise.all([import("node:http2"), import("node:events")]);
+}
+
+let nodeHttp2Modules: ReturnType<typeof importNodeHttp2Modules> | undefined;
+
+function loadNodeHttp2Modules(): ReturnType<typeof importNodeHttp2Modules> {
+  if (nodeHttp2Modules === undefined) {
+    nodeHttp2Modules = importNodeHttp2Modules();
+  }
+  return nodeHttp2Modules;
+}
+
 async function ensureHttp2Sessions(
   origin: string,
   options: EnsureOptions = {},
 ): Promise<Http2SessionPool> {
-  const http2 = await import("node:http2");
-  const { EventEmitter } = await import("node:events");
+  const [http2, { EventEmitter }] = await loadNodeHttp2Modules();
   if (options.abandoned?.()) throw new PreconnectAbandoned();
   let resolveFirstReady: () => void = () => {};
   const firstReady = new Promise<void>((resolve) => {
