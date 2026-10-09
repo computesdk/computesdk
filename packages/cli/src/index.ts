@@ -174,7 +174,6 @@ program
 program
   .command('logout')
   .description('Clear stored credentials')
-  .option('--base-url <url>', 'platform URL the stored login authenticates against')
   .option('--json', 'print machine-readable JSON')
   .action(async (opts) => {
     await runLogout();
