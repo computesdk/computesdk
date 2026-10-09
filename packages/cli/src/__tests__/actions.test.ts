@@ -18,8 +18,10 @@ import {
   parseVaultKind,
   secretValueClient,
   usageErrorOutput,
+  vaultDeliveryLabels,
   vaultPath,
   vaultSetBody,
+  vaultSetLabels,
 } from '../actions.js';
 import {
   ActionsApiError,
@@ -1065,6 +1067,33 @@ describe('vault helpers', () => {
   it('refuses an empty value and --revealable on a variable', () => {
     expect(() => vaultSetBody('T', '', { kind: 'secret' })).toThrow(ActionsCliError);
     expect(() => vaultSetBody('T', 'v', { kind: 'variable', revealable: true })).toThrow(ActionsCliError);
+  });
+
+  it('turns the delivery flags into labels', () => {
+    expect(vaultDeliveryLabels({ inject: true })).toEqual(['materialize']);
+    expect(
+      vaultDeliveryLabels({ proxy: true, hosts: ['api.github.com, *.githubusercontent.com', 'github.com'] }),
+    ).toEqual(['hosts:api.github.com,*.githubusercontent.com,github.com']);
+    expect(() => vaultDeliveryLabels({ proxy: true, inject: true })).toThrow(ActionsCliError);
+    expect(() => vaultDeliveryLabels({ inject: true, hosts: ['api.github.com'] })).toThrow(
+      ActionsCliError,
+    );
+    expect(() => vaultDeliveryLabels({ proxy: true })).toThrow(ActionsCliError);
+    expect(() => vaultDeliveryLabels({ hosts: ['api.github.com'] })).toThrow(ActionsCliError);
+    expect(() => vaultDeliveryLabels({})).toThrow(ActionsCliError);
+  });
+
+  it('keeps --labels and the delivery flags mutually exclusive on vault set', () => {
+    expect(vaultSetLabels({ labels: ['ci'] })).toEqual(['ci']);
+    expect(vaultSetLabels({})).toBeUndefined();
+    expect(vaultSetLabels({ inject: true })).toEqual(['materialize']);
+    expect(vaultSetLabels({ proxy: true, hosts: ['api.github.com'] })).toEqual([
+      'hosts:api.github.com',
+    ]);
+    expect(() => vaultSetLabels({ labels: ['ci'], proxy: true, hosts: ['a.com'] })).toThrow(
+      ActionsCliError,
+    );
+    expect(() => vaultSetLabels({ labels: ['ci'], hosts: ['a.com'] })).toThrow(ActionsCliError);
   });
 
   it('shows where a repo-scoped row comes from', () => {

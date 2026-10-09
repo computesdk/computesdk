@@ -693,10 +693,64 @@ export function vaultSetBody(
   };
 }
 
+/**
+ * The label set a delivery choice becomes — `hosts:` rules for proxied,
+ * `materialize` for injected. `vault set` and `vault delivery` share it so
+ * both surfaces write identical labels.
+ */
+export function vaultDeliveryLabels(opts: {
+  proxy?: boolean;
+  inject?: boolean;
+  hosts?: string[];
+}): string[] {
+  if (opts.proxy && opts.inject) {
+    throw new ActionsCliError('invalid_argument', '--proxy and --inject are mutually exclusive.');
+  }
+  const hosts = (opts.hosts ?? [])
+    .flatMap((host) => host.split(/[\s,]+/))
+    .map((host) => host.trim().toLowerCase())
+    .filter((host) => host !== '');
+  if (opts.inject) {
+    if (hosts.length > 0) {
+      throw new ActionsCliError(
+        'invalid_argument',
+        '--inject takes no --hosts — host rules only apply to --proxy.',
+      );
+    }
+    return ['materialize'];
+  }
+  if (!opts.proxy) {
+    throw new ActionsCliError('invalid_argument', 'Pick a delivery: --proxy (with --hosts) or --inject.');
+  }
+  if (hosts.length === 0) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      '--proxy needs --hosts — the hosts the real value may be attached to.',
+    );
+  }
+  return [`hosts:${hosts.join(',')}`];
+}
+
+/** `vault set`'s labels: the delivery sugar, or raw --labels — never both. */
+export function vaultSetLabels(opts: {
+  labels?: string[];
+  proxy?: boolean;
+  inject?: boolean;
+  hosts?: string[];
+}): string[] | undefined {
+  const flagged = opts.proxy === true || opts.inject === true || (opts.hosts?.length ?? 0) > 0;
+  if (flagged && (opts.labels?.length ?? 0) > 0) {
+    throw new ActionsCliError('invalid_argument', 'Use --labels or --proxy/--inject --hosts, not both.');
+  }
+  if (!flagged) return opts.labels;
+  return vaultDeliveryLabels(opts);
+}
+
 export function formatVaultRow(item: CiVaultItem): string {
   const flags = [
     item.kind,
     ...(item.revealable && item.kind === 'secret' ? ['revealable'] : []),
+    ...item.labels.map(safeTerm),
     `v${item.version}`,
     ...(item.source === 'organization' ? ['inherited'] : []),
     ...(item.overridesOrganization ? ['overrides org'] : []),
@@ -1170,8 +1224,11 @@ export function registerActionsCommands(program: Command): void {
       .option('--from-file <path>', 'read the value from a file instead of stdin')
       .option('--revealable', 'let the value be read back with `vault get` (secrets; fixed at creation)')
       .option('--description <text>', 'what the item is for')
-      .option('--labels <labels...>', 'labels (fixed at creation)'),
-  ).action(async (name: string, opts: VaultOpts & { fromFile?: string; revealable?: boolean; description?: string; labels?: string[] }) => {
+      .option('--labels <labels...>', 'labels (fixed at creation)')
+      .option('--proxy', 'hand the job a placeholder; the value is attached to requests for --hosts at egress')
+      .option('--inject', 'inject the real value into the job environment (the default)')
+      .option('--hosts <hosts...>', 'hosts the proxied value may be attached to (comma or space separated, *.example.com covers subdomains)'),
+  ).action(async (name: string, opts: VaultOpts & { fromFile?: string; revealable?: boolean; description?: string; labels?: string[]; proxy?: boolean; inject?: boolean; hosts?: string[] }) => {
     try {
       if (opts.fromFile === undefined && process.stdin.isTTY) {
         throw new ActionsCliError(
@@ -1181,7 +1238,8 @@ export function registerActionsCommands(program: Command): void {
       }
       const value = readFileSync(opts.fromFile ?? 0, 'utf8');
       const kind = parseVaultKind(opts.kind);
-      const body = vaultSetBody(name, value, { ...opts, kind });
+      const labels = vaultSetLabels(opts);
+      const body = vaultSetBody(name, value, { ...opts, kind, labels });
       const result = await (await vaultValueClient(opts)).put<CiVaultSaveResponse>(
         vaultPath('/api/v1/vault', { repo: opts.repo }),
         body,
@@ -1211,6 +1269,33 @@ export function registerActionsCommands(program: Command): void {
         { name, kind },
       );
       output(opts, result, (r) => process.stdout.write(r.value));
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  vaultScope(
+    vault
+      .command('delivery')
+      .description('Reclassify how a secret reaches a job — labels only, no value needed')
+      .argument('<name>', 'item name')
+      .option('--proxy', 'hand the job a placeholder; the value is attached to requests for --hosts at egress')
+      .option('--inject', 'inject the real value into the job environment')
+      .option('--hosts <hosts...>', 'hosts the proxied value may be attached to (comma or space separated, *.example.com covers subdomains)'),
+  ).action(async (name: string, opts: VaultOpts & { proxy?: boolean; inject?: boolean; hosts?: string[] }) => {
+    try {
+      const kind = parseVaultKind(opts.kind);
+      const labels = vaultDeliveryLabels(opts);
+      const result = await (await client(opts)).patch<CiVaultSaveResponse>(
+        vaultPath('/api/v1/vault', { repo: opts.repo }),
+        { name, kind, labels },
+      );
+      output(opts, result, (r) => {
+        const where = opts.repo ? safeTerm(opts.repo) : 'org';
+        console.log(
+          `reclassified  ${pc.cyan(safeTerm(r.item.name))}  ${pc.dim(`(labels: ${r.item.labels.join(', ') || 'none'}, v${r.item.version}, ${where})`)}`,
+        );
+      });
     } catch (e) {
       fail(e, opts);
     }
