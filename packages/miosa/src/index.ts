@@ -604,16 +604,14 @@ function preconnectMiosa(
   // list/getById/getUrl/filesystem/snapshots stay on the control-plane pool
   // even when runnerMode is on (runner-sdk.d.ts), so both warm here when
   // eligible - this is additive, never a replacement for the block below.
-  const apiKey =
-    config.apiKey ??
-    (typeof process !== "undefined" ? process.env?.MIOSA_API_KEY : undefined) ??
-    "";
-  const baseUrl = (config.baseUrl ?? baseUrlFromEnv()).replace(/\/+$/, "");
   const runner = resolveRunnerRouting(config);
   if (runner) {
-    void getRunnerClient({ apiKey, baseUrl, runner }).catch(() => undefined);
+    // resolveAuth cannot throw here: the credentials were checked above. It
+    // also keys the warmed client exactly as the first create will look it up.
+    void getRunnerClient(resolveAuth(config)).catch(() => undefined);
   }
 
+  const baseUrl = (config.baseUrl ?? baseUrlFromEnv()).replace(/\/+$/, "");
   const url = new URL(baseUrl);
 
   if (canUseNodeHttp2(url)) {
