@@ -820,9 +820,44 @@ interface MiosaAuth {
   readonly runner?: RunnerRouting;
 }
 
-/** True for a failure to reach the regional endpoint - the request never
- * landed, so nothing was provisioned and the account API can still serve it. */
-async function isRegionalEndpointUnreachable(error: unknown): Promise<boolean> {
+/** DNS failures that mean the regional hostname never resolved. */
+const UNRESOLVED_HOST_CODES = new Set(["ENOTFOUND", "EAI_AGAIN"]);
+
+/**
+ * True when the regional endpoint declined a create before provisioning
+ * anything, so the account API can serve it without risking a second
+ * sandbox:
+ * - it could not be reached (connect, reset, timeout or DNS failure);
+ * - every runner tried refused it with 429 (`rate_limited` or
+ *   `runtime_busy`) or `feed_stale`. The SDK already retries the next runner
+ *   address on these and throws once it runs out, so by the time the error
+ *   arrives here no runner has capacity for it.
+ * Anything else is rethrown by the caller, because it may follow a sandbox
+ * that already exists.
+ */
+async function regionalCreateDeclined(error: unknown): Promise<boolean> {
+  if (typeof error === "object" && error !== null) {
+    const shaped = error as {
+      name?: unknown;
+      code?: unknown;
+      status?: unknown;
+      isRateLimited?: unknown;
+      isBusy?: unknown;
+      message?: unknown;
+    };
+    if (shaped.isRateLimited === true || shaped.isBusy === true) return true;
+    // A runner answers 429 only before it admits a create.
+    if (shaped.name === "RunnerError" && shaped.status === 429) return true;
+    if (typeof shaped.code === "string" && UNRESOLVED_HOST_CODES.has(shaped.code)) {
+      return true;
+    }
+    if (
+      typeof shaped.message === "string" &&
+      shaped.message.startsWith("RunnerClient: no runner addresses")
+    ) {
+      return true;
+    }
+  }
   try {
     const { isConnectFailure } = await import("@miosa/sdk");
     return isConnectFailure(error);
@@ -1212,11 +1247,12 @@ const createMiosaProvider = defineProvider<
             // the account API.
             servedByAccountApi = !created.runnerUrl;
           } catch (error) {
-            // An unreachable regional endpoint is not a create failure: the
-            // request never landed, so the account API can still serve it.
-            // Deliberately narrow - anything raised once a sandbox exists is
-            // rethrown, because retrying there would provision a second one.
-            if (!(await isRegionalEndpointUnreachable(error))) throw error;
+            // An unreachable regional endpoint, or one with no capacity for
+            // this create, is not a create failure: nothing was provisioned,
+            // so the account API can still serve it. Deliberately narrow -
+            // anything that may follow an existing sandbox is rethrown,
+            // because retrying there would provision a second one.
+            if (!(await regionalCreateDeclined(error))) throw error;
             record = await createSandboxOnAccountApi(auth, body);
             servedByAccountApi = true;
           }
