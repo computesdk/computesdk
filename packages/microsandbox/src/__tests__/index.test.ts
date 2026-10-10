@@ -156,6 +156,10 @@ vi.mock('microsandbox', () => {
 
   return {
     defaultBackendKind: () => mock.backendKind,
+    defaultBackendInfo: () => ({
+      kind: mock.backendKind,
+      source: mock.backendSelections.length > 0 ? 'programmatic' : 'default',
+    }),
     setDefaultBackend: (backend: 'local' | { kind: 'cloud' }) => {
       mock.backendSelections.push(backend);
       mock.backendKind = backend === 'local' ? 'local' : 'cloud';
@@ -332,23 +336,32 @@ describe('microsandbox provider', () => {
     { apiKey: 'different-key' },
     { apiKey: 'same-key', apiUrl: 'https://other.example.test' },
     { profile: 'other-profile' },
-    {},
-  ])('rejects conflicting backend configuration without rerouting in-flight work: %j', async (conflict) => {
+  ])('serializes a different backend configuration behind in-flight work: %j', async (conflict) => {
     const creation = microsandbox({ apiKey: 'same-key' }).sandbox.create({ name: 'original' });
     await vi.waitFor(() => expect(mock.activeCreates).toBe(1), { interval: 1 });
-    await expect(microsandbox(conflict).sandbox.create({ name: 'conflict' })).rejects.toThrow(/one backend configuration per process/);
+    // The conflicting selection waits for the in-flight create instead of
+    // interleaving with it, then installs its own backend and runs.
+    const conflicting = microsandbox(conflict).sandbox.list();
     await creation;
-    // The configuration stays pinned after the first operation finishes too.
-    await expect(microsandbox(conflict).sandbox.list()).rejects.toThrow(/one backend configuration per process/);
-    expect(mock.backendSelections).toEqual([{ kind: 'cloud', apiKey: 'same-key' }]);
+    await conflicting;
+    expect(mock.backendSelections).toHaveLength(2);
+    expect(mock.backendSelections[0]).toEqual({ kind: 'cloud', apiKey: 'same-key' });
     expect(mock.created).toHaveLength(1);
     expect(mock.created[0]).toMatchObject({ name: 'original', backend: 'cloud' });
   });
 
-  it('rejects cloud configuration after selecting local', async () => {
+  it('still rejects SDK-resolved cloud credentials once a programmatic backend is installed', async () => {
+    await microsandbox({ apiKey: 'same-key' }).sandbox.create({ name: 'original' });
+    // `microsandbox()` has no explicit override, and there is no way back to
+    // the SDK's env/profile resolution once setDefaultBackend ran — fail closed.
+    await expect(microsandbox().sandbox.list()).rejects.toThrow(/one backend configuration per process/);
+    expect(mock.backendSelections).toEqual([{ kind: 'cloud', apiKey: 'same-key' }]);
+  });
+
+  it('switches backends after an earlier selection drains', async () => {
     await microsandbox({ backend: 'local' }).sandbox.create({ name: 'local' });
-    await expect(microsandbox({ apiKey: 'key' }).sandbox.list()).rejects.toThrow(/one backend configuration per process/);
-    expect(mock.backendSelections).toEqual(['local']);
+    await microsandbox({ apiKey: 'key' }).sandbox.list();
+    expect(mock.backendSelections).toEqual(['local', { kind: 'cloud', apiKey: 'key' }]);
   });
 
   it('accepts memoryMib and per-create root disk overrides', async () => {
