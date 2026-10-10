@@ -10,7 +10,6 @@ import {
   formatRate,
   formatReplacedFill,
   formatSettlementRow,
-  formatUsd,
   listingPatchBody,
   parseCapacity,
   parseExpiresIn,
@@ -304,13 +303,7 @@ describe('credentialBody', () => {
   });
 });
 
-describe('formatUsd / formatRate', () => {
-  it('trims trailing zeros', () => {
-    expect(formatUsd(0.12)).toBe('$0.12');
-    expect(formatUsd(5)).toBe('$5');
-    expect(formatUsd(0.00005)).toBe('$0.00005');
-  });
-
+describe('formatRate', () => {
   it('renders a rate in all three units, per hour first', () => {
     expect(formatRate(0.12, 'second')).toBe('$432/hr · $7.2/min · $0.12/s');
   });
@@ -508,8 +501,8 @@ describe('formatSettlementRow', () => {
     expect(row).toContain('2026-08-01');
     expect(row).toContain('2026-09-01');
     expect(row).toContain('1,234,567 vCPU·s');
-    expect(row).toContain('gross $12.5');
-    expect(row).toContain('net $11.875');
+    expect(row).toContain('gross $12.50');
+    expect(row).toContain('net $11.88');
     expect(row).toContain('paid 2026-09-05');
   });
 

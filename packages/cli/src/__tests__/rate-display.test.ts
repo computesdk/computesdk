@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  formatMoney,
   formatRateAllUnits,
   formatUsd,
   formatUsdPer,
@@ -58,6 +59,28 @@ describe('formatUsd', () => {
     for (const tiny of [1e-9, 2.5e-12, 7e-20]) {
       expect(formatUsd(tiny)).not.toMatch(/e/i);
     }
+  });
+});
+
+describe('formatMoney', () => {
+  it('prints 2 decimals with thousands separators', () => {
+    expect(formatMoney(1234.56)).toBe('$1,234.56');
+    expect(formatMoney(20)).toBe('$20.00');
+    expect(formatMoney(0.1)).toBe('$0.10');
+    expect(formatMoney(0)).toBe('$0.00');
+    expect(formatMoney(1_000_000)).toBe('$1,000,000.00');
+  });
+
+  it('keeps up to 4 significant digits for non-zero amounts under $0.01', () => {
+    expect(formatMoney(0.0042)).toBe('$0.0042');
+    expect(formatMoney(0.009)).toBe('$0.009');
+    expect(formatMoney(0.00000028)).toBe('$0.00000028');
+  });
+
+  it('renders negatives with the sign before the dollar', () => {
+    expect(formatMoney(-0.5)).toBe('-$0.50');
+    expect(formatMoney(-1234.5)).toBe('-$1,234.50');
+    expect(formatMoney(-0.0042)).toBe('-$0.0042');
   });
 });
 

@@ -22,7 +22,7 @@ import {
   usageErrorOutput,
   type CommonOpts,
 } from './actions.js';
-import { formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits } from './rate-display.js';
+import { formatMoney, formatRateAllUnits, formatUsdPer, rateAllUnits } from './rate-display.js';
 
 /**
  * `--max-price <usd>/<unit>` → the body's `maxPrice` / the quote's
@@ -233,7 +233,7 @@ interface SandboxQuoteWire {
 const perHour = (n: number | undefined): string =>
   n === undefined ? '—' : formatRateAllUnits(rateAllUnits({ usd: n, per: 'hour' }));
 
-const usdAmount = (n: number | undefined): string => (n === undefined ? '—' : formatUsd(n));
+const usdAmount = (n: number | undefined): string => (n === undefined ? '—' : formatMoney(n));
 
 function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
   console.log(`quote: ${q.ok ? pc.green('ok') : pc.red(q.reason ?? 'unfillable')}`);

@@ -57,6 +57,26 @@ export function formatUsd(usd: number): string {
   return `$${trimmed}`;
 }
 
+/**
+ * `$1,234.56`, `$20.00`, `$0.10` — money *amounts* (balances, costs, holds,
+ * credits, settlements): always 2 decimals with thousands separators.
+ * Non-zero amounts under $0.01 keep up to 4 significant digits (`$0.0042`),
+ * negatives render `-$0.50`. Rates use `formatUsd`, not this.
+ */
+export function formatMoney(usd: number): string {
+  if (!Number.isFinite(usd)) return '$—';
+  const sign = usd < 0 ? '-' : '';
+  const abs = Math.abs(usd);
+  if (abs !== 0 && abs < 0.01) {
+    return `${sign}${formatUsd(abs)}`;
+  }
+  const s = abs.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${sign}$${s}`;
+}
+
 /** `$0.1008/hr · $0.00168/min · $0.000028/s` — per hour first. */
 export function formatRateAllUnits(rate: RateAllUnits): string {
   return `${formatUsd(rate.perHour)}/hr · ${formatUsd(rate.perMinute)}/min · ${formatUsd(rate.perSecond)}/s`;
