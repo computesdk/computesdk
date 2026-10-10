@@ -1,5 +1,11 @@
 # @computesdk/blaxel
 
+## 1.6.30
+
+### Patch Changes
+
+- 0d16a09: Raise any sandbox/preview ttl below Blaxel's 5-minute minimum to `300s` (with a warning) instead of sending it and failing `ttl … is too short: the minimum is 5m`. Destroy still ends the box early, so billing stays on actual use.
+
 ## 1.6.29
 
 ### Patch Changes
