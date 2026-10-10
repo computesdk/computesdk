@@ -17,8 +17,8 @@
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
     CommandResult,
-    SandboxInfo,
-    CreateSandboxOptions,
+    InstanceInfo,
+    CreateInstanceOptions,
     FileEntry,
     RunCommandOptions,
 } from 'computesdk';
@@ -211,7 +211,7 @@ async function waitForExecution(
 export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
     name: 'agentuity',
     methods: {
-        sandbox: {
+        instances: {
             // ── Lifecycle ─────────────────────────────────────────────────────
 
             /**
@@ -221,8 +221,8 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
              */
             create: async (
                 config: AgentuityConfig,
-                options?: CreateSandboxOptions,
-            ): Promise<{ sandbox: AgentuityHandle; sandboxId: string }> => {
+                options?: CreateInstanceOptions,
+            ): Promise<{ instance: AgentuityHandle; instanceId: string }> => {
                 const apiKey = resolveApiKey(config);
                 if (!apiKey) {
                     throw new Error(
@@ -278,7 +278,7 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                     stderrStreamUrl: data.stderrStreamUrl,
                 };
 
-                return { sandbox, sandboxId: data.sandboxId };
+                return { instance: sandbox, instanceId: data.sandboxId };
             },
 
             /**
@@ -289,7 +289,7 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
             getById: async (
                 config: AgentuityConfig,
                 sandboxId: string,
-            ): Promise<{ sandbox: AgentuityHandle; sandboxId: string } | null> => {
+            ): Promise<{ instance: AgentuityHandle; instanceId: string } | null> => {
                 const apiKey = resolveApiKey(config);
                 if (!apiKey) return null;
 
@@ -300,7 +300,7 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                 if (!res.ok) return null;
 
                 const sandbox: AgentuityHandle = { sandboxId, apiKey, baseURL };
-                return { sandbox, sandboxId };
+                return { instance: sandbox, instanceId: sandboxId };
             },
 
             /**
@@ -310,7 +310,7 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
              */
             list: async (
                 config: AgentuityConfig,
-            ): Promise<Array<{ sandbox: AgentuityHandle; sandboxId: string }>> => {
+            ): Promise<Array<{ instance: AgentuityHandle; instanceId: string }>> => {
                 const apiKey = resolveApiKey(config);
                 if (!apiKey) return [];
 
@@ -322,8 +322,8 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
 
                 const data = unwrapResponse<{ sandboxes: Array<{ sandboxId: string }> }>(await res.json());
                 return (data.sandboxes ?? []).map((s) => ({
-                    sandboxId: s.sandboxId,
-                    sandbox: { sandboxId: s.sandboxId, apiKey, baseURL },
+                    instanceId: s.sandboxId,
+                    instance: { sandboxId: s.sandboxId, apiKey, baseURL },
                 }));
             },
 
@@ -427,7 +427,7 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
              *
              * GET /sandbox/{sandboxId}
              */
-            getInfo: async (sandbox: AgentuityHandle): Promise<SandboxInfo> => {
+            getInfo: async (sandbox: AgentuityHandle): Promise<InstanceInfo> => {
                 const res = await agentuityFetch(
                     sandbox,
                     'GET',

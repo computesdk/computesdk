@@ -15,8 +15,8 @@ import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions
 } from 'computesdk';
@@ -47,14 +47,14 @@ export interface HopxConfig {
 export const hopx = defineProvider<HopxSandbox, HopxConfig>({
   name: 'hopx',
   methods: {
-    sandbox: {
+    instances: {
       /**
        * Create a new HopX sandbox
        * 
        * Uses Sandbox.create() from @hopx-ai/sdk to provision a new sandbox.
        * Default template is 'code-interpreter' if not specified.
        */
-      create: async (config: HopxConfig, options?: CreateSandboxOptions) => {
+      create: async (config: HopxConfig, options?: CreateInstanceOptions) => {
         // Validate API key - fail fast with helpful error message
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
 
@@ -115,10 +115,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           sandbox = await HopxSandbox.create(createOptions);
           sandboxId = sandbox.sandboxId;
 
-          return {
-            sandbox,
-            sandboxId
-          };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch (error) {
           // Provide helpful error messages for common issues
           if (error instanceof Error) {
@@ -156,10 +153,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           // Connect to existing sandbox using Sandbox.connect()
           const sandbox = await HopxSandbox.connect(sandboxId, apiKey, config.baseURL);
 
-          return {
-            sandbox,
-            sandboxId
-          };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch (error) {
           // Sandbox doesn't exist or can't be accessed
           return null;
@@ -185,9 +179,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
             baseURL: config.baseURL,
           });
 
-          return sandboxes.map((sandbox: HopxSandbox) => ({
-            sandbox,
-            sandboxId: sandbox.sandboxId
+          return sandboxes.map((sandbox: HopxSandbox) => ({ instance: sandbox, instanceId: sandbox.sandboxId
           }));
         } catch (error) {
           // Return empty array if listing fails
@@ -285,7 +277,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * 
        * Uses sandbox.getInfo() to retrieve sandbox metadata.
        */
-      getInfo: async (sandbox: HopxSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: HopxSandbox): Promise<InstanceInfo> => {
         try {
           const info = await sandbox.getInfo();
 

@@ -13,10 +13,10 @@ import { performance } from 'node:perf_hooks'
 import { defineProvider, escapeShellArg } from '@computesdk/provider'
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider'
 
 const PROVIDER = 'cloud-run' as const
@@ -294,8 +294,8 @@ type FsRunCommand = (sandbox: CloudRunSandbox, command: string, options?: RunCom
 export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
   name: PROVIDER,
   methods: {
-    sandbox: {
-      create: async (config: CloudRunConfig = {}, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: CloudRunConfig = {}, options?: CreateInstanceOptions) => {
         const sandboxConfig = {
           ...config,
           env: { ...config.env, ...options?.envs },
@@ -320,11 +320,11 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
             }))
             const sandbox = { id: response.sandboxId ?? sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true }
             activeSandboxes.set(sandbox.id, sandbox)
-            return { sandbox, sandboxId: sandbox.id }
+            return { instance: sandbox, instanceId: sandbox.id }
           }
           const sandbox = { id: sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true }
           activeSandboxes.set(sandbox.id, sandbox)
-          return { sandbox, sandboxId: sandbox.id }
+          return { instance: sandbox, instanceId: sandbox.id }
         }
 
         await assertSandboxBinary(sandboxConfig)
@@ -340,7 +340,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         }
         const sandbox = { id: sandboxId, createdAt: new Date(), config: sandboxConfig, remote: false }
         activeSandboxes.set(sandboxId, sandbox)
-        return { sandbox, sandboxId }
+        return { instance: sandbox, instanceId: sandboxId }
       },
 
       getById: async (config: CloudRunConfig, sandboxId: string) => {
@@ -348,14 +348,14 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
           try {
             await gatewayRequest(config, '/v1/sandbox/info', { sandboxId })
             const sandbox = activeSandboxes.get(sandboxId) ?? { id: sandboxId, createdAt: new Date(), config, remote: true }
-            return { sandbox, sandboxId }
+            return { instance: sandbox, instanceId: sandboxId }
           } catch { return null }
         }
         const sandbox = activeSandboxes.get(sandboxId) ?? { id: sandboxId, createdAt: new Date(), config, remote: false }
-        return { sandbox, sandboxId }
+        return { instance: sandbox, instanceId: sandboxId }
       },
 
-      list: async (_config: CloudRunConfig) => Array.from(activeSandboxes.entries()).map(([sandboxId, sandbox]) => ({ sandbox, sandboxId })),
+      list: async (_config: CloudRunConfig) => Array.from(activeSandboxes.entries()).map(([sandboxId, sandbox]) => ({ instance: sandbox, instanceId: sandboxId })),
 
       destroy: async (config: CloudRunConfig, sandboxId: string) => {
         // Destroy receives only an id, so resolve the mode the sandbox was
@@ -381,7 +381,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
 
       runCommand: execInSandbox,
 
-      getInfo: async (sandbox: CloudRunSandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: CloudRunSandbox): Promise<InstanceInfo> => ({
         id: sandbox.id,
         provider: PROVIDER,
         status: 'running',

@@ -10,10 +10,10 @@ import type { Sandbox as Sandbox0Sandbox } from 'sandbox0';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 
 export interface Sandbox0Config {
@@ -84,7 +84,7 @@ function createClient(config: Sandbox0Config): Client {
   });
 }
 
-function resolveTemplate(config: Sandbox0Config, options?: CreateSandboxOptions): string {
+function resolveTemplate(config: Sandbox0Config, options?: CreateInstanceOptions): string {
   return options?.templateId || config.templateId || env('SANDBOX0_TEMPLATE') || 'coding-agent';
 }
 
@@ -112,7 +112,7 @@ function normalizeMemory(value: unknown): string | undefined {
 
 function buildClaimOptions(
   config: Sandbox0Config,
-  options?: CreateSandboxOptions,
+  options?: CreateInstanceOptions,
 ): Sandbox0ClaimOptions | undefined {
   const providerOptions = options as Record<string, unknown> | undefined;
   const ttl = optionalPositiveSeconds('ttl', providerOptions?.ttl ?? config.ttl);
@@ -211,7 +211,7 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw abortError(signal);
 }
 
-function mapStatus(status: string): SandboxInfo['status'] {
+function mapStatus(status: string): InstanceInfo['status'] {
   switch (status) {
     case 'starting':
     case 'running':
@@ -354,7 +354,7 @@ function deleteContextBestEffort(sandbox: Sandbox0Sandbox, contextId: string): v
   void sandbox.deleteContext(contextId).catch(() => undefined);
 }
 
-async function createSandbox(config: Sandbox0Config, options?: CreateSandboxOptions) {
+async function createSandbox(config: Sandbox0Config, options?: CreateInstanceOptions) {
   throwIfAborted(options?.signal);
   const client = createClient(config);
   const template = resolveTemplate(config, options);
@@ -375,13 +375,13 @@ async function createSandbox(config: Sandbox0Config, options?: CreateSandboxOpti
     clusterId: sandbox.clusterId,
     commandTimeout: config.commandTimeout,
   });
-  return { sandbox, sandboxId: sandbox.id };
+  return { instance: sandbox, instanceId: sandbox.id };
 }
 
 const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
   name: 'sandbox0',
   methods: {
-    sandbox: {
+    instances: {
       create: createSandbox,
 
       getById: async (config, sandboxId) => {
@@ -397,7 +397,7 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
             templateId: details.templateId,
             commandTimeout: config.commandTimeout,
           });
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch (error) {
           if (isNotFound(error)) return null;
           throw error;
@@ -406,7 +406,7 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
 
       list: async (config) => {
         const client = createClient(config);
-        const sandboxes: Array<{ sandbox: Sandbox0Sandbox; sandboxId: string }> = [];
+        const sandboxes: Array<{ instance: Sandbox0Sandbox; instanceId: string }> = [];
         let offset = 0;
 
         for (;;) {
@@ -422,7 +422,7 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
               clusterId: summary.clusterId,
               commandTimeout: config.commandTimeout,
             });
-            sandboxes.push({ sandbox, sandboxId: summary.id });
+            sandboxes.push({ instance: sandbox, instanceId: summary.id });
           }
 
           if (!page.hasMore || page.sandboxes.length === 0) break;
@@ -481,7 +481,7 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
         }
       },
 
-      getInfo: async (sandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox): Promise<InstanceInfo> => {
         const observation = observations.get(sandbox);
         const status = observation?.status || sandbox.status;
         return {

@@ -5,14 +5,14 @@
  * but don't have native sandbox capabilities. Used by gateway server.
  */
 
-import type { CreateSandboxOptions } from './types/index.js';
+import type { CreateInstanceOptions } from './types/index.js';
 
 /**
  * Infrastructure provider methods - only resource provisioning
  */
 export interface InfraProviderMethods<TInstance = any, TConfig = any> {
   /** Create a new compute instance */
-  create: (config: TConfig, options?: CreateSandboxOptions & { daemonConfig?: DaemonConfig }) => Promise<{ instance: TInstance; instanceId: string }>;
+  create: (config: TConfig, options?: CreateInstanceOptions & { daemonConfig?: DaemonConfig }) => Promise<{ instance: TInstance; instanceId: string }>;
   
   /** Get an existing instance by ID */
   getById: (config: TConfig, instanceId: string) => Promise<{ instance: TInstance; instanceId: string } | null>;
@@ -49,7 +49,7 @@ export interface InfraProviderConfig<TInstance = any, TConfig = any> {
  */
 export interface InfraProvider<TInstance = any> {
   name: string;
-  create: (options?: CreateSandboxOptions & { daemonConfig?: DaemonConfig }) => Promise<{ instance: TInstance; instanceId: string }>;
+  create: (options?: CreateInstanceOptions & { daemonConfig?: DaemonConfig }) => Promise<{ instance: TInstance; instanceId: string }>;
   getById: (instanceId: string) => Promise<{ instance: TInstance; instanceId: string } | null>;
   list: () => Promise<Array<{ instance: TInstance; instanceId: string }>>;
   destroy: (instanceId: string) => Promise<void>;

@@ -13,10 +13,10 @@ import { defineProvider } from '@computesdk/provider'
 
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider'
 
 export interface BrezelConfig {
@@ -62,7 +62,7 @@ function getClient(config: ConfigWithClient): BrezelClient {
   return config.__client
 }
 
-function environmentRevision(config: BrezelConfig, options?: CreateSandboxOptions): string {
+function environmentRevision(config: BrezelConfig, options?: CreateInstanceOptions): string {
   return required(
     options?.templateId ?? config.environmentRevision ?? process.env.BREZEL_ENVIRONMENT_REVISION,
     'BREZEL_ENVIRONMENT_REVISION',
@@ -82,7 +82,7 @@ function terminal(status: unknown): boolean {
   return status === 'deleted' || status === 'expired'
 }
 
-function status(state: unknown): SandboxInfo['status'] {
+function status(state: unknown): InstanceInfo['status'] {
   if (state === 'failed') return 'error'
   if (state === 'paused' || state === 'standby' || state === 'stopped' || terminal(state)) return 'stopped'
   return 'running'
@@ -111,7 +111,7 @@ function validateEnvironment(environment: Record<string, string> | undefined): R
   return result
 }
 
-function createTimeout(options: CreateSandboxOptions | undefined): { timeoutMs: number; ttlSeconds: number } {
+function createTimeout(options: CreateInstanceOptions | undefined): { timeoutMs: number; ttlSeconds: number } {
   const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error('Brezel sandbox timeout must be a positive finite number of milliseconds')
@@ -127,7 +127,7 @@ function createTimeout(options: CreateSandboxOptions | undefined): { timeoutMs: 
   }
 }
 
-function validateCreateOptions(options: CreateSandboxOptions | undefined): void {
+function validateCreateOptions(options: CreateInstanceOptions | undefined): void {
   if (options?.snapshotId) throw new Error('Brezel snapshots are not exposed through ComputeSDK yet')
   if (options?.image) throw new Error('Use a prequalified Brezel environment revision instead of image')
 
@@ -175,8 +175,8 @@ async function waitUntilDeleted(client: BrezelClient, id: string): Promise<void>
 export const brezel = defineProvider<Sandbox, ConfigWithClient>({
   name: 'brezel',
   methods: {
-    sandbox: {
-      create: async (config: ConfigWithClient, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {
         validateCreateOptions(options)
         const { timeoutMs, ttlSeconds } = createTimeout(options)
         if (options?.signal?.aborted) throw options.signal.reason ?? new Error('Sandbox creation aborted')
@@ -188,7 +188,7 @@ export const brezel = defineProvider<Sandbox, ConfigWithClient>({
         })
         sandboxTimeouts.set(sandbox, timeoutMs)
         sandboxClients.set(sandbox, getClient(config))
-        return { sandbox, sandboxId: sandbox.id }
+        return { instance: sandbox, instanceId: sandbox.id }
       },
 
       getById: async (config: ConfigWithClient, sandboxId: string) => {
@@ -196,7 +196,7 @@ export const brezel = defineProvider<Sandbox, ConfigWithClient>({
           const sandbox = await getClient(config).sandbox(sandboxId)
           if (terminal(sandbox.resource.state)) return null
           sandboxClients.set(sandbox, getClient(config))
-          return { sandbox, sandboxId }
+          return { instance: sandbox, instanceId: sandboxId }
         } catch (error) {
           if (isMissing(error)) return null
           throw error
@@ -210,7 +210,7 @@ export const brezel = defineProvider<Sandbox, ConfigWithClient>({
         return Promise.all(active.map(async resource => {
           const sandbox = await client.sandbox(resourceString(resource, 'id'))
           sandboxClients.set(sandbox, client)
-          return { sandbox, sandboxId: sandbox.id }
+          return { instance: sandbox, instanceId: sandbox.id }
         }))
       },
 
@@ -233,7 +233,7 @@ export const brezel = defineProvider<Sandbox, ConfigWithClient>({
       // generic in-sandbox SSE bridge when callbacks are requested.
       streamCommand: runCommand,
 
-      getInfo: async (sandbox: Sandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: Sandbox): Promise<InstanceInfo> => {
         const client = sandboxClients.get(sandbox)
         if (!client) throw new Error(`Brezel client is unavailable for sandbox: ${sandbox.id}`)
         const current = await client.sandbox(sandbox.id)

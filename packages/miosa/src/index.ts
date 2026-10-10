@@ -13,8 +13,8 @@ import { defineProvider, escapeShellArg } from "@computesdk/provider";
 
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
   RunCommandOptions,
@@ -977,7 +977,7 @@ function toMs(timeoutSec: number | null | undefined): number {
     : DEFAULT_TIMEOUT_MS;
 }
 
-function toStatus(state: string | null | undefined): SandboxInfo["status"] {
+function toStatus(state: string | null | undefined): InstanceInfo["status"] {
   switch (state) {
     case "running":
     case "starting":
@@ -1074,8 +1074,8 @@ const createMiosaProvider = defineProvider<
 >({
   name: "miosa",
   methods: {
-    sandbox: {
-      create: async (config: MiosaConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: MiosaConfig, options?: CreateInstanceOptions) => {
         const auth = resolveAuth(config);
         const timeoutMs =
           options?.timeout ?? config.timeout ?? DEFAULT_TIMEOUT_MS;
@@ -1138,7 +1138,7 @@ const createMiosaProvider = defineProvider<
           );
         }
 
-        return { sandbox: { record, ...auth }, sandboxId: record.id };
+        return { instance: { record, ...auth }, instanceId: record.id };
       },
 
       getById: async (config: MiosaConfig, sandboxId: string) => {
@@ -1150,7 +1150,7 @@ const createMiosaProvider = defineProvider<
             `/sandboxes/${sandboxId}`,
           );
           const record = unwrapSandbox(payload);
-          return { sandbox: { record, ...auth }, sandboxId: record.id };
+          return { instance: { record, ...auth }, instanceId: record.id };
         } catch (error) {
           if (error instanceof MiosaApiError && error.status === 404)
             return null;
@@ -1165,9 +1165,7 @@ const createMiosaProvider = defineProvider<
           "GET",
           "/sandboxes",
         );
-        return (payload.data ?? []).map((record) => ({
-          sandbox: { record, ...auth },
-          sandboxId: record.id,
+        return (payload.data ?? []).map((record) => ({ instance: { record, ...auth }, instanceId: record.id,
         }));
       },
 
@@ -1194,7 +1192,7 @@ const createMiosaProvider = defineProvider<
 
       runCommand: execInSandbox,
 
-      getInfo: async (sandbox: MiosaSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: MiosaSandbox): Promise<InstanceInfo> => {
         // The handle's record is a snapshot from create/getById and goes stale
         // as soon as the sandbox stops or fails. Refetch so callers polling
         // status see live state, and refresh the handle for later reads. This

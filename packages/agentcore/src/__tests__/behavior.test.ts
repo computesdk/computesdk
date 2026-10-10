@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { agentcore } from '../index';
-import type { ProviderSandbox } from '@computesdk/provider';
+import type { ProviderInstance } from '@computesdk/provider';
 
 const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
 const hasCredentials = Boolean(
@@ -20,7 +20,7 @@ const describeFn = hasCredentials ? describe : describe.skip;
 
 describeFn('agentcore behavior', () => {
   const provider = agentcore({ region });
-  let sandbox: ProviderSandbox;
+  let sandbox: ProviderInstance;
 
   const getSandbox = async () => {
     if (!sandbox) sandbox = await provider.sandbox.create();

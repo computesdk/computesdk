@@ -15,8 +15,8 @@ import type {
 import type {
   FileEntry,
   RunCommandOptions,
-  CreateSandboxOptions,
-  SandboxInfo,
+  CreateInstanceOptions,
+  InstanceInfo,
 } from 'computesdk';
 
 /** When the provider should clean up containers it created */

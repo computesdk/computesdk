@@ -21,8 +21,8 @@ import { defineProvider } from '@computesdk/provider';
 
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
 } from '@computesdk/provider';
@@ -81,8 +81,8 @@ function captureStdio() {
 export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
   name: 'secure-exec',
   methods: {
-    sandbox: {
-      create: async (config: SecureExecConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: SecureExecConfig, options?: CreateInstanceOptions) => {
         const fs = createInMemoryFileSystem();
         let v8Runtime;
         try {
@@ -107,7 +107,7 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
         });
         await fs.mkdir('/workspace');
         const sandboxId = `secureexec_${nanoid(10)}`;
-        return { sandbox: { runtime, fs, sandboxId }, sandboxId };
+        return { instance: { runtime, fs, sandboxId }, instanceId: sandboxId };
       },
 
       getById: async (_config: SecureExecConfig, _sandboxId: string) => null,
@@ -147,7 +147,7 @@ export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({
         }
       },
 
-      getInfo: async (instance: SecureExecInstance): Promise<SandboxInfo> => ({
+      getInfo: async (instance: SecureExecInstance): Promise<InstanceInfo> => ({
         id: instance.sandboxId,
         provider: 'secure-exec',
         status: 'running',

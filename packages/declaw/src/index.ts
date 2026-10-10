@@ -9,8 +9,8 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
 } from '@computesdk/provider';
@@ -27,8 +27,8 @@ export interface DeclawConfig {
 export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
   name: 'declaw',
   methods: {
-    sandbox: {
-      create: async (config: DeclawConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: DeclawConfig, options?: CreateInstanceOptions) => {
         const apiKey =
           config.apiKey ||
           (typeof process !== 'undefined' && process.env?.DECLAW_API_KEY) ||
@@ -66,7 +66,7 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
           });
           const sandboxId = (sandbox as any).sandboxId ?? (sandbox as any).sandbox_id;
           if (!sandboxId) throw new Error('Declaw create() returned sandbox without an ID');
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             const msg = error.message.toLowerCase();
@@ -89,7 +89,7 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         const domain = config.domain || process.env.DECLAW_DOMAIN;
         try {
           const sandbox = await DeclawSandbox.connect(sandboxId, { apiKey, domain });
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch { return null; }
       },
 
@@ -99,13 +99,13 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         try {
           const result = await DeclawSandbox.list({ apiKey, domain });
           const infos = Array.isArray(result) ? result : result?.sandboxes ?? [];
-          const out: Array<{ sandbox: DeclawSandbox; sandboxId: string }> = [];
+          const out: Array<{ instance: DeclawSandbox; instanceId: string }> = [];
           for (const info of infos) {
             const id = (info as any).sandboxId ?? (info as any).sandbox_id;
             if (!id) continue;
             try {
               const sandbox = await DeclawSandbox.connect(id, { apiKey, domain });
-              out.push({ sandbox, sandboxId: id });
+              out.push({ instance: sandbox, instanceId: id });
             } catch { /* skip */ }
           }
           return out;
@@ -144,7 +144,7 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         }
       },
 
-      getInfo: async (sandbox: DeclawSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: DeclawSandbox): Promise<InstanceInfo> => {
         const id = (sandbox as any).sandboxId ?? (sandbox as any).sandbox_id ?? 'declaw-unknown';
         return { id, provider: 'declaw', status: 'running', createdAt: new Date(), timeout: 300_000, metadata: { declawSandboxId: id } };
       },

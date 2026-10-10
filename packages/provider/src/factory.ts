@@ -7,16 +7,16 @@
 
 // Import all types from local types
 import type {
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxFileSystem,
+  InstanceFileSystem,
   Provider,
-  ProviderSandboxManager,
+  ProviderInstanceManager,
   ProviderTemplateManager,
   ProviderSnapshotManager,
-  ProviderSandbox,
-  SandboxInfo,
+  ProviderInstance,
+  InstanceInfo,
   CommandResult,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
@@ -25,7 +25,8 @@ import type {
   StartProcessOptions,
   ProcessStatus,
   ProcessHandle,
-  SandboxEgressInfo,
+  InstanceEgressInfo,
+  ComputeKind,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
@@ -35,7 +36,7 @@ import {
   type SeedInput,
   type SeedInvocationResult,
 } from 'daemond';
-import { readSandboxEgress, setupSandboxEgress } from './egress.js';
+import { readInstanceEgress, setupInstanceEgress } from './egress.js';
 
 type DaemonStreamState = {
   token: string;
@@ -259,17 +260,37 @@ async function streamDaemonEvents(
 }
 
 /**
- * Flat sandbox method implementations - all operations in one place
+ * Result shape returned by instance lifecycle methods.
+ *
+ * Canonical shape is `{ instance, instanceId }`; the legacy
+ * `{ sandbox, sandboxId }` shape is still accepted for backwards
+ * compatibility — the factory normalizes both.
  */
-export interface SandboxMethods<TSandbox = any, TConfig = any> {
-  // Collection operations (map to compute.sandbox.*)
-  create: (config: TConfig, options?: CreateSandboxOptions) => Promise<{ sandbox: TSandbox; sandboxId: string }>;
-  getById: (config: TConfig, sandboxId: string) => Promise<{ sandbox: TSandbox; sandboxId: string } | null>;
-  list: (config: TConfig) => Promise<Array<{ sandbox: TSandbox; sandboxId: string }>>;
-  destroy: (config: TConfig, sandboxId: string) => Promise<void>;
+export type InstanceLifecycleResult<TInstance> =
+  | { instance: TInstance; instanceId: string }
+  | { sandbox: TInstance; sandboxId: string };
+
+function normalizeInstanceResult<TInstance>(
+  result: InstanceLifecycleResult<TInstance>
+): { instance: TInstance; instanceId: string } {
+  if ('instance' in result) {
+    return { instance: result.instance, instanceId: result.instanceId };
+  }
+  return { instance: result.sandbox, instanceId: result.sandboxId };
+}
+
+/**
+ * Flat instance method implementations - all operations in one place
+ */
+export interface InstanceMethods<TInstance = any, TConfig = any> {
+  // Collection operations (map to compute.instances.*)
+  create: (config: TConfig, options?: CreateInstanceOptions) => Promise<InstanceLifecycleResult<TInstance>>;
+  getById: (config: TConfig, instanceId: string) => Promise<InstanceLifecycleResult<TInstance> | null>;
+  list: (config: TConfig) => Promise<InstanceLifecycleResult<TInstance>[]>;
+  destroy: (config: TConfig, instanceId: string) => Promise<void>;
 
   // Instance operations
-  runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
+  runCommand: (instance: TInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
 
   /**
    * Optional native streaming implementation, used instead of the daemond SSE
@@ -282,23 +303,26 @@ export interface SandboxMethods<TSandbox = any, TConfig = any> {
    * where that implementation goes. Callbacks must fire while the command runs;
    * a provider that can only deliver output at exit should leave this unset.
    */
-  streamCommand?: (sandbox: TSandbox, command: string, options: RunCommandOptions) => Promise<CommandResult>;
-  getInfo: (sandbox: TSandbox) => Promise<SandboxInfo>;
-  getUrl: (sandbox: TSandbox, options: { port: number; protocol?: string }) => Promise<string>;
+  streamCommand?: (instance: TInstance, command: string, options: RunCommandOptions) => Promise<CommandResult>;
+  getInfo: (instance: TInstance) => Promise<InstanceInfo>;
+  getUrl: (instance: TInstance, options: { port: number; protocol?: string }) => Promise<string>;
 
   // Optional provider-specific typed getInstance method
-  getInstance?: (sandbox: TSandbox) => TSandbox;
+  getInstance?: (instance: TInstance) => TInstance;
 
   // Optional filesystem methods
   filesystem?: {
-    readFile: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<string>;
-    writeFile: (sandbox: TSandbox, path: string, content: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
-    mkdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
-    readdir: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<FileEntry[]>;
-    exists: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<boolean>;
-    remove: (sandbox: TSandbox, path: string, runCommand: (sandbox: TSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
+    readFile: (instance: TInstance, path: string, runCommand: (instance: TInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<string>;
+    writeFile: (instance: TInstance, path: string, content: string, runCommand: (instance: TInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
+    mkdir: (instance: TInstance, path: string, runCommand: (instance: TInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
+    readdir: (instance: TInstance, path: string, runCommand: (instance: TInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<FileEntry[]>;
+    exists: (instance: TInstance, path: string, runCommand: (instance: TInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<boolean>;
+    remove: (instance: TInstance, path: string, runCommand: (instance: TInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>) => Promise<void>;
   };
 }
+
+/** @deprecated Use {@link InstanceMethods} instead. */
+export type SandboxMethods<TInstance = any, TConfig = any> = InstanceMethods<TInstance, TConfig>;
 
 /**
  * Template method implementations
@@ -313,7 +337,7 @@ export interface TemplateMethods<TTemplate = any, TConfig = any, TCreateOptions 
  * Snapshot method implementations  
  */
 export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
-  create: (config: TConfig, sandboxId: string, options?: CreateSnapshotOptions) => Promise<TSnapshot>;
+  create: (config: TConfig, instanceId: string, options?: CreateSnapshotOptions) => Promise<TSnapshot>;
   list: (config: TConfig, options?: ListSnapshotsOptions) => Promise<TSnapshot[]>;
   delete: (config: TConfig, snapshotId: string) => Promise<void>;
 }
@@ -321,10 +345,18 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
 /**
  * Provider configuration for defineProvider()
  */
-export interface ProviderConfig<TSandbox = any, TConfig = any, TTemplate = any, TSnapshot = any> {
+export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any, TSnapshot = any> {
   name: string;
+  /**
+   * The form of compute this provider provisions
+   * (`'sandbox' | 'vm' | 'baremetal'`). Defaults to `'sandbox'`.
+   */
+  kind?: ComputeKind;
   methods: {
-    sandbox: SandboxMethods<TSandbox, TConfig>;
+    /** Instance lifecycle methods (canonical key). */
+    instances?: InstanceMethods<TInstance, TConfig>;
+    /** @deprecated Use `instances`. Still honored as a fallback. */
+    sandbox?: InstanceMethods<TInstance, TConfig>;
     template?: TemplateMethods<TTemplate, TConfig>;
     snapshot?: SnapshotMethods<TSnapshot, TConfig>;
   };
@@ -333,7 +365,7 @@ export interface ProviderConfig<TSandbox = any, TConfig = any, TTemplate = any, 
 /**
  * Auto-generated filesystem implementation that throws "not supported" errors
  */
-class UnsupportedFileSystem implements SandboxFileSystem {
+class UnsupportedFileSystem implements InstanceFileSystem {
   private readonly providerName: string;
 
   constructor(providerName: string) {
@@ -370,35 +402,35 @@ class UnsupportedFileSystem implements SandboxFileSystem {
 /**
  * Auto-generated filesystem implementation that wraps provider methods
  */
-class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
+class SupportedFileSystem<TInstance> implements InstanceFileSystem {
   constructor(
-    private sandbox: TSandbox,
-    private methods: NonNullable<SandboxMethods<TSandbox>['filesystem']>,
-    private allMethods: SandboxMethods<TSandbox>
+    private instance: TInstance,
+    private methods: NonNullable<InstanceMethods<TInstance>['filesystem']>,
+    private allMethods: InstanceMethods<TInstance>
   ) {}
 
   async readFile(path: string): Promise<string> {
-    return this.methods.readFile(this.sandbox, path, this.allMethods.runCommand);
+    return this.methods.readFile(this.instance, path, this.allMethods.runCommand);
   }
 
   async writeFile(path: string, content: string): Promise<void> {
-    return this.methods.writeFile(this.sandbox, path, content, this.allMethods.runCommand);
+    return this.methods.writeFile(this.instance, path, content, this.allMethods.runCommand);
   }
 
   async mkdir(path: string): Promise<void> {
-    return this.methods.mkdir(this.sandbox, path, this.allMethods.runCommand);
+    return this.methods.mkdir(this.instance, path, this.allMethods.runCommand);
   }
 
   async readdir(path: string): Promise<FileEntry[]> {
-    return this.methods.readdir(this.sandbox, path, this.allMethods.runCommand);
+    return this.methods.readdir(this.instance, path, this.allMethods.runCommand);
   }
 
   async exists(path: string): Promise<boolean> {
-    return this.methods.exists(this.sandbox, path, this.allMethods.runCommand);
+    return this.methods.exists(this.instance, path, this.allMethods.runCommand);
   }
 
   async remove(path: string): Promise<void> {
-    return this.methods.remove(this.sandbox, path, this.allMethods.runCommand);
+    return this.methods.remove(this.instance, path, this.allMethods.runCommand);
   }
 }
 
@@ -407,42 +439,46 @@ class SupportedFileSystem<TSandbox> implements SandboxFileSystem {
 
 
 /**
- * Generated sandbox class - implements the ProviderSandbox interface
+ * Generated instance class - implements the ProviderInstance interface
  */
-class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
+class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> {
+  readonly instanceId: string;
+  /** @deprecated Use `instanceId`. Always identical to it. */
   readonly sandboxId: string;
   readonly provider: string;
-  readonly filesystem: SandboxFileSystem;
-  /** Set at create when `CreateSandboxOptions.egress` was passed. */
-  egress?: SandboxEgressInfo;
+  readonly filesystem: InstanceFileSystem;
+  /** Set at create when `CreateInstanceOptions.egress` was passed. */
+  egress?: InstanceEgressInfo;
   private daemonStreamState?: DaemonStreamState;
   constructor(
-    private sandbox: TSandbox,
-    sandboxId: string,
+    private instance: TInstance,
+    instanceId: string,
     providerName: string,
-    private methods: SandboxMethods<TSandbox>,
+    private methods: InstanceMethods<TInstance>,
     private config: any,
-    private destroyMethod: (config: any, sandboxId: string) => Promise<void>,
-    private providerInstance: Provider
+    private destroyMethod: (config: any, instanceId: string) => Promise<void>,
+    private providerInstance: Provider,
+    private providerKind: ComputeKind
   ) {
-    this.sandboxId = sandboxId;
+    this.instanceId = instanceId;
+    this.sandboxId = instanceId;
     this.provider = providerName;
 
     // Auto-detect filesystem support
     if (methods.filesystem) {
-      this.filesystem = new SupportedFileSystem(sandbox, methods.filesystem, methods);
+      this.filesystem = new SupportedFileSystem(instance, methods.filesystem, methods);
     } else {
       this.filesystem = new UnsupportedFileSystem(providerName);
     }
   }
 
-  getInstance(): TSandbox {
+  getInstance(): TInstance {
     // Use provider-specific typed getInstance if available
     if (this.methods.getInstance) {
-      return this.methods.getInstance(this.sandbox);
+      return this.methods.getInstance(this.instance);
     }
-    // Fallback to returning the sandbox directly
-    return this.sandbox;
+    // Fallback to returning the instance directly
+    return this.instance;
   }
 
   private async resolveDaemonSseUrl(
@@ -470,7 +506,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       throw new Error('Daemon SSE URL must include a valid port.');
     }
 
-    const providerBaseUrl = await this.methods.getUrl(this.sandbox, { port: parsedPort });
+    const providerBaseUrl = await this.methods.getUrl(this.instance, { port: parsedPort });
     const providerUrl = new URL(providerBaseUrl);
 
     parsed = new URL(providerUrl.toString());
@@ -493,7 +529,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
       // A provider that streams over its own API needs neither the daemon nor a
       // routable port for it, so it is asked first.
       if (this.methods.streamCommand) {
-        return await this.methods.streamCommand(this.sandbox, command, options);
+        return await this.methods.streamCommand(this.instance, command, options);
       }
 
       const forwardedOptions: RunCommandOptions = { ...options };
@@ -556,7 +592,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
           .catch(() => undefined);
       }
       try {
-        const daemonResult = await this.methods.runCommand(this.sandbox, daemonCommand, forwardedOptions);
+        const daemonResult = await this.methods.runCommand(this.instance, daemonCommand, forwardedOptions);
         const invocation = parseDaemonSeedResult(daemonResult, 'daemon command');
         this.daemonStreamState = {
           token: invocation.token,
@@ -585,7 +621,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
 
     // Pass command and options directly to provider - no preprocessing
     // Provider is responsible for handling cwd, env, background, etc.
-    return await this.methods.runCommand(this.sandbox, command, options);
+    return await this.methods.runCommand(this.instance, command, options);
   }
 
   /**
@@ -610,7 +646,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
         { ssePort: DEFAULT_DAEMON_SSE_PORT },
         bootstrapPayload
       );
-      const bootstrapResult = await this.methods.runCommand(this.sandbox, bootstrapCommand, forwardedOptions);
+      const bootstrapResult = await this.methods.runCommand(this.instance, bootstrapCommand, forwardedOptions);
       const bootstrapInvocation = parseDaemonSeedResult(bootstrapResult, 'daemon bootstrap');
       this.daemonStreamState = {
         token: bootstrapInvocation.token,
@@ -643,7 +679,7 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     if (opts?.cwd) runOptions.cwd = opts.cwd;
     if (opts?.env) runOptions.env = opts.env;
     if (opts?.timeout) runOptions.timeout = opts.timeout;
-    const result = await this.methods.runCommand(this.sandbox, command, runOptions);
+    const result = await this.methods.runCommand(this.instance, command, runOptions);
     const invocation = parseDaemonSeedResult(result, phase);
     this.daemonStreamState = {
       token: invocation.token,
@@ -929,21 +965,23 @@ class GeneratedSandbox<TSandbox = any> implements ProviderSandbox<TSandbox> {
     return { finish };
   }
 
-  async getInfo(): Promise<SandboxInfo> {
-    return await this.methods.getInfo(this.sandbox);
+  async getInfo(): Promise<InstanceInfo> {
+    const info = await this.methods.getInfo(this.instance);
+    // Providers that don't report a form default to their declared kind.
+    return { kind: this.providerKind, ...info };
   }
 
   async getUrl(options: { port: number; protocol?: string }): Promise<string> {
-    return await this.methods.getUrl(this.sandbox, options);
+    return await this.methods.getUrl(this.instance, options);
   }
 
-  getProvider(): Provider<TSandbox> {
+  getProvider(): Provider<TInstance> {
     return this.providerInstance;
   }
 
   async destroy(): Promise<void> {
     // Destroy via the provider's destroy method using our sandboxId
-    await this.destroyMethod(this.config, this.sandboxId);
+    await this.destroyMethod(this.config, this.instanceId);
   }
 }
 
@@ -970,27 +1008,42 @@ function abortPromise(signal?: AbortSignal): Promise<never> {
 }
 
 /**
- * Auto-generated Sandbox Manager implementation
+ * Auto-generated Instance Manager implementation
  */
-class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManager<TSandbox> {
+class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceManager<TInstance> {
   constructor(
     private config: TConfig,
     private providerName: string,
-    private methods: SandboxMethods<TSandbox, TConfig>,
-    private providerInstance: Provider
+    private methods: InstanceMethods<TInstance, TConfig>,
+    private providerInstance: Provider,
+    private providerKind: ComputeKind
   ) {}
 
-  async create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>> {
+  private wrap(result: InstanceLifecycleResult<TInstance>): GeneratedInstance<TInstance> {
+    const { instance, instanceId } = normalizeInstanceResult(result);
+    return new GeneratedInstance<TInstance>(
+      instance,
+      instanceId,
+      this.providerName,
+      this.methods,
+      this.config,
+      this.methods.destroy,
+      this.providerInstance,
+      this.providerKind
+    );
+  }
+
+  async create(options?: CreateInstanceOptions): Promise<ProviderInstance<TInstance>> {
     throwIfAborted(options?.signal);
 
     const signal = options?.signal;
-    const createPromise = this.methods.create(this.config, options);
+    const createPromise = this.methods.create(this.config, options).then(normalizeInstanceResult);
 
-    // If the provider promise resolves after abort, clean up the orphaned sandbox
+    // If the provider promise resolves after abort, clean up the orphaned instance
     createPromise.then(
       (result) => {
         if (signal?.aborted) {
-          this.methods.destroy(this.config, result.sandboxId).catch(() => {});
+          this.methods.destroy(this.config, result.instanceId).catch(() => {});
         }
       },
       () => {}
@@ -1002,28 +1055,20 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       throw makeAbortError();
     }
 
-    const sandbox = new GeneratedSandbox<TSandbox>(
-      result.sandbox,
-      result.sandboxId,
-      this.providerName,
-      this.methods,
-      this.config,
-      this.methods.destroy,
-      this.providerInstance
-    );
+    const instance = this.wrap(result);
 
     if (options?.egress && typeof options.egress === 'object' && !Array.isArray(options.egress)) {
       throwIfAborted(signal);
-      // Providers like archil treat an explicit sandboxId as attach-to-existing;
+      // Providers like archil treat an explicit instanceId as attach-to-existing;
       // destroying on failure would delete a VM the caller did not create.
-      const attached = Boolean((options as { sandboxId?: unknown }).sandboxId);
+      const attached = Boolean((options as { instanceId?: unknown; sandboxId?: unknown }).instanceId ?? (options as { sandboxId?: unknown }).sandboxId);
       const cleanup = async () => {
-        if (!attached) await this.methods.destroy(this.config, result.sandboxId).catch(() => {});
+        if (!attached) await this.methods.destroy(this.config, result.instanceId).catch(() => {});
       };
       try {
-        sandbox.egress = await setupSandboxEgress(sandbox, options.egress, this.providerName);
+        instance.egress = await setupInstanceEgress(instance, options.egress, this.providerName);
       } catch (error) {
-        // A failed router setup must not orphan the sandbox it was set up on.
+        // A failed router setup must not orphan the instance it was set up on.
         await cleanup();
         throw error;
       }
@@ -1033,47 +1078,31 @@ class GeneratedSandboxManager<TSandbox, TConfig> implements ProviderSandboxManag
       }
     }
 
-    return sandbox;
+    return instance;
   }
 
-  async getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null> {
-    const result = await this.methods.getById(this.config, sandboxId);
+  async getById(instanceId: string): Promise<ProviderInstance<TInstance> | null> {
+    const result = await this.methods.getById(this.config, instanceId);
     if (!result) {
       return null;
     }
 
-    const sandbox = new GeneratedSandbox<TSandbox>(
-      result.sandbox,
-      result.sandboxId,
-      this.providerName,
-      this.methods,
-      this.config,
-      this.methods.destroy,
-      this.providerInstance
-    );
+    const instance = this.wrap(result);
     // Reattach a running router's info; nothing to read if none ever ran.
-    sandbox.egress = await readSandboxEgress(sandbox).catch(() => undefined);
-    return sandbox;
+    instance.egress = await readInstanceEgress(instance).catch(() => undefined);
+    return instance;
   }
 
-  async list(): Promise<ProviderSandbox<TSandbox>[]> {
+  async list(): Promise<ProviderInstance<TInstance>[]> {
     const results = await this.methods.list(this.config);
-    
+
     // No egress reattach here: the pointer read costs one filesystem call per
-    // sandbox, which multiplies badly on enumeration. getById reattaches.
-    return results.map(result => new GeneratedSandbox<TSandbox>(
-      result.sandbox,
-      result.sandboxId,
-      this.providerName,
-      this.methods,
-      this.config,
-      this.methods.destroy,
-      this.providerInstance
-    ));
+    // instance, which multiplies badly on enumeration. getById reattaches.
+    return results.map(result => this.wrap(result));
   }
 
-  async destroy(sandboxId: string): Promise<void> {
-    await this.methods.destroy(this.config, sandboxId);
+  async destroy(instanceId: string): Promise<void> {
+    await this.methods.destroy(this.config, instanceId);
   }
 }
 
@@ -1108,8 +1137,8 @@ class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotMa
     private methods: SnapshotMethods<TSnapshot, TConfig>
   ) {}
 
-  async create(sandboxId: string, options?: CreateSnapshotOptions): Promise<TSnapshot> {
-    return await this.methods.create(this.config, sandboxId, options);
+  async create(instanceId: string, options?: CreateSnapshotOptions): Promise<TSnapshot> {
+    return await this.methods.create(this.config, instanceId, options);
   }
 
   async list(options?: ListSnapshotsOptions): Promise<TSnapshot[]> {
@@ -1124,26 +1153,41 @@ class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotMa
 /**
  * Auto-generated Provider implementation
  */
-class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Provider<TSandbox, TTemplate, TSnapshot> {
+class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot> implements Provider<TInstance, TTemplate, TSnapshot> {
   readonly name: string;
-  readonly sandbox: ProviderSandboxManager<TSandbox>;
+  readonly kind?: ComputeKind;
+  readonly instances: ProviderInstanceManager<TInstance>;
+  /** @deprecated Use `instances`. Always the same manager object. */
+  readonly sandbox: ProviderInstanceManager<TInstance>;
   readonly template?: ProviderTemplateManager<TTemplate>;
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
 
-  constructor(config: TConfig, providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>) {
+  constructor(config: TConfig, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot>) {
     this.name = providerConfig.name;
-    this.sandbox = new GeneratedSandboxManager(
+    this.kind = providerConfig.kind;
+
+    const instanceMethods = providerConfig.methods.instances ?? providerConfig.methods.sandbox;
+    if (!instanceMethods) {
+      throw new Error(
+        `Provider "${providerConfig.name}" must define methods.instances ` +
+        `(methods.sandbox is still accepted but deprecated).`
+      );
+    }
+
+    this.instances = new GeneratedInstanceManager(
       config,
       providerConfig.name,
-      providerConfig.methods.sandbox,
-      this
+      instanceMethods,
+      this,
+      providerConfig.kind ?? 'sandbox'
     );
+    this.sandbox = this.instances;
 
     // Initialize optional managers if methods are provided
     if (providerConfig.methods.template) {
       this.template = new GeneratedTemplateManager(config, providerConfig.methods.template);
     }
-    
+
     if (providerConfig.methods.snapshot) {
       this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
     }
@@ -1156,9 +1200,9 @@ class GeneratedProvider<TSandbox, TConfig, TTemplate, TSnapshot> implements Prov
  * Auto-generates all boilerplate classes and provides feature detection
  * based on which methods are implemented.
  */
-export function defineProvider<TSandbox, TConfig = any, TTemplate = any, TSnapshot = any>(
-  providerConfig: ProviderConfig<TSandbox, TConfig, TTemplate, TSnapshot>
-): (config: TConfig) => Provider<TSandbox, TTemplate, TSnapshot> {
+export function defineProvider<TInstance, TConfig = any, TTemplate = any, TSnapshot = any>(
+  providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot>
+): (config: TConfig) => Provider<TInstance, TTemplate, TSnapshot> {
   return (config: TConfig) => {
     return new GeneratedProvider(config, providerConfig);
   };

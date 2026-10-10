@@ -15,7 +15,7 @@
  */
 
 import { defineProvider } from "@computesdk/provider";
-import type { RunCommandOptions, CommandResult, SandboxInfo, FileEntry } from "computesdk";
+import type { RunCommandOptions, CommandResult, InstanceInfo, FileEntry } from "computesdk";
 import {
   CollimateClient,
   CollimateError,
@@ -136,7 +136,7 @@ function buildCommand(
 export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
   name: "collimate",
   methods: {
-    sandbox: {
+    instances: {
       async create(config, options) {
         const { client, serverUrl } = makeClient(config);
         const templateId =
@@ -152,9 +152,7 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
 
         const timeoutMs = (config.timeout ?? 900) * 1000;
         const session = await client.createSession(templateId);
-        return {
-          sandbox: toSandbox(client, serverUrl, session, timeoutMs),
-          sandboxId: session.session_id,
+        return { instance: toSandbox(client, serverUrl, session, timeoutMs), instanceId: session.session_id,
         };
       },
 
@@ -163,9 +161,7 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
         const info = await client.getSession(sandboxId);
         if (!info) return null;
         const timeoutMs = (config.timeout ?? 900) * 1000;
-        return {
-          sandbox: toSandboxFromInfo(client, serverUrl, info, timeoutMs),
-          sandboxId: info.session_id,
+        return { instance: toSandboxFromInfo(client, serverUrl, info, timeoutMs), instanceId: info.session_id,
         };
       },
 
@@ -173,9 +169,7 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
         const { client, serverUrl } = makeClient(config);
         const sessions = await client.listSessions();
         const timeoutMs = (config.timeout ?? 900) * 1000;
-        return sessions.map((info) => ({
-          sandbox: toSandboxFromInfo(client, serverUrl, info, timeoutMs),
-          sandboxId: info.session_id,
+        return sessions.map((info) => ({ instance: toSandboxFromInfo(client, serverUrl, info, timeoutMs), instanceId: info.session_id,
         }));
       },
 
@@ -212,7 +206,7 @@ export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({
         };
       },
 
-      async getInfo(sandbox): Promise<SandboxInfo> {
+      async getInfo(sandbox): Promise<InstanceInfo> {
         const info = await sandbox.client.getSession(sandbox.sessionId);
         if (!info) {
           throw new CollimateError(

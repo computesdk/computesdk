@@ -8,7 +8,7 @@ import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 export interface VercelConfig {
   token?: string;
@@ -72,8 +72,8 @@ function getUtf8Sink() {
 export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSnapshot>({
   name: 'vercel',
   methods: {
-    sandbox: {
-      create: async (config: VercelConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: VercelConfig, options?: CreateInstanceOptions) => {
         const creds = resolveCredentials(config);
         validateCredentials(creds);
         const timeout = options?.timeout ?? config.timeout ?? 300000;
@@ -120,7 +120,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           }
 
           const sandbox = await VercelSandbox.create(params);
-          return { sandbox, sandboxId: sandbox.name };
+          return { instance: sandbox, instanceId: sandbox.name };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('token')) {
@@ -140,7 +140,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           const sandbox = creds.useOidc
             ? await VercelSandbox.get({ name: sandboxId })
             : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch { return null; }
       },
 
@@ -179,7 +179,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         }
       },
 
-      getInfo: async (_sandbox: VercelSandbox): Promise<SandboxInfo> => ({
+      getInfo: async (_sandbox: VercelSandbox): Promise<InstanceInfo> => ({
         id: 'vercel-unknown',
         provider: 'vercel',
         status: 'running',

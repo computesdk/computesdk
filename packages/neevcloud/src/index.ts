@@ -1,5 +1,5 @@
 import {
-  type SandboxMethods,
+  type InstanceMethods,
   type SnapshotMethods,
   type TemplateMethods,
   defineProvider,
@@ -16,7 +16,7 @@ import {
   type SandboxTemplate,
   type SnapshotData,
 } from "@neevcloud/sdk";
-import type { CommandResult, CreateSandboxOptions, FileEntry, RunCommandOptions } from "computesdk";
+import type { CommandResult, CreateInstanceOptions, FileEntry, RunCommandOptions } from "computesdk";
 
 // Provider config. Every field is optional; the Neev client reads the matching NEEV_* env
 // var when a field is omitted.
@@ -88,7 +88,7 @@ function phaseToStatus(phase: SandboxPhase): "running" | "stopped" | "error" {
 }
 
 // Maps ComputeSDK create options to a Neev create request; a snapshot overrides image/template.
-function toCreateParams(options: CreateSandboxOptions = {}): CreateSandboxParams {
+function toCreateParams(options: CreateInstanceOptions = {}): CreateSandboxParams {
   const params: CreateSandboxParams = options.snapshotId
     ? { restore: options.snapshotId }
     : options.image
@@ -197,7 +197,7 @@ async function collectPages<T>(fetchPage: (page: number) => Promise<{ items: T[]
   }
 }
 
-const sandboxMethods: SandboxMethods<Sandbox, NeevCloudConfig> = {
+const sandboxMethods: InstanceMethods<Sandbox, NeevCloudConfig> = {
   // Create and wait until Ready; an abort after the request deletes the sandbox.
   create: async (config, options) => {
     options?.signal?.throwIfAborted();
@@ -210,14 +210,14 @@ const sandboxMethods: SandboxMethods<Sandbox, NeevCloudConfig> = {
       await sandbox.delete().catch(() => undefined);
       throw err;
     }
-    return { sandbox, sandboxId: sandbox.id };
+    return { instance: sandbox, instanceId: sandbox.id };
   },
 
   // Look a sandbox up; a missing id is not an error to ComputeSDK — return null.
   getById: async (config, sandboxId) => {
     try {
       const sandbox = await clientFor(config).sandboxes.get(sandboxId);
-      return { sandbox, sandboxId: sandbox.id };
+      return { instance: sandbox, instanceId: sandbox.id };
     } catch (err) {
       if (err instanceof NotFoundError) return null;
       throw err;
@@ -228,7 +228,7 @@ const sandboxMethods: SandboxMethods<Sandbox, NeevCloudConfig> = {
   list: async (config) => {
     const client = clientFor(config);
     const sandboxes = await collectPages((page) => client.sandboxes.list({ page, limit: LIST_PAGE_SIZE }));
-    return sandboxes.map((sandbox) => ({ sandbox, sandboxId: sandbox.id }));
+    return sandboxes.map((sandbox) => ({ instance: sandbox, instanceId: sandbox.id }));
   },
 
   destroy: async (config, sandboxId) => {
@@ -403,5 +403,5 @@ const templateMethods: TemplateMethods<SandboxTemplate, NeevCloudConfig> = {
 // Usage: `createCompute({ defaultProvider: neevcloud({ apiKey }) })`.
 export const neevcloud = defineProvider<Sandbox, NeevCloudConfig, SandboxTemplate, NeevCloudSnapshot>({
   name: "neevcloud",
-  methods: { sandbox: sandboxMethods, snapshot: snapshotMethods, template: templateMethods },
+  methods: { instances: sandboxMethods, snapshot: snapshotMethods, template: templateMethods },
 });

@@ -10,8 +10,8 @@ import beamClient, { Sandbox, SandboxInstance, beamOpts, Image } from '@beamclou
 import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp } from '@computesdk/provider';
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
 } from 'computesdk';
@@ -183,8 +183,8 @@ function getCachedSandbox(cacheKey: string, sandboxConfig: any): Sandbox {
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
   methods: {
-    sandbox: {
-      create: async (config: BeamConfig, options?: CreateSandboxOptions) =>
+    instances: {
+      create: async (config: BeamConfig, options?: CreateInstanceOptions) =>
         withBeamConfig(config, async () => {
         if (!beamOpts.token) {
           throw new Error(
@@ -244,7 +244,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           cacheKey = sandboxCacheKey(sandboxConfig);
           const sandbox = getCachedSandbox(cacheKey, sandboxConfig);
           const instance = await sandbox.create({ waitForReady: false });
-          return { sandbox: beamStamp.stamp(instance, config), sandboxId: instance.containerId };
+          return { instance: beamStamp.stamp(instance, config), instanceId: instance.containerId };
         } catch (error) {
           if (cacheKey) sandboxCache.delete(cacheKey);
           if (error instanceof Error && (error.message.includes('unauthorized') || error.message.includes('401'))) {
@@ -263,7 +263,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (!beamOpts.token) return null;
           try {
             const instance = await Sandbox.connect(sandboxId);
-            return { sandbox: beamStamp.stamp(instance, config), sandboxId: instance.containerId };
+            return { instance: beamStamp.stamp(instance, config), instanceId: instance.containerId };
           } catch { return null; }
         }),
 
@@ -302,7 +302,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         }
         }),
 
-      getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: SandboxInstance): Promise<InstanceInfo> => {
         let runtime = 'python';
         const runtimeHint = sandbox as SandboxInstance & { runtime?: unknown; image?: unknown; imageName?: unknown };
         if (typeof runtimeHint.runtime === 'string') {

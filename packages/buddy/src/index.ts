@@ -14,10 +14,10 @@
 
 import { defineProvider } from '@computesdk/provider';
 import type {
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   ListSnapshotsOptions,
   ListTemplatesOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 import type { Snapshot } from 'computesdk';
 
@@ -84,8 +84,8 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
   name: PROVIDER,
 
   methods: {
-    sandbox: {
-      create: async (config: BuddyConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: BuddyConfig, options?: CreateInstanceOptions) => {
         const resolved = resolveConfig(config);
         const created = await getClient(resolved).addSandbox({
           body: buildCreateBody(resolved, options),
@@ -99,7 +99,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
           await deleteSandbox(sandbox.client, sandbox.sandboxId).catch(() => {});
           throw error;
         }
-        return { sandbox, sandboxId: sandbox.sandboxId };
+        return { instance: sandbox, instanceId: sandbox.sandboxId };
       },
 
       getById: async (config: BuddyConfig, sandboxId: string) => {
@@ -107,7 +107,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
         try {
           const data = await getSandboxData(resolved, sandboxId);
           const sandbox = toHandle(resolved, data);
-          return { sandbox, sandboxId: sandbox.sandboxId };
+          return { instance: sandbox, instanceId: sandbox.sandboxId };
         } catch (error) {
           if (isNotFound(error) || isUnroutableId(error)) return null;
           throw error;
@@ -124,7 +124,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
           .filter(entry => Boolean(entry.id))
           .map(entry => {
             const sandbox = toHandle(resolved, entry);
-            return { sandbox, sandboxId: sandbox.sandboxId };
+            return { instance: sandbox, instanceId: sandbox.sandboxId };
           });
       },
 
@@ -142,7 +142,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
       // its Node-based streaming daemon inside the sandbox instead.
       streamCommand: runCommand,
 
-      getInfo: async (sandbox: BuddySandboxHandle): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: BuddySandboxHandle): Promise<InstanceInfo> => {
         const data = await getSandboxData(sandbox.config, sandbox.sandboxId);
         sandbox.endpoints = data.endpoints ?? sandbox.endpoints;
 
@@ -225,7 +225,7 @@ export function toSeconds(ms: number): number {
   return Math.max(1, Math.ceil(ms / 1000));
 }
 
-function buildCreateBody(config: ResolvedBuddyConfig, options: CreateSandboxOptions = {}) {
+function buildCreateBody(config: ResolvedBuddyConfig, options: CreateInstanceOptions = {}) {
   const name = options.name ?? generateSandboxName();
   const timeoutMs = options.timeout ?? config.timeout;
   // `templateId` is accepted alongside `snapshotId` because Buddy's template

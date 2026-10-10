@@ -4,7 +4,7 @@
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 export interface SpritesSandbox {
   id: string;
@@ -29,8 +29,8 @@ function stripControlChars(str: string): string {
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
   name: 'sprites',
   methods: {
-    sandbox: {
-      create: async (config: SpritesConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: SpritesConfig, options?: CreateInstanceOptions) => {
         const token = config.apiKey || (typeof process !== 'undefined' && process.env?.SPRITES_TOKEN) || '';
         const baseUrl = config.baseUrl || 'https://api.sprites.dev/v1';
 
@@ -65,7 +65,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           data._token = token;
           data._baseUrl = baseUrl;
 
-          return { sandbox: data, sandboxId: data.name };
+          return { instance: data, instanceId: data.name };
         } catch (error) {
           if (error instanceof Error && error.message.includes('Sprites API error')) throw error;
           throw new Error(`Failed to create Sprites sandbox: ${error instanceof Error ? error.message : String(error)}`);
@@ -80,7 +80,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           if (!res.ok) return null;
           const data = await res.json() as SpritesSandbox;
           data._token = token; data._baseUrl = baseUrl;
-          return { sandbox: data, sandboxId: data.name };
+          return { instance: data, instanceId: data.name };
         } catch { return null; }
       },
 
@@ -91,7 +91,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           const res = await fetch(`${baseUrl}/sprites`, { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
           if (!res.ok) return [];
           const data = await res.json() as SpritesSandbox[];
-          return data.map((sprite: SpritesSandbox) => { sprite._token = token; sprite._baseUrl = baseUrl; return { sandbox: sprite, sandboxId: sprite.name }; });
+          return data.map((sprite: SpritesSandbox) => { sprite._token = token; sprite._baseUrl = baseUrl; return { instance: sprite, instanceId: sprite.name }; });
         } catch { return []; }
       },
 
@@ -153,7 +153,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         }
       },
 
-      getInfo: async (sandbox: SpritesSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: SpritesSandbox): Promise<InstanceInfo> => {
         const token = sandbox._token;
         const baseUrl = sandbox._baseUrl;
         const name = sandbox.name;

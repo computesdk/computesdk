@@ -8,8 +8,8 @@ import {
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   RunCommandOptions,
 } from '@computesdk/provider';
 
@@ -82,7 +82,7 @@ function loadKubeConfig(config: K8sConfig): KubeConfig {
   return kc;
 }
 
-function getNamespace(config: K8sConfig, options?: CreateSandboxOptions): string {
+function getNamespace(config: K8sConfig, options?: CreateInstanceOptions): string {
   return options?.namespace || config.namespace || 'default';
 }
 
@@ -230,8 +230,8 @@ function parseExitCode(stdout: string, stderr: string): { stdout: string; stderr
 const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
   name: PROVIDER,
   methods: {
-    sandbox: {
-      create: async (config: K8sConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: K8sConfig, options?: CreateInstanceOptions) => {
         const namespace = getNamespace(config, options);
         const runtime = parseRuntime(options?.runtime || config.runtime || 'node');
         const timeout = options?.timeout ?? config.timeout ?? 120000;
@@ -287,8 +287,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
           rawKubeConfigBySandboxId.set(`${namespace}/${podName}`, config.kubeConfigRaw);
         }
 
-        return {
-          sandbox: {
+        return { instance: {
             podName: `${namespace}/${podName}`,
             namespace,
             runtime,
@@ -297,8 +296,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
             kubeConfigPath: config.kubeConfigPath,
             context: config.context,
             urlTemplate: config.urlTemplate,
-          },
-          sandboxId: `${namespace}/${podName}`,
+          }, instanceId: `${namespace}/${podName}`,
         };
       },
 
@@ -315,8 +313,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
           if (config.kubeConfigRaw) {
             rawKubeConfigBySandboxId.set(`${namespace}/${name}`, config.kubeConfigRaw);
           }
-          return {
-            sandbox: {
+          return { instance: {
               podName: `${namespace}/${name}`,
               namespace,
               runtime,
@@ -325,8 +322,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
               kubeConfigPath: config.kubeConfigPath,
               context: config.context,
               urlTemplate: config.urlTemplate,
-            },
-            sandboxId: `${namespace}/${name}`,
+            }, instanceId: `${namespace}/${name}`,
           };
         } catch (error) {
           if (isNotFound(error)) return null;
@@ -346,8 +342,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
           if (config.kubeConfigRaw) {
             rawKubeConfigBySandboxId.set(`${namespace}/${podName}`, config.kubeConfigRaw);
           }
-          return {
-            sandbox: {
+          return { instance: {
               podName: `${namespace}/${podName}`,
               namespace,
               runtime,
@@ -356,10 +351,9 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
               kubeConfigPath: config.kubeConfigPath,
               context: config.context,
               urlTemplate: config.urlTemplate,
-            },
-            sandboxId: `${namespace}/${podName}`,
+            }, instanceId: `${namespace}/${podName}`,
           };
-        }).filter(item => item.sandboxId);
+        }).filter(item => item.instanceId);
       },
 
       destroy: async (config: K8sConfig, sandboxId: string) => {
@@ -397,7 +391,7 @@ const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({
         };
       },
 
-      getInfo: async (sandbox: K8sSandboxHandle): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: K8sSandboxHandle): Promise<InstanceInfo> => {
         const kc = loadKubeConfigFromHandle(sandbox);
         const core = kc.makeApiClient(CoreV1Api);
         const pod = await core.readNamespacedPod({ namespace: sandbox.namespace, name: getPodName(sandbox) });

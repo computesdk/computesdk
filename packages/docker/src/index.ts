@@ -4,8 +4,8 @@ import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
   RunCommandOptions,
-  CreateSandboxOptions,
-  SandboxInfo,
+  CreateInstanceOptions,
+  InstanceInfo,
   FileEntry,
 } from '@computesdk/provider';
 
@@ -126,8 +126,8 @@ function pickImageForRuntime(runtime: string, configured?: DockerImage): DockerI
 export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
   name: PROVIDER,
   methods: {
-    sandbox: {
-      create: async (config: DockerConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: DockerConfig, options?: CreateInstanceOptions) => {
         const cfg: DockerConfig = { ...defaultDockerConfig, ...config };
         const effectiveRuntime: string = ((options as any)?.runtime ?? cfg.runtime ?? 'python') as string;
 
@@ -189,7 +189,7 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
           image: inspect.Config?.Image ?? chosenImage.name,
           createdAt: new Date(inspect.Created || Date.now()),
         };
-        return { sandbox: handle, sandboxId: handle.containerId };
+        return { instance: handle, instanceId: handle.containerId };
       },
 
       getById: async (config: DockerConfig, sandboxId: string) => {
@@ -197,7 +197,7 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         try {
           const container = docker.getContainer(sandboxId);
           const info = await container.inspect();
-          return { sandbox: { docker, container, containerId: sandboxId, image: info.Config?.Image ?? '', createdAt: new Date(info.Created || Date.now()) } as DockerSandboxHandle, sandboxId };
+          return { instance: { docker, container, containerId: sandboxId, image: info.Config?.Image ?? '', createdAt: new Date(info.Created || Date.now()) } as DockerSandboxHandle, instanceId: sandboxId };
         } catch { return null; }
       },
 
@@ -206,8 +206,7 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         try {
           const items = await docker.listContainers({ all: true, filters: { label: [LABEL_KEY] } as any });
           return items.map(ci => ({
-            sandbox: { docker, container: docker.getContainer(ci.Id), containerId: ci.Id, image: ci.Image, createdAt: new Date((ci as any).Created * 1000) } as DockerSandboxHandle,
-            sandboxId: ci.Id,
+            instance: { docker, container: docker.getContainer(ci.Id), containerId: ci.Id, image: ci.Image, createdAt: new Date((ci as any).Created * 1000) } as DockerSandboxHandle, instanceId: ci.Id,
           }));
         } catch { return []; }
       },
@@ -227,7 +226,7 @@ export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({
         return { stdout, stderr, exitCode, durationMs: Date.now() - start };
       },
 
-      getInfo: async (handle: DockerSandboxHandle): Promise<SandboxInfo> => {
+      getInfo: async (handle: DockerSandboxHandle): Promise<InstanceInfo> => {
         const info = await handle.container.inspect();
         const state = info.State || {};
         return {

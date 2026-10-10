@@ -8,7 +8,7 @@
 import * as fs from 'fs/promises';
 import { randomUUID } from 'node:crypto';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
  * Namespace sandbox instance
@@ -180,8 +180,8 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
   name: 'namespace',
 
   methods: {
-    sandbox: {
-      create: async (config: NamespaceConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: NamespaceConfig, options?: CreateInstanceOptions) => {
         const { token } = await getAndValidateCredentials(config);
         const containerName = config.targetContainerName || 'main-container';
         const image = options?.image;
@@ -256,7 +256,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             ...(options?.snapshotId && { snapshotVolumeMountPoint: SNAPSHOT_VOLUME_MOUNTPOINT }),
           };
 
-          return { sandbox, sandboxId: instanceId };
+          return { instance: sandbox, instanceId: instanceId };
         } catch (error) {
           throw new Error(
             `Failed to create Namespace instance: ${error instanceof Error ? error.message : String(error)}`
@@ -293,7 +293,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             status: instanceStatus(responseData.metadata),
           };
 
-          return { sandbox, sandboxId: instanceId };
+          return { instance: sandbox, instanceId: instanceId };
         } catch (error) {
           if (error instanceof Error && error.message.includes('404')) return null;
           throw new Error(
@@ -330,7 +330,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
                 createdAt: instanceData.metadata?.createdAt ? new Date(instanceData.metadata.createdAt) : new Date(0),
                 status: instanceStatus(instanceData.metadata),
               };
-              return { sandbox, sandboxId: instanceId };
+              return { instance: sandbox, instanceId: instanceId };
             });
         } catch (error) {
           throw new Error(
@@ -420,7 +420,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         }
       },
 
-      getInfo: async (sandbox: NamespaceSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: NamespaceSandbox): Promise<InstanceInfo> => {
         // The handle's status is a snapshot; describe the instance live so a
         // long-held handle sees suspensions and destruction as they happen.
         try {

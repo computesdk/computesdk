@@ -8,10 +8,10 @@
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 import {
   App,
@@ -177,7 +177,7 @@ function createWithAbortCleanup(
 }
 
 /** Reject options that Sail cannot honor without changing their meaning. */
-function validateCreateOptions(options: CreateSandboxOptions | undefined): void {
+function validateCreateOptions(options: CreateInstanceOptions | undefined): void {
   const supported = new Set([
     'memoryGib',
     'name',
@@ -229,7 +229,7 @@ function toIngressProtocol(protocol: string | undefined): 'http' | 'tcp' {
 }
 
 /** Map Sail lifecycle states onto ComputeSDK's three status values. */
-function toStatus(status: string): SandboxInfo['status'] {
+function toStatus(status: string): InstanceInfo['status'] {
   switch (status) {
     case 'running':
       return 'running';
@@ -308,8 +308,8 @@ function toExecOptions(options?: RunCommandOptions): ExecOptions {
 export const sail = defineProvider<Sailbox, SailConfig>({
   name: PROVIDER,
   methods: {
-    sandbox: {
-      create: async (config, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config, options?: CreateInstanceOptions) => {
         validateCreateOptions(options);
         if (options?.signal?.aborted) throw abortError(options.signal);
         const { client } = resolve(config);
@@ -325,7 +325,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           memoryGib: options?.memoryGib,
         });
         const sandbox = await createWithAbortCleanup(creation, options?.signal, client);
-        return { sandbox, sandboxId: sandbox.sailboxId };
+        return { instance: sandbox, instanceId: sandbox.sailboxId };
       },
 
       getById: async (config, sandboxId) => {
@@ -333,7 +333,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         try {
           const sandbox = await Sailbox.get(sandboxId, { client });
           if (GONE_STATUSES.has(sandbox.status)) return null;
-          return { sandbox, sandboxId: sandbox.sailboxId };
+          return { instance: sandbox, instanceId: sandbox.sailboxId };
         } catch (error) {
           if (error instanceof NotFoundError) return null;
           throw error;
@@ -352,7 +352,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         const sandboxes = await Sailbox.list({ appId: app.id, client });
         return sandboxes
           .filter((sandbox) => !GONE_STATUSES.has(sandbox.status))
-          .map((sandbox) => ({ sandbox, sandboxId: sandbox.sailboxId }));
+          .map((sandbox) => ({ instance: sandbox, instanceId: sandbox.sailboxId }));
       },
 
       destroy: async (config, sandboxId) => {
@@ -383,7 +383,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         };
       },
 
-      getInfo: async (sandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox): Promise<InstanceInfo> => {
         const current = await Sailbox.get(sandbox.sailboxId, {
           client: sandbox.client,
         });

@@ -16,31 +16,52 @@
  *   });
  */
 
-// Universal Sandbox Interface & Types
+// Universal Instance Interface & Types
 //
-// Note: The interface is renamed from "Sandbox" to "SandboxInterface" on export
-// so provider-agnostic code has a canonical type name to reference.
+// Note: The interface is renamed from "Instance" to "InstanceInterface" on
+// export so provider-agnostic code has a canonical type name to reference.
+// Sandbox* names are deprecated aliases kept for backwards compatibility.
 export type {
-  Sandbox as SandboxInterface,
+  Instance as InstanceInterface,
+  ComputeKind,
   CodeResult,
   CommandResult,
-  SandboxInfo,
+  InstanceInfo,
   Snapshot,
   FileEntry,
   RunCommandOptions,
   StartProcessOptions,
   ProcessStatus,
   ProcessHandle,
-  SandboxFileSystem,
-  CreateSandboxOptions,
-  SandboxResourceOptions,
+  InstanceFileSystem,
+  CreateInstanceOptions,
+  InstanceResourceOptions,
   RunloopLaunchParameters,
   VercelSandboxResources,
+  InstanceEgressOptions,
+  InstanceEgressInfo,
+} from './types/universal-instance';
+
+/** @deprecated Use {@link InstanceInterface}. */
+export type { Sandbox as SandboxInterface } from './types/universal-sandbox';
+export type {
+  /** @deprecated Use {@link InstanceInfo}. */
+  SandboxInfo,
+  /** @deprecated Use {@link InstanceFileSystem}. */
+  SandboxFileSystem,
+  /** @deprecated Use {@link CreateInstanceOptions}. */
+  CreateSandboxOptions,
+  /** @deprecated Use {@link InstanceResourceOptions}. */
+  SandboxResourceOptions,
+  /** @deprecated Use {@link InstanceEgressOptions}. */
   SandboxEgressOptions,
+  /** @deprecated Use {@link InstanceEgressInfo}. */
   SandboxEgressInfo,
 } from './types/universal-sandbox';
 
 // Egress router helpers
+export { instanceEgressEnvVars } from './egress';
+/** @deprecated Use {@link instanceEgressEnvVars}. */
 export { sandboxEgressEnvVars } from './egress';
 
 // Compute API

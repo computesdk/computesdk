@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, ProviderSandbox, CommandResult, FileEntry, RunCommandOptions, SandboxInfo } from '@computesdk/provider';
+import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOptions, InstanceInfo } from '@computesdk/provider';
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -61,7 +61,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
   } = config;
 
   return () => {
-    let sandbox: ProviderSandbox;
+    let sandbox: ProviderInstance;
 
     const createSandbox = async () => {
       if (skipIntegration) {
@@ -74,7 +74,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
       return await provider.sandbox.create(createOptions);
     };
 
-    const cleanupSandbox = async (sb: ProviderSandbox) => {
+    const cleanupSandbox = async (sb: ProviderInstance) => {
       if (sb && !skipIntegration) {
         try {
           await Promise.race([
@@ -349,7 +349,7 @@ export function runProviderTestSuite(config: ProviderTestConfig) {
 /**
  * Creates a mock sandbox for unit testing
  */
-function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
+function createMockSandbox(config: ProviderTestConfig): ProviderInstance {
   const providerName = config.name.toLowerCase();
 
   // Mock state to simulate realistic behavior
@@ -357,6 +357,7 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
   const mockDirs = new Set<string>();
 
   return {
+    instanceId: 'mock-sandbox-123',
     sandboxId: 'mock-sandbox-123',
     provider: providerName,
     getInstance: <T = unknown>(): T => ({} as T),
@@ -411,7 +412,7 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
       throw new Error('daemond: not supported by mock');
     },
 
-    getInfo: async (): Promise<SandboxInfo> => ({
+    getInfo: async (): Promise<InstanceInfo> => ({
       id: 'mock-sandbox-123',
       provider: providerName,
       status: 'running',
@@ -452,15 +453,19 @@ function createMockSandbox(config: ProviderTestConfig): ProviderSandbox {
       remove: async (path: string): Promise<void> => { mockFiles.delete(path); mockDirs.delete(path); }
     },
 
-    getProvider: (): Provider => ({
-      name: providerName,
-      sandbox: {
+    getProvider: (): Provider => {
+      const instances = {
         create: async () => { throw new Error('Not implemented in mock'); },
         getById: async () => { throw new Error('Not implemented in mock'); },
         list: async () => { throw new Error('Not implemented in mock'); },
         destroy: async () => { throw new Error('Not implemented in mock'); }
-      }
-    } as Provider)
+      };
+      return {
+        name: providerName,
+        instances,
+        sandbox: instances
+      } as Provider;
+    }
   };
 }
 

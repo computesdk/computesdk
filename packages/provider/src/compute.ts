@@ -21,8 +21,10 @@ export interface CreateComputeConfig<TInstance = any> {
  * Compute API for direct provider usage
  */
 export interface ComputeAPI<TInstance = any> {
-  /** Sandbox management methods */
-  sandbox: Provider<TInstance>['sandbox'];
+  /** Instance management methods */
+  instances: Provider<TInstance>['instances'];
+  /** @deprecated Use `instances`. Always the same manager object. */
+  sandbox: Provider<TInstance>['instances'];
   /** Get current configuration */
   getConfig(): CreateComputeConfig<TInstance> | null;
   /** Update configuration and return new compute instance */
@@ -42,7 +44,7 @@ export interface ComputeAPI<TInstance = any> {
  * const provider = e2bProvider({ apiKey: 'your-key' });
  * const compute = createCompute({ defaultProvider: provider });
  * 
- * const sandbox = await compute.sandbox.create();
+ * const instance = await compute.instances.create();
  * ```
  */
 export function createCompute<TInstance = any>(
@@ -61,7 +63,8 @@ export function createCompute<TInstance = any>(
   let currentConfig: CreateComputeConfig<TInstance> | null = config;
 
   return {
-    sandbox: provider.sandbox,
+    instances: provider.instances,
+    sandbox: provider.instances,
     
     getConfig() {
       return currentConfig;

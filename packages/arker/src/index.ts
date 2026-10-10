@@ -9,7 +9,7 @@ import { Arker, ArkerError, VM } from '@arker-ai/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { RunOptions } from '@arker-ai/sdk';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /** Provider used when none is configured. */
 const DEFAULT_PROVIDER = 'aws';
@@ -93,10 +93,10 @@ async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 export const arker = defineProvider<VM, ArkerConfig>({
   name: 'arker',
   methods: {
-    sandbox: {
+    instances: {
       // --- Collection operations ---
 
-      create: async (config: ArkerConfig, options?: CreateSandboxOptions) => {
+      create: async (config: ArkerConfig, options?: CreateInstanceOptions) => {
         const client = makeClient(config);
         const name = options?.name ?? null;
         
@@ -116,14 +116,14 @@ export const arker = defineProvider<VM, ArkerConfig>({
               ...(platforms?.length ? { platforms } : {}),
             });
 
-        return { sandbox: vm, sandboxId: vm.id };
+        return { instance: vm, instanceId: vm.id };
       },
 
       getById: async (config: ArkerConfig, sandboxId: string) => {
         const client = makeClient(config);
         try {
           const vm = await client.getVm(sandboxId);
-          return { sandbox: vm, sandboxId };
+          return { instance: vm, instanceId: sandboxId };
         } catch (err) {
           if (err instanceof ArkerError && err.status === 404) return null;
           throw err;
@@ -133,7 +133,7 @@ export const arker = defineProvider<VM, ArkerConfig>({
       list: async (config: ArkerConfig) => {
         const client = makeClient(config);
         const { vms } = await client.listVms();
-        return vms.map((vm) => ({ sandbox: vm, sandboxId: vm.id }));
+        return vms.map((vm) => ({ instance: vm, instanceId: vm.id }));
       },
 
       destroy: async (config: ArkerConfig, sandboxId: string) => {
@@ -192,7 +192,7 @@ export const arker = defineProvider<VM, ArkerConfig>({
         };
       },
 
-      getInfo: async (sandbox: VM): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: VM): Promise<InstanceInfo> => ({
         id: sandbox.id,
         provider: 'arker',
         status: 'running',

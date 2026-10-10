@@ -12,7 +12,7 @@
 
 import { defineProvider, createConfigGate, createConfigStamp } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /** Default instance type used when none is supplied via config. */
 const DEFAULT_INSTANCE_TYPE = 'cpu-1';
@@ -202,7 +202,7 @@ function withStamped<T>(sandbox: LightningNativeSandbox, fn: () => Promise<T>): 
 }
 
 /** Map a Lightning sandbox status string onto the ComputeSDK status enum. */
-function mapStatus(status: string): SandboxInfo['status'] {
+function mapStatus(status: string): InstanceInfo['status'] {
   const s = (status || '').toLowerCase();
   if (s.includes('fail') || s.includes('error')) return 'error';
   if (s.includes('stop') || s.includes('pause') || s.includes('terminat') || s.includes('delet')) return 'stopped';
@@ -230,8 +230,8 @@ function toSnapshot(snap: LightningSnapshotData): LightningSnapshot {
 export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({
   name: 'lightning',
   methods: {
-    sandbox: {
-      create: async (config: LightningConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: LightningConfig, options?: CreateInstanceOptions) => {
         const {
           timeout: optTimeout,
           envs: _envs,
@@ -271,7 +271,7 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
           // polling), so every request uses this config's credentials.
           const sandbox = await withSandbox(config, (Sandbox) => Sandbox.create(params));
           stampConfig(sandbox, config);
-          return { sandbox, sandboxId: sandbox.sandboxId };
+          return { instance: sandbox, instanceId: sandbox.sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('401') || error.message.toLowerCase().includes('unauthorized') || error.message.toLowerCase().includes('api key')) {
@@ -289,7 +289,7 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
         try {
           const sandbox = await withSandbox(config, (Sandbox) => Sandbox.get({ sandboxId }));
           stampConfig(sandbox, config);
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch {
           return null;
         }
@@ -298,7 +298,7 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
       list: async (config: LightningConfig) => {
         try {
           const { sandboxes } = await withSandbox(config, (Sandbox) => Sandbox.list());
-          return sandboxes.map((sandbox) => ({ sandbox: stampConfig(sandbox, config), sandboxId: sandbox.sandboxId }));
+          return sandboxes.map((sandbox) => ({ instance: stampConfig(sandbox, config), instanceId: sandbox.sandboxId }));
         } catch {
           return [];
         }
@@ -348,7 +348,7 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
         }
       },
 
-      getInfo: async (sandbox: LightningNativeSandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: LightningNativeSandbox): Promise<InstanceInfo> => ({
         id: sandbox.sandboxId,
         provider: 'lightning',
         status: mapStatus(sandbox.status),
