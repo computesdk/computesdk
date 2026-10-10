@@ -1,5 +1,12 @@
 # @computesdk/lelantos
 
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
 ## 0.2.9
 
 ### Patch Changes

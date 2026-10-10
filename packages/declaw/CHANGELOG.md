@@ -1,5 +1,12 @@
 # @computesdk/declaw
 
+## 0.2.16
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
 ## 0.2.15
 
 ### Patch Changes

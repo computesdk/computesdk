@@ -1,5 +1,12 @@
 # @computesdk/agentcore
 
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
 ## 0.1.9
 
 ### Patch Changes

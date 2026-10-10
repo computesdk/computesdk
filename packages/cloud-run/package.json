@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/cloud-run",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Google Cloud Run Sandboxes provider for ComputeSDK",
   "author": "Garrison",
   "license": "MIT",
