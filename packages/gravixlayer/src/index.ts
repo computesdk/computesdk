@@ -11,7 +11,7 @@ import { defineProvider } from '@computesdk/provider'
 
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   CreateTemplateOptions,
   FileEntry,
@@ -407,8 +407,8 @@ const createGravixLayerProvider = defineProvider<
 >({
   name: 'gravixlayer',
   methods: {
-    sandbox: {
-      create: async (config: GravixLayerConfig, options: CreateSandboxOptions = {}) => {
+    instances: {
+      create: async (config: GravixLayerConfig, options: CreateInstanceOptions = {}) => {
         if (nonempty(options.image)) {
           throw new Error(
             'GravixLayer runtimes start from a template, not an image. Pass `templateId`, or build a template from the image with `template.create({ name, fromImage })`.',
@@ -464,7 +464,7 @@ const createGravixLayerProvider = defineProvider<
           sandbox,
           body.timeoutSeconds === undefined ? undefined : body.timeoutSeconds * 1000,
         )
-        return { sandbox, sandboxId: sandbox.runtimeId }
+        return { instance: sandbox, instanceId: sandbox.runtimeId }
       },
 
       getById: async (config: GravixLayerConfig, sandboxId: string) => {
@@ -473,7 +473,7 @@ const createGravixLayerProvider = defineProvider<
         try {
           const sandbox = await client.runtime.get(sandboxId)
           if (ENDED_STATUSES.has(sandbox.status)) return null
-          return { sandbox, sandboxId: sandbox.runtimeId }
+          return { instance: sandbox, instanceId: sandbox.runtimeId }
         } catch (error) {
           if (isNotFound(error)) return null
           throw error
@@ -484,7 +484,7 @@ const createGravixLayerProvider = defineProvider<
         const client = getClient(config)
         const pageSize = 100
         let offset = 0
-        const sandboxes: Array<{ sandbox: Runtime; sandboxId: string }> = []
+        const sandboxes: Array<{ instance: Runtime; instanceId: string }> = []
         const seen = new Set<string>()
 
         for (;;) {
@@ -497,7 +497,7 @@ const createGravixLayerProvider = defineProvider<
             // The list payload is enough to bind a handle. A follow-up get
             // per row would add one round trip per runtime.
             const sandbox = bindRuntime(client, info)
-            sandboxes.push({ sandbox, sandboxId: sandbox.runtimeId })
+            sandboxes.push({ instance: sandbox, instanceId: sandbox.runtimeId })
           }
           offset += page.runtimes.length
           if (

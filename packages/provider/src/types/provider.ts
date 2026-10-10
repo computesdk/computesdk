@@ -4,31 +4,41 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { CreateSandboxOptions, SandboxInterface } from 'computesdk';
+import type { ComputeKind, CreateInstanceOptions, InstanceInterface } from 'computesdk';
 
 /**
- * Provider Sandbox - what provider implementations return
- * 
- * Extends the universal Sandbox interface with provider-specific methods
+ * Provider Instance - what provider implementations return
+ *
+ * Extends the universal Instance interface with provider-specific methods.
+ * Covers every compute form: sandbox, VM, baremetal.
  */
-export interface ProviderSandbox<TSandbox = any> extends Omit<SandboxInterface, 'runCode'> {
-  /** Get the provider that created this sandbox */
-  getProvider(): Provider<TSandbox>;
-  /** Get the native provider sandbox instance */
-  getInstance(): TSandbox;
-  /** Destroy sandbox and clean up resources */
+export interface ProviderInstance<TInstance = any> extends Omit<InstanceInterface, 'runCode'> {
+  /** Get the provider that created this instance */
+  getProvider(): Provider<TInstance>;
+  /** Get the native provider instance */
+  getInstance(): TInstance;
+  /** Destroy instance and clean up resources */
   destroy(): Promise<void>;
 }
 
-/**
- * Extract the sandbox type from a provider using generic inference
- */
-export type ExtractProviderSandboxType<TProvider> = TProvider extends Provider<infer TSandbox, any, any> ? TSandbox : any;
+/** @deprecated Use {@link ProviderInstance} instead. */
+export type ProviderSandbox<TInstance = any> = ProviderInstance<TInstance>;
 
 /**
- * Typed provider sandbox interface that preserves the provider's native instance type
+ * Extract the instance type from a provider using generic inference
  */
-export type TypedProviderSandbox<TProvider extends Provider> = ProviderSandbox<ExtractProviderSandboxType<TProvider>>;
+export type ExtractProviderInstanceType<TProvider> = TProvider extends Provider<infer TInstance, any, any> ? TInstance : any;
+
+/** @deprecated Use {@link ExtractProviderInstanceType} instead. */
+export type ExtractProviderSandboxType<TProvider> = ExtractProviderInstanceType<TProvider>;
+
+/**
+ * Typed provider instance interface that preserves the provider's native instance type
+ */
+export type TypedProviderInstance<TProvider extends Provider> = ProviderInstance<ExtractProviderInstanceType<TProvider>>;
+
+/** @deprecated Use {@link TypedProviderInstance} instead. */
+export type TypedProviderSandbox<TProvider extends Provider> = TypedProviderInstance<TProvider>;
 
 /**
  * Common options for creating snapshots
@@ -44,7 +54,9 @@ export interface CreateSnapshotOptions {
  * Common options for listing snapshots
  */
 export interface ListSnapshotsOptions {
-  /** Filter by sandbox ID */
+  /** Filter by instance ID */
+  instanceId?: string;
+  /** @deprecated Use {@link ListSnapshotsOptions.instanceId} instead. */
   sandboxId?: string;
   /** Limit the number of results */
   limit?: number;
@@ -71,18 +83,21 @@ export interface ListTemplatesOptions {
 }
 
 /**
- * Provider sandbox manager interface - handles sandbox lifecycle
+ * Provider instance manager interface - handles instance lifecycle
  */
-export interface ProviderSandboxManager<TSandbox = any> {
-  /** Create a new sandbox */
-  create(options?: CreateSandboxOptions): Promise<ProviderSandbox<TSandbox>>;
-  /** Get an existing sandbox by ID */
-  getById(sandboxId: string): Promise<ProviderSandbox<TSandbox> | null>;
-  /** List all active sandboxes */
-  list(): Promise<ProviderSandbox<TSandbox>[]>;
-  /** Destroy a sandbox */
-  destroy(sandboxId: string): Promise<void>;
+export interface ProviderInstanceManager<TInstance = any> {
+  /** Create a new instance */
+  create(options?: CreateInstanceOptions): Promise<ProviderInstance<TInstance>>;
+  /** Get an existing instance by ID */
+  getById(instanceId: string): Promise<ProviderInstance<TInstance> | null>;
+  /** List all active instances */
+  list(): Promise<ProviderInstance<TInstance>[]>;
+  /** Destroy an instance */
+  destroy(instanceId: string): Promise<void>;
 }
+
+/** @deprecated Use {@link ProviderInstanceManager} instead. */
+export type ProviderSandboxManager<TInstance = any> = ProviderInstanceManager<TInstance>;
 
 /**
  * Provider template manager interface - handles template/blueprint lifecycle
@@ -100,8 +115,8 @@ export interface ProviderTemplateManager<TTemplate = any, TCreateOptions extends
  * Provider snapshot manager interface - handles snapshot lifecycle
  */
 export interface ProviderSnapshotManager<TSnapshot = any> {
-  /** Create a snapshot from a sandbox */
-  create(sandboxId: string, options?: CreateSnapshotOptions): Promise<TSnapshot>;
+  /** Create a snapshot from an instance */
+  create(instanceId: string, options?: CreateSnapshotOptions): Promise<TSnapshot>;
   /** List all snapshots */
   list(options?: ListSnapshotsOptions): Promise<TSnapshot[]>;
   /** Delete a snapshot */
@@ -111,12 +126,21 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
 /**
  * Provider interface - creates and manages resources
  */
-export interface Provider<TSandbox = any, TTemplate = any, TSnapshot = any> {
+export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any> {
   /** Provider name/type */
   readonly name: string;
 
-  /** Sandbox management operations */
-  readonly sandbox: ProviderSandboxManager<TSandbox>;
+  /** The form of compute this provider provisions. Defaults to 'sandbox'. */
+  readonly kind?: ComputeKind;
+
+  /** Instance management operations */
+  readonly instances: ProviderInstanceManager<TInstance>;
+
+  /**
+   * @deprecated Use `instances`. Kept for backwards compatibility; always
+   * the same manager object as `instances`.
+   */
+  readonly sandbox: ProviderInstanceManager<TInstance>;
 
   /** Optional template management operations */
   readonly template?: ProviderTemplateManager<TTemplate>;
@@ -147,29 +171,35 @@ export interface ComputeConfig<TProvider extends Provider = Provider> {
 }
 
 /**
- * Parameters for compute.sandbox.create()
+ * Parameters for compute.instances.create()
  */
-export interface CreateSandboxParams {
+export interface CreateInstanceParams {
   /** Provider instance to use */
-  provider: Provider;  
-  /** Optional sandbox creation options */
-  options?: CreateSandboxOptions;
+  provider: Provider;
+  /** Optional instance creation options */
+  options?: CreateInstanceOptions;
 }
 
+/** @deprecated Use {@link CreateInstanceParams} instead. */
+export type CreateSandboxParams = CreateInstanceParams;
+
 /**
- * Parameters for compute.sandbox.create() with optional provider
+ * Parameters for compute.instances.create() with optional provider
  */
-export interface CreateSandboxParamsWithOptionalProvider {
+export interface CreateInstanceParamsWithOptionalProvider {
   /** Provider instance to use (optional if default is set) */
   provider?: Provider;
-  /** Optional sandbox creation options */
-  options?: CreateSandboxOptions;
+  /** Optional instance creation options */
+  options?: CreateInstanceOptions;
 }
+
+/** @deprecated Use {@link CreateInstanceParamsWithOptionalProvider} instead. */
+export type CreateSandboxParamsWithOptionalProvider = CreateInstanceParamsWithOptionalProvider;
 
 /**
  * Base Compute API interface (non-generic)
  *
- * Returns ProviderSandbox which is the common interface for all sandboxes.
+ * Returns ProviderInstance which is the common interface for all instances.
  */
 export interface ComputeAPI {
   /** Configuration management */
@@ -177,16 +207,19 @@ export interface ComputeAPI {
   getConfig(): ComputeConfig | null;
   clearConfig(): void;
 
-  sandbox: {
-    /** Create a sandbox from a provider (or default provider if configured) */
-    create(params?: CreateSandboxParams | CreateSandboxParamsWithOptionalProvider): Promise<ProviderSandbox>;
-    /** Get an existing sandbox by ID from a provider (or default provider if configured) */
-    getById(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<ProviderSandbox | null>;
-    /** List all active sandboxes from a provider (or default provider if configured) */
-    list(provider?: Provider): Promise<ProviderSandbox[]>;
-    /** Destroy a sandbox via a provider (or default provider if configured) */
-    destroy(providerOrSandboxId: Provider | string, sandboxId?: string): Promise<void>;
+  instances: {
+    /** Create an instance from a provider (or default provider if configured) */
+    create(params?: CreateInstanceParams | CreateInstanceParamsWithOptionalProvider): Promise<ProviderInstance>;
+    /** Get an existing instance by ID from a provider (or default provider if configured) */
+    getById(providerOrInstanceId: Provider | string, instanceId?: string): Promise<ProviderInstance | null>;
+    /** List all active instances from a provider (or default provider if configured) */
+    list(provider?: Provider): Promise<ProviderInstance[]>;
+    /** Destroy an instance via a provider (or default provider if configured) */
+    destroy(providerOrInstanceId: Provider | string, instanceId?: string): Promise<void>;
   };
+
+  /** @deprecated Use `instances`. Always the same manager object. */
+  sandbox: ComputeAPI['instances'];
 
   // Future resource APIs will be added here:
   // blob: ProviderBlobAPI;
@@ -197,24 +230,27 @@ export interface ComputeAPI {
 /**
  * Typed Compute API interface that preserves provider type information
  */
-export interface TypedComputeAPI<TProvider extends Provider> extends Omit<ComputeAPI, 'sandbox' | 'setConfig'> {
+export interface TypedComputeAPI<TProvider extends Provider> extends Omit<ComputeAPI, 'instances' | 'sandbox' | 'setConfig'> {
   /** Configuration management that returns typed compute instance */
   setConfig<T extends Provider>(config: ComputeConfig<T>): TypedComputeAPI<T>;
 
-  sandbox: {
-    /** Create a sandbox from the configured provider with proper typing */
-    create(params?: Omit<CreateSandboxParamsWithOptionalProvider, 'provider'>): Promise<
-      TypedProviderSandbox<TProvider>
+  instances: {
+    /** Create an instance from the configured provider with proper typing */
+    create(params?: Omit<CreateInstanceParamsWithOptionalProvider, 'provider'>): Promise<
+      TypedProviderInstance<TProvider>
     >;
-    /** Get an existing sandbox by ID from the configured provider with proper typing */
-    getById(sandboxId: string): Promise<
-      TypedProviderSandbox<TProvider> | null
+    /** Get an existing instance by ID from the configured provider with proper typing */
+    getById(instanceId: string): Promise<
+      TypedProviderInstance<TProvider> | null
     >;
-    /** List all active sandboxes from the configured provider with proper typing */
-    list(): Promise<TypedProviderSandbox<TProvider>[]>;
-    /** Destroy a sandbox via the configured provider */
-    destroy(sandboxId: string): Promise<void>;
+    /** List all active instances from the configured provider with proper typing */
+    list(): Promise<TypedProviderInstance<TProvider>[]>;
+    /** Destroy an instance via the configured provider */
+    destroy(instanceId: string): Promise<void>;
   };
+
+  /** @deprecated Use `instances`. Always the same manager object. */
+  sandbox: TypedComputeAPI<TProvider>['instances'];
 }
 
 /**

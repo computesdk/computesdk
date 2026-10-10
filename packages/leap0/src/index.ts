@@ -5,7 +5,7 @@
 import { Leap0Client } from 'leap0';
 import type { Sandbox as Leap0Sandbox } from 'leap0';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from 'computesdk';
 
 export interface Leap0Config {
   /** Leap0 API key - if not provided, will use LEAP0_API_KEY environment variable */
@@ -40,8 +40,8 @@ function createLeap0Client(config: Leap0Config): Leap0Client {
 const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
   name: 'leap0',
   methods: {
-    sandbox: {
-      create: async (config: Leap0Config, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: Leap0Config, options?: CreateInstanceOptions) => {
         const client = createLeap0Client(config);
 
         const {
@@ -60,7 +60,7 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
           ...providerOptions,
         });
         sandboxToClient.set(sandbox.id, client);
-        return { sandbox, sandboxId: sandbox.id };
+        return { instance: sandbox, instanceId: sandbox.id };
       },
 
       getById: async (config: Leap0Config, sandboxId: string) => {
@@ -68,7 +68,7 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
           const client = createLeap0Client(config);
           const sandbox = await client.sandboxes.get(sandboxId);
           sandboxToClient.set(sandboxId, client);
-          return { sandbox, sandboxId: sandbox.id };
+          return { instance: sandbox, instanceId: sandbox.id };
         } catch {
           return null;
         }
@@ -87,7 +87,7 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
             sandboxes.push(result.value);
           }
         }
-        return sandboxes.map((s) => ({ sandbox: s, sandboxId: s.id }));
+        return sandboxes.map((s) => ({ instance: s, instanceId: s.id }));
       },
 
       destroy: async (_config: Leap0Config, sandboxId: string) => {
@@ -125,7 +125,7 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
         }
       },
 
-      getInfo: async (sandbox: Leap0Sandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: Leap0Sandbox): Promise<InstanceInfo> => ({
         id: sandbox.id,
         provider: 'leap0',
         status: 'running',

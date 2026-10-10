@@ -632,6 +632,7 @@ function createInMemoryFilesystemProvider(): DirectProvider {
         const filesystem = createInMemoryFilesystem();
 
         const sandbox: Sandbox = {
+          instanceId: sandboxId,
           sandboxId,
           provider: 'in-memory-filesystem',
           runCommand: async (

@@ -1,5 +1,5 @@
 /**
- * `compute sandboxes` — drive sandboxes placed through the platform's
+ * `compute instances` (alias `compute sandboxes`) — drive instances placed through the platform's
  * `/api/v1/sandboxes` API: create/list/get/destroy, exec commands, spawn and
  * control detached processes, read/write the filesystem, and resolve port
  * URLs.
@@ -379,9 +379,10 @@ function mergeLeadOpts<T>(opts: T, inline: Record<string, string | string[] | tr
 
 export function registerSandboxesCommands(program: Command): void {
   const cmd = program
-    .command('sandboxes')
+    .command('instances')
+    .alias('sandboxes')
     .alias('sbx')
-    .description('Create and drive sandboxes through the platform')
+    .description('Create and drive compute instances through the platform')
     .enablePositionalOptions()
     .configureOutput({ outputError: usageErrorOutput });
 

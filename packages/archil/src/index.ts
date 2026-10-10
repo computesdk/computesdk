@@ -24,8 +24,8 @@ import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
 } from 'computesdk';
@@ -117,7 +117,7 @@ interface ArchilSandbox {
   createdAt: Date;
 }
 
-interface ArchilCreateOptions extends CreateSandboxOptions {
+interface ArchilCreateOptions extends CreateInstanceOptions {
   /**
    * exec mode: id of the existing disk to run commands against. Required in
    * "exec" mode; ignored in "persistent" mode.
@@ -378,7 +378,7 @@ function toSandboxRequest(options?: ArchilCreateOptions): ArchilSandboxRequest {
   if (options?.maxTtlSeconds !== undefined) {
     request.maxTtlSeconds = options.maxTtlSeconds;
   } else if (options?.timeout !== undefined) {
-    // CreateSandboxOptions.timeout is milliseconds; Archil's TTL is seconds.
+    // CreateInstanceOptions.timeout is milliseconds; Archil's TTL is seconds.
     request.maxTtlSeconds = Math.ceil(options.timeout / 1000);
   }
   return request;
@@ -392,7 +392,7 @@ const sandboxModes = new Map<string, ArchilExecutionMode>();
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
   name: 'archil',
   methods: {
-    sandbox: {
+    instances: {
       create: async (config: ArchilConfig, options?: ArchilCreateOptions) => {
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
@@ -437,28 +437,24 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             });
           }
           sandboxModes.set(vm.id, 'persistent');
-          return {
-            sandbox: {
+          return { instance: {
               client,
               disk: { id: vm.id },
               vm,
               resolved,
               createdAt: new Date(),
-            },
-            sandboxId: vm.id,
+            }, instanceId: vm.id,
           };
         }
 
         const diskId = resolveCreateDiskId(options);
         sandboxModes.set(diskId, 'exec');
-        return {
-          sandbox: {
+        return { instance: {
             client,
             disk: { id: diskId },
             resolved,
             createdAt: new Date(),
-          },
-          sandboxId: diskId,
+          }, instanceId: diskId,
         };
       },
 
@@ -469,21 +465,17 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
           if (resolved.execution === 'persistent') {
             const vm = await client.sandboxes.get(sandboxId);
             await ensureVmRunning(vm);
-            return {
-              sandbox: {
+            return { instance: {
                 client,
                 disk: { id: vm.id },
                 vm,
                 resolved,
                 createdAt: new Date(),
-              },
-              sandboxId: vm.id,
+              }, instanceId: vm.id,
             };
           }
           const disk = await client.disks.get(sandboxId);
-          return {
-            sandbox: { client, disk, resolved, createdAt: new Date() },
-            sandboxId: disk.id,
+          return { instance: { client, disk, resolved, createdAt: new Date() }, instanceId: disk.id,
           };
         } catch {
           return null;
@@ -495,21 +487,17 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const client = createClient(config, resolved);
         if (resolved.execution === 'persistent') {
           const vms = await client.sandboxes.list();
-          return vms.map((vm) => ({
-            sandbox: {
+          return vms.map((vm) => ({ instance: {
               client,
               disk: { id: vm.id },
               vm,
               resolved,
               createdAt: new Date(),
-            },
-            sandboxId: vm.id,
+            }, instanceId: vm.id,
           }));
         }
         const disks = await client.disks.list();
-        return disks.map((disk) => ({
-          sandbox: { client, disk, resolved, createdAt: new Date() },
-          sandboxId: disk.id,
+        return disks.map((disk) => ({ instance: { client, disk, resolved, createdAt: new Date() }, instanceId: disk.id,
         }));
       },
 
@@ -586,7 +574,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         }
       },
 
-      getInfo: async (sandbox: ArchilSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: ArchilSandbox): Promise<InstanceInfo> => {
         if (sandbox.vm) {
           const vm = sandbox.vm;
           return {

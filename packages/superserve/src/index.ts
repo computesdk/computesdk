@@ -18,10 +18,10 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 
 export interface SuperserveConfig {
@@ -175,8 +175,8 @@ function toSnapshot(info: SnapshotInfo) {
 export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
   name: 'superserve',
   methods: {
-    sandbox: {
-      create: async (config: SuperserveConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: SuperserveConfig, options?: CreateInstanceOptions) => {
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
 
@@ -207,7 +207,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
             ...(envs ? { envVars: envs } : {}),
             ...providerOptions,
           });
-          return { sandbox, sandboxId: sandbox.id };
+          return { instance: sandbox, instanceId: sandbox.id };
         } catch (error) {
           rethrowFriendly(error, 'Failed to create Superserve sandbox');
         }
@@ -218,7 +218,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         const baseUrl = resolveBaseUrl(config);
         try {
           const sandbox = await SuperserveSandbox.connect(sandboxId, { apiKey, baseUrl });
-          return { sandbox, sandboxId: sandbox.id };
+          return { instance: sandbox, instanceId: sandbox.id };
         } catch {
           return null;
         }
@@ -230,9 +230,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         try {
           const infos = await SuperserveSandbox.list({ apiKey, baseUrl });
           // No per-item connect() — that would POST /activate and resume paused sandboxes.
-          return infos.map((info) => ({
-            sandbox: info as unknown as SuperserveSandbox,
-            sandboxId: info.id,
+          return infos.map((info) => ({ instance: info as unknown as SuperserveSandbox, instanceId: info.id,
           }));
         } catch {
           return [];
@@ -252,9 +250,9 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
       runCommand,
       streamCommand: runCommand,
 
-      getInfo: async (sandbox: SuperserveSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: SuperserveSandbox): Promise<InstanceInfo> => {
         const info = await sandbox.getInfo();
-        const status: SandboxInfo['status'] =
+        const status: InstanceInfo['status'] =
           info.status === 'paused' || info.status === 'deleted' ? 'stopped' :
           info.status === 'failed' ? 'error' :
           'running';

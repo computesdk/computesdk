@@ -6,7 +6,7 @@
  * SDK used across the CreateOS tooling.
  *
  * Design notes:
- *  - `TSandbox` is the native `@nodeops-createos/sandbox` `Sandbox` handle, so
+ *  - `TInstance` is the native `@nodeops-createos/sandbox` `Sandbox` handle, so
  *    `getInstance()` hands callers the full stateful API (pause / resume / fork /
  *    disks / networks / bandwidth) that ComputeSDK's core surface does not model.
  *    The resolving config is associated with each handle via a `WeakMap`
@@ -39,18 +39,18 @@ import type {
 import { defineProvider } from "@computesdk/provider";
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
   ListSnapshotsOptions,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from "@computesdk/provider";
 
 const PROVIDER_NAME = "createos-sandbox";
 
 /** Per-sandbox config side-channel: associates the resolving config with each
- *  native handle without mutating it or wrapping `TSandbox` — so `getInstance()`
+ *  native handle without mutating it or wrapping `TInstance` — so `getInstance()`
  *  still returns the bare native handle (the escape hatch other providers honour),
  *  while `getInfo` can still reach `config` (e.g. `timeout`). Keyed weakly, so an
  *  entry is collected with its sandbox. */
@@ -154,7 +154,7 @@ export interface CreateosConfig {
 /** ComputeSDK create options plus the createos-specific fields this provider
  *  reads off the (otherwise open) options bag. Declaring them turns the cast-
  *  heavy decode into a typed contract and makes unsupported fields obvious. */
-export interface CreateosCreateOptions extends CreateSandboxOptions {
+export interface CreateosCreateOptions extends CreateInstanceOptions {
   /** Explicit shape id. Overrides cpus/memoryMb selection and skips the catalog fetch. */
   shape?: string;
   /** Rootfs catalog name or template id (alias of `runtime`). */
@@ -268,7 +268,7 @@ async function resolveShape(
 }
 
 /** Map an createos-sandbox lifecycle state onto ComputeSDK's running|stopped|error. */
-export function mapStatus(status: SandboxStatus): SandboxInfo["status"] {
+export function mapStatus(status: SandboxStatus): InstanceInfo["status"] {
   if (status === "running") return "running";
   if (status === "error" || status === "failed") return "error";
   return "stopped";
@@ -372,8 +372,8 @@ export function parseLsOutput(stdout: string): FileEntry[] {
 export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
   name: PROVIDER_NAME,
   methods: {
-    sandbox: {
-      create: async (config: CreateosConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: CreateosConfig, options?: CreateInstanceOptions) => {
         const client = resolveClient(config);
         const opts = (options ?? {}) as CreateosCreateOptions;
 
@@ -385,14 +385,14 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           // (or hits a terminal state) must not be reported as success.
           await forked.waitUntilRunning();
           sandboxConfig.set(forked, config);
-          return { sandbox: forked, sandboxId: forked.id };
+          return { instance: forked, instanceId: forked.id };
         }
 
         const shape = await resolveShape(client, opts, config);
         const rootfs = opts.image ?? opts.runtime ?? config.rootfs ?? "devbox:1";
         const sandbox = await client.createSandbox(toCreateRequest(opts, shape, rootfs));
         sandboxConfig.set(sandbox, config);
-        return { sandbox, sandboxId: sandbox.id };
+        return { instance: sandbox, instanceId: sandbox.id };
       },
 
       getById: async (config: CreateosConfig, sandboxId: string) => {
@@ -400,7 +400,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         try {
           const sandbox = await client.getSandbox(sandboxId);
           sandboxConfig.set(sandbox, config);
-          return { sandbox, sandboxId: sandbox.id };
+          return { instance: sandbox, instanceId: sandbox.id };
         } catch (e) {
           if (isNotFound(e)) return null;
           throw e;
@@ -413,7 +413,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const sandboxes = await client.listSandboxes({ limit: 100 });
         return sandboxes.map((sandbox) => {
           sandboxConfig.set(sandbox, config);
-          return { sandbox, sandboxId: sandbox.id };
+          return { instance: sandbox, instanceId: sandbox.id };
         });
       },
 
@@ -452,7 +452,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         };
       },
 
-      getInfo: async (sandbox: Sandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: Sandbox): Promise<InstanceInfo> => {
         // Refresh failures propagate (no swallow): a getInfo that cannot reach
         // the control plane must surface that rather than return stale data.
         await sandbox.refresh();

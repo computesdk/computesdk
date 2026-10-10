@@ -6,26 +6,38 @@
 
 // Import and re-export universal types from computesdk (grandmother package)
 export type {
-  SandboxInterface,
+  InstanceInterface,
+  ComputeKind,
   CodeResult,
   CommandResult,
-  SandboxInfo,
+  InstanceInfo,
   FileEntry,
   RunCommandOptions,
   StartProcessOptions,
   ProcessStatus,
   ProcessHandle,
+  InstanceFileSystem,
+  CreateInstanceOptions,
+  InstanceResourceOptions,
+  InstanceEgressOptions,
+  InstanceEgressInfo,
+  RunloopLaunchParameters,
+  VercelSandboxResources,
+} from 'computesdk';
+
+// Deprecated Sandbox* aliases for backwards compatibility
+export type {
+  SandboxInterface,
+  SandboxInfo,
   SandboxFileSystem,
   CreateSandboxOptions,
   SandboxResourceOptions,
   SandboxEgressOptions,
   SandboxEgressInfo,
-  RunloopLaunchParameters,
-  VercelSandboxResources,
 } from 'computesdk';
 
 // Provider-specific types (defined in this package)
-// Includes: Provider, ProviderSandbox, TypedProviderSandbox, and all manager interfaces
+// Includes: Provider, ProviderInstance, TypedProviderInstance, and all manager interfaces
 export * from './provider';
 
 // Re-export storage types explicitly for clarity

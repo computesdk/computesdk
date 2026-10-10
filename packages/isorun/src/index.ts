@@ -12,10 +12,10 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider'
 
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider'
 
 export interface IsorunConfig {
@@ -58,8 +58,8 @@ export interface IsorunSnapshot {
 export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({
   name: 'isorun',
   methods: {
-    sandbox: {
-      create: async (config: ConfigWithClient, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {
         const client = getClient(config)
         const runtime = (options?.runtime as Runtime | undefined) ?? 'node'
         const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
@@ -71,18 +71,18 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
           timeoutSec: Math.max(1, Math.ceil(timeoutMs / 1000)),
         })
         sandboxTimeouts.set(sandbox, timeoutMs)
-        return { sandbox, sandboxId: sandbox.id }
+        return { instance: sandbox, instanceId: sandbox.id }
       },
 
       getById: async (config: ConfigWithClient, sandboxId: string) => {
         const sandbox = await getClient(config).get(sandboxId)
         if (!sandbox) return null
-        return { sandbox, sandboxId }
+        return { instance: sandbox, instanceId: sandboxId }
       },
 
       list: async (config: ConfigWithClient) => {
         const sandboxes = await getClient(config).list()
-        return sandboxes.map(sandbox => ({ sandbox, sandboxId: sandbox.id }))
+        return sandboxes.map(sandbox => ({ instance: sandbox, instanceId: sandbox.id }))
       },
 
       destroy: async (config: ConfigWithClient, sandboxId: string) => {
@@ -124,7 +124,7 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         }
       },
 
-      getInfo: async (sandbox: Sandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: Sandbox): Promise<InstanceInfo> => {
         const i = await sandbox.info()
         return {
           id: sandbox.id,
