@@ -579,6 +579,48 @@ describe('archil persistent mode', () => {
     ).toBe(true);
   });
 
+  it('stops a running sandbox before deleting it', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      if (String(input).endsWith('/stop')) return json(sandboxWire('stopped'));
+      return json(sandboxWire('running'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    await provider.sandbox.destroy('sbx_123');
+
+    const ops = (fetchMock.mock.calls as any[][])
+      .map(([url, init]) => `${(init as RequestInit)?.method ?? 'GET'} ${String(url).replace(/^.*\/api/, '')}`)
+      .filter((op) => !op.startsWith('GET'));
+    expect(ops).toEqual(['POST /sandboxes/sbx_123/stop', 'DELETE /sandboxes/sbx_123']);
+  });
+
+  it('deletes an exited sandbox without stopping it', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      return json(sandboxWire('exited'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    await provider.sandbox.destroy('sbx_123');
+
+    const calls = fetchMock.mock.calls as any[][];
+    expect(calls.some(([url]) => String(url).endsWith('/stop'))).toBe(false);
+    expect(calls.some(([, init]) => (init as RequestInit)?.method === 'DELETE')).toBe(true);
+  });
+
   it('honors the ephemeral create option over the configured mode', async () => {
     const fetchMock = vi.fn(async () => json(sandboxWire()));
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
