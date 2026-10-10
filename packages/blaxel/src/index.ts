@@ -12,6 +12,43 @@ import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp } f
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
+ * Blaxel rejects sandboxes with a ttl under 5 minutes
+ * (`ttl 120s is too short: the minimum is 5m`). Any timeout below the floor
+ * is raised to it — the platform's own destroy still ends the box early, so
+ * billing stays on actual use.
+ */
+export const BLAXEL_MIN_TTL_SECONDS = 300;
+
+function toBlaxelTtl(timeoutMs: number | undefined, what: string): string | undefined {
+	if (timeoutMs === undefined) return undefined;
+	const seconds = Math.ceil(timeoutMs / 1000);
+	if (seconds >= BLAXEL_MIN_TTL_SECONDS) return `${seconds}s`;
+	console.warn(
+		`blaxel: ${what} ttl ${seconds}s is below the 5m provider minimum — raised to ${BLAXEL_MIN_TTL_SECONDS}s`
+	);
+	return `${BLAXEL_MIN_TTL_SECONDS}s`;
+}
+
+/**
+ * A `ttl` passed through provider options (`'300s'`, `'5m'`, `'1h'`; a
+ * bare number is taken as milliseconds) in ms — undefined when the value
+ * is not a shape we can normalize, in which case it passes through as-is.
+ */
+function parseBlaxelTtl(ttl: unknown): number | undefined {
+	if (typeof ttl === 'number') return Number.isFinite(ttl) ? ttl : undefined;
+	if (typeof ttl !== 'string') return undefined;
+	const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(ttl.trim());
+	if (!match) return undefined;
+	const value = Number(match[1]);
+	switch (match[2]) {
+		case 'ms': return value;
+		case 's': return value * 1000;
+		case 'm': return value * 60000;
+		default: return value * 3600000;
+	}
+}
+
+/**
  * Blaxel-specific configuration options
  */
 export interface BlaxelConfig {
@@ -108,7 +145,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				}
 				const memory = config.memory;
 				const region = config.region;
-				const ttl = optTimeout ? `${Math.ceil(optTimeout / 1000)}s` : undefined;
+				const ttl = toBlaxelTtl(optTimeout, 'sandbox');
 
 			return withBlaxelConfig(config, async () => {
 			try {
@@ -142,16 +179,22 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						throw new Error(`Sandbox ${forkName} not found after forking snapshot ${snapshotId}`);
 					}
 				} else {
+					// A `ttl` inside providerOptions would spread over the clamped
+					// value — lift it out and apply the same 5m floor.
+					const { ttl: optionTtl, ...restProviderOptions } = providerOptions;
+					const effectiveTtl = optionTtl === undefined
+						? ttl
+						: (toBlaxelTtl(parseBlaxelTtl(optionTtl), 'sandbox') ?? (optionTtl as string));
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
 						image,
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value: value as string })),
 						...(metadata?.labels && { labels: metadata.labels }),
-						ttl,
+						ttl: effectiveTtl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
-						...providerOptions, // Spread provider-specific options
+						...restProviderOptions, // Spread provider-specific options
 					});
 				}
 
@@ -330,7 +373,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 							requestHeaders: options.headers?.request || defaultHeaders,
 							customDomain: options.customDomain,
 							prefixUrl: options.prefixUrl,
-							ttl: options.ttl ? `${Math.ceil(options.ttl / 1000)}s` : undefined
+							ttl: toBlaxelTtl(options.ttl, 'preview')
 						}
 					});
 

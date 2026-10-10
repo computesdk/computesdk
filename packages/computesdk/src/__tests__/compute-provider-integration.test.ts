@@ -113,7 +113,8 @@ describeIntegration('compute provider integration', () => {
 
     const sdk = compute({ provider });
     const sandbox = await sdk.sandbox.create({
-      timeout: 120000,
+      // Blaxel rejects a ttl under its 5-minute minimum.
+      timeout: testProvider === 'blaxel' ? 300000 : 120000,
       ...(testProvider === 'archil'
         ? {
             diskId: requireEnv('ARCHIL_DISK_ID'),
