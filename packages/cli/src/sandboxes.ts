@@ -244,16 +244,19 @@ function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
   );
   console.log(`  order type: ${q.orderType}   order: ${q.providerOrder.join(', ')}`);
   if (q.rateUsd) {
-    console.log(`  rate: ${formatRateAllUnits(q.rateUsd)}   cheapest live: ${perHour(q.cheapestLiveUsdPerHour)}   reference: ${perHour(q.referenceUsdPerHour)}`);
+    console.log(`  rate: ${formatRateAllUnits(q.rateUsd)}`);
   } else if (q.rate) {
     console.log(`  rate: ${formatUsdPer(q.rate)}`);
   }
+  console.log(`  cheapest live: ${perHour(q.cheapestLiveUsdPerHour)}`);
+  console.log(`  reference: ${perHour(q.referenceUsdPerHour)}`);
   const timeout = timeoutMs !== undefined ? ` for ${timeoutMs}ms` : '';
-  console.log(`  est. cost${timeout}: ${usdAmount(q.estimatedCostUsd)}   required hold: ${usdAmount(q.requiredHoldUsd)}`);
   console.log(
-    `  cap: ${q.maxPrice ? formatUsdPer(q.maxPrice) : perHour(q.marketCapUsdPerHour)}` +
-      `   protection limit: ${perHour(q.protectionLimitUsdPerHour)}   balance: ${usdAmount(q.creditBalanceUsd)}`,
+    `  est. cost${timeout}: ${usdAmount(q.estimatedCostUsd)}   required hold: ${usdAmount(q.requiredHoldUsd)}` +
+      `   balance: ${usdAmount(q.creditBalanceUsd)}`,
   );
+  console.log(`  cap: ${q.maxPrice ? formatUsdPer(q.maxPrice) : perHour(q.marketCapUsdPerHour)}`);
+  console.log(`  protection limit: ${perHour(q.protectionLimitUsdPerHour)}`);
   if (!q.ok && q.topUpPath) console.log(`  ${pc.dim(`→ ${q.topUpPath}`)}`);
   if (q.liveAskDepth !== undefined) console.log(`  ${pc.dim(`live asks: ${q.liveAskDepth}`)}`);
 }
