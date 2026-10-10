@@ -22,7 +22,9 @@ const compute = blaxel({
 });
 
 const sandbox = await compute.sandbox.create({
-  timeout: 3600000,   // 1 hour timeout
+  timeout: 3600000,   // 1 hour timeout (minimum: 5 minutes — Blaxel rejects
+                      // a ttl under 5m; anything shorter is raised to 5m
+                      // with a warning)
   envs: { 
     DEBUG: 'true' 
   }

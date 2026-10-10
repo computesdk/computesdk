@@ -12,6 +12,24 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
+ * Blaxel rejects sandboxes with a ttl under 5 minutes
+ * (`ttl 120s is too short: the minimum is 5m`). Any timeout below the floor
+ * is raised to it — the platform's own destroy still ends the box early, so
+ * billing stays on actual use.
+ */
+export const BLAXEL_MIN_TTL_SECONDS = 300;
+
+function toBlaxelTtl(timeoutMs: number | undefined, what: string): string | undefined {
+	if (timeoutMs === undefined) return undefined;
+	const seconds = Math.ceil(timeoutMs / 1000);
+	if (seconds >= BLAXEL_MIN_TTL_SECONDS) return `${seconds}s`;
+	console.warn(
+		`blaxel: ${what} ttl ${seconds}s is below the 5m provider minimum — raised to ${BLAXEL_MIN_TTL_SECONDS}s`
+	);
+	return `${BLAXEL_MIN_TTL_SECONDS}s`;
+}
+
+/**
  * Blaxel-specific configuration options
  */
 export interface BlaxelConfig {
@@ -73,7 +91,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				}
 				const memory = config.memory;
 				const region = config.region;
-				const ttl = optTimeout ? `${Math.ceil(optTimeout / 1000)}s` : undefined;
+				const ttl = toBlaxelTtl(optTimeout, 'sandbox');
 
 			try {
 				// Initialize Blaxel SDK with credentials
@@ -294,7 +312,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 							requestHeaders: options.headers?.request || defaultHeaders,
 							customDomain: options.customDomain,
 							prefixUrl: options.prefixUrl,
-							ttl: options.ttl ? `${Math.ceil(options.ttl / 1000)}s` : undefined
+							ttl: toBlaxelTtl(options.ttl, 'preview')
 						}
 					});
 
