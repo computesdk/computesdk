@@ -22,6 +22,7 @@ function sanitizePathPart(name: string): string {
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { registerSettingsCommands } from './settings.js';
 import { basename, join } from 'path';
 import {
   ActionsApiError,
@@ -1419,5 +1420,12 @@ export function registerActionsCommands(program: Command): void {
     } catch (e) {
       fail(e, opts);
     }
+  });
+
+  registerSettingsCommands(actions, 'actions', common, {
+    client,
+    fail,
+    output,
+    usageErrorOutput,
   });
 }
