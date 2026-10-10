@@ -1,5 +1,12 @@
 # @computesdk/tigris
 
+## 1.1.19
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
 ## 1.1.18
 
 ### Patch Changes

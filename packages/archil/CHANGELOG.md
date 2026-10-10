@@ -1,5 +1,13 @@
 # @computesdk/archil
 
+## 0.4.19
+
+### Patch Changes
+
+- 1909aad: Stop running Archil sandboxes before deleting them on `destroy` and `snapshot.delete`; Archil rejects deleting a live sandbox.
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
 ## 0.4.18
 
 ### Patch Changes
