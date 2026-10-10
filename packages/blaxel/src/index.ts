@@ -30,6 +30,25 @@ function toBlaxelTtl(timeoutMs: number | undefined, what: string): string | unde
 }
 
 /**
+ * A `ttl` passed through provider options (`'300s'`, `'5m'`, `'1h'`; a
+ * bare number is taken as milliseconds) in ms — undefined when the value
+ * is not a shape we can normalize, in which case it passes through as-is.
+ */
+function parseBlaxelTtl(ttl: unknown): number | undefined {
+	if (typeof ttl === 'number') return Number.isFinite(ttl) ? ttl : undefined;
+	if (typeof ttl !== 'string') return undefined;
+	const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(ttl.trim());
+	if (!match) return undefined;
+	const value = Number(match[1]);
+	switch (match[2]) {
+		case 'ms': return value;
+		case 's': return value * 1000;
+		case 'm': return value * 60000;
+		default: return value * 3600000;
+	}
+}
+
+/**
  * Blaxel-specific configuration options
  */
 export interface BlaxelConfig {
@@ -127,16 +146,22 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						throw new Error(`Sandbox ${forkName} not found after forking snapshot ${snapshotId}`);
 					}
 				} else {
+					// A `ttl` inside providerOptions would spread over the clamped
+					// value — lift it out and apply the same 5m floor.
+					const { ttl: optionTtl, ...restProviderOptions } = providerOptions;
+					const effectiveTtl = optionTtl === undefined
+						? ttl
+						: (toBlaxelTtl(parseBlaxelTtl(optionTtl), 'sandbox') ?? (optionTtl as string));
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
 						image,
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value: value as string })),
 						...(metadata?.labels && { labels: metadata.labels }),
-						ttl,
+						ttl: effectiveTtl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
-						...providerOptions, // Spread provider-specific options
+						...restProviderOptions, // Spread provider-specific options
 					});
 				}
 
