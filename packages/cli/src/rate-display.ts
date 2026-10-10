@@ -50,7 +50,9 @@ export function formatUsd(usd: number): string {
   // Decimals needed for 4 significant digits; Math.log10(1e-9) = -9 still
   // lands on a plain toFixed call, so tiny per-second values never go
   // exponential.
-  const decimals = Math.max(0, 3 - Math.floor(Math.log10(Math.abs(usd))));
+  // toFixed accepts at most 100 decimals; a rate smaller than 1e-100 would
+  // ask for more, so cap it (the string rounds to $0 rather than throwing).
+  const decimals = Math.min(100, Math.max(0, 3 - Math.floor(Math.log10(Math.abs(usd)))));
   const fixed = usd.toFixed(decimals);
   // Trailing zeros only count after a decimal point — "3600" stays "3600".
   const trimmed = fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;

@@ -60,6 +60,13 @@ describe('formatUsd', () => {
       expect(formatUsd(tiny)).not.toMatch(/e/i);
     }
   });
+
+  it('does not throw on rates below the toFixed 100-decimal limit', () => {
+    expect(() => formatUsd(1e-98)).not.toThrow();
+    expect(() => formatUsd(1e-308)).not.toThrow();
+    expect(formatUsd(1e-98)).toMatch(/^\$/);
+    expect(formatUsd(1e-308)).toBe('$0');
+  });
 });
 
 describe('formatMoney', () => {
