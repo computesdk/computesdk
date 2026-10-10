@@ -283,11 +283,14 @@ function getClient(config: GravixLayerConfig): GravixLayer {
  * sleeping inside the caller's timer. `connect()` is intentionally not
  * called: it issues its own request and would compete with create.
  *
- * The client default HTTP timeout is 60s, which is shorter than a slow boot
- * and shorter than the benchmark's 120s create budget. This ceiling is the
- * same budget the SDK uses for snapshot restore. It does not add latency on
- * a fast create; it only releases the HTTP/2 stream if a boot never returns.
- * `0` would hold that stream until the process exits.
+ * A boot can outlast the client's 60-second default, so create gets its own
+ * HTTP deadline — longer than a slow boot and shorter than the benchmark's
+ * 120s create budget. It is sent as `requestTimeoutMs`: `timeout` on create
+ * options is the sandbox lifetime in seconds, so putting the budget there
+ * would store a multi-day lifetime. An explicit provider `timeout` is kept
+ * as the caller's cap. It does not add latency on a fast create; it only
+ * releases the HTTP/2 stream if a boot never returns. `0` would hold that
+ * stream until the process exits.
  */
 const CREATE_HTTP_TIMEOUT_MS = 180_000
 
@@ -364,7 +367,7 @@ async function runCommand(
   const opts: {
     workingDir?: string
     environment?: Record<string, string>
-    timeoutSeconds?: number
+    timeout?: number
     background?: boolean
     onStdout?: (chunk: string) => void
     onStderr?: (chunk: string) => void
@@ -373,7 +376,7 @@ async function runCommand(
   if (options.cwd) opts.workingDir = options.cwd
   if (Object.keys(environment).length > 0) opts.environment = environment
   if (options.timeout !== undefined) {
-    opts.timeoutSeconds = toTimeoutSeconds(options.timeout, 'command timeout')
+    opts.timeout = toTimeoutSeconds(options.timeout, 'command timeout')
   }
   if (options.onStdout) opts.onStdout = options.onStdout
   if (options.onStderr) opts.onStderr = options.onStderr
@@ -426,9 +429,10 @@ const createGravixLayerProvider = defineProvider<
           template?: string
           snapshot?: string
           envVars?: Record<string, string>
-          timeoutSeconds?: number
-          /** HTTP timeout for this request, in milliseconds. */
+          /** Sandbox lifetime in seconds. */
           timeout?: number
+          /** HTTP deadline for this request, in milliseconds. */
+          requestTimeoutMs?: number
           metadata?: Record<string, unknown>
           cloud?: string
           region?: string
@@ -444,7 +448,7 @@ const createGravixLayerProvider = defineProvider<
         if (Object.keys(envVars).length > 0) body.envVars = envVars
 
         if (options.timeout !== undefined) {
-          body.timeoutSeconds = toTimeoutSeconds(options.timeout, 'sandbox timeout')
+          body.timeout = toTimeoutSeconds(options.timeout, 'sandbox timeout')
         }
 
         if (isPlainObject(options.metadata)) {
@@ -455,14 +459,14 @@ const createGravixLayerProvider = defineProvider<
         if (typeof options.region === 'string') body.region = options.region
         if (options.signal) body.signal = options.signal
         if (!options.snapshotId && config.timeout === undefined) {
-          body.timeout = CREATE_HTTP_TIMEOUT_MS
+          body.requestTimeoutMs = CREATE_HTTP_TIMEOUT_MS
         }
 
         const sandbox = await client.runtime.create(body)
         // Report the lease the runtime actually got: seconds, rounded up.
         rememberTimeout(
           sandbox,
-          body.timeoutSeconds === undefined ? undefined : body.timeoutSeconds * 1000,
+          body.timeout === undefined ? undefined : body.timeout * 1000,
         )
         return { sandbox, sandboxId: sandbox.runtimeId }
       },
