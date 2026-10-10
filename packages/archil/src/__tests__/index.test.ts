@@ -570,12 +570,39 @@ describe('archil persistent mode', () => {
     await provider.sandbox.destroy('sbx_123');
 
     const calls = fetchMock.mock.calls as any[][];
+    const stopIndex = calls.findIndex(
+      ([url, init]) =>
+        String(url).includes('/api/sandboxes/sbx_123/stop') &&
+        (init as RequestInit)?.method === 'POST',
+    );
+    const deleteIndex = calls.findIndex(
+      ([url, init]) =>
+        String(url).includes('/api/sandboxes/sbx_123') &&
+        (init as RequestInit)?.method === 'DELETE',
+    );
+    expect(stopIndex).toBeGreaterThanOrEqual(0);
+    expect(deleteIndex).toBeGreaterThan(stopIndex);
+  });
+
+  it('deletes a stopped sandbox without stopping it again', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      return json(sandboxWire('stopped'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    await provider.sandbox.destroy('sbx_123');
+
+    const calls = fetchMock.mock.calls as any[][];
+    expect(calls.some(([url]) => String(url).includes('/stop'))).toBe(false);
     expect(
-      calls.some(
-        ([url, init]) =>
-          String(url).includes('/api/sandboxes/sbx_123') &&
-          (init as RequestInit)?.method === 'DELETE',
-      ),
+      calls.some(([, init]) => (init as RequestInit)?.method === 'DELETE'),
     ).toBe(true);
   });
 

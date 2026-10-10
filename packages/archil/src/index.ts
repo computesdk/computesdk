@@ -357,6 +357,14 @@ async function ensureVmRunning(vm: ArchilVm): Promise<void> {
   }
 }
 
+// Archil rejects deleting a sandbox that has not stopped, exited or failed.
+async function stopAndDelete(vm: ArchilVm): Promise<void> {
+  if (!['stopped', 'exited', 'failed'].includes(vm.status)) {
+    await vm.stop();
+  }
+  await vm.delete();
+}
+
 function toSandboxRequest(options?: ArchilCreateOptions): ArchilSandboxRequest {
   const request: ArchilSandboxRequest = {
     ...options?.sandbox,
@@ -510,7 +518,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         if (mode === 'persistent') {
           const client = createClient(config, resolved);
           const vm = await client.sandboxes.get(sandboxId);
-          await vm.delete();
+          await stopAndDelete(vm);
         }
         // exec handles are disk references — Archil disks have an independent
         // lifecycle, so destroying them is a no-op. Unknown ids fall back to
@@ -912,7 +920,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
           if (error instanceof ArchilError && error.status === 404) return;
           throw error;
         }
-        await vm.delete();
+        await stopAndDelete(vm);
       },
     },
   },
