@@ -23,6 +23,7 @@ import {
   usageErrorOutput,
   type CommonOpts,
 } from './actions.js';
+import { formatMoney, formatUsdPer } from './rate-display.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/market describes) ───────────
 
@@ -421,14 +422,9 @@ export function credentialBody(
 
 // ─── Formatting (pure, exported for tests) ──────────────────────────────────
 
-/** `$0.12`, `$5` — micro-USD-precision dollars without trailing zeros. */
-export function formatUsd(usd: number): string {
-  return `$${usd.toFixed(6).replace(/\.?0+$/, '')}`;
-}
-
-/** `$0.12/second` — how a listing (or offer, or sale) is priced. */
-export function formatRate(usd: number, per: string): string {
-  return `${formatUsd(usd)}/${per}`;
+/** How a listing (or offer, or sale) is priced — all three units, per hour first. */
+export function formatRate(usd: number, per: MarketRatePer): string {
+  return formatUsdPer({ usd, per });
 }
 
 /** The human status: withdrawn > paused > expired > live. */
@@ -537,7 +533,7 @@ export function formatBook(book: MarketOrderBook): string {
 
 /** `replaced  f-1  settled $0.0003` (+ a note when an Actions job re-places). */
 export function formatReplacedFill(fill: MarketReplacedFill): string {
-  const settled = formatUsd(fill.settledMicroUsd / 1e6);
+  const settled = formatMoney(fill.settledMicroUsd / 1e6);
   const job = fill.jobRequeued
     ? pc.dim(" — job re-places on the buyer's next provider")
     : '';
@@ -580,8 +576,8 @@ export function formatSettlementRow(s: MarketSettlement): string {
   return [
     pc.dim(period),
     `${s.vcpuSeconds.toLocaleString('en-US')} vCPU·s`,
-    `gross ${formatUsd(s.grossUsd)}`,
-    `net ${formatUsd(s.netUsd)}`,
+    `gross ${formatMoney(s.grossUsd)}`,
+    `net ${formatMoney(s.netUsd)}`,
     paid,
   ].join('  ');
 }
