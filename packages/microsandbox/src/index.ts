@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, createConfigGate } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateSandboxOptions,
@@ -125,7 +125,14 @@ interface RecoveredPorts {
 }
 
 let sdkPromise: Promise<MicrosandboxModule> | undefined;
-let backendSelectionKey: string | undefined;
+
+/**
+ * The microsandbox SDK keeps one process-global default backend: a different
+ * backend selection must serialize against in-flight calls, not interleave
+ * with them. The gate admits same-selection calls concurrently; a different
+ * selection waits for the active calls to drain, then installs itself once.
+ */
+const backendGate = createConfigGate();
 /**
  * Keep credential-bearing backend configuration out of the public sandbox
  * object returned by getInstance(). The mapping is only needed when a sandbox
@@ -141,29 +148,40 @@ function loadSdk(): Promise<MicrosandboxModule> {
   return sdkPromise;
 }
 
-/** Run against the single backend selected for this process. */
+/**
+ * Run `operation` under `selection`'s backend epoch. Explicit selections
+ * (apiKey, apiUrl, profile, or local) install via setDefaultBackend when their
+ * epoch begins, so distinct credentials coexist in one process — serialized,
+ * never concurrent.
+ *
+ * One selection cannot be installed: the SDK's env/profile resolution
+ * (`{ kind: 'cloud' }` with no override) has no programmatic equivalent, so
+ * once another epoch installs an override there is no way back to it. That
+ * combination still fails closed with the previous error instead of silently
+ * running under the leftover credentials.
+ */
 async function withBackend<T>(
   selection: BackendSelection,
   operation: (sdk: MicrosandboxModule) => Promise<T>,
 ): Promise<T> {
   const sdk = await loadSdk();
-  const selectionKey = JSON.stringify(selection);
-  if (backendSelectionKey !== undefined && backendSelectionKey !== selectionKey) {
-    throw new Error('Microsandbox supports one backend configuration per process. Use the same backend, credentials, endpoint, and profile for all provider instances.');
-  }
-  if (backendSelectionKey === undefined && selection.override) {
-    sdk.setDefaultBackend(selection.override);
-  }
-  if (sdk.defaultBackendKind() !== selection.kind) {
-    throw new Error(
-      `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
-      `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
-    );
-  }
-  // No await between checking, selecting, and pinning the backend: overlapping
-  // calls cannot change its configuration before another SDK operation resumes.
-  backendSelectionKey = selectionKey;
-  return operation(sdk);
+  return backendGate.withConfig(
+    JSON.stringify(selection),
+    () => {
+      if (selection.override) {
+        sdk.setDefaultBackend(selection.override);
+      } else if (sdk.defaultBackendInfo().source === 'programmatic') {
+        throw new Error('Microsandbox supports one backend configuration per process. Use the same backend, credentials, endpoint, and profile for all provider instances.');
+      }
+      if (sdk.defaultBackendKind() !== selection.kind) {
+        throw new Error(
+          `Microsandbox cloud is the default, but no cloud credentials or profile were resolved. ` +
+          `Provide 'apiKey', set MSB_API_KEY, configure an active cloud profile, or pass backend: 'local'.`,
+        );
+      }
+    },
+    () => operation(sdk),
+  );
 }
 
 function selectBackend(config: MicrosandboxConfig): BackendSelection {

@@ -22,6 +22,7 @@ import {
   usageErrorOutput,
   type CommonOpts,
 } from './actions.js';
+import { formatMoney, formatRateAllUnits, formatUsdPer, rateAllUnits } from './rate-display.js';
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
@@ -148,7 +149,8 @@ function printSandbox(s: SandboxSummary): void {
       : '';
     console.log(
       `  provider: ${p.box?.provider ?? s.provider ?? '—'}${box}` +
-        `   size: ${p.size ?? '—'}   order: ${p.orderType ?? '—'}   rate: $${p.rate.usd}/${p.rate.per}`,
+        `   size: ${p.size ?? '—'}   order: ${p.orderType ?? '—'}   rate: ${formatUsdPer(p.rate)}` +
+        `${p.maxPrice ? `   max price: ${formatUsdPer(p.maxPrice)}` : ''}`,
     );
   }
   if (attach !== undefined) {
@@ -191,8 +193,11 @@ interface SandboxQuoteWire {
   topUpPath?: string;
 }
 
-const usd = (n: number | undefined, suffix = ''): string =>
-  n === undefined ? '—' : `$${n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '.00')}${suffix}`;
+/** A per-hour dollar field off the wire → all-units display (`—` when absent). */
+const perHour = (n: number | undefined): string =>
+  n === undefined ? '—' : formatRateAllUnits(rateAllUnits({ usd: n, per: 'hour' }));
+
+const usdAmount = (n: number | undefined): string => (n === undefined ? '—' : formatMoney(n));
 
 function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
   console.log(`quote: ${q.ok ? pc.green('ok') : pc.red(q.reason ?? 'unfillable')}`);
@@ -203,16 +208,19 @@ function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
   );
   console.log(`  order type: ${q.orderType}   order: ${q.providerOrder.join(', ')}`);
   if (q.rateUsd) {
-    console.log(`  rate: ${usd(q.rateUsd.perHour, '/hour')}   cheapest live: ${usd(q.cheapestLiveUsdPerHour, '/hr')}   reference: ${usd(q.referenceUsdPerHour, '/hr')}`);
+    console.log(`  rate: ${formatRateAllUnits(q.rateUsd)}`);
   } else if (q.rate) {
-    console.log(`  rate: $${q.rate.usd}/${q.rate.per}`);
+    console.log(`  rate: ${formatUsdPer(q.rate)}`);
   }
+  console.log(`  cheapest live: ${perHour(q.cheapestLiveUsdPerHour)}`);
+  console.log(`  reference: ${perHour(q.referenceUsdPerHour)}`);
   const timeout = timeoutMs !== undefined ? ` for ${timeoutMs}ms` : '';
-  console.log(`  est. cost${timeout}: ${usd(q.estimatedCostUsd)}   required hold: ${usd(q.requiredHoldUsd)}`);
   console.log(
-    `  cap: ${q.maxPrice ? `$${q.maxPrice.usd}/${q.maxPrice.per}` : usd(q.marketCapUsdPerHour, '/hr')}` +
-      `   protection limit: ${usd(q.protectionLimitUsdPerHour, '/hr')}   balance: ${usd(q.creditBalanceUsd)}`,
+    `  est. cost${timeout}: ${usdAmount(q.estimatedCostUsd)}   required hold: ${usdAmount(q.requiredHoldUsd)}` +
+      `   balance: ${usdAmount(q.creditBalanceUsd)}`,
   );
+  console.log(`  cap: ${q.maxPrice ? formatUsdPer(q.maxPrice) : perHour(q.marketCapUsdPerHour)}`);
+  console.log(`  protection limit: ${perHour(q.protectionLimitUsdPerHour)}`);
   if (!q.ok && q.topUpPath) console.log(`  ${pc.dim(`→ ${q.topUpPath}`)}`);
   if (q.liveAskDepth !== undefined) console.log(`  ${pc.dim(`live asks: ${q.liveAskDepth}`)}`);
 }
@@ -356,7 +364,7 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--max-price-per <unit>', 'unit for a bare --max-price usd (second, minute, or hour)')
     .option('--market', 'place the create on the compute market (order type "market")')
     .option('--order-type <type>', 'explicit market order type: market or limit')
-    .option('--timeout-ms <ms>', 'sandbox timeout in ms')
+    .option('--timeout-ms <ms>', 'sandbox timeout in ms (provider minimums apply, e.g. blaxel ≥5m)')
     .option('--secret <name>', 'vault secret name to inject (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
     .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
     .option('--base-url <url>', 'platform base URL')
@@ -405,7 +413,7 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--memory-mb <n>', 'memory in MB')
     .option('--disk-mb <n>', 'ephemeral disk in MB')
     .option('--region <region>', 'pin the placement region')
-    .option('--timeout-ms <ms>', 'sandbox timeout in ms')
+    .option('--timeout-ms <ms>', 'sandbox timeout in ms (provider minimums apply, e.g. blaxel ≥5m)')
     .option('--order-type <type>', 'market order type: market or limit')
     .option('--market', 'quote a market order (fills at the live price, protection-bounded)')
     .option('--max-price <usd/unit>', 'max price for a market fill (e.g. 0.12/hour)')

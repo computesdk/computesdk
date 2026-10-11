@@ -99,8 +99,8 @@ describe('compute sandboxes settings', () => {
     expect(get).toHaveBeenCalledWith('/api/v1/sandboxes/settings');
     expect(out).toContain('order type: inherit');
     expect(out).toContain('Actions: limit');
-    expect(out).toContain('inherits Actions: $0.4/hour');
-    expect(out).toContain('reference $0.12/hour');
+    expect(out).toContain('inherits Actions: $0.4/hr');
+    expect(out).toContain('reference $0.12/hr');
     expect(out).toContain('market, blaxel');
     expect(out).toContain('blaxel  4 vCPU / 8192 MB');
     expect(out).toContain('blaxel  2');
@@ -213,7 +213,7 @@ describe('compute actions settings', () => {
     );
     expect(get).toHaveBeenCalledWith('/api/v1/actions/settings');
     expect(out).toContain('order type: limit');
-    expect(out).toContain('general cap: $0.4/hour');
+    expect(out).toContain('general cap: $0.4/hr');
     expect(out).toContain('warm pool');
     expect(out).toContain('snapshot pool');
   });

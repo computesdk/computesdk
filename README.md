@@ -97,7 +97,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Microsandbox** | `MSB_API_KEY` or `MSB_PROFILE` for cloud; none for explicit local mode | Hardware-isolated microVMs on local machines or microsandbox cloud |
 | **MIOSA** | `MIOSA_API_KEY` | Snapshot-backed Firecracker microVM sandboxes with native filesystem and preview URLs |
 | **Mosaic** | `MOSAIC_API_URL`, `MOSAIC_API_TOKEN` | Firecracker microVMs with preview URLs, snapshots, and container-image environments |
-| **NeevCloud** | `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID` | Cloud sandboxes with command execution and preview URLs |
+| **NeevCloud** | `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID` | Cloud sandboxes with snapshots, streaming exec and preview URLs |
 | **Northflank** | `NORTHFLANK_TOKEN`, `NORTHFLANK_PROJECT_ID` | Cloud sandboxes with preview URLs |
 | **Novita** | `NOVITA_API_KEY` | Cloud sandboxes with native command streaming, filesystem access, snapshots, and template builds |
 | **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
@@ -358,7 +358,7 @@ See individual provider READMEs for details:
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
 - **[@computesdk/miosa](./packages/miosa)** - Snapshot-backed Firecracker microVMs with native filesystem, preview URLs, and checkpoints
 - **[@computesdk/mosaic](./packages/mosaic)** - Firecracker microVMs with preview URLs, snapshots, and container-image environments
-- **[@computesdk/neevcloud](./packages/neevcloud)** - Secure cloud sandboxes with command execution, filesystem, and preview URLs
+- **[@computesdk/neevcloud](./packages/neevcloud)** - Secure cloud sandboxes with command execution, filesystem, snapshots, and preview URLs
 - **[@computesdk/novita](./packages/novita)** - Novita cloud sandboxes with native streaming, filesystem access, snapshots, and template management
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
 - **[@computesdk/run-cloud](./packages/run-cloud)** - Fast Firecracker microVM sandboxes with filesystem and snapshot support

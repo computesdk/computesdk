@@ -1,5 +1,12 @@
 # @computesdk/tilion
 
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
 ## 0.1.7
 
 ### Patch Changes

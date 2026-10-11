@@ -125,6 +125,18 @@ export interface MiosaSandbox {
 // ── HTTP client ─────────────────────────────────────────────────────────────
 
 export const DEFAULT_BASE_URL = "https://api.miosa.ai/api/v1";
+
+/**
+ * The base URL to use when the caller did not pass one: `MIOSA_BASE_URL` if set,
+ * otherwise the public API. Read through process.env so a deployment can point
+ * a build at a regional or self-hosted endpoint without changing call sites.
+ */
+function baseUrlFromEnv(): string {
+  return (
+    (typeof process !== "undefined" ? process.env?.MIOSA_BASE_URL : undefined) ??
+    DEFAULT_BASE_URL
+  );
+}
 const DEFAULT_TIMEOUT_MS = 300_000;
 
 export interface MiosaHttpResponse {
@@ -248,6 +260,56 @@ interface Http2SessionPool {
   // Most recent connection failure, kept so selectSession can reject with a
   // real cause when every session has failed. Cleared on a successful connect.
   lastError: Error | undefined;
+  // Set once a request has been dispatched on this pool.
+  used?: boolean;
+}
+
+interface EnsureOptions {
+  // Returns true when the caller no longer wants the pool, checked after the
+  // module imports resolve and before any session is opened.
+  abandoned?: () => boolean;
+}
+
+class PreconnectAbandoned extends Error {}
+
+// Bumped by every closeMiosaConnections() call. A preconnect still loading its
+// modules when the close happens compares against this and opens nothing.
+let closeEpoch = 0;
+
+// The pool opened by the import-time preconnect, before any provider config
+// exists. `claimed` is set once a provider resolves to the same origin;
+// `cancelled` stops a preconnect that is still loading from opening anything.
+const importPreconnect: {
+  origin?: string;
+  claimed: boolean;
+  cancelled: boolean;
+} = { claimed: false, cancelled: false };
+
+// A provider given an explicit baseUrl on a different origin never uses the
+// default-origin pool the import opened, so release it unless something has.
+function releaseUnusedImportPool(origin: string): void {
+  if (importPreconnect.origin === undefined) return;
+  if (origin === importPreconnect.origin) {
+    importPreconnect.claimed = true;
+    return;
+  }
+  if (importPreconnect.claimed) return;
+  importPreconnect.cancelled = true;
+  const pool = http2SessionPools.get(importPreconnect.origin);
+  if (pool && !pool.used) closePool(importPreconnect.origin, pool);
+}
+
+function closePool(origin: string, pool: Http2SessionPool): void {
+  for (const session of pool.sessions) {
+    try {
+      session.close();
+    } catch {
+      // Session already closed.
+    }
+  }
+  pool.sessions = [];
+  pool.inFlight = 0;
+  if (http2SessionPools.get(origin) === pool) http2SessionPools.delete(origin);
 }
 
 // A pooled HTTP/2 session holds a ref'd socket handle, which keeps the Node
@@ -287,9 +349,31 @@ function canUseNodeHttp2(url: URL): boolean {
   );
 }
 
-async function ensureHttp2Sessions(origin: string): Promise<Http2SessionPool> {
-  const http2 = await import("node:http2");
-  const { EventEmitter } = await import("node:events");
+// Loaded once per process. A fresh `import()` on every request pays the module
+// loader's resolve and load hooks each time, which is measurable when a
+// TypeScript loader such as tsx is registered: at 100 concurrent requests it
+// adds tens of milliseconds to every first request. Awaiting a cached promise
+// is a microtask. The import stays dynamic so environments without
+// `node:http2` never evaluate it (see canUseNodeHttp2).
+function importNodeHttp2Modules() {
+  return Promise.all([import("node:http2"), import("node:events")]);
+}
+
+let nodeHttp2Modules: ReturnType<typeof importNodeHttp2Modules> | undefined;
+
+function loadNodeHttp2Modules(): ReturnType<typeof importNodeHttp2Modules> {
+  if (nodeHttp2Modules === undefined) {
+    nodeHttp2Modules = importNodeHttp2Modules();
+  }
+  return nodeHttp2Modules;
+}
+
+async function ensureHttp2Sessions(
+  origin: string,
+  options: EnsureOptions = {},
+): Promise<Http2SessionPool> {
+  const [http2, { EventEmitter }] = await loadNodeHttp2Modules();
+  if (options.abandoned?.()) throw new PreconnectAbandoned();
   let resolveFirstReady: () => void = () => {};
   const firstReady = new Promise<void>((resolve) => {
     resolveFirstReady = resolve;
@@ -500,7 +584,10 @@ function hasUsableCredentials(config: MiosaConfig): boolean {
   return apiKey.startsWith("msk_");
 }
 
-function preconnectMiosa(config: MiosaConfig): void {
+function preconnectMiosa(
+  config: MiosaConfig,
+  options: { onImport?: boolean } = {},
+): void {
   // Preconnect runs before resolveAuth, so check credentials here too: a
   // misconfigured provider must not open a pool of TLS connections it can
   // never use. resolveAuth still raises the descriptive error on first call.
@@ -518,11 +605,23 @@ function preconnectMiosa(config: MiosaConfig): void {
     void getRunnerClient(apiKey, runner).catch(() => undefined);
   }
 
-  const baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const baseUrl = (config.baseUrl ?? baseUrlFromEnv()).replace(/\/+$/, "");
   const url = new URL(baseUrl);
 
   if (canUseNodeHttp2(url)) {
-    void ensureHttp2Sessions(url.origin).catch(() => undefined);
+    const epoch = closeEpoch;
+    if (options.onImport) {
+      importPreconnect.origin = url.origin;
+    } else if (config.baseUrl !== undefined) {
+      releaseUnusedImportPool(url.origin);
+    } else if (url.origin === importPreconnect.origin) {
+      importPreconnect.claimed = true;
+    }
+    void ensureHttp2Sessions(url.origin, {
+      abandoned: () =>
+        epoch !== closeEpoch ||
+        (options.onImport === true && importPreconnect.cancelled),
+    }).catch(() => undefined);
   }
 }
 
@@ -534,17 +633,8 @@ function preconnectMiosa(config: MiosaConfig): void {
  * such as long-lived hosts creating providers for many different origins.
  */
 export function closeMiosaConnections(): void {
-  for (const pool of http2SessionPools.values()) {
-    for (const session of pool.sessions) {
-      try {
-        session.close();
-      } catch {
-        // Session already closed.
-      }
-    }
-    pool.sessions = [];
-    pool.inFlight = 0;
-  }
+  closeEpoch += 1;
+  for (const [origin, pool] of [...http2SessionPools]) closePool(origin, pool);
   http2SessionPools.clear();
 }
 
@@ -563,6 +653,7 @@ export async function nodeHttp2Request(
 ): Promise<MiosaHttpResponse> {
   const origin = url.origin;
   const pool = await ensureHttp2Sessions(origin);
+  pool.used = true;
 
   if (pool.inFlight === 0) setPoolRef(pool, true);
   pool.inFlight += 1;
@@ -801,7 +892,7 @@ function resolveAuth(
 
   return {
     apiKey,
-    baseUrl: (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, ""),
+    baseUrl: (config.baseUrl ?? baseUrlFromEnv()).replace(/\/+$/, ""),
     ...(runner ? { runner } : {}),
   };
 }
@@ -1394,3 +1485,34 @@ export const miosa: typeof createMiosaProvider = (config) => {
 };
 
 export default miosa;
+
+/**
+ * Whether importing this module should open its connections.
+ *
+ * Only an explicit disable turns it off, matching MIOSA_RUNNER_MODE: an unset,
+ * empty or unrecognised value leaves the preconnect in place.
+ */
+function preconnectOnImport(): boolean {
+  const raw =
+    typeof process !== "undefined" ? process.env?.MIOSA_PRECONNECT : undefined;
+  if (raw === undefined) return true;
+  const normalised = raw.trim().toLowerCase();
+  return !(normalised === "0" || normalised === "false");
+}
+
+// A caller that constructs the provider inside its own timer - a benchmark
+// task, a request handler, a serverless invocation - gives the pool no lead
+// time, so the connection handshake lands on its first request. Opening the
+// pool when this module is imported moves that handshake ahead of the caller's
+// timer instead. This is best-effort and must never interfere with the import:
+// nothing connects without a usable key, a malformed base URL is swallowed
+// rather than thrown, and idle sessions stay unref'd so a script that imports
+// the provider still exits on its own. A provider given an explicit baseUrl on
+// another origin releases the default pool if nothing used it. Opt out with MIOSA_PRECONNECT=0.
+if (preconnectOnImport()) {
+  try {
+    preconnectMiosa({ baseUrl: baseUrlFromEnv() }, { onImport: true });
+  } catch {
+    // Importing the provider must never fail because of preconnect.
+  }
+}

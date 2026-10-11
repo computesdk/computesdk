@@ -7,9 +7,46 @@
 import { randomUUID } from 'node:crypto';
 
 import { SandboxInstance, Snapshot, initialize } from '@blaxel/core';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp } from '@computesdk/provider';
 
 import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+
+/**
+ * Blaxel rejects sandboxes with a ttl under 5 minutes
+ * (`ttl 120s is too short: the minimum is 5m`). Any timeout below the floor
+ * is raised to it — the platform's own destroy still ends the box early, so
+ * billing stays on actual use.
+ */
+export const BLAXEL_MIN_TTL_SECONDS = 300;
+
+function toBlaxelTtl(timeoutMs: number | undefined, what: string): string | undefined {
+	if (timeoutMs === undefined) return undefined;
+	const seconds = Math.ceil(timeoutMs / 1000);
+	if (seconds >= BLAXEL_MIN_TTL_SECONDS) return `${seconds}s`;
+	console.warn(
+		`blaxel: ${what} ttl ${seconds}s is below the 5m provider minimum — raised to ${BLAXEL_MIN_TTL_SECONDS}s`
+	);
+	return `${BLAXEL_MIN_TTL_SECONDS}s`;
+}
+
+/**
+ * A `ttl` passed through provider options (`'300s'`, `'5m'`, `'1h'`; a
+ * bare number is taken as milliseconds) in ms — undefined when the value
+ * is not a shape we can normalize, in which case it passes through as-is.
+ */
+function parseBlaxelTtl(ttl: unknown): number | undefined {
+	if (typeof ttl === 'number') return Number.isFinite(ttl) ? ttl : undefined;
+	if (typeof ttl !== 'string') return undefined;
+	const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(ttl.trim());
+	if (!match) return undefined;
+	const value = Number(match[1]);
+	switch (match[2]) {
+		case 'ms': return value;
+		case 's': return value * 1000;
+		case 'm': return value * 60000;
+		default: return value * 3600000;
+	}
+}
 
 /**
  * Blaxel-specific configuration options
@@ -27,6 +64,41 @@ export interface BlaxelConfig {
 	memory?: number | 4096;
 	/** Default ports for sandbox */
 	ports?: number[] | [3000];
+}
+
+/**
+ * Blaxel's `initialize()` rewrites the SDK's process-global settings and
+ * client config: a different credential must serialize against in-flight
+ * calls, not interleave with them. The gate admits same-config calls
+ * concurrently; a different resolved config waits for the active calls to
+ * drain, then installs itself once.
+ */
+const blaxelGate = createConfigGate();
+
+/** Stamps created/connected instances so their instance ops re-enter the gate under their own config. */
+const blaxelStamp = createConfigStamp<BlaxelConfig>();
+
+function blaxelKey(config: BlaxelConfig): string {
+	const apiKey = config.apiKey || (typeof process !== 'undefined' ? process.env?.BL_API_KEY : undefined) || '';
+	const workspace = config.workspace || (typeof process !== 'undefined' ? process.env?.BL_WORKSPACE : undefined) || '';
+	return JSON.stringify({ apiKey, workspace });
+}
+
+async function withBlaxelConfig<T>(config: BlaxelConfig, fn: () => Promise<T>): Promise<T> {
+	return blaxelGate.withConfig(blaxelKey(config), () => initializeBlaxel(config), fn);
+}
+
+/**
+ * Instance ops use the config the instance was created under. An instance
+ * arriving without a stamp joins whatever epoch is active without installing
+ * a config — the same best-effort semantics it always had.
+ */
+function withBlaxelInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): Promise<T> {
+	const config = blaxelStamp.config(sandbox);
+	if (config === undefined) {
+		return blaxelGate.withConfig('blaxel.unconfigured', undefined, fn);
+	}
+	return withBlaxelConfig(config, fn);
 }
 
 /**
@@ -73,12 +145,10 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				}
 				const memory = config.memory;
 				const region = config.region;
-				const ttl = optTimeout ? `${Math.ceil(optTimeout / 1000)}s` : undefined;
+				const ttl = toBlaxelTtl(optTimeout, 'sandbox');
 
+			return withBlaxelConfig(config, async () => {
 			try {
-				// Initialize Blaxel SDK with credentials
-				initializeBlaxel(config);
-
 				let sandbox: SandboxInstance;
 
 				if (optSandboxId) {
@@ -109,21 +179,27 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						throw new Error(`Sandbox ${forkName} not found after forking snapshot ${snapshotId}`);
 					}
 				} else {
+					// A `ttl` inside providerOptions would spread over the clamped
+					// value — lift it out and apply the same 5m floor.
+					const { ttl: optionTtl, ...restProviderOptions } = providerOptions;
+					const effectiveTtl = optionTtl === undefined
+						? ttl
+						: (toBlaxelTtl(parseBlaxelTtl(optionTtl), 'sandbox') ?? (optionTtl as string));
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
 						image,
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value: value as string })),
 						...(metadata?.labels && { labels: metadata.labels }),
-						ttl,
+						ttl: effectiveTtl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
-						...providerOptions, // Spread provider-specific options
+						...restProviderOptions, // Spread provider-specific options
 					});
 				}
 
 				return {
-					sandbox,
+					sandbox: blaxelStamp.stamp(sandbox, config),
 					sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
 				};
 			} catch (error) {
@@ -152,47 +228,49 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						`Failed to create Blaxel sandbox: ${errorDetail}`
 					);
 				}
+				});
 			},
 
-			getById: async (config: BlaxelConfig, sandboxId: string) => {
-				try {
-					initializeBlaxel(config);
-					const sandbox = await SandboxInstance.get(sandboxId);
+			getById: async (config: BlaxelConfig, sandboxId: string) =>
+				withBlaxelConfig(config, async () => {
+					try {
+						const sandbox = await SandboxInstance.get(sandboxId);
 
-					if (!sandbox) {
+						if (!sandbox) {
+							return null;
+						}
+
+						return {
+							sandbox: blaxelStamp.stamp(sandbox, config),
+							sandboxId,
+						};
+					} catch (error) {
+						// Sandbox doesn't exist or can't be accessed
 						return null;
 					}
+				}),
 
-					return {
-						sandbox,
-						sandboxId,
-					};
-				} catch (error) {
-					// Sandbox doesn't exist or can't be accessed
-					return null;
-				}
-			},
+			list: async (config: BlaxelConfig) =>
+				withBlaxelConfig(config, async () => {
+					const sandboxList = await listAllSandboxes();
+					return sandboxList.map(sandbox => ({
+						sandbox: blaxelStamp.stamp(sandbox, config),
+						sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
+					}));
+				}),
 
-			list: async (config: BlaxelConfig) => {
-				initializeBlaxel(config);
-				const sandboxList = await listAllSandboxes();
-				return sandboxList.map(sandbox => ({
-					sandbox,
-					sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
-				}));
-			},
-
-			destroy: async (config: BlaxelConfig, sandboxId: string) => {
-				try {
-					initializeBlaxel(config);
-					await SandboxInstance.delete(sandboxId);
-				} catch (error) {
-					// Sandbox might already be destroyed or doesn't exist
-				}
-			},
+			destroy: async (config: BlaxelConfig, sandboxId: string) =>
+				withBlaxelConfig(config, async () => {
+					try {
+						await SandboxInstance.delete(sandboxId);
+					} catch (error) {
+						// Sandbox might already be destroyed or doesn't exist
+					}
+				}),
 
 			// Instance operations (map to individual Sandbox methods)
-		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> =>
+			withBlaxelInstance(sandbox, async () => {
 			const startTime = Date.now();
 
 			try {
@@ -233,7 +311,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					durationMs: Date.now() - startTime
 				};
 			}
-		},
+			}),
 
 			getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
 				const runtime = sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node';
@@ -263,7 +341,8 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					public?: boolean;
 					tokenExpiryMinutes?: number;
 				};
-			}): Promise<string> => {
+			}): Promise<string> =>
+				withBlaxelInstance(sandbox, async () => {
 				try {
 					// If public is not set, default to true
 					const isPublic = options.authentication?.public !== undefined ? options.authentication.public : true;
@@ -294,7 +373,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 							requestHeaders: options.headers?.request || defaultHeaders,
 							customDomain: options.customDomain,
 							prefixUrl: options.prefixUrl,
-							ttl: options.ttl ? `${Math.ceil(options.ttl / 1000)}s` : undefined
+							ttl: toBlaxelTtl(options.ttl, 'preview')
 						}
 					});
 
@@ -323,24 +402,28 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						`Failed to get Blaxel preview URL for port ${options.port}: ${error instanceof Error ? error.message : String(error)}`
 					);
 				}
-			},
+				}),
 
 			// Optional filesystem methods - implement using Blaxel's filesystem API
 			filesystem: {
-				readFile: async (sandbox: SandboxInstance, path: string): Promise<string> => {
-					const result = await sandbox.fs.read(path);
-					return result || '';
-				},
+				readFile: async (sandbox: SandboxInstance, path: string): Promise<string> =>
+					withBlaxelInstance(sandbox, async () => {
+						const result = await sandbox.fs.read(path);
+						return result || '';
+					}),
 
-				writeFile: async (sandbox: SandboxInstance, path: string, content: string): Promise<void> => {
-					await sandbox.fs.write(path, content);
-				},
+				writeFile: async (sandbox: SandboxInstance, path: string, content: string): Promise<void> =>
+					withBlaxelInstance(sandbox, async () => {
+						await sandbox.fs.write(path, content);
+					}),
 
-				mkdir: async (sandbox: SandboxInstance, path: string): Promise<void> => {
-					await sandbox.fs.mkdir(path);
-				},
+				mkdir: async (sandbox: SandboxInstance, path: string): Promise<void> =>
+					withBlaxelInstance(sandbox, async () => {
+						await sandbox.fs.mkdir(path);
+					}),
 
-				readdir: async (sandbox: SandboxInstance, path: string): Promise<FileEntry[]> => {
+				readdir: async (sandbox: SandboxInstance, path: string): Promise<FileEntry[]> =>
+					withBlaxelInstance(sandbox, async () => {
 					const result = await sandbox.fs.ls(path);
 					const files = result.files || [];
 					const directories = result.subdirectories || [];
@@ -362,25 +445,27 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						});
 					}
 					return entries;
-				},
+					}),
 
-				exists: async (sandbox: SandboxInstance, path: string): Promise<boolean> => {
-					try {
-						await sandbox.fs.read(path);
-						return true;
-					} catch {
+				exists: async (sandbox: SandboxInstance, path: string): Promise<boolean> =>
+					withBlaxelInstance(sandbox, async () => {
 						try {
-							await sandbox.fs.ls(path);
+							await sandbox.fs.read(path);
 							return true;
 						} catch {
-							return false;
+							try {
+								await sandbox.fs.ls(path);
+								return true;
+							} catch {
+								return false;
+							}
 						}
-					}
-				},
+					}),
 
-				remove: async (sandbox: SandboxInstance, path: string): Promise<void> => {
-					await sandbox.fs.rm(path);
-				}
+				remove: async (sandbox: SandboxInstance, path: string): Promise<void> =>
+					withBlaxelInstance(sandbox, async () => {
+						await sandbox.fs.rm(path);
+					})
 			},
 
 			// Provider-specific typed getInstance method
@@ -390,52 +475,50 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		},
 
 		snapshot: {
-			create: async (config: BlaxelConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
-				try {
-					initializeBlaxel(config);
-
+			create: async (config: BlaxelConfig, sandboxId: string, options?: CreateSnapshotOptions) =>
+				withBlaxelConfig(config, async () => {
+					try {
 					const snapshot = await Snapshot.create({
 						...(options?.name && { name: options.name }),
 						source: { name: sandboxId },
 					});
 
 					return toSnapshotInfo(snapshot);
-				} catch (error) {
-					throw new Error(
-						`Failed to create Blaxel snapshot: ${error instanceof Error ? error.message : String(error)}`
-					);
-				}
-			},
+					} catch (error) {
+						throw new Error(
+							`Failed to create Blaxel snapshot: ${error instanceof Error ? error.message : String(error)}`
+						);
+					}
+				}),
 
-			list: async (config: BlaxelConfig, options?: ListSnapshotsOptions) => {
-				initializeBlaxel(config);
+			list: async (config: BlaxelConfig, options?: ListSnapshotsOptions) =>
+				withBlaxelConfig(config, async () => {
+					if (options?.sandboxId) {
+						const sandbox = await SandboxInstance.get(options.sandboxId);
+						const snapshots = await sandbox.snapshots.list();
+						const infos = snapshots.map(toSnapshotInfo);
+						return options.limit ? infos.slice(0, options.limit) : infos;
+					}
 
-				if (options?.sandboxId) {
-					const sandbox = await SandboxInstance.get(options.sandboxId);
-					const snapshots = await sandbox.snapshots.list();
-					const infos = snapshots.map(toSnapshotInfo);
-					return options.limit ? infos.slice(0, options.limit) : infos;
-				}
+					// Workspace-wide listing; the page is an auto-paging iterable.
+					const snapshots: Snapshot[] = [];
+					for await (const snapshot of await Snapshot.list(
+						options?.limit ? { limit: Math.min(options.limit, 200) } : undefined
+					)) {
+						snapshots.push(snapshot);
+						if (options?.limit && snapshots.length >= options.limit) break;
+					}
+					return snapshots.map(toSnapshotInfo);
+				}),
 
-				// Workspace-wide listing; the page is an auto-paging iterable.
-				const snapshots: Snapshot[] = [];
-				for await (const snapshot of await Snapshot.list(
-					options?.limit ? { limit: Math.min(options.limit, 200) } : undefined
-				)) {
-					snapshots.push(snapshot);
-					if (options?.limit && snapshots.length >= options.limit) break;
-				}
-				return snapshots.map(toSnapshotInfo);
-			},
-
-			delete: async (config: BlaxelConfig, snapshotId: string) => {
-				try {
-					initializeBlaxel(config);
-					await Snapshot.delete(snapshotId);
-				} catch (error) {
-					// Ignore if not found
-				}
-			}
+			delete: async (config: BlaxelConfig, snapshotId: string) =>
+				withBlaxelConfig(config, async () => {
+					try {
+						await Snapshot.delete(snapshotId);
+					} catch (error) {
+						// Ignore if not found
+					}
+				})
 		},
 
 		// Templates in Blaxel are pre-configured images

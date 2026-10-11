@@ -1,5 +1,12 @@
 # @computesdk/r2
 
+## 1.2.13
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
 ## 1.2.12
 
 ### Patch Changes

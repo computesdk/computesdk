@@ -1,5 +1,12 @@
 # @computesdk/run-cloud
 
+## 1.0.9
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
 ## 1.0.8
 
 ### Patch Changes

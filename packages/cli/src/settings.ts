@@ -13,6 +13,7 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { ActionsApiError, type ActionsClient } from './actions-client.js';
+import { formatUsdPer } from './rate-display.js';
 import type { CommonOpts } from './actions.js';
 
 /**
@@ -107,10 +108,10 @@ function parseSizeCap(entry: string): { size: string; cap: Rate | null } {
 }
 
 const fmtRate = (cap: Rate | null | undefined): string =>
-  cap ? `$${cap.usd}/${cap.per}` : '—';
+  cap ? formatUsdPer(cap) : '—';
 
 const fmtRef = (ref: Rate | null | undefined): string =>
-  ref ? `  ${pc.dim(`reference $${ref.usd}/${ref.per}`)}` : '';
+  ref ? `  ${pc.dim(`reference ${formatUsdPer(ref)}`)}` : '';
 
 export function printLaneSettings(
   s: LaneSettings,

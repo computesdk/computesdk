@@ -1153,8 +1153,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       gravixlayer:
-        specifier: ^0.1.32
-        version: 0.1.32(@opentelemetry/api@1.9.1)
+        specifier: ^0.1.34
+        version: 0.1.34(@opentelemetry/api@1.9.1)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -1711,8 +1711,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@neevcloud/sdk':
-        specifier: ^0.7.0-beta
-        version: 0.7.0-beta(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+        specifier: ^0.8.2
+        version: 0.8.2(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4343,8 +4343,8 @@ packages:
     resolution: {integrity: sha512-mQ2s0pYYiav+tzCDR05Zptem8Ey2v8s11lri5RKGhTtL4COVCvVCk5vtyRYNT+9L8qSfyOqqefF9UtnW8mC5jA==}
     engines: {node: '>= 20.19.0'}
 
-  '@neevcloud/sdk@0.7.0-beta':
-    resolution: {integrity: sha512-AIYO6s+wI+s5SvSRhAPZ2uDSnTC03oE4h7b1TvSuSdWRBH4+oxnnTPtvh7+q665RZOqFVEFdwqDkadEvqOstZQ==}
+  '@neevcloud/sdk@0.8.2':
+    resolution: {integrity: sha512-JcSs8yRalJoUiKbZbws8rCIqMmvnBLLyN9DDROxMgvm/3dJi93sTITcqhAwqRZ03BbpGrCevIyvW6GvpsJB7xg==}
     engines: {node: '>=18'}
     peerDependencies:
       ws: ^8
@@ -6839,8 +6839,8 @@ packages:
     resolution: {integrity: sha512-Chq1s4CY7jmh8gO2qvLIJyfCDIN+EHLFW/9iShnp1z8FjBQMoodWP1kDC36VAMXXIvAjj4ARa7ntfAV2BrjsbA==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
-  gravixlayer@0.1.32:
-    resolution: {integrity: sha512-IByqAIXhyP0BAss0V644m9NE9ljvqJGCaNqIMdBMQQMcSRY8atfpkvlQXYR8Mk7/D79V/2bis6JIweG+mnYwDg==}
+  gravixlayer@0.1.34:
+    resolution: {integrity: sha512-FlSk0tihWYDpAxm2wQP9LqE2iiue0MigWJ5xtvRmdbsRN5pr/21sJ3DDs27bCQvVnQ5nv9QV5RWcjShjV/FG1w==}
     engines: {node: '>=20'}
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
@@ -11246,7 +11246,7 @@ snapshots:
       prebuild-install: 7.1.3
     optional: true
 
-  '@neevcloud/sdk@0.7.0-beta(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@neevcloud/sdk@0.8.2(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
       openapi-fetch: 0.17.0
     optionalDependencies:
@@ -14463,7 +14463,7 @@ snapshots:
 
   graphql@16.14.2: {}
 
-  gravixlayer@0.1.32(@opentelemetry/api@1.9.1):
+  gravixlayer@0.1.34(@opentelemetry/api@1.9.1):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
 
