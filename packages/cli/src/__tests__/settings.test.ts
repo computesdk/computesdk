@@ -251,3 +251,22 @@ describe('compute actions settings', () => {
     expect(patch).not.toHaveBeenCalled();
   });
 });
+
+describe('review fixes', () => {
+  it('rejects an --order that names no providers', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await buildSandboxes().parseAsync(
+        ['sandboxes', 'settings', 'set', '--order', ','],
+        { from: 'user' },
+      );
+    } catch {
+      /* noop */
+    } finally {
+      exit.mockRestore();
+      err.mockRestore();
+    }
+    expect(patch).not.toHaveBeenCalled();
+  });
+});

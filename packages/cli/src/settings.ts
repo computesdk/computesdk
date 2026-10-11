@@ -166,13 +166,14 @@ function settingsFail(
   e: unknown,
   opts: CommonOpts,
   lane: string,
+  verb: 'view' | 'change',
   deps: SettingsDeps,
 ): never {
   if (e instanceof ActionsApiError && e.status === 403) {
     return deps.fail(
       new ActionsApiError(
         403,
-        `Only org owners/admins can change ${lane} settings`,
+        `Only org owners/admins can ${verb} ${lane} settings`,
         e.body,
       ),
       opts,
@@ -204,7 +205,7 @@ export function registerSettingsCommands(
       const res = await c.get<LaneSettings>(`/api/v1/${lane}/settings`);
       deps.output(opts, res, (s) => printLaneSettings(s, lane));
     } catch (e) {
-      settingsFail(e, opts, lane, deps);
+      settingsFail(e, opts, lane, 'view', deps);
     }
   });
 
@@ -273,6 +274,13 @@ export function registerSettingsCommands(
           body.providerOrder = [];
         } else {
           body.providerOrder = opts.order.split(',').map((s) => s.trim()).filter(Boolean);
+          if ((body.providerOrder as string[]).length === 0) {
+            throw new Error(
+              lane === 'sandboxes'
+                ? `--order "${opts.order}" names no providers — pass a comma-separated list or "inherit".`
+                : `--order "${opts.order}" names no providers — pass a comma-separated list or "default".`,
+            );
+          }
         }
       }
       if (Object.keys(body).length === 0) {
@@ -284,7 +292,7 @@ export function registerSettingsCommands(
       const res = await c.patch<LaneSettings>(`/api/v1/${lane}/settings`, body);
       deps.output(opts, res, (s) => printLaneSettings(s, lane));
     } catch (e) {
-      settingsFail(e, opts, lane, deps);
+      settingsFail(e, opts, lane, 'change', deps);
     }
   });
 }
