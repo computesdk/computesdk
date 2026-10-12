@@ -10,6 +10,7 @@
 
 * [Providers](providers/README.md)
   * [AWS Bedrock AgentCore](providers/agentcore.md)
+  * [AWS EC2](providers/aws-ec2.md)
   * [Agentuity](providers/agentuity.md)
   * [Archil](providers/archil.md)
   * [Beam](providers/beam.md)
