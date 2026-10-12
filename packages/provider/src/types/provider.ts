@@ -4,7 +4,7 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { ComputeKind, CreateInstanceOptions, InstanceInterface } from 'computesdk';
+import type { CreateInstanceOptions, InstanceInterface } from 'computesdk';
 
 /**
  * Provider Instance - what provider implementations return
@@ -129,9 +129,6 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
 export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any> {
   /** Provider name/type */
   readonly name: string;
-
-  /** The form of compute this provider provisions. Defaults to 'sandbox'. */
-  readonly kind?: ComputeKind;
 
   /** Instance management operations */
   readonly instances: ProviderInstanceManager<TInstance>;

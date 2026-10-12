@@ -26,7 +26,6 @@ import type {
   ProcessStatus,
   ProcessHandle,
   InstanceEgressInfo,
-  ComputeKind,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
@@ -347,11 +346,6 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
  */
 export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any, TSnapshot = any> {
   name: string;
-  /**
-   * The lifecycle class of compute this provider provisions
-   * (see `ComputeKind`). Defaults to `'sandbox'`.
-   */
-  kind?: ComputeKind;
   methods: {
     /** Instance lifecycle methods (canonical key). */
     instances?: InstanceMethods<TInstance, TConfig>;
@@ -457,8 +451,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     private methods: InstanceMethods<TInstance>,
     private config: any,
     private destroyMethod: (config: any, instanceId: string) => Promise<void>,
-    private providerInstance: Provider,
-    private providerKind: ComputeKind
+    private providerInstance: Provider
   ) {
     this.instanceId = instanceId;
     this.sandboxId = instanceId;
@@ -966,9 +959,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   }
 
   async getInfo(): Promise<InstanceInfo> {
-    const info = await this.methods.getInfo(this.instance);
-    // Providers that don't report a form default to their declared kind.
-    return { kind: this.providerKind, ...info };
+    return await this.methods.getInfo(this.instance);
   }
 
   async getUrl(options: { port: number; protocol?: string }): Promise<string> {
@@ -1015,8 +1006,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     private config: TConfig,
     private providerName: string,
     private methods: InstanceMethods<TInstance, TConfig>,
-    private providerInstance: Provider,
-    private providerKind: ComputeKind
+    private providerInstance: Provider
   ) {}
 
   private wrap(result: InstanceLifecycleResult<TInstance>): GeneratedInstance<TInstance> {
@@ -1028,8 +1018,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance,
-      this.providerKind
+      this.providerInstance
     );
   }
 
@@ -1159,7 +1148,6 @@ class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotMa
  */
 class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot> implements Provider<TInstance, TTemplate, TSnapshot> {
   readonly name: string;
-  readonly kind?: ComputeKind;
   readonly instances: ProviderInstanceManager<TInstance>;
   /** @deprecated Use `instances`. Always the same manager object. */
   readonly sandbox: ProviderInstanceManager<TInstance>;
@@ -1168,7 +1156,6 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot> implements Pro
 
   constructor(config: TConfig, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot>) {
     this.name = providerConfig.name;
-    this.kind = providerConfig.kind;
 
     const instanceMethods = providerConfig.methods.instances ?? providerConfig.methods.sandbox;
     if (!instanceMethods) {
@@ -1182,8 +1169,7 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot> implements Pro
       config,
       providerConfig.name,
       instanceMethods,
-      this,
-      providerConfig.kind ?? 'sandbox'
+      this
     );
     this.sandbox = this.instances;
 

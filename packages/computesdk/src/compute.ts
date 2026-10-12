@@ -6,7 +6,6 @@
 
 import type {
   Instance as InstanceInterface,
-  ComputeKind,
   CreateInstanceOptions as UniversalCreateInstanceOptions,
 } from './types/universal-instance';
 
@@ -42,8 +41,6 @@ interface ProviderSnapshotManager {
 
 export interface DirectProvider {
   readonly name?: string;
-  /** The form of compute this provider provisions. Defaults to 'sandbox'. */
-  readonly kind?: ComputeKind;
   /** Instance lifecycle manager (canonical). */
   readonly instances?: ProviderInstanceManager;
   /**
@@ -186,32 +183,21 @@ class ComputeManager {
     }
   }
 
-  private getCreateCandidates(preferredProviderName?: string, kind?: ComputeKind): DirectProvider[] {
+  private getCreateCandidates(preferredProviderName?: string): DirectProvider[] {
     const providers = this.getProviders();
     if (preferredProviderName) {
-      const provider = this.getProviderByName(preferredProviderName);
-      if (kind !== undefined && (provider.kind ?? 'sandbox') !== kind) {
-        throw new Error(
-          `Provider "${preferredProviderName}" cannot create an instance of kind "${kind}" ` +
-          `(its declared kind is "${provider.kind ?? 'sandbox'}").`
-        );
-      }
-      return [provider];
+      return [this.getProviderByName(preferredProviderName)];
     }
 
-    const matching = kind === undefined
-      ? providers
-      : providers.filter((p) => (p.kind ?? 'sandbox') === kind);
-
-    if (matching.length <= 1 || this.providerStrategy === 'priority') {
-      return [...matching];
+    if (providers.length <= 1 || this.providerStrategy === 'priority') {
+      return [...providers];
     }
 
-    const start = this.roundRobinCursor % matching.length;
-    this.roundRobinCursor = (this.roundRobinCursor + 1) % matching.length;
+    const start = this.roundRobinCursor % providers.length;
+    this.roundRobinCursor = (this.roundRobinCursor + 1) % providers.length;
     return [
-      ...matching.slice(start),
-      ...matching.slice(0, start),
+      ...providers.slice(start),
+      ...providers.slice(0, start),
     ];
   }
 
@@ -246,18 +232,10 @@ class ComputeManager {
 
   private async createWithFallback(options?: CreateInstanceOptions): Promise<InstanceInterface> {
     const preferredProviderName = options?.provider;
-    // `provider`/`kind` are routing metadata consumed by ComputeManager — do not
-    // forward them into provider create options (strict validators reject them).
-    const { provider: _providerName, kind: _kind, ...providerOptions } = options || {};
-    const candidates = this.getCreateCandidates(preferredProviderName, options?.kind);
+    const { provider: _providerName, ...providerOptions } = options || {};
+    const candidates = this.getCreateCandidates(preferredProviderName);
     const canFallback = this.fallbackOnError && !preferredProviderName;
     const errors: string[] = [];
-
-    if (candidates.length === 0) {
-      throw new Error(
-        `No configured provider can create an instance of kind "${options?.kind}".`
-      );
-    }
 
     for (const [index, provider] of candidates.entries()) {
       try {

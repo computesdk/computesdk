@@ -7,7 +7,6 @@
 // Import and re-export universal types from computesdk (grandmother package)
 export type {
   InstanceInterface,
-  ComputeKind,
   CodeResult,
   CommandResult,
   InstanceInfo,

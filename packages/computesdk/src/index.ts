@@ -23,7 +23,6 @@
 // Sandbox* names are deprecated aliases kept for backwards compatibility.
 export type {
   Instance as InstanceInterface,
-  ComputeKind,
   CodeResult,
   CommandResult,
   InstanceInfo,

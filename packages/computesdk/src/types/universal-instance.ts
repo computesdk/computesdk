@@ -7,15 +7,6 @@
  */
 
 /**
- * The lifecycle class of compute a provider provisions.
- *
- * Only `'sandbox'` exists today: ephemeral isolated environments
- * (E2B, Modal, Daytona, ...). Other classes — `'vm'`, `'metal'` —
- * are added to this union when a provider declares them.
- */
-export type ComputeKind = 'sandbox';
-
-/**
  * Code execution result
  */
 export interface CodeResult {
@@ -42,8 +33,6 @@ export interface InstanceInfo {
   id: string;
   /** Provider hosting the instance */
   provider: string;
-  /** The form of compute this instance is */
-  kind?: ComputeKind;
   /** Current status of the instance */
   status: 'running' | 'stopped' | 'error';
   /** When the instance was created */
@@ -311,12 +300,6 @@ export interface InstanceEgressInfo {
  * read additional provider-specific keys via the index signature.
  */
 export interface CreateInstanceOptions extends InstanceResourceOptions {
-  /**
-   * Restrict creation to providers of a given lifecycle class
-   * (see `ComputeKind`). Providers declare their class via
-   * `ProviderConfig.kind` (default `'sandbox'`). Unset = any provider.
-   */
-  kind?: ComputeKind;
   /**
    * Select the provider's ephemeral compute surface when it offers both
    * ephemeral and persistent instances.

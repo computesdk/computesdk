@@ -19,7 +19,6 @@ import type {
 
 // Non-renamed types stay re-exported so deep imports of this file keep working.
 export type {
-  ComputeKind,
   CodeResult,
   CommandResult,
   FileEntry,
