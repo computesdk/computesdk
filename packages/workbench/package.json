@@ -60,6 +60,7 @@
   "peerDependencies": {
     "@computesdk/blaxel": "workspace:*",
     "@computesdk/cloudflare": "workspace:*",
+    "@computesdk/cloud-run": "workspace:*",
     "@computesdk/gcp": "workspace:*",
     "@computesdk/codesandbox": "workspace:*",
     "@computesdk/daytona": "workspace:*",
@@ -106,6 +107,9 @@
       "optional": true
     },
     "@computesdk/cloudflare": {
+      "optional": true
+    },
+    "@computesdk/cloud-run": {
       "optional": true
     },
     "@computesdk/gcp": {

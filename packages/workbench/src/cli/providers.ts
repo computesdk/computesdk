@@ -345,6 +345,17 @@ export function getProviderSetupHelp(provider: string): string {
   return lines.join('\n');
 }
 
+const PROVIDER_PACKAGES: Partial<Record<ProviderName, string>> = {
+  'cloud-run': '@computesdk/gcp',
+};
+
+/**
+ * npm package that provides a given provider
+ */
+export function getProviderPackage(providerName: string): string {
+  return PROVIDER_PACKAGES[providerName as ProviderName] ?? `@computesdk/${providerName}`;
+}
+
 /**
  * Dynamically import a provider package
  */
@@ -367,7 +378,12 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'cloudflare':
         return await import('@computesdk/cloudflare');
       case 'cloud-run':
-        return await import('@computesdk/gcp/cloud-run');
+        try {
+          return await import('@computesdk/gcp/cloud-run');
+        } catch {
+          // Deprecated package; still supported for existing installs
+          return await import('@computesdk/cloud-run');
+        }
       case 'beam':
         return await import('@computesdk/beam');
       case 'just-bash':
@@ -419,7 +435,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
   } catch (error) {
     throw new Error(
       `Failed to load provider ${providerName}. ` +
-      `Make sure to install it: npm install @computesdk/${providerName}`
+      `Make sure to install it: npm install ${getProviderPackage(providerName)}`
     );
   }
 }

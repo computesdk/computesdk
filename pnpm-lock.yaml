@@ -2691,6 +2691,9 @@ importers:
       '@computesdk/blaxel':
         specifier: workspace:*
         version: link:../blaxel
+      '@computesdk/cloud-run':
+        specifier: workspace:*
+        version: link:../cloud-run
       '@computesdk/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
