@@ -70,6 +70,8 @@ A plain on-demand launch (at most one `instanceType`, no `subnetIds`) is a singl
 several instance types, or `subnetIds` use an instant EC2 Fleet over every type × subnet pair
 (`price-capacity-optimized` for Spot).
 
+If your launch template doesn't pin a subnet, pass `subnetIds`; otherwise AWS falls back to the default VPC.
+
 ### Credentials
 
 There are no API keys in config. Pass a credential provider for short-lived credentials, e.g. on Vercel with OIDC:
