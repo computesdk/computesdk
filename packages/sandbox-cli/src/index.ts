@@ -64,6 +64,11 @@ function fromB64(s: string | null | undefined): string {
   return s ? Buffer.from(s, 'base64').toString('utf8') : '';
 }
 
+/** `URL.hostname` of a loopback address: 127.0.0.0/8, [::1] or localhost. */
+function isLoopback(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '[::1]' || /^127(\.\d{1,3}){3}$/.test(hostname);
+}
+
 class ApiClient {
   readonly base: string;
   private readonly headers: Record<string, string>;
@@ -83,6 +88,14 @@ class ApiClient {
     const u = new URL(endpoint);
     if (u.protocol !== 'https:' && u.protocol !== 'http:') {
       throw new Error(`sandbox-cli endpoint must be http(s)://host[:port], got ${endpoint}`);
+    }
+    // Every request carries the bearer token, so plain http is only for a
+    // sandboxd on this machine.
+    if (u.protocol === 'http:' && !isLoopback(u.hostname)) {
+      throw new Error(
+        `sandbox-cli endpoint ${endpoint} is plain http to a non-loopback host, which would send the token ` +
+          `unencrypted. Use https://, or http:// only to 127.0.0.1, ::1 or localhost.`
+      );
     }
     this.base = endpoint.replace(/\/+$/, '');
     this.headers = { Authorization: `Bearer ${token}` };
@@ -167,11 +180,20 @@ async function run(instance: SandboxCliInstance, command: string, options?: RunC
   };
 }
 
+/** How long after a timeout's KILL the output stream may take to end. */
+const KILL_GRACE_MS = 2_000;
+
 /**
  * Live output through the API's own process stream: start the process, then
  * read `GET …/processes/{pid}/output`, one JSON object per line, until the
- * `{"exit_code": N}` line. A timeout sends KILL; the stream then ends with the
- * killed process's exit code.
+ * `{"exit_code": N}` line.
+ *
+ * A timeout sends KILL, which ends the stream once it lands (the guest kills
+ * the whole process group). The output request has a deadline of its own as
+ * well, so a kill that fails cannot leave the caller waiting on a command
+ * that is still running. Any other failure - the output request, a read, a
+ * callback - kills the process before the error is reported, so nothing is
+ * left running without a reader.
  */
 async function stream(instance: SandboxCliInstance, command: string, options: RunCommandOptions): Promise<CommandResult> {
   const { client, sandbox } = instance;
@@ -182,22 +204,35 @@ async function stream(instance: SandboxCliInstance, command: string, options: Ru
 
   const proc = await client.json<{ pid: number }>('POST', client.sbx(sandbox.id) + '/processes', req);
   const procPath = `${client.sbx(sandbox.id)}/processes/${proc.pid}`;
+  const kill = () => client.json('POST', procPath + '/signal', { signal: 'KILL' }).catch(() => {});
 
+  const abort = new AbortController();
   let timedOut = false;
+  let grace: ReturnType<typeof setTimeout> | undefined;
   const timer = options.timeout
     ? setTimeout(() => {
         timedOut = true;
-        client.json('POST', procPath + '/signal', { signal: 'KILL' }).catch(() => {});
+        void kill();
+        grace = setTimeout(() => abort.abort(), KILL_GRACE_MS);
       }, options.timeout)
     : undefined;
 
-  let stdout = '';
-  let stderr = '';
+  // Output arrives in byte chunks that can split a character, so each stream
+  // keeps one decoder across events and is flushed at the end.
+  const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
+  const out = { stdout: '', stderr: '' };
+  const emit = (s: 'stdout' | 'stderr', text: string) => {
+    if (!text) return;
+    out[s] += text;
+    (s === 'stdout' ? options.onStdout : options.onStderr)?.(text);
+  };
+
   let exitCode: number | undefined;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    const resp = await client.request('GET', procPath + '/output');
+    const resp = await client.request('GET', procPath + '/output', { signal: abort.signal });
     if (!resp.body) throw new Error('sandbox-cli: output stream has no body');
-    const reader = resp.body.getReader();
+    reader = resp.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
     for (;;) {
@@ -212,23 +247,26 @@ async function stream(instance: SandboxCliInstance, command: string, options: Ru
         const ev = JSON.parse(line) as { stream?: 'stdout' | 'stderr'; data?: string; exit_code?: number };
         if (typeof ev.exit_code === 'number') {
           exitCode = ev.exit_code;
-        } else if (ev.stream === 'stdout') {
-          const text = fromB64(ev.data);
-          stdout += text;
-          options.onStdout?.(text);
-        } else if (ev.stream === 'stderr') {
-          const text = fromB64(ev.data);
-          stderr += text;
-          options.onStderr?.(text);
+        } else if (ev.stream === 'stdout' || ev.stream === 'stderr') {
+          emit(ev.stream, decoders[ev.stream].decode(Buffer.from(ev.data ?? '', 'base64'), { stream: true }));
         }
       }
     }
+  } catch (error) {
+    if (!(timedOut && abort.signal.aborted)) {
+      if (exitCode === undefined) await kill();
+      throw error;
+    }
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
+    clearTimeout(grace);
+    reader?.cancel().catch(() => {});
   }
+  emit('stdout', decoders.stdout.decode());
+  emit('stderr', decoders.stderr.decode());
 
   if (exitCode === undefined || (timedOut && exitCode === 0)) exitCode = -1;
-  return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
+  return { stdout: out.stdout, stderr: out.stderr, exitCode, durationMs: Date.now() - startTime };
 }
 
 /**
@@ -316,7 +354,9 @@ export const sandboxCli = defineProvider<SandboxCliInstance, SandboxCliConfig>({
         return {
           id: s.id,
           provider: 'sandbox-cli',
-          status: s.state === 'running' || s.state === 'pending' ? 'running' : 'stopped',
+          // A pending sandbox is still being created and refuses commands; its
+          // native state stays in metadata.
+          status: s.state === 'running' ? 'running' : 'stopped',
           createdAt: new Date(s.created_at),
           timeout: (s.lifetime_secs ?? 0) * 1000,
           metadata: { state: s.state, image: s.image, cpus: s.cpus, memoryMb: s.memory_mb, name: s.name, labels: s.labels },

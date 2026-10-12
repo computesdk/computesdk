@@ -28,6 +28,10 @@ export SANDBOX_ORG=your_org
 
 These are the same variables the `sandbox-cli` command and its SDKs read.
 
+The endpoint must be `https://`, except for a sandboxd on the same machine:
+plain `http://` is accepted only to `127.0.0.1`, `::1` or `localhost`, since every
+request carries the token.
+
 ## Usage
 
 ```typescript
