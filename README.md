@@ -105,6 +105,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
 | **Runtime** | `RUNTIME_API_KEY` | Firecracker microVM sandboxes with streaming, previews and snapshots |
 | **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
+| **sandbox-cli** | `SANDBOX_ENDPOINT`, `SANDBOX_TOKEN` | MicroVM sandboxes with their own kernel, one API on a Mac, a self-hosted Linux machine or the cloud |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
 | **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
 | **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
@@ -321,6 +322,7 @@ npm install @computesdk/run-cloud        # Run Cloud Firecracker sandbox provide
 npm install @computesdk/runloop          # Runloop provider
 npm install @computesdk/runtime          # Runtime provider
 npm install @computesdk/sail             # Sail provider
+npm install @computesdk/sandbox-cli      # sandbox-cli provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/superserve       # Superserve provider
 npm install @computesdk/tensorlake       # Tensorlake provider

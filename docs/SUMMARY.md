@@ -50,6 +50,7 @@
   * [Runloop](providers/runloop.md)
   * [Runtime](providers/runtime.md)
   * [Sail](providers/sail.md)
+  * [sandbox-cli](providers/sandbox-cli.md)
   * [Sandbox0](providers/sandbox0.md)
   * [Secure Exec](providers/secure-exec.md)
   * [Sprites](providers/sprites.md)
