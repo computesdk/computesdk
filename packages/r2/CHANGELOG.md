@@ -1,5 +1,12 @@
 # @computesdk/r2
 
+## 1.2.14
+
+### Patch Changes
+
+- Updated dependencies [aadc200]
+  - @computesdk/provider@2.1.13
+
 ## 1.2.13
 
 ### Patch Changes

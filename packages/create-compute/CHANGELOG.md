@@ -1,5 +1,12 @@
 # create-compute
 
+## 0.2.22
+
+### Patch Changes
+
+- Updated dependencies [aadc200]
+  - computesdk@4.1.11
+
 ## 0.2.21
 
 ### Patch Changes
