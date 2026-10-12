@@ -367,7 +367,7 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
       case 'cloudflare':
         return await import('@computesdk/cloudflare');
       case 'cloud-run':
-        return await import('@computesdk/cloud-run');
+        return await import('@computesdk/gcp/cloud-run');
       case 'beam':
         return await import('@computesdk/beam');
       case 'just-bash':

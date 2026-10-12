@@ -284,7 +284,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.39(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.59)(@computesdk/modal@1.9.15)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.41(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.61)(@computesdk/modal@1.9.17)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -605,16 +605,10 @@ importers:
 
   packages/cloud-run:
     dependencies:
-      '@computesdk/provider':
+      '@computesdk/gcp':
         specifier: workspace:*
-        version: link:../provider
-      computesdk:
-        specifier: workspace:*
-        version: link:../computesdk
+        version: link:../gcp
     devDependencies:
-      '@computesdk/test-utils':
-        specifier: workspace:*
-        version: link:../test-utils
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.41
@@ -1109,6 +1103,40 @@ importers:
       vitest:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/gcp:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
   packages/givemeanode:
     dependencies:
@@ -2663,9 +2691,6 @@ importers:
       '@computesdk/blaxel':
         specifier: workspace:*
         version: link:../blaxel
-      '@computesdk/cloud-run':
-        specifier: workspace:*
-        version: link:../cloud-run
       '@computesdk/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
@@ -2690,6 +2715,9 @@ importers:
       '@computesdk/freestyle':
         specifier: workspace:*
         version: link:../freestyle
+      '@computesdk/gcp':
+        specifier: workspace:*
+        version: link:../gcp
       '@computesdk/hopx':
         specifier: workspace:*
         version: link:../hopx
@@ -3265,17 +3293,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.39':
-    resolution: {integrity: sha512-chhxbklRNonXcOTvJE1qkozUBJQ46K7uM03+hOeWbF73eS1jQdJVi9EkoEw/ZvuF62RZMmPvxOWL7IfDnDkxEw==}
+  '@computesdk/daytona@1.7.41':
+    resolution: {integrity: sha512-Sh/Uokho9RgW1643/la/ewUHOtNK15BF8QTcmMmXuLiQ5ZDgfC58nZeFZGhxFvhW2PK9OalHEn0YQ3xzATTY5Q==}
 
-  '@computesdk/e2b@1.7.59':
-    resolution: {integrity: sha512-eX0jq81QFPI9m3iO5fXwJ9dASyklnb1kGzWEnUoSOw8MIHN445KBmf1hs62F8AsagBCAUP5Jx93p20fTmkAy4g==}
+  '@computesdk/e2b@1.7.61':
+    resolution: {integrity: sha512-geXNhV1cgizEgVYoBtExNWh06jp1lDVnoz48nj3Yu3AWEWLoQHYEeZELnoC19ALNGa5xmHPjasLkHIelVzAiLw==}
 
-  '@computesdk/modal@1.9.15':
-    resolution: {integrity: sha512-ikwmTzsxsBwlDahyfFRQSPaVttLE9j1V3UaVwJ+FBwfzJuwLMgA6okKVEpPPIOhaLRDMPeo7zd15lvYnVRnWqg==}
+  '@computesdk/modal@1.9.17':
+    resolution: {integrity: sha512-fdM0SJl/Kv9igEm/vCXKqap/sIcZrjPqgdAz/7i97PMl7JMD93C57Ohwqd0dB22/pcveaPkTJ6G6o8xHoqwb+w==}
 
-  '@computesdk/provider@2.1.11':
-    resolution: {integrity: sha512-jgryilUaZ7TD8W37sXZzoiiiKr20PeykwWBkJxwMWL3m6nS88VWEfnMlUWyYVBwxAlgsMS1oog/fx/EZ9/xusA==}
+  '@computesdk/provider@2.1.13':
+    resolution: {integrity: sha512-ZXC6nwhU5BbYAhfJ+4snRo0HWfMIB0onI6FWkH86+01kr/xU4Qf/qaF5XsJm0KzyNk1GUpRNLOFigGz4BZi0pg==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -6107,8 +6135,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.10:
-    resolution: {integrity: sha512-I99mW+7BfB24ilVbCpTQ7pglda8sETuRsbedwGHDQx/DRTLLtDGHQVfME17gVPvBUCRttbEe/qjY5ZEHUn/eBA==}
+  computesdk@4.1.11:
+    resolution: {integrity: sha512-vBvKWvW7uG5udz4hOqN04VN58Q+3DkoGv8qoW3NXJd96TpyVQmW7X1EJcizo2qq1DiH+TpI04jfXJoWHh9s5sQ==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -9397,15 +9425,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.39(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.59)(@computesdk/modal@1.9.15)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.41(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.61)(@computesdk/modal@1.9.17)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.39(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@computesdk/e2b': 1.7.59
-      '@computesdk/modal': 1.9.15
+      '@computesdk/daytona': 1.7.41(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@computesdk/e2b': 1.7.61
+      '@computesdk/modal': 1.9.17
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10383,11 +10411,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.39(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@computesdk/daytona@1.7.41(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
-      '@computesdk/provider': 2.1.11
+      '@computesdk/provider': 2.1.13
       '@daytonaio/sdk': 0.192.0(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      computesdk: 4.1.10
+      computesdk: 4.1.11
     transitivePeerDependencies:
       - aws-crt
       - debug
@@ -10395,24 +10423,24 @@ snapshots:
       - ws
     optional: true
 
-  '@computesdk/e2b@1.7.59':
+  '@computesdk/e2b@1.7.61':
     dependencies:
-      '@computesdk/provider': 2.1.11
-      computesdk: 4.1.10
+      '@computesdk/provider': 2.1.13
+      computesdk: 4.1.11
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.15':
+  '@computesdk/modal@1.9.17':
     dependencies:
-      '@computesdk/provider': 2.1.11
-      computesdk: 4.1.10
+      '@computesdk/provider': 2.1.13
+      computesdk: 4.1.11
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.11':
+  '@computesdk/provider@2.1.13':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.10
+      computesdk: 4.1.11
       daemond: 0.1.8
     optional: true
 
@@ -13533,7 +13561,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.10:
+  computesdk@4.1.11:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.8

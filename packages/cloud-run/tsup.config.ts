@@ -10,7 +10,7 @@ export default defineConfig([
     clean: true,
   },
   {
-    entry: ['src/setup.ts', 'src/gateway.ts'],
+    entry: ['src/setup.ts'],
     format: ['esm'],
     splitting: false,
     sourcemap: false,

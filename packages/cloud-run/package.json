@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/cloud-run",
   "version": "0.1.16",
-  "description": "Google Cloud Run Sandboxes provider for ComputeSDK",
+  "description": "Deprecated: use @computesdk/gcp/cloud-run. Thin re-export of the Google Cloud Run Sandboxes provider for ComputeSDK.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -32,11 +32,9 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+    "@computesdk/gcp": "workspace:*"
   },
   "devDependencies": {
-    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
@@ -52,7 +50,8 @@
     "sandbox",
     "code-execution",
     "provider",
-    "ai-agent"
+    "ai-agent",
+    "deprecated"
   ],
   "repository": {
     "type": "git",
@@ -62,5 +61,6 @@
   "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
-  }
+  },
+  "deprecated": "Use @computesdk/gcp/cloud-run instead."
 }
