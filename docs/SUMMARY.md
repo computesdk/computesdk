@@ -69,9 +69,9 @@
 
 ## Reference
 
-* [Sandbox (interface)](reference/Sandbox.md)
+* [Instance (interface)](reference/Instance.md)
 * [compute](reference/compute.md)
-* [compute.sandbox](reference/compute.sandbox.md)
+* [compute.instances](reference/compute.instances.md)
 
 ***
 

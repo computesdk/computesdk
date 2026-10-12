@@ -23,7 +23,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Execute code
 const result = await sandbox.runCommand('python -c "print(\"Hello World!\")"');
@@ -55,10 +55,10 @@ compute.setConfig({
 });
 
 // Uses configured strategy
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Force a specific provider for one call
-const modalSandbox = await compute.sandbox.create({ provider: 'modal' });
+const modalSandbox = await compute.instances.create({ provider: 'modal' });
 ```
 
 ## API Reference
@@ -114,15 +114,15 @@ When both are present, `provider` is treated as the primary provider and is plac
 
 ### Sandbox Management
 
-#### `compute.sandbox.create(options?)`
+#### `compute.instances.create(options?)`
 
 Create a new sandbox.
 
 ```typescript
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // With options
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   timeout: 300000, // 5 minutes
   metadata: { userId: '123' },
   namespace: 'my-org',
@@ -139,12 +139,12 @@ const sandbox = await compute.sandbox.create({
 
 > **Note:** Not every provider honors every option. Support for fields like `name`, `metadata`, and `envs` depends on the underlying provider SDK — some pass them through, some map them to a different field, and some ignore them silently. Check your provider package's README for the exact set of options it respects.
 
-#### `compute.sandbox.getById(sandboxId)`
+#### `compute.instances.getById(instanceId)`
 
 Get an existing sandbox by ID.
 
 ```typescript
-const sandbox = await compute.sandbox.getById('sandbox-id');
+const sandbox = await compute.instances.getById('sandbox-id');
 ```
 
 ### Sandbox Operations
@@ -236,7 +236,7 @@ await sandbox.filesystem.remove('/tmp/hello.py');
 ```typescript
 import { compute } from 'computesdk';
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create project structure
 await sandbox.filesystem.mkdir('/app');
@@ -287,7 +287,7 @@ compute.setConfig({
   provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
-const e2bSandbox = await compute.sandbox.create();
+const e2bSandbox = await compute.instances.create();
 await e2bSandbox.runCommand('python -c "import pandas as pd; print(pd.__version__)"');
 await e2bSandbox.destroy();
 
@@ -299,7 +299,7 @@ compute.setConfig({
   }),
 });
 
-const modalSandbox = await compute.sandbox.create();
+const modalSandbox = await compute.instances.create();
 await modalSandbox.runCommand('python -c "import torch; print(torch.cuda.is_available())"');
 await modalSandbox.destroy();
 ```
@@ -308,7 +308,7 @@ await modalSandbox.destroy();
 
 ```typescript
 try {
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   const result = await sandbox.runCommand('invalid python code');
 } catch (error) {
   console.error('Execution failed:', error.message);
@@ -335,7 +335,7 @@ Example direct mode usage:
 import { e2b } from '@computesdk/e2b';
 
 const compute = e2b({ apiKey: 'your_api_key' });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 ```
 
 ## Building Custom Providers
@@ -348,11 +348,11 @@ Full TypeScript support with comprehensive type definitions:
 
 ```typescript
 import type { 
-  Sandbox,
-  SandboxInfo,
+  InstanceInterface,
+  InstanceInfo,
   CodeResult,
   CommandResult,
-  CreateSandboxOptions
+  CreateInstanceOptions
 } from 'computesdk';
 ```
 

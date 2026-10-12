@@ -20,7 +20,7 @@ const compute = createCompute({
   defaultProvider: miosa({ apiKey: process.env.MIOSA_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('python3 -c "print(40 + 2)"');
 console.log(result.stdout); // "42"
@@ -61,7 +61,7 @@ Auth is a MIOSA API key (`msk_*`) sent as `Authorization: Bearer <key>`.
 | `filesystem.exists()` | `POST /sandboxes/:id/exec` (`test -e`) | **composed** because there is no boolean exists endpoint |
 | `filesystem.remove()` | `DELETE /sandboxes/:id/fs?path=` | native |
 | `snapshot.create()` | `POST /sandboxes/:id/snapshots` | native Firecracker checkpoints; `name → comment` |
-| `snapshot.list({sandboxId})` | `GET /sandboxes/:id/snapshots` | MIOSA snapshots are sandbox-scoped |
+| `snapshot.list({instanceId})` | `GET /sandboxes/:id/snapshots` | MIOSA snapshots are sandbox-scoped |
 
 Beyond the ComputeSDK surface, the same API key unlocks the full MIOSA API: sandbox fork/branching, pause/resume, desktop graduation, deploys, and off-host exports.
 

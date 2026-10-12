@@ -53,7 +53,7 @@ const compute = tensorlake({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from Tensorlake!"');
@@ -85,7 +85,7 @@ interface TensorlakeConfig {
 Tensorlake supports custom container images. The default is `ubuntu-minimal`:
 
 ```typescript
-const sandbox = await compute.sandbox.create({ image: 'ubuntu-minimal' });
+const sandbox = await compute.instances.create({ image: 'ubuntu-minimal' });
 ```
 
 ### Snapshots
@@ -94,8 +94,8 @@ Tensorlake supports snapshotting sandboxes for fast restores:
 
 ```typescript
 // Create a snapshot from a running sandbox
-const snapshot = await compute.snapshot.create(sandboxId);
+const snapshot = await compute.snapshot.create(instanceId);
 
 // Restore from a snapshot
-const sandbox = await compute.sandbox.create({ snapshotId: snapshot.id });
+const sandbox = await compute.instances.create({ snapshotId: snapshot.id });
 ```

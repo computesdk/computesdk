@@ -22,7 +22,7 @@ const compute = createCompute({
   },
 })
 
-const sandbox = await compute.sandbox.create({ provider: 'brezel' })
+const sandbox = await compute.instances.create({ provider: 'brezel' })
 const result = await sandbox.runCommand('node --version')
 console.log(result.stdout)
 await sandbox.destroy()

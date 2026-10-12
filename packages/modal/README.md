@@ -30,7 +30,7 @@ const compute = modal({
   tokenSecret: process.env.MODAL_TOKEN_SECRET,
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python - <<'PY'
 import sys
@@ -80,7 +80,7 @@ const compute = modal({
   ports: [3000, 8080],
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 await sandbox.runCommand(`node - <<'JS'
 const http = require('http');
@@ -150,7 +150,7 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // Reconnect to existing sandbox
-const existing = await compute.sandbox.getById('sandbox-id');
+const existing = await compute.instances.getById('sandbox-id');
 
 // Destroy sandbox
 await sandbox.destroy();
@@ -166,7 +166,7 @@ try {
     tokenId: process.env.MODAL_TOKEN_ID,
     tokenSecret: process.env.MODAL_TOKEN_SECRET,
   });
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   const result = await sandbox.runCommand('python -c "import nonexistent"');
 
   if (result.exitCode !== 0) {
@@ -193,7 +193,7 @@ const compute = modal({
   tokenSecret: process.env.MODAL_TOKEN_SECRET,
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python - <<'PY'
 import torch
@@ -223,7 +223,7 @@ const compute = modal({
 const tasks = ['task1.json', 'task2.json', 'task3.json'];
 
 const results = await Promise.all(tasks.map(async (taskFile) => {
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   try {
     return await sandbox.runCommand(`python -c "import json; print(json.dumps({'task': '${taskFile}'}))"`);
   } finally {

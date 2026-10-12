@@ -27,7 +27,7 @@ Use the gateway for zero-config auto-detection:
 import { compute } from 'computesdk';
 
 // Auto-detects Tensorlake from TENSORLAKE_API_KEY environment variable
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('uname -a');
 console.log(result.stdout);
@@ -44,7 +44,7 @@ import { tensorlake } from '@computesdk/tensorlake';
 
 const compute = tensorlake({ apiKey: process.env.TENSORLAKE_API_KEY });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`uname -a`);
 
@@ -94,10 +94,10 @@ interface TensorlakeConfig {
 
 ```typescript
 // Create a sandbox (default image: ubuntu-minimal)
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create with options
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   image: 'ubuntu-minimal',
   timeout: 300000,         // ms → converted to seconds internally
   name: 'my-sandbox',
@@ -105,10 +105,10 @@ const sandbox = await compute.sandbox.create({
 });
 
 // Get an existing sandbox by ID
-const sandbox = await compute.sandbox.getById('sandbox-id');
+const sandbox = await compute.instances.getById('sandbox-id');
 
 // List all running sandboxes
-const sandboxes = await compute.sandbox.list();
+const sandboxes = await compute.instances.list();
 
 // Destroy a sandbox
 await sandbox.destroy();
@@ -159,7 +159,7 @@ await sandbox.filesystem.remove('/tmp/hello.py');
 
 ```typescript
 // Snapshot the current state of a running sandbox
-const snapshot = await compute.snapshot.create(sandboxId, { name: 'after-setup' });
+const snapshot = await compute.snapshot.create(instanceId, { name: 'after-setup' });
 console.log(snapshot.id); // 'snap-abc123'
 
 // List all snapshots
@@ -169,7 +169,7 @@ const snapshots = await compute.snapshot.list();
 await compute.snapshot.delete('snap-abc123');
 
 // Resume from a snapshot
-const sandbox = await compute.sandbox.create({ snapshotId: 'snap-abc123' });
+const sandbox = await compute.instances.create({ snapshotId: 'snap-abc123' });
 ```
 
 ### URL Access
@@ -198,7 +198,7 @@ as a public endpoint.
 import { tensorlake } from '@computesdk/tensorlake';
 
 const compute = tensorlake({ apiKey: process.env.TENSORLAKE_API_KEY });
-const sandbox = await compute.sandbox.create({ timeout: 600000 });
+const sandbox = await compute.instances.create({ timeout: 600000 });
 
 // Install dependencies once
 await sandbox.runCommand('pip install requests pandas');
@@ -218,16 +218,16 @@ const compute = tensorlake({ apiKey: process.env.TENSORLAKE_API_KEY });
 
 // One-time setup: create a pre-warmed snapshot
 async function createBaseSnapshot(): Promise<string> {
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   await sandbox.runCommand('pip install pandas numpy scikit-learn');
-  const snapshot = await compute.snapshot.create(sandbox.sandboxId);
+  const snapshot = await compute.snapshot.create(sandbox.instanceId);
   await sandbox.destroy();
   return snapshot.id;
 }
 
 // Fast boot from snapshot — skips install step
 const snapshotId = await createBaseSnapshot();
-const sandbox = await compute.sandbox.create({ snapshotId });
+const sandbox = await compute.instances.create({ snapshotId });
 
 const result = await sandbox.runCommand(`uname -a`);
 
@@ -242,7 +242,7 @@ import { tensorlake } from '@computesdk/tensorlake';
 
 try {
   const compute = tensorlake({ apiKey: process.env.TENSORLAKE_API_KEY });
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   const result = await sandbox.runCommand('umane -a');
   console.log(result.stdout);
 } catch (error) {

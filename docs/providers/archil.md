@@ -61,7 +61,7 @@ const compute = archil({
 const diskId = process.env.ARCHIL_DISK_ID;
 if (!diskId) throw new Error('ARCHIL_DISK_ID is not set');
 
-const sandbox = await compute.sandbox.create({ diskId });
+const sandbox = await compute.instances.create({ diskId });
 
 // Run a shell command against the mounted disk
 const result = await sandbox.runCommand('echo hello > /mnt/note && cat /mnt/note');

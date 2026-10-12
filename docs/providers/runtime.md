@@ -53,7 +53,7 @@ import { runtime } from '@computesdk/runtime'
 
 const compute = runtime({ apiKey: process.env.RUNTIME_API_KEY })
 
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   envs: { NODE_ENV: 'production' },
   timeout: 10 * 60 * 1000,
 })
@@ -84,7 +84,7 @@ try {
 | `previewVisibility` | —                    | `private` (default): the URL from `getUrl` carries a signed token. `public`: anyone with the address.        |
 | `previewTtlSeconds` | —                    | How long a private preview's token lasts, from 60 seconds to 7 days. Defaults to one day.                    |
 
-`compute.sandbox.create()` maps these options onto Runtime:
+`compute.instances.create()` maps these options onto Runtime:
 
 | ComputeSDK option               | Runtime                                                                       |
 | ------------------------------- | ----------------------------------------------------------------------------- |

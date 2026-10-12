@@ -31,7 +31,7 @@ compute.setConfig({
   provider: arker({ apiKey: process.env.ARKER_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('node -v');
 console.log(result.stdout); // v18.x
@@ -53,7 +53,7 @@ const sandbox = await sdk.sandbox.create();
 Arker disables direct VM creation — every sandbox is **forked from a source VM**. `create()` forks the `ubuntu-small` golden (Node.js + Python preinstalled) by default. The source can be chosen two ways:
 
 - **By name** — a golden/template, via `source` in config or `templateId` in create options.
-- **By id** — a specific existing VM, via `snapshotId` in create options. The `sandboxId` returned by `create()` is itself a valid source, so this branches a sandbox from its current state (Arker's equivalent of a snapshot restore). If both are given, `snapshotId` wins.
+- **By id** — a specific existing VM, via `snapshotId` in create options. The `instanceId` returned by `create()` is itself a valid source, so this branches a sandbox from its current state (Arker's equivalent of a snapshot restore). If both are given, `snapshotId` wins.
 
 ```typescript
 // Default: forks the `ubuntu-small` golden
@@ -66,7 +66,7 @@ const heavy = arker({ apiKey, source: 'ubuntu-full' });
 const other = await sdk.sandbox.create({ templateId: 'ubuntu-full' });
 
 // Fork an existing sandbox by id — branches from its current state
-const forked = await sdk.sandbox.create({ snapshotId: sandbox.sandboxId });
+const forked = await sdk.sandbox.create({ snapshotId: sandbox.instanceId });
 ```
 
 ## Configuration
@@ -133,7 +133,7 @@ await sandbox.filesystem.remove('/tmp/hello.txt');
 const sandbox = await sdk.sandbox.create();
 const info = await sandbox.getInfo();      // { id, provider, status, createdAt, ... }
 const all = await sdk.sandbox.list();      // VMs visible to the API key
-const existing = await sdk.sandbox.getById(sandbox.sandboxId);
+const existing = await sdk.sandbox.getById(sandbox.instanceId);
 await sandbox.destroy();
 ```
 
@@ -146,7 +146,7 @@ await sandbox.destroy();
 
 ## Limitations
 
-- **Creation is fork-only** — direct VM creation is disabled; `create()` forks a golden by name (`templateId`/`source`) or an existing VM by id (`snapshotId`). There's no separate snapshot store, but any `sandboxId` can be re-forked as a `snapshotId`.
+- **Creation is fork-only** — direct VM creation is disabled; `create()` forks a golden by name (`templateId`/`source`) or an existing VM by id (`snapshotId`). There's no separate snapshot store, but any `instanceId` can be re-forked as a `snapshotId`.
 - **`getUrl` is not supported** — Arker does not expose per-port URLs; `getUrl` throws. VMs forked with network reachability enabled get a stable per-VM hostname — see the [Arker SDK](https://github.com/ArkerHQ/arker-sdk) fork network options.
 - **`getInfo` status** — always reports `running`; idle sandboxes resume automatically on their next command.
 

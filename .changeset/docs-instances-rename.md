@@ -1,0 +1,50 @@
+---
+"@computesdk/agentcore": patch
+"@computesdk/archil": patch
+"@computesdk/arker": patch
+"@computesdk/blaxel": patch
+"@computesdk/brezel": patch
+"@computesdk/buddy": patch
+"@computesdk/cloud-run": patch
+"@computesdk/cloudflare": patch
+"@computesdk/codesandbox": patch
+"@computesdk/collimate": patch
+"@computesdk/createos-sandbox": patch
+"@computesdk/daytona": patch
+"@computesdk/declaw": patch
+"@computesdk/docker": patch
+"@computesdk/e2b": patch
+"@computesdk/freestyle": patch
+"@computesdk/givemeanode": patch
+"@computesdk/gravixlayer": patch
+"@computesdk/isorun": patch
+"@computesdk/just-bash": patch
+"@computesdk/k8s": patch
+"@computesdk/lelantos": patch
+"@computesdk/lightning": patch
+"@computesdk/microsandbox": patch
+"@computesdk/miosa": patch
+"@computesdk/modal": patch
+"@computesdk/mosaic": patch
+"@computesdk/namespace": patch
+"@computesdk/neevcloud": patch
+"@computesdk/northflank": patch
+"@computesdk/novita": patch
+"@computesdk/opencomputer": patch
+"@computesdk/provider": patch
+"@computesdk/quilt": patch
+"@computesdk/railway": patch
+"@computesdk/run-cloud": patch
+"@computesdk/runtime": patch
+"@computesdk/sail": patch
+"@computesdk/sandbox0": patch
+"@computesdk/superserve": patch
+"@computesdk/tenki": patch
+"@computesdk/tensorlake": patch
+"@computesdk/upstash": patch
+"@computesdk/vercel": patch
+"@computesdk/workbench": patch
+"computesdk": patch
+---
+
+Docs: update examples to the canonical `compute.instances` API (`Instance*` type names, `instanceId`, `methods.instances`). `compute.sandbox` / `Sandbox*` / `methods.sandbox` remain working deprecated aliases.

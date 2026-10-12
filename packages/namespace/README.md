@@ -26,11 +26,11 @@ const compute = namespace({
 });
 
 // Create a sandbox
-const sandbox = await compute.sandbox.create();
-console.log(`Created sandbox: ${sandbox.sandboxId}`);
+const sandbox = await compute.instances.create();
+console.log(`Created sandbox: ${sandbox.instanceId}`);
 
 // List all sandboxes
-const sandboxes = await compute.sandbox.list();
+const sandboxes = await compute.instances.list();
 
 // Destroy the sandbox
 await sandbox.destroy();

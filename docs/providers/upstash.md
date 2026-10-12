@@ -53,7 +53,7 @@ const compute = upstash({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from Upstash!"');
@@ -74,10 +74,10 @@ For more details, see the [Upstash Box documentation](https://upstash.com/docs/b
 
 ```typescript
 // Default box
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Ephemeral box
-const sandbox = await compute.sandbox.create({ ephemeral: true });
+const sandbox = await compute.instances.create({ ephemeral: true });
 ```
 
 ### Configuration Options

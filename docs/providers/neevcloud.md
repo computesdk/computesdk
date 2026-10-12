@@ -52,7 +52,7 @@ const compute = neevcloud({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from NeevCloud!"');
@@ -91,8 +91,8 @@ const url = await sandbox.getUrl({ port: 3000 });
 Start from a catalogue template, a raw OCI image, or the platform default (`templateId` and `image` are mutually exclusive):
 
 ```typescript
-await compute.sandbox.create({ templateId: 'sb-ubuntu-24-04-minimal' });
-await compute.sandbox.create({ image: 'docker.io/library/python:3.12' });
+await compute.instances.create({ templateId: 'sb-ubuntu-24-04-minimal' });
+await compute.instances.create({ image: 'docker.io/library/python:3.12' });
 ```
 
 ### Sandbox Options
@@ -100,7 +100,7 @@ await compute.sandbox.create({ image: 'docker.io/library/python:3.12' });
 Set a name, env vars, size and lifetime at create. `cpu` is cores, `memory` is MB, and `timeout` is the sandbox's lifetime in milliseconds; it is deleted when that elapses.
 
 ```typescript
-await compute.sandbox.create({
+await compute.instances.create({
   name: 'build-42',
   envs: { NODE_ENV: 'production' },
   cpu: 2,
@@ -114,8 +114,8 @@ await compute.sandbox.create({
 A snapshot saves a sandbox's memory and filesystem. `snapshot.create` resolves once it can be restored.
 
 ```typescript
-const snapshot = await compute.snapshot.create(sandbox.sandboxId, { name: 'after-install' });
-const copy = await compute.sandbox.create({ snapshotId: snapshot.id });
+const snapshot = await compute.snapshot.create(sandbox.instanceId, { name: 'after-install' });
+const copy = await compute.instances.create({ snapshotId: snapshot.id });
 await compute.snapshot.delete(snapshot.id);
 ```
 

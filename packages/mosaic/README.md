@@ -21,7 +21,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create({ templateId: 'node-20' });
+const sandbox = await compute.instances.create({ templateId: 'node-20' });
 
 await sandbox.filesystem.writeFile('/workspace/server.js', 'require("http").createServer((_, r) => r.end("ok")).listen(3000)');
 await sandbox.runCommand('node /workspace/server.js', { background: true });
@@ -62,11 +62,11 @@ const provider = mosaic({});
 await provider.template.create({ name: 'my-env', image: 'python:3.12-slim' });
 
 // Sandboxes from it restore in about a second, like any other template.
-const sandbox = await compute.sandbox.create({ templateId: 'my-env' });
+const sandbox = await compute.instances.create({ templateId: 'my-env' });
 
 // Or checkpoint a sandbox you have already set up.
-const snapshot = await provider.snapshot.create(sandbox.sandboxId, { name: 'my-toolchain' });
-await compute.sandbox.create({ snapshotId: 'my-toolchain' });
+const snapshot = await provider.snapshot.create(sandbox.instanceId, { name: 'my-toolchain' });
+await compute.instances.create({ snapshotId: 'my-toolchain' });
 ```
 
 `template.create` accepts `image` plus optional `retentionSeconds` and `registryUsername`/`registryPassword` for a private image. Registry credentials are used for that single pull and are never stored.

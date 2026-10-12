@@ -29,7 +29,7 @@ compute.setConfig({
   provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
@@ -147,7 +147,7 @@ import { e2b } from '@computesdk/e2b';
 
 try {
   const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   
   const result = await sandbox.runCommand('invalid code');
 } catch (error) {
@@ -171,7 +171,7 @@ try {
 import { e2b } from '@computesdk/e2b';
 
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create project structure
 await sandbox.filesystem.mkdir('/analysis');
@@ -242,7 +242,7 @@ await sandbox.destroy();
 import { e2b } from '@computesdk/e2b';
 
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-const sandbox = await compute.sandbox.create({ timeout: 600000 }); // 10 minutes for ML tasks
+const sandbox = await compute.instances.create({ timeout: 600000 }); // 10 minutes for ML tasks
 
 // Create ML project structure
 await sandbox.filesystem.mkdir('/ml-project');

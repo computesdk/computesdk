@@ -32,7 +32,7 @@ import { givemeanode } from '@computesdk/givemeanode'
 
 const compute = givemeanode({ apiKey: process.env.GMN_TOKEN })
 
-const sandbox = await compute.sandbox.create()
+const sandbox = await compute.instances.create()
 const result = await sandbox.runCommand('node -v')
 console.log(result.stdout) // v24.19.0
 await sandbox.destroy()
@@ -61,10 +61,10 @@ onto the **smallest** named instance type that satisfies both dimensions:
 
 ```typescript
 // 8 vCPU / 32 GiB (sandbox-lg)
-const sandbox = await compute.sandbox.create({ vcpus: 8, memory: 16384 })
+const sandbox = await compute.instances.create({ vcpus: 8, memory: 16384 })
 
 // ...or name the size outright, which wins over the hints
-const xl = await compute.sandbox.create({ size: 'sandbox-xl' })
+const xl = await compute.instances.create({ size: 'sandbox-xl' })
 ```
 
 | Size | vCPU | RAM | Billed as |
@@ -95,7 +95,7 @@ be billed more for.
 Pass any container image by digest and givemeanode will run it:
 
 ```typescript
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   image: 'ghcr.io/acme/task@sha256:abc...',
 })
 ```
@@ -107,8 +107,8 @@ per sandbox:
 const template = await compute.template.create({
   image: 'ghcr.io/acme/task@sha256:abc...',
 })
-const a = await compute.sandbox.create({ templateId: template.id })
-const b = await compute.sandbox.create({ templateId: template.id })
+const a = await compute.instances.create({ templateId: template.id })
+const b = await compute.instances.create({ templateId: template.id })
 ```
 
 Three things to know:
@@ -225,8 +225,8 @@ A sandbox can be snapshotted, and a snapshot started from. This is the
 fastest way to get N copies of a prepared environment:
 
 ```typescript
-const snapshot = await compute.snapshot.create(sandbox.sandboxId)
-const copy = await compute.sandbox.create({ snapshotId: snapshot.id })
+const snapshot = await compute.snapshot.create(sandbox.instanceId)
+const copy = await compute.instances.create({ snapshotId: snapshot.id })
 ```
 
 ## Supported
@@ -268,7 +268,7 @@ running inside the sandbox - the page a coding agent just wrote, looked at
 from outside:
 
 ```ts
-const sandbox = await compute.sandbox.create({ templateId: template.id })
+const sandbox = await compute.instances.create({ templateId: template.id })
 await sandbox.runCommand('sh', ['-c', 'cd app && (npm run dev > /tmp/dev.log 2>&1 &)'])
 const url = await sandbox.getUrl({ port: 3000 })
 ```

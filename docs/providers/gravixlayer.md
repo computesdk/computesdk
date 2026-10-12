@@ -57,7 +57,7 @@ const compute = gravixlayer({
   apiKey: process.env.GRAVIXLAYER_API_KEY,
 })
 
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   templateId: 'base-small',
 })
 
@@ -71,7 +71,7 @@ await sandbox.destroy()
 `snapshotId` instead (not both). `image` is not accepted; build a template from
 an image with `template.create({ name, fromImage })` and pass its name as
 `templateId`. Create a snapshot with
-`compute.snapshot.create(sandboxId, { name: 'my-snapshot' })` — a name is
+`compute.snapshot.create(instanceId, { name: 'my-snapshot' })` — a name is
 required. Building a new template needs `fromImage` or `dockerfile` on
 `template.create`; pick an existing template with `templateId` on sandbox create.
 

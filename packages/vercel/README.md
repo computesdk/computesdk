@@ -47,7 +47,7 @@ const compute = vercel({
   timeout: 600000 // 10 minutes
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('node -e "console.log(\"Hello from Vercel!\")"');
 console.log(result.stdout);
@@ -158,10 +158,10 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // Get existing sandbox
-const existing = await compute.sandbox.getById('sandbox-id');
+const existing = await compute.instances.getById('sandbox-id');
 
 // Destroy sandbox
-await compute.sandbox.destroy('sandbox-id');
+await compute.instances.destroy('sandbox-id');
 
 // Note: Vercel doesn't support listing all sandboxes
 // Each sandbox is ephemeral and single-use
@@ -172,7 +172,7 @@ await compute.sandbox.destroy('sandbox-id');
 Sandboxes are created with `persistent: false` by default — a persistent sandbox auto-snapshots its filesystem on every `stop()`, which accrues Vercel Snapshot Storage charges. To opt in to persistence (required if you plan to resume or snapshot the sandbox later), pass `persistent: true` (or the shared `ephemeral: false` durable-sandbox selector) at create time:
 
 ```typescript
-const sandbox = await compute.sandbox.create({ persistent: true });
+const sandbox = await compute.instances.create({ persistent: true });
 ```
 
 ## Error Handling
@@ -186,7 +186,7 @@ try {
     teamId: process.env.VERCEL_TEAM_ID,
     projectId: process.env.VERCEL_PROJECT_ID
   });
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   
   const result = await sandbox.runCommand('invalid code');
 } catch (error) {
@@ -210,7 +210,7 @@ try {
 import { vercel } from '@computesdk/vercel';
 
 const compute = vercel({});
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`node - <<'JS'
 const http = require('http');
@@ -247,7 +247,7 @@ await sandbox.destroy();
 import { vercel } from '@computesdk/vercel';
 
 const compute = vercel({});
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python - <<'PY'
 import json
@@ -292,7 +292,7 @@ await sandbox.destroy();
 import { vercel } from '@computesdk/vercel';
 
 const compute = vercel({});
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create project structure
 await sandbox.filesystem.mkdir('/tmp/project');
@@ -406,7 +406,7 @@ await sandbox.destroy();
 import { vercel } from '@computesdk/vercel';
 
 const compute = vercel({});
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Install lodash
 const installResult = await sandbox.runCommand('npm install lodash');

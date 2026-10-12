@@ -58,7 +58,7 @@ const compute = declaw({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('node -v');
@@ -99,7 +99,7 @@ When `domain` is not set (and `DECLAW_DOMAIN` is not set), the provider passes `
 * `devops`
 
 ```typescript
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   templateId: 'python',
 });
 ```

@@ -15,7 +15,7 @@ import { justBash } from '@computesdk/just-bash';
 
 const compute = justBash({});
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('echo "Hello" | tr a-z A-Z');
 console.log(result.stdout); // "HELLO"
@@ -124,7 +124,7 @@ const hello = defineCommand('hello', async (args, ctx) => {
 });
 
 const compute = justBash({ customCommands: [hello] });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('hello Alice');
 console.log(result.stdout); // "Hello, Alice!\n"
@@ -155,7 +155,7 @@ console.log(result.stdout);
 
 // Execute Python code (requires python: true in config)
 const compute = justBash({ python: true });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python - <<'PY'
 import json
@@ -212,10 +212,10 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // List all active sandboxes
-const sandboxes = await compute.sandbox.list();
+const sandboxes = await compute.instances.list();
 
 // Get sandbox by ID
-const existing = await compute.sandbox.getById('sandbox-id');
+const existing = await compute.instances.getById('sandbox-id');
 
 // Destroy sandbox
 await sandbox.destroy();
@@ -235,7 +235,7 @@ const compute = justBash({
   cwd: '/app',
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const result = await sandbox.runCommand('cat config.json');
 console.log(result.stdout); // {"port": 3000}
 ```
@@ -259,7 +259,7 @@ just-bash includes 60+ built-in commands:
 import { justBash } from '@computesdk/just-bash';
 
 const compute = justBash({});
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('cat /nonexistent');
 if (result.exitCode !== 0) {
@@ -282,7 +282,7 @@ try {
 import { justBash } from '@computesdk/just-bash';
 
 const compute = justBash({});
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create CSV data
 await sandbox.filesystem.writeFile('/data/sales.csv',
@@ -312,7 +312,7 @@ const compute = justBash({
     ]),
   },
 });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Filter admins and extract names
 const result = await sandbox.runCommand(
@@ -329,7 +329,7 @@ await sandbox.destroy();
 import { justBash } from '@computesdk/just-bash';
 
 const compute = justBash({});
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`
 #!/bin/bash

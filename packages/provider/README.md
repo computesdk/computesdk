@@ -27,7 +27,7 @@ export const myProvider = defineProvider<any, MyProviderConfig>({
   name: 'my-provider',
   defaultMode: 'direct',
   methods: {
-    sandbox: {
+    instances: {
       create: async (config, options) => {
         // Create sandbox via your provider's API
         const response = await fetch(`https://api.example.com/sandboxes`, {
@@ -39,21 +39,21 @@ export const myProvider = defineProvider<any, MyProviderConfig>({
         const data = await response.json();
         
         return {
-          sandbox: data, // Your provider's sandbox object
-          sandboxId: data.id
+          instance: data, // Your provider's sandbox object
+          instanceId: data.id
         };
       },
       
-      getById: async (config, sandboxId) => {
+      getById: async (config, instanceId) => {
         const response = await fetch(
-          `https://api.example.com/sandboxes/${sandboxId}`,
+          `https://api.example.com/sandboxes/${instanceId}`,
           { headers: { 'Authorization': `Bearer ${config.apiKey}` } }
         );
         
         if (!response.ok) return null;
         
         const data = await response.json();
-        return { sandbox: data, sandboxId: data.id };
+        return { instance: data, instanceId: data.id };
       },
       
       list: async (config) => {
@@ -63,12 +63,12 @@ export const myProvider = defineProvider<any, MyProviderConfig>({
         );
         
         const data = await response.json();
-        return data.map((s: any) => ({ sandbox: s, sandboxId: s.id }));
+        return data.map((s: any) => ({ instance: s, instanceId: s.id }));
       },
       
-      destroy: async (config, sandboxId) => {
+      destroy: async (config, instanceId) => {
         await fetch(
-          `https://api.example.com/sandboxes/${sandboxId}`,
+          `https://api.example.com/sandboxes/${instanceId}`,
           {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${config.apiKey}` }
@@ -119,20 +119,22 @@ Define a new provider with sandbox lifecycle methods.
 **Parameters:**
 
 ```typescript
-interface ProviderConfig<TSandbox, TConfig> {
+interface ProviderConfig<TInstance, TConfig> {
   name: string;
   defaultMode?: 'direct' | 'gateway';
   methods: {
-    sandbox: SandboxMethods<TSandbox, TConfig>;
+    instances: InstanceMethods<TInstance, TConfig>;
     template?: TemplateMethods<TTemplate, TConfig>;
     snapshot?: SnapshotMethods<TSnapshot, TConfig>;
   };
 }
 ```
 
+`methods.sandbox` remains a deprecated alias for `methods.instances` — use `instances` in new providers.
+
 **Returns:** A factory function `(config: TConfig) => Provider`
 
-### Required Sandbox Methods
+### Required Instance Methods
 
 #### Collection Operations
 
@@ -144,22 +146,20 @@ Create a new sandbox.
 
 ```typescript
 create: async (config, options) => {
-  // Return: { sandbox: YourSandboxObject, sandboxId: string }
-  return {
-    sandbox: mySandboxInstance,
-    sandboxId: 'sandbox-123'
+  // Return: { instance: YourSandboxObject, instanceId: string }
+  return { instance: myInstance, instanceId: 'sandbox-123'
   };
 }
 ```
 
-##### `getById(config, sandboxId)`
+##### `getById(config, instanceId)`
 
 Get an existing sandbox by ID.
 
 ```typescript
-getById: async (config, sandboxId) => {
-  // Return: { sandbox, sandboxId } or null if not found
-  return { sandbox: mySandboxInstance, sandboxId };
+getById: async (config, instanceId) => {
+  // Return: { instance, instanceId } or null if not found
+  return { instance: myInstance, instanceId };
 }
 ```
 
@@ -169,21 +169,21 @@ List all sandboxes.
 
 ```typescript
 list: async (config) => {
-  // Return: Array of { sandbox, sandboxId }
+  // Return: Array of { instance, instanceId }
   return [
-    { sandbox: sandbox1, sandboxId: 'id1' },
-    { sandbox: sandbox2, sandboxId: 'id2' }
+    { instance: sandbox1, instanceId: 'id1' },
+    { instance: sandbox2, instanceId: 'id2' }
   ];
 }
 ```
 
-##### `destroy(config, sandboxId)`
+##### `destroy(config, instanceId)`
 
 Destroy a sandbox.
 
 ```typescript
-destroy: async (config, sandboxId) => {
-  await yourApi.deleteSandbox(sandboxId);
+destroy: async (config, instanceId) => {
+  await yourApi.deleteSandbox(instanceId);
 }
 ```
 
@@ -240,7 +240,7 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 // ...
 
 methods: {
-  sandbox: {
+  instances: {
     // ... required methods
     
     filesystem: {
@@ -287,25 +287,25 @@ import type {
   // Provider types
   Provider,
   ProviderConfig,
-  ProviderSandbox,
+  ProviderInstance,
   
   // Method definitions
-  SandboxMethods,
+  InstanceMethods,
   TemplateMethods,
   SnapshotMethods,
   
   // Result types
   CodeResult,
   CommandResult,
-  SandboxInfo,
+  InstanceInfo,
   
   // Options
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   RunCommandOptions,
   
   // Filesystem
   FileEntry,
-  SandboxFileSystem
+  InstanceFileSystem
 } from '@computesdk/provider';
 ```
 
@@ -341,19 +341,19 @@ export const minimal = defineProvider<any, MinimalConfig>({
   name: 'minimal',
   defaultMode: 'direct',
   methods: {
-    sandbox: {
+    instances: {
       create: async (config, options) => {
         const id = `sandbox-${Date.now()}`;
         return {
-          sandbox: { id, status: 'running' },
-          sandboxId: id
+          instance: { id, status: 'running' },
+          instanceId: id
         };
       },
       
       getById: async (config, id) => {
         return {
-          sandbox: { id, status: 'running' },
-          sandboxId: id
+          instance: { id, status: 'running' },
+          instanceId: id
         };
       },
       
@@ -408,7 +408,7 @@ export const myProvider = defineProvider({ /* ... */ });
 import { myProvider } from '@computesdk/my-provider';
 
 const compute = myProvider({ apiKey: 'xxx' });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 ```
 
 ## Best Practices
@@ -492,8 +492,8 @@ describe('MyProvider', () => {
   it('creates and destroys sandboxes', async () => {
     const compute = myProvider({ apiKey: process.env.MY_PROVIDER_API_KEY! });
     
-    const sandbox = await compute.sandbox.create();
-    expect(sandbox.sandboxId).toBeDefined();
+    const sandbox = await compute.instances.create();
+    expect(sandbox.instanceId).toBeDefined();
     
     const info = await sandbox.getInfo();
     expect(info.status).toBe('running');
@@ -503,7 +503,7 @@ describe('MyProvider', () => {
   
   it('executes code', async () => {
     const compute = myProvider({ apiKey: process.env.MY_PROVIDER_API_KEY! });
-    const sandbox = await compute.sandbox.create();
+    const sandbox = await compute.instances.create();
     
     const result = await sandbox.runCommand('python -c "print(\"Hello\")"');
     expect(result.stdout).toContain('Hello');

@@ -24,7 +24,7 @@ export NEEV_PROJECT_ID=prj-...
 import { neevcloud } from '@computesdk/neevcloud';
 
 const compute = neevcloud();
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const res = await sandbox.runCommand('echo "Hello from NeevCloud!"');
 console.log(res.stdout); // "Hello from NeevCloud!"
@@ -109,11 +109,11 @@ const url = await sandbox.getUrl({ port: 3000 });
 ### Sandbox Management
 
 ```typescript
-const sandbox = await compute.sandbox.create({ templateId: 'sb-ubuntu-24-04-minimal' });
-const sandbox = await compute.sandbox.create({ image: 'docker.io/library/python:3.12' });
+const sandbox = await compute.instances.create({ templateId: 'sb-ubuntu-24-04-minimal' });
+const sandbox = await compute.instances.create({ image: 'docker.io/library/python:3.12' });
 
 // Name, env vars, size (cpu cores, memory in MB) and lifetime (ms; deleted when it elapses)
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   name: 'build-42',
   envs: { NODE_ENV: 'production' },
   cpu: 2,
@@ -122,8 +122,8 @@ const sandbox = await compute.sandbox.create({
 });
 
 const info = await sandbox.getInfo(); // { id, provider, status, createdAt, timeout, metadata }
-const all = await compute.sandbox.list();
-const one = await compute.sandbox.getById(id); // null if not found
+const all = await compute.instances.list();
+const one = await compute.instances.getById(id); // null if not found
 await sandbox.destroy();
 ```
 
@@ -133,12 +133,12 @@ await sandbox.destroy();
 
 ```typescript
 // Save memory and filesystem; resolves once the snapshot is ready to restore
-const snapshot = await compute.snapshot.create(sandbox.sandboxId, { name: 'after-install' });
+const snapshot = await compute.snapshot.create(sandbox.instanceId, { name: 'after-install' });
 
 // Boot a new sandbox from it
-const copy = await compute.sandbox.create({ snapshotId: snapshot.id });
+const copy = await compute.instances.create({ snapshotId: snapshot.id });
 
-const forOne = await compute.snapshot.list({ sandboxId: sandbox.sandboxId });
+const forOne = await compute.snapshot.list({ instanceId: sandbox.instanceId });
 const all = await compute.snapshot.list(); // visits every sandbox in the project
 await compute.snapshot.delete(snapshot.id);
 ```
