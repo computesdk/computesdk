@@ -232,7 +232,11 @@ class ComputeManager {
 
   private async createWithFallback(options?: CreateInstanceOptions): Promise<InstanceInterface> {
     const preferredProviderName = options?.provider;
-    const { provider: _providerName, ...providerOptions } = options || {};
+    // `provider` is routing metadata consumed by ComputeManager. `kind` is
+    // reserved vocabulary (not yet in the type): strip it too so callers
+    // passing it via the index signature don't leak it into provider
+    // create options, where strict validators (e.g. Sail) reject it.
+    const { provider: _providerName, kind: _kind, ...providerOptions } = options || {};
     const candidates = this.getCreateCandidates(preferredProviderName);
     const canFallback = this.fallbackOnError && !preferredProviderName;
     const errors: string[] = [];
