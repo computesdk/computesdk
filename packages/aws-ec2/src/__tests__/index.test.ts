@@ -3,6 +3,7 @@ import {
   CreateFleetCommand,
   DescribeInstancesCommand,
   EC2Client,
+  RunInstancesCommand,
   TerminateInstancesCommand,
   type Instance,
 } from '@aws-sdk/client-ec2';
@@ -44,10 +45,10 @@ const COMMAND_ID = 'cmd-0001';
 function makeConfig(overrides: Partial<AwsEc2Config> = {}): AwsEc2Config {
   return {
     region: 'us-east-2',
-    launchTemplateName: 'computesdk-market-medium',
+    launchTemplate: 'computesdk-market-medium',
     subnetIds: ['subnet-a', 'subnet-b'],
-    instanceTypes: ['c5d.large', 'm7a.large', 'c6in.large'],
-    maxPricePerHour: '0.05',
+    instanceType: ['c5d.large', 'm7a.large', 'c6in.large'],
+    spot: { maxPricePerHour: '0.05' },
     pollIntervalMs: 1,
     readyTimeoutMs: 1_000,
     ...overrides,
@@ -80,6 +81,7 @@ function mockLaunch(instance: Instance = ec2Instance()) {
   ssm.on(DescribeInstanceInformationCommand).resolves({
     InstanceInformationList: [{ InstanceId: INSTANCE_ID, PingStatus: 'Online' }],
   });
+  ec2.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: INSTANCE_ID }] });
   ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [instance] }] });
   ec2.on(TerminateInstancesCommand).resolves({});
 }
@@ -152,7 +154,7 @@ describe('create', () => {
 
   it('honours launchTemplateVersion and omits MaxTotalPrice when unset', async () => {
     mockLaunch();
-    await awsEc2(makeConfig({ launchTemplateVersion: '7', maxPricePerHour: undefined })).sandbox.create();
+    await awsEc2(makeConfig({ launchTemplateVersion: '7', spot: true })).sandbox.create();
     const input = ec2.commandCalls(CreateFleetCommand)[0].args[0].input;
     expect(input.LaunchTemplateConfigs![0].LaunchTemplateSpecification!.Version).toBe('7');
     expect(input.SpotOptions).toEqual({ AllocationStrategy: 'price-capacity-optimized' });
@@ -256,11 +258,74 @@ describe('create', () => {
   });
 
   it('validates required config and region', async () => {
-    await expect(awsEc2(makeConfig({ subnetIds: [] })).sandbox.create()).rejects.toThrow('subnetIds');
+    await expect(awsEc2(makeConfig({ launchTemplate: '' })).sandbox.create()).rejects.toThrow('launchTemplate');
     await expect(awsEc2(makeConfig({ region: undefined })).sandbox.create()).rejects.toThrow('AWS_REGION');
     process.env.AWS_REGION = 'us-east-2';
     mockLaunch();
     await expect(awsEc2(makeConfig({ region: undefined })).sandbox.create()).resolves.toBeTruthy();
+  });
+});
+
+describe('create (on-demand)', () => {
+  const onDemand = (overrides: Partial<AwsEc2Config> = {}) =>
+    makeConfig({ spot: undefined, subnetIds: undefined, instanceType: undefined, ...overrides });
+
+  it('uses RunInstances with only a launch template', async () => {
+    mockLaunch(ec2Instance({ InstanceLifecycle: undefined }));
+    const sandbox = await awsEc2(onDemand()).sandbox.create({ name: 'od-1' });
+
+    expect(ec2.commandCalls(CreateFleetCommand)).toHaveLength(0);
+    const input = ec2.commandCalls(RunInstancesCommand)[0].args[0].input;
+    expect(input).toMatchObject({
+      MinCount: 1,
+      MaxCount: 1,
+      LaunchTemplate: { LaunchTemplateName: 'computesdk-market-medium', Version: '$Default' },
+    });
+    expect(input).not.toHaveProperty('InstanceType');
+    expect(input).not.toHaveProperty('SubnetId');
+    expect(input).not.toHaveProperty('InstanceMarketOptions');
+    expect(input.TagSpecifications!.map((spec) => spec.ResourceType)).toEqual(['instance', 'volume']);
+    expect(input.TagSpecifications![0].Tags).toContainEqual({ Key: MANAGED_TAG_KEY, Value: 'true' });
+    expect((sandbox.getInstance() as AwsEc2Sandbox).lifecycle).toBe('on-demand');
+  });
+
+  it('passes a single instanceType and a launch template id', async () => {
+    mockLaunch();
+    await awsEc2(onDemand({ launchTemplate: 'lt-0abc123', instanceType: 'm7a.large' })).sandbox.create();
+    const input = ec2.commandCalls(RunInstancesCommand)[0].args[0].input;
+    expect(input.InstanceType).toBe('m7a.large');
+    expect(input.LaunchTemplate).toEqual({ LaunchTemplateId: 'lt-0abc123', Version: '$Default' });
+  });
+
+  it('maps RunInstances capacity errors to AwsEc2CapacityError', async () => {
+    mockLaunch();
+    ec2.on(RunInstancesCommand).rejects(Object.assign(new Error('no room'), { name: 'InsufficientInstanceCapacity' }));
+    const error = await awsEc2(onDemand({ instanceType: 'm7a.large' })).sandbox.create().catch((e: unknown) => e);
+    expect(isAwsEc2CapacityError(error)).toBe(true);
+    expect((error as AwsEc2CapacityError).codes).toEqual(['InsufficientInstanceCapacity']);
+    expect(ec2.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
+  });
+
+  it('rethrows other RunInstances errors', async () => {
+    mockLaunch();
+    ec2.on(RunInstancesCommand).rejects(Object.assign(new Error('bad'), { name: 'UnauthorizedOperation' }));
+    await expect(awsEc2(onDemand()).sandbox.create()).rejects.toThrow('bad');
+  });
+
+  it('falls back across several types with an on-demand fleet', async () => {
+    mockLaunch();
+    await awsEc2(onDemand({ instanceType: ['m7a.large', 'm5a.large'] })).sandbox.create();
+    expect(ec2.commandCalls(RunInstancesCommand)).toHaveLength(0);
+    const input = ec2.commandCalls(CreateFleetCommand)[0].args[0].input;
+    expect(input.TargetCapacitySpecification).toEqual({ TotalTargetCapacity: 1, DefaultTargetCapacityType: 'on-demand' });
+    expect(input).not.toHaveProperty('SpotOptions');
+    expect(input.LaunchTemplateConfigs![0].Overrides).toEqual([{ InstanceType: 'm7a.large' }, { InstanceType: 'm5a.large' }]);
+  });
+
+  it('uses a fleet when subnets are given', async () => {
+    mockLaunch();
+    await awsEc2(onDemand({ subnetIds: ['subnet-a'] })).sandbox.create();
+    expect(ec2.commandCalls(CreateFleetCommand)[0].args[0].input.LaunchTemplateConfigs![0].Overrides).toEqual([{ SubnetId: 'subnet-a' }]);
   });
 });
 
@@ -476,7 +541,10 @@ describe('destroy', () => {
 
 describe('helpers', () => {
   it('builds the instance type x subnet product', () => {
-    expect(buildOverrides(makeConfig({ instanceTypes: ['a', 'b'], subnetIds: ['s1', 's2', 's3'] }))).toHaveLength(6);
+    expect(buildOverrides(makeConfig({ instanceType: ['a', 'b'], subnetIds: ['s1', 's2', 's3'] }))).toHaveLength(6);
+    expect(buildOverrides(makeConfig({ instanceType: undefined, subnetIds: ['s1', 's2'] }))).toEqual([{ SubnetId: 's1' }, { SubnetId: 's2' }]);
+    expect(buildOverrides(makeConfig({ instanceType: 'a', subnetIds: undefined }))).toEqual([{ InstanceType: 'a' }]);
+    expect(buildOverrides(makeConfig({ instanceType: undefined, subnetIds: undefined }))).toEqual([]);
   });
 
   it('sanitizes and caps tags, keeping the managed tag', () => {

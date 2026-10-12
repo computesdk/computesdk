@@ -1,9 +1,10 @@
 /**
- * AWS EC2 Spot Provider - Factory-based Implementation
+ * AWS EC2 Provider - Factory-based Implementation
  *
- * Launches one Spot instance per sandbox through an instant EC2 Fleet and runs
- * commands with SSM Run Command (`AWS-RunShellScript`). Nothing listens on the
- * box: the preinstalled SSM agent dials out, so no inbound ports are needed.
+ * Launches one EC2 instance per sandbox from a launch template and runs commands
+ * with SSM Run Command (`AWS-RunShellScript`). A plain on-demand launch uses
+ * RunInstances; Spot or multi-type/multi-subnet launches use an instant EC2
+ * Fleet. Nothing listens on the box: the SSM agent dials out.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -11,11 +12,14 @@ import {
   CreateFleetCommand,
   DescribeInstancesCommand,
   EC2Client,
+  RunInstancesCommand,
   TerminateInstancesCommand,
   paginateDescribeInstances,
   type CreateFleetError,
   type FleetLaunchTemplateOverridesRequest,
+  type FleetLaunchTemplateSpecificationRequest,
   type Instance as Ec2Instance,
+  type LaunchTemplateSpecification,
   type Tag,
 } from '@aws-sdk/client-ec2';
 import {
@@ -67,19 +71,24 @@ export const CAPACITY_ERROR_CODES: ReadonlySet<string> = new Set([
   'UnfulfillableCapacity',
 ]);
 
-export interface AwsEc2Config {
-  /** AWS region, e.g. "us-east-2". Falls back to AWS_REGION. */
-  region?: string;
-  /** Launch template carrying AMI, IMDSv2, root volume, security group, public IP, and instance profile. */
-  launchTemplateName: string;
-  /** Launch template version (default "$Default"). */
-  launchTemplateVersion?: string;
-  /** Subnets to launch into, one per AZ. */
-  subnetIds: string[];
-  /** Instance types the fleet may pick from. */
-  instanceTypes: string[];
+export interface AwsEc2SpotOptions {
   /** Max total Spot price per hour, e.g. "0.05". */
   maxPricePerHour?: string;
+}
+
+export interface AwsEc2Config {
+  /** Launch template name or id (`lt-...`). It owns AMI, IMDS, root volume, security group, networking, and instance profile. */
+  launchTemplate: string;
+  /** Launch template version (default "$Default"). */
+  launchTemplateVersion?: string;
+  /** AWS region, e.g. "us-east-2". Falls back to AWS_REGION. */
+  region?: string;
+  /** Instance type, or a list the fleet may pick from. Default: the launch template's. */
+  instanceType?: string | string[];
+  /** Subnets to launch into, one per AZ. Default: the launch template's. */
+  subnetIds?: string[];
+  /** Launch Spot capacity instead of on-demand (default). */
+  spot?: boolean | AwsEc2SpotOptions;
   /** Static credentials or a provider function. Omit to use the default AWS SDK credential chain. */
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider;
   /** How long `create` waits for the instance to come Online in SSM (default 120000). */
@@ -117,7 +126,7 @@ export interface AwsEc2FleetErrorDetail {
   availabilityZone?: string;
 }
 
-/** CreateFleet returned no instance. `errors` holds the per-override AWS errors. */
+/** The launch produced no instance. `errors` holds the AWS errors (one per fleet override). */
 export class AwsEc2FleetError extends Error {
   readonly errors: AwsEc2FleetErrorDetail[];
   constructor(message: string, errors: AwsEc2FleetErrorDetail[]) {
@@ -130,7 +139,7 @@ export class AwsEc2FleetError extends Error {
   }
 }
 
-/** No Spot capacity (or quota/price headroom) across the configured instance types and subnets. */
+/** No capacity (or quota/price headroom) across the configured instance types and subnets. */
 export class AwsEc2CapacityError extends AwsEc2FleetError {
   readonly code = 'AWS_EC2_CAPACITY_UNAVAILABLE';
   constructor(message: string, errors: AwsEc2FleetErrorDetail[]) {
@@ -205,14 +214,10 @@ function contextForSandbox(sandbox: AwsEc2Sandbox): Context {
 }
 
 function validateLaunchConfig(config: AwsEc2Config): void {
-  const missing: string[] = [];
-  if (!config.launchTemplateName) missing.push('launchTemplateName');
-  if (!config.subnetIds?.length) missing.push('subnetIds');
-  if (!config.instanceTypes?.length) missing.push('instanceTypes');
-  if (missing.length) {
+  if (!config.launchTemplate) {
     throw new Error(
-      `Missing aws-ec2 config: ${missing.join(', ')}.\n\n` +
-      'Pass them: awsEc2({ region, launchTemplateName, subnetIds: [...], instanceTypes: [...] })'
+      'Missing aws-ec2 config: launchTemplate.\n\n' +
+      'Pass it: awsEc2({ launchTemplate: "my-template" })'
     );
   }
 }
@@ -255,10 +260,39 @@ export function buildTags(options?: CreateInstanceOptions): Tag[] {
   return [...tags].map(([Key, Value]) => ({ Key, Value }));
 }
 
+export function instanceTypesOf(config: AwsEc2Config): string[] {
+  const { instanceType } = config;
+  return (Array.isArray(instanceType) ? instanceType : instanceType ? [instanceType] : []).filter(Boolean);
+}
+
+export function spotOptionsOf(config: AwsEc2Config): AwsEc2SpotOptions | undefined {
+  if (!config.spot) return undefined;
+  return config.spot === true ? {} : config.spot;
+}
+
+/** Fleet is only needed for Spot or to fall back across several instance types/subnets. */
+export function usesFleet(config: AwsEc2Config): boolean {
+  return !!spotOptionsOf(config) || instanceTypesOf(config).length > 1 || (config.subnetIds?.length ?? 0) > 0;
+}
+
+/** Instance type x subnet product; a missing dimension falls back to the launch template's value. */
 export function buildOverrides(config: AwsEc2Config): FleetLaunchTemplateOverridesRequest[] {
-  return config.instanceTypes.flatMap((InstanceType) =>
-    config.subnetIds.map((SubnetId) => ({ InstanceType: InstanceType as FleetLaunchTemplateOverridesRequest['InstanceType'], SubnetId }))
+  const types: Array<string | undefined> = instanceTypesOf(config);
+  const subnets: Array<string | undefined> = config.subnetIds?.length ? config.subnetIds : [];
+  if (!types.length && !subnets.length) return [];
+  return (types.length ? types : [undefined]).flatMap((InstanceType) =>
+    (subnets.length ? subnets : [undefined]).map((SubnetId) => ({
+      ...(InstanceType ? { InstanceType: InstanceType as FleetLaunchTemplateOverridesRequest['InstanceType'] } : {}),
+      ...(SubnetId ? { SubnetId } : {}),
+    }))
   );
+}
+
+function launchTemplateSpec(config: AwsEc2Config): LaunchTemplateSpecification & FleetLaunchTemplateSpecificationRequest {
+  const Version = config.launchTemplateVersion ?? DEFAULT_LAUNCH_TEMPLATE_VERSION;
+  return /^lt-[0-9a-f]+$/.test(config.launchTemplate)
+    ? { LaunchTemplateId: config.launchTemplate, Version }
+    : { LaunchTemplateName: config.launchTemplate, Version };
 }
 
 function fleetErrorDetail(error: CreateFleetError): AwsEc2FleetErrorDetail {
@@ -326,28 +360,58 @@ async function terminate(context: Context, instanceId: string): Promise<void> {
   }
 }
 
-async function launchInstance(context: Context, options?: CreateInstanceOptions) {
-  const { config } = context;
+function tagSpecifications(options?: CreateInstanceOptions) {
   const tags = buildTags(options);
+  return [
+    { ResourceType: 'instance' as const, Tags: tags },
+    { ResourceType: 'volume' as const, Tags: tags },
+  ];
+}
+
+async function launchWithRunInstances(context: Context, options?: CreateInstanceOptions): Promise<string> {
+  const { config } = context;
+  const [instanceType] = instanceTypesOf(config);
+  try {
+    const result = await context.clients.ec2.send(new RunInstancesCommand({
+      ClientToken: randomUUID(),
+      MinCount: 1,
+      MaxCount: 1,
+      LaunchTemplate: launchTemplateSpec(config),
+      ...(instanceType ? { InstanceType: instanceType as FleetLaunchTemplateOverridesRequest['InstanceType'] } : {}),
+      TagSpecifications: tagSpecifications(options),
+    }));
+    const instanceId = result.Instances?.[0]?.InstanceId;
+    if (!instanceId) throw new AwsEc2FleetError('EC2 RunInstances launched no instance.', []);
+    return instanceId;
+  } catch (error) {
+    const code = errorName(error);
+    if (code && CAPACITY_ERROR_CODES.has(code)) {
+      const detail = { code, message: (error as Error).message, instanceType };
+      throw new AwsEc2CapacityError(`No EC2 capacity for ${config.launchTemplate} (${code}).`, [detail]);
+    }
+    throw error;
+  }
+}
+
+async function launchWithFleet(context: Context, options?: CreateInstanceOptions): Promise<string> {
+  const { config } = context;
+  const spot = spotOptionsOf(config);
+  const overrides = buildOverrides(config);
   const result = await context.clients.ec2.send(new CreateFleetCommand({
     Type: 'instant',
     ClientToken: randomUUID(),
-    TargetCapacitySpecification: { TotalTargetCapacity: 1, DefaultTargetCapacityType: 'spot' },
-    SpotOptions: {
-      AllocationStrategy: 'price-capacity-optimized',
-      ...(config.maxPricePerHour ? { MaxTotalPrice: config.maxPricePerHour } : {}),
-    },
-    LaunchTemplateConfigs: [{
-      LaunchTemplateSpecification: {
-        LaunchTemplateName: config.launchTemplateName,
-        Version: config.launchTemplateVersion ?? DEFAULT_LAUNCH_TEMPLATE_VERSION,
+    TargetCapacitySpecification: { TotalTargetCapacity: 1, DefaultTargetCapacityType: spot ? 'spot' : 'on-demand' },
+    ...(spot ? {
+      SpotOptions: {
+        AllocationStrategy: 'price-capacity-optimized',
+        ...(spot.maxPricePerHour ? { MaxTotalPrice: spot.maxPricePerHour } : {}),
       },
-      Overrides: buildOverrides(config),
+    } : {}),
+    LaunchTemplateConfigs: [{
+      LaunchTemplateSpecification: launchTemplateSpec(config),
+      ...(overrides.length ? { Overrides: overrides } : {}),
     }],
-    TagSpecifications: [
-      { ResourceType: 'instance', Tags: tags },
-      { ResourceType: 'volume', Tags: tags },
-    ],
+    TagSpecifications: tagSpecifications(options),
   }));
 
   const launched = result.Instances?.find((entry) => entry.InstanceIds?.length);
@@ -357,7 +421,7 @@ async function launchInstance(context: Context, options?: CreateInstanceOptions)
     const codes = [...new Set(errors.map((error) => error.code).filter(Boolean))];
     const summary = codes.length ? codes.join(', ') : 'no error reported';
     if (errors.length === 0 || errors.every((error) => error.code && CAPACITY_ERROR_CODES.has(error.code))) {
-      throw new AwsEc2CapacityError(`No EC2 Spot capacity for ${config.launchTemplateName} (${summary}).`, errors);
+      throw new AwsEc2CapacityError(`No EC2 ${spot ? 'Spot ' : ''}capacity for ${config.launchTemplate} (${summary}).`, errors);
     }
     throw new AwsEc2FleetError(`EC2 CreateFleet launched no instance (${summary}).`, errors);
   }
@@ -367,6 +431,10 @@ async function launchInstance(context: Context, options?: CreateInstanceOptions)
   for (const extra of extras) await terminate(context, extra).catch(() => {});
 
   return instanceId;
+}
+
+function launchInstance(context: Context, options?: CreateInstanceOptions): Promise<string> {
+  return usesFleet(context.config) ? launchWithFleet(context, options) : launchWithRunInstances(context, options);
 }
 
 async function waitForSsmOnline(context: Context, instanceId: string, timeoutMs: number, signal?: AbortSignal): Promise<void> {
