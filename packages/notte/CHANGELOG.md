@@ -1,5 +1,13 @@
 # @computesdk/notte
 
+## 0.3.15
+
+### Patch Changes
+
+- Updated dependencies [aadc200]
+  - computesdk@4.1.11
+  - @computesdk/provider@2.1.13
+
 ## 0.3.14
 
 ### Patch Changes

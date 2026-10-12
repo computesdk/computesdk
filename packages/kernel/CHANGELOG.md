@@ -1,5 +1,13 @@
 # @computesdk/kernel
 
+## 0.2.19
+
+### Patch Changes
+
+- Updated dependencies [aadc200]
+  - computesdk@4.1.11
+  - @computesdk/provider@2.1.13
+
 ## 0.2.18
 
 ### Patch Changes

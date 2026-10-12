@@ -1,5 +1,13 @@
 # @computesdk/steel
 
+## 0.2.15
+
+### Patch Changes
+
+- Updated dependencies [aadc200]
+  - computesdk@4.1.11
+  - @computesdk/provider@2.1.13
+
 ## 0.2.14
 
 ### Patch Changes
