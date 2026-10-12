@@ -174,7 +174,7 @@ describe('create', () => {
     expect(native).not.toHaveProperty('clients');
 
     const info = await sandbox.getInfo();
-    expect(info).toMatchObject({ id: INSTANCE_ID, provider: 'aws-ec2', status: 'running' });
+    expect(info).toMatchObject({ id: INSTANCE_ID, provider: 'aws-ec2', status: 'running', timeout: 3_600_000 });
     expect(info.metadata).toMatchObject({
       instanceType: 'c5d.large',
       availabilityZone: 'us-east-2a',
@@ -255,6 +255,15 @@ describe('create', () => {
     ssm.on(DescribeInstanceInformationCommand).rejects(new Error('AccessDenied'));
     await expect(ec2(makeConfig()).sandbox.create()).rejects.toThrow('AccessDenied');
     expect(ec2Mock.commandCalls(TerminateInstancesCommand)).toHaveLength(1);
+  });
+
+  it('surfaces a failed cleanup so a leaked instance is not silent', async () => {
+    mockLaunch();
+    ssm.on(DescribeInstanceInformationCommand).rejects(new Error('AccessDenied'));
+    ec2Mock.on(TerminateInstancesCommand).rejects(new Error('Throttling'));
+    const error = await ec2(makeConfig()).sandbox.create().catch((e: unknown) => e);
+    expect((error as Error).message).toMatch(/AccessDenied.*cleanup also failed; i-[0-9a-f]+ may still be running: Throttling/);
+    expect((error as { cleanupError?: Error }).cleanupError?.message).toBe('Throttling');
   });
 
   it('validates required config and region', async () => {
@@ -398,6 +407,26 @@ describe('runCommand', () => {
     const result = await sandbox.runCommand('echo ok');
     expect(result).toMatchObject({ stdout: 'ok', exitCode: 0 });
     expect(ssm.commandCalls(GetCommandInvocationCommand)).toHaveLength(3);
+  });
+
+  it('cancels the queued command when the invocation never registers', async () => {
+    const sandbox = await launch();
+    ssm.on(SendCommandCommand).resolves({ Command: { CommandId: COMMAND_ID } });
+    ssm.on(CancelCommandCommand).resolves({});
+    const realNow = Date.now;
+    let offset = 0;
+    ssm.on(GetCommandInvocationCommand).callsFake(() => {
+      offset += 20_000;
+      throw new InvocationDoesNotExist({ message: 'not yet', $metadata: {} });
+    });
+    Date.now = () => realNow() + offset;
+    try {
+      await expect(sandbox.runCommand('echo')).rejects.toThrow('not yet');
+    } finally {
+      Date.now = realNow;
+    }
+    expect(ssm.commandCalls(CancelCommandCommand)).toHaveLength(1);
+    expect(ssm.commandCalls(CancelCommandCommand)[0].args[0].input).toEqual({ CommandId: COMMAND_ID, InstanceIds: [INSTANCE_ID] });
   });
 
   it('propagates other GetCommandInvocation errors', async () => {

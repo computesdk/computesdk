@@ -230,6 +230,10 @@ function errorName(error: unknown): string | undefined {
   return Code ?? code ?? name;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function isInstanceNotFound(error: unknown): boolean {
   const name = errorName(error);
   return name === 'InvalidInstanceID.NotFound' || name === 'InvalidInstanceID.Malformed';
@@ -470,7 +474,14 @@ async function createSandbox(config: Ec2Config, options?: CreateInstanceOptions)
     }
     return { instance: sandboxFromEc2(context, described), instanceId };
   } catch (error) {
-    await terminate(context, instanceId).catch(() => {});
+    try {
+      await terminate(context, instanceId);
+    } catch (cleanupError) {
+      if (error instanceof Error) {
+        error.message += ` (cleanup also failed; ${instanceId} may still be running: ${errorMessage(cleanupError)})`;
+        Object.assign(error, { cleanupError });
+      }
+    }
     throw error;
   }
 }
@@ -553,16 +564,23 @@ async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCom
   const basePoll = Math.min(config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS, 1_000);
   let interval = Math.max(1, Math.min(basePoll, 250));
 
+  const cancel = () =>
+    clients.ssm.send(new CancelCommandCommand({ CommandId: commandId, InstanceIds: [sandbox.instanceId] })).catch(() => {});
+
   let invocation: GetCommandInvocationCommandOutput | undefined;
   while (true) {
     try {
       invocation = await clients.ssm.send(new GetCommandInvocationCommand({ CommandId: commandId, InstanceId: sandbox.instanceId }));
       if (invocation.Status && TERMINAL_STATUSES.has(invocation.Status)) break;
     } catch (error) {
-      if (errorName(error) !== 'InvocationDoesNotExist' || Date.now() > registrationDeadline) throw error;
+      if (errorName(error) !== 'InvocationDoesNotExist') throw error;
+      if (Date.now() > registrationDeadline) {
+        await cancel();
+        throw error;
+      }
     }
     if (Date.now() > deadline) {
-      await clients.ssm.send(new CancelCommandCommand({ CommandId: commandId, InstanceIds: [sandbox.instanceId] })).catch(() => {});
+      await cancel();
       throw new Error(`SSM command ${commandId} on ${sandbox.instanceId} did not finish before the client deadline; it was cancelled.`);
     }
     await sleep(interval);
@@ -652,7 +670,7 @@ export const ec2 = defineProvider<Ec2Sandbox, Ec2Config>({
           provider: PROVIDER,
           status: mapStatus(state),
           createdAt: sandbox.launchTime,
-          timeout: context.config.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS,
+          timeout: DEFAULT_EXECUTION_TIMEOUT_S * 1000,
           metadata: {
             region: sandbox.region,
             instanceType: sandbox.instanceType,
