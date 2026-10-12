@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { SandboxInstance, Snapshot, initialize } from '@blaxel/core';
 import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
  * Blaxel rejects sandboxes with a ttl under 5 minutes
@@ -107,9 +107,9 @@ function withBlaxelInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): 
 export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	name: 'blaxel',
 	methods: {
-		sandbox: {
+		instances: {
 			// Collection operations (map to compute.sandbox.*)
-			create: async (config: BlaxelConfig, options?: CreateSandboxOptions) => {
+			create: async (config: BlaxelConfig, options?: CreateInstanceOptions) => {
 				// Destructure known ComputeSDK fields, collect the rest for passthrough
 				const {
 					timeout: optTimeout,
@@ -198,9 +198,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					});
 				}
 
-				return {
-					sandbox: blaxelStamp.stamp(sandbox, config),
-					sandboxId: sandbox.metadata?.name || 'blaxel-unknown',
+				return { instance: blaxelStamp.stamp(sandbox, config), instanceId: sandbox.metadata?.name || 'blaxel-unknown',
 				};
 			} catch (error) {
 					const errorDetail = error instanceof Error
@@ -253,9 +251,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			list: async (config: BlaxelConfig) =>
 				withBlaxelConfig(config, async () => {
 					const sandboxList = await listAllSandboxes();
-					return sandboxList.map(sandbox => ({
-						sandbox: blaxelStamp.stamp(sandbox, config),
-						sandboxId: sandbox.metadata?.name || 'blaxel-unknown'
+					return sandboxList.map(sandbox => ({ instance: blaxelStamp.stamp(sandbox, config), instanceId: sandbox.metadata?.name || 'blaxel-unknown'
 					}));
 				}),
 
@@ -313,7 +309,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			}
 			}),
 
-			getInfo: async (sandbox: SandboxInstance): Promise<SandboxInfo> => {
+			getInfo: async (sandbox: SandboxInstance): Promise<InstanceInfo> => {
 				const runtime = sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node';
 				return {
 					id: sandbox.metadata?.name || 'blaxel-unknown',

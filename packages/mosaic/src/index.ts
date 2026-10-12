@@ -2,14 +2,14 @@ import { performance } from 'node:perf_hooks';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   CreateTemplateOptions,
   FileEntry,
   ListSnapshotsOptions,
   ListTemplatesOptions,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 
 const PROVIDER = 'mosaic' as const;
@@ -256,11 +256,11 @@ function isStockTemplate(value: string): boolean {
   return (STOCK_TEMPLATES as readonly string[]).includes(value);
 }
 
-function memoryFor(config: Required<MosaicConfig>, options?: CreateSandboxOptions): number {
+function memoryFor(config: Required<MosaicConfig>, options?: CreateInstanceOptions): number {
   return options?.memoryMb ?? options?.memoryMiB ?? options?.memMiB ?? options?.memory ?? config.memoryMb;
 }
 
-function vcpuFor(config: Required<MosaicConfig>, options?: CreateSandboxOptions): number {
+function vcpuFor(config: Required<MosaicConfig>, options?: CreateInstanceOptions): number {
   return options?.vcpus ?? options?.cpus ?? options?.cpu ?? config.vcpu;
 }
 
@@ -272,7 +272,7 @@ function vcpuFor(config: Required<MosaicConfig>, options?: CreateSandboxOptions)
  */
 function bootFrom(
   config: Required<MosaicConfig>,
-  options?: CreateSandboxOptions,
+  options?: CreateInstanceOptions,
 ): { template?: string; snapshot_id?: string } {
   const environment =
     options?.snapshotId ||
@@ -358,7 +358,7 @@ async function shell(
 export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot, MosaicSnapshot>({
   name: PROVIDER,
   methods: {
-    sandbox: {
+    instances: {
       create: async (config, options) => {
         const resolved = resolvedConfig(config);
         const boot = bootFrom(resolved, options);
@@ -392,7 +392,7 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
           createdAt: new Date(),
           config,
         };
-        return { sandbox, sandboxId: sandbox.id };
+        return { instance: sandbox, instanceId: sandbox.id };
       },
 
       getById: async (config, sandboxId) => {
@@ -400,7 +400,7 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
           const info = await request<MarVmInfo>(config, `/v1/sandboxes/${encodeURIComponent(sandboxId)}`, {
             method: 'GET',
           });
-          return { sandbox: fromInfo(config, info), sandboxId };
+          return { instance: fromInfo(config, info), instanceId: sandboxId };
         } catch (error) {
           if (error instanceof MosaicApiError && (error.status === 400 || error.status === 404)) return null;
           throw error;
@@ -409,9 +409,7 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
 
       list: async (config) => {
         const result = await request<{ sandboxes: MarVmInfo[] }>(config, '/v1/sandboxes', { method: 'GET' });
-        return result.sandboxes.map((info) => ({
-          sandbox: fromInfo(config, info),
-          sandboxId: info.id,
+        return result.sandboxes.map((info) => ({ instance: fromInfo(config, info), instanceId: info.id,
         }));
       },
 
@@ -474,7 +472,7 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
         };
       },
 
-      getInfo: async (sandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox): Promise<InstanceInfo> => {
         const info = await request<MarVmInfo>(
           sandbox.config,
           `/v1/sandboxes/${encodeURIComponent(sandbox.id)}`,

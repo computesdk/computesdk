@@ -5,7 +5,7 @@
 import { Sandbox as E2BSandbox } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 type E2BFileEntry = {
@@ -34,8 +34,8 @@ export interface E2BConfig {
 export const e2b = defineProvider<E2BSandbox, E2BConfig>({
   name: 'e2b',
   methods: {
-    sandbox: {
-      create: async (config: E2BConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: E2BConfig, options?: CreateInstanceOptions) => {
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.E2B_API_KEY) || '';
 
         if (!apiKey) {
@@ -68,7 +68,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           if (!sandbox.sandboxId) throw new Error('E2B create() returned sandbox without an ID');
           sandboxId = sandbox.sandboxId;
 
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('API key')) {
@@ -86,7 +86,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
         try {
           const sandbox = await E2BSandbox.connect(sandboxId, { apiKey });
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch { return null; }
       },
 
@@ -98,7 +98,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           return items.map((sandbox) => {
             const listedSandbox = sandbox as unknown as E2BSandbox & { id?: string; sandboxId?: string };
             const sandboxId = listedSandbox.id || listedSandbox.sandboxId || 'e2b-unknown';
-            return { sandbox: listedSandbox, sandboxId };
+            return { instance: listedSandbox, instanceId: sandboxId };
           });
         } catch { return []; }
       },
@@ -130,7 +130,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         }
       },
 
-      getInfo: async (sandbox: E2BSandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: E2BSandbox): Promise<InstanceInfo> => ({
         id: sandbox.sandboxId || 'e2b-unknown',
         provider: 'e2b',
         status: 'running',

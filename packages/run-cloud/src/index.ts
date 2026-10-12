@@ -14,12 +14,12 @@ import type {
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
   ListSnapshotsOptions,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 
 const DEFAULT_IMAGE = 'runcloud/agent-base';
@@ -250,7 +250,7 @@ function makeHandle(
   };
 }
 
-function rejectSandboxEnvs(options?: CreateSandboxOptions): void {
+function rejectSandboxEnvs(options?: CreateInstanceOptions): void {
   if (!options?.envs || Object.keys(options.envs).length === 0) return;
   throw new Error(
     'Run Cloud does not support sandbox-level envs yet. ' +
@@ -260,7 +260,7 @@ function rejectSandboxEnvs(options?: CreateSandboxOptions): void {
 
 function resolveTimeoutSeconds(
   config: RunCloudConfig,
-  options?: CreateSandboxOptions,
+  options?: CreateInstanceOptions,
 ): number | undefined {
   const providerOptions = options as Record<string, unknown> | undefined;
   return providerOptions?.timeoutSeconds === undefined
@@ -272,7 +272,7 @@ function resolveTimeoutSeconds(
 
 function createOptions(
   config: RunCloudConfig,
-  options?: CreateSandboxOptions,
+  options?: CreateInstanceOptions,
 ) {
   rejectSandboxEnvs(options);
 
@@ -301,7 +301,7 @@ function createOptions(
 
 function snapshotRestoreOptions(
   config: RunCloudConfig,
-  options: CreateSandboxOptions,
+  options: CreateInstanceOptions,
 ) {
   rejectSandboxEnvs(options);
   const providerOptions = options as Record<string, unknown>;
@@ -347,7 +347,7 @@ function snapshotRestoreOptions(
   };
 }
 
-function mapStatus(state: string): SandboxInfo['status'] {
+function mapStatus(state: string): InstanceInfo['status'] {
   if (state === 'running') return 'running';
   if (state === 'interrupted' || state === 'failed') return 'error';
   return 'stopped';
@@ -377,7 +377,7 @@ function mapSnapshot(snapshot: NativeSnapshot): RunCloudSnapshot {
 
 async function createSandbox(
   config: RunCloudConfig,
-  options?: CreateSandboxOptions,
+  options?: CreateInstanceOptions,
 ) {
   throwIfAborted(options?.signal);
   const client = createClient(config);
@@ -409,9 +409,7 @@ async function createSandbox(
     throw abortError(options.signal);
   }
 
-  return {
-    sandbox: makeHandle(client, sandbox, config),
-    sandboxId: sandbox.id,
+  return { instance: makeHandle(client, sandbox, config), instanceId: sandbox.id,
   };
 }
 
@@ -423,7 +421,7 @@ const _provider = defineProvider<
 >({
   name: 'run-cloud',
   methods: {
-    sandbox: {
+    instances: {
       create: createSandbox,
 
       getById: async (config, sandboxId) => {
@@ -443,9 +441,7 @@ const _provider = defineProvider<
       list: async (config) => {
         const client = createClient(config);
         const sandboxes = await client.sandboxes.list({ state: 'running' });
-        return sandboxes.map((sandbox) => ({
-          sandbox: makeHandle(client, sandbox, config),
-          sandboxId: sandbox.id,
+        return sandboxes.map((sandbox) => ({ instance: makeHandle(client, sandbox, config), instanceId: sandbox.id,
         }));
       },
 
@@ -486,7 +482,7 @@ const _provider = defineProvider<
         };
       },
 
-      getInfo: async (handle): Promise<SandboxInfo> => {
+      getInfo: async (handle): Promise<InstanceInfo> => {
         handle.sandbox = await handle.client.sandboxes.get(handle.sandbox.id);
         const sandbox = handle.sandbox;
         return {

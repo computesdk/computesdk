@@ -10,8 +10,8 @@ import { nanoid } from 'nanoid';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
 } from 'computesdk';
@@ -38,8 +38,8 @@ const activeSandboxes = new Map<string, JustBashSandbox>();
 const _provider = defineProvider<JustBashSandbox, JustBashConfig>({
   name: 'just-bash',
   methods: {
-    sandbox: {
-      create: async (config: JustBashConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: JustBashConfig, options?: CreateInstanceOptions) => {
         const sandboxId = `just-bash-${nanoid(10)}`;
         const usePython = config.python ?? ((options as any)?.runtime === 'python');
         const bash = new Bash({
@@ -53,17 +53,17 @@ const _provider = defineProvider<JustBashSandbox, JustBashConfig>({
         });
         const sandbox: JustBashSandbox = { bash, id: sandboxId, createdAt: new Date(), config: { ...config, python: usePython } };
         activeSandboxes.set(sandboxId, sandbox);
-        return { sandbox, sandboxId };
+        return { instance: sandbox, instanceId: sandboxId };
       },
 
       getById: async (_config: JustBashConfig, sandboxId: string) => {
         const sandbox = activeSandboxes.get(sandboxId);
         if (!sandbox) return null;
-        return { sandbox, sandboxId };
+        return { instance: sandbox, instanceId: sandboxId };
       },
 
       list: async (_config: JustBashConfig) =>
-        Array.from(activeSandboxes.entries()).map(([sandboxId, sandbox]) => ({ sandbox, sandboxId })),
+        Array.from(activeSandboxes.entries()).map(([sandboxId, sandbox]) => ({ instance: sandbox, instanceId: sandboxId })),
 
       destroy: async (_config: JustBashConfig, sandboxId: string) => {
         activeSandboxes.delete(sandboxId);
@@ -82,7 +82,7 @@ const _provider = defineProvider<JustBashSandbox, JustBashConfig>({
         }
       },
 
-      getInfo: async (sandbox: JustBashSandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: JustBashSandbox): Promise<InstanceInfo> => ({
         id: sandbox.id,
         provider: 'just-bash',
         status: 'running',

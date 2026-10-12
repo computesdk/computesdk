@@ -9,12 +9,12 @@ import { defineProvider } from '@computesdk/provider';
 
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
   ListSnapshotsOptions,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 
 interface OpenComputerSandboxOpts {
@@ -213,7 +213,7 @@ function redactWebhooks(webhooks: OpenComputerNativeSandbox['webhooks']): Array<
   }));
 }
 
-function createOpts(config: OpenComputerConfig, options?: CreateSandboxOptions): OpenComputerSandboxOpts {
+function createOpts(config: OpenComputerConfig, options?: CreateInstanceOptions): OpenComputerSandboxOpts {
   return {
     ...baseOpts(config),
     template: options?.templateId || config.template,
@@ -313,7 +313,7 @@ async function createFromCheckpointWithRetry(
   }
 }
 
-async function createSandbox(config: OpenComputerConfig, options?: CreateSandboxOptions) {
+async function createSandbox(config: OpenComputerConfig, options?: CreateInstanceOptions) {
   const Sandbox = await loadSandbox();
   const opts = createOpts(config, options);
 
@@ -327,24 +327,24 @@ async function createSandbox(config: OpenComputerConfig, options?: CreateSandbox
       envs: opts.envs,
       secretStore: opts.secretStore,
     });
-    return { sandbox, sandboxId: sandbox.sandboxId || sandbox.id };
+    return { instance: sandbox, instanceId: sandbox.sandboxId || sandbox.id };
   }
 
   const sandbox = await Sandbox.create(opts);
-  return { sandbox, sandboxId: sandbox.sandboxId || sandbox.id };
+  return { instance: sandbox, instanceId: sandbox.sandboxId || sandbox.id };
 }
 
 const _provider = defineProvider<OpenComputerNativeSandbox, OpenComputerConfig, any, OpenComputerSnapshot>({
   name: 'opencomputer',
   methods: {
-    sandbox: {
+    instances: {
       create: createSandbox,
 
       getById: async (config: OpenComputerConfig, sandboxId: string) => {
         const Sandbox = await loadSandbox();
         try {
           const sandbox = await Sandbox.connect(sandboxId, baseOpts(config));
-          return { sandbox, sandboxId: sandbox.sandboxId || sandbox.id || sandboxId };
+          return { instance: sandbox, instanceId: sandbox.sandboxId || sandbox.id || sandboxId };
         } catch (error) {
           if (error instanceof Error && (error.message.includes('404') || error.message.includes('not found'))) {
             return null;
@@ -401,7 +401,7 @@ const _provider = defineProvider<OpenComputerNativeSandbox, OpenComputerConfig, 
         }
       },
 
-      getInfo: async (sandbox: OpenComputerNativeSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: OpenComputerNativeSandbox): Promise<InstanceInfo> => {
         let status = sandbox.status;
         try {
           status = (await sandbox.isRunning()) ? 'running' : sandbox.status;

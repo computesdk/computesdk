@@ -2,12 +2,12 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
   ListSnapshotsOptions,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 import type { Snapshot } from 'computesdk';
 
@@ -283,7 +283,7 @@ function buildExecCommand(command: string, options?: RunCommandOptions): string 
   return fullCommand;
 }
 
-function mapStatus(state: QuiltContainerState | undefined): SandboxInfo['status'] {
+function mapStatus(state: QuiltContainerState | undefined): InstanceInfo['status'] {
   switch (state) {
     case 'error':
       return 'error';
@@ -456,8 +456,8 @@ async function createPublishedService(
 export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snapshot>({
   name: PROVIDER,
   methods: {
-    sandbox: {
-      create: async (config: QuiltConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: QuiltConfig, options?: CreateInstanceOptions) => {
         const resolved = resolveConfig(config);
         const {
           timeout: requestedTimeout,
@@ -511,13 +511,11 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
           if (!container) {
             throw new Error(`Quilt cloned container ${containerId} was not found after creation.`);
           }
-          return {
-            sandbox: {
+          return { instance: {
               config: resolved,
               sandboxId: containerId,
               container,
-            },
-            sandboxId: containerId,
+            }, instanceId: containerId,
           };
         }
 
@@ -547,13 +545,11 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
           throw new Error('Quilt container create did not return a container_id.');
         }
 
-        return {
-          sandbox: {
+        return { instance: {
             config: resolved,
             sandboxId: container.container_id,
             container,
-          },
-          sandboxId: container.container_id,
+          }, instanceId: container.container_id,
         };
       },
 
@@ -561,19 +557,18 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
         const resolved = resolveConfig(config);
         const container = await getContainerById(resolved, sandboxId);
         if (!container) return null;
-        return {
-          sandbox: {
+        return { instance: {
             config: resolved,
             sandboxId,
             container,
           },
-          sandboxId,
+          instanceId: sandboxId,
         };
       },
 
       list: async (config: QuiltConfig) => {
         const resolved = resolveConfig(config);
-        const sandboxes: Array<{ sandbox: QuiltSandboxHandle; sandboxId: string }> = [];
+        const sandboxes: Array<{ instance: QuiltSandboxHandle; instanceId: string }> = [];
         let cursor: string | null | undefined = undefined;
 
         while (true) {
@@ -587,12 +582,11 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
           for (const container of response?.containers ?? []) {
             if (!container.container_id) continue;
             sandboxes.push({
-              sandbox: {
-                config: resolved,
-                sandboxId: container.container_id,
+              instance: {
+                config: resolved, sandboxId: container.container_id,
                 container,
               },
-              sandboxId: container.container_id,
+              instanceId: container.container_id,
             });
           }
 
@@ -654,7 +648,7 @@ export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snap
         };
       },
 
-      getInfo: async (handle: QuiltSandboxHandle): Promise<SandboxInfo> => {
+      getInfo: async (handle: QuiltSandboxHandle): Promise<InstanceInfo> => {
         const container =
           (await getContainerById(handle.config, handle.sandboxId)) ?? handle.container;
 

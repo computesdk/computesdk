@@ -14,7 +14,7 @@ import type {
   CodeResult,
   CommandResult,
   SandboxInfo as ComputeSandboxInfo,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
 } from "@computesdk/provider";
@@ -122,10 +122,10 @@ export const tensorlake = defineProvider<
 >({
   name: "tensorlake",
   methods: {
-    sandbox: {
+    instances: {
       create: async (
         config: TensorlakeConfig,
-        options?: CreateSandboxOptions,
+        options?: CreateInstanceOptions,
       ) => {
         const { apiKey, apiUrl } = resolveAuth(config);
         const image = options?.image || config.image;
@@ -157,9 +157,7 @@ export const tensorlake = defineProvider<
             sandbox: instance,
           };
           const durationMs = Date.now() - startTime;
-          return {
-            sandbox,
-            sandboxId: instance.sandboxId,
+          return { instance: sandbox, instanceId: instance.sandboxId,
             durationMs,
           };
         } catch (error) {
@@ -185,7 +183,7 @@ export const tensorlake = defineProvider<
             config,
             sandbox,
           };
-          return { sandbox: ctx, sandboxId: sandbox.sandboxId };
+          return { instance: ctx, instanceId: sandbox.sandboxId };
         } catch {
           return null;
         }
@@ -204,13 +202,11 @@ export const tensorlake = defineProvider<
                 apiKey,
                 apiUrl,
               });
-              return {
-                sandbox: {
+              return { instance: {
                   sandboxId: s.sandboxId,
                   config,
                   sandbox,
-                } as TensorlakeSandboxContext,
-                sandboxId: s.sandboxId,
+                } as TensorlakeSandboxContext, instanceId: s.sandboxId,
               };
             }),
           );

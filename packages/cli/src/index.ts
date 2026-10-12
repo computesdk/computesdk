@@ -9,7 +9,8 @@
  *   compute providers                    # list configured providers
  *   compute actions …                    # Actions API
  *   compute market …                     # market sell-side commands
- *   compute sandboxes …                  # platform sandbox control plane
+ *   compute instances …                  # platform compute-instance control plane
+ *     (alias: compute sandboxes, compute sbx)
  *   compute bench …                      # benchmarks platform CLI
  */
 
@@ -288,8 +289,9 @@ registerActionsCommands(program);
 registerMarketCommands(program);
 
 // ─── sandboxes ───────────────────────────────────────────────────────────────
-// `compute sandboxes` drives /api/v1/sandboxes — the customer-facing sandbox
-// control plane (create/exec/processes/files/urls). Same auth as actions.
+// `compute instances` (alias `compute sandboxes`/`sbx`) drives
+// /api/v1/sandboxes — the customer-facing compute control plane
+// (create/exec/processes/files/urls). Same auth as actions.
 
 registerSandboxesCommands(program);
 

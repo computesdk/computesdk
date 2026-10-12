@@ -7,12 +7,15 @@
 
 // Export factories
 export { defineProvider } from './factory';
-export type { 
-  ProviderConfig, 
-  SandboxMethods, 
-  TemplateMethods, 
+export type {
+  ProviderConfig,
+  InstanceMethods,
+  InstanceLifecycleResult,
+  TemplateMethods,
   SnapshotMethods
 } from './factory';
+/** @deprecated Use {@link InstanceMethods}. */
+export type { SandboxMethods } from './factory';
 
 export { defineInfraProvider } from './infra-factory';
 export type {
@@ -27,7 +30,15 @@ export { createConfigGate, createConfigStamp } from './config-gate';
 export type { ConfigGate, ConfigStamp, InstallConfig } from './config-gate';
 
 // Export egress router setup
-export { setupSandboxEgress, readSandboxEgress, EGRESS_SHIM_DIR } from './egress';
+export {
+  setupInstanceEgress,
+  readInstanceEgress,
+  EGRESS_SHIM_DIR,
+  /** @deprecated Use {@link setupInstanceEgress}. */
+  setupSandboxEgress,
+  /** @deprecated Use {@link readInstanceEgress}. */
+  readSandboxEgress,
+} from './egress';
 
 // Export direct mode compute API
 export { createCompute } from './compute';

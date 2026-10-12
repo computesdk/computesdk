@@ -6,7 +6,7 @@ import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxSandbox } from '@codesandbox/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 type HibernateCapableSandbox = CodesandboxSandbox & { hibernate: () => Promise<void>; };
 
@@ -24,8 +24,8 @@ export interface CodesandboxConfig {
 export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({
   name: 'codesandbox',
   methods: {
-    sandbox: {
-      create: async (config: CodesandboxConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: CodesandboxConfig, options?: CreateInstanceOptions) => {
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
         if (!apiKey) {
           throw new Error(`Missing CodeSandbox API key. Provide 'apiKey' in config or set CSB_API_KEY environment variable.`);
@@ -50,7 +50,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
             sandbox = await sdk.sandboxes.create(createOptions);
             sandboxId = sandbox.id;
           }
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('API key')) {
@@ -70,7 +70,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         const sdk = new CodeSandbox(apiKey);
         try {
           const sandbox = await sdk.sandboxes.resume(sandboxId);
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch { return null; }
       },
 
@@ -111,7 +111,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         }
       },
 
-      getInfo: async (sandbox: CodesandboxSandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: CodesandboxSandbox): Promise<InstanceInfo> => ({
         id: sandbox.id,
         provider: 'codesandbox',
         status: 'running',

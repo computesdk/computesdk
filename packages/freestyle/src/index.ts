@@ -21,8 +21,8 @@ import {
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
   FileEntry,
@@ -271,15 +271,15 @@ function toSnapshot(data: SnapshotData): FreestyleSnapshot {
 export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleSnapshot>({
   name: 'freestyle',
   methods: {
-    sandbox: {
+    instances: {
       // ── Collection operations (compute.sandbox.*) ──────────────────────
-      create: async (config: FreestyleConfig, options?: CreateSandboxOptions) => {
+      create: async (config: FreestyleConfig, options?: CreateInstanceOptions) => {
         const resolved = resolveConfig(config);
         const client = clientFor(resolved);
 
         // Reconnect to an existing sandbox by id — no boot.
         if (options?.sandboxId) {
-          return { sandbox: client.vms.ref(options.sandboxId), sandboxId: options.sandboxId };
+          return { instance: client.vms.ref(options.sandboxId), instanceId: options.sandboxId };
         }
 
         // `snapshotId` accepts an id, your own slug, or a public `{owner}/{slug}`,
@@ -324,7 +324,7 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
             metadata: { ...(options?.metadata ?? {}), purpose: SANDBOX_METADATA_MARKER },
             firewall: config.firewall ?? ALLOW_ALL_OUTBOUND,
           });
-          return { sandbox: vm, sandboxId: vmId };
+          return { instance: vm, instanceId: vmId };
         }
       },
 
@@ -333,7 +333,7 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         try {
           // Confirm it exists (and is this account's) before handing back a handle.
           await client.vms.get(sandboxId);
-          return { sandbox: client.vms.ref(sandboxId), sandboxId };
+          return { instance: client.vms.ref(sandboxId), instanceId: sandboxId };
         } catch (error) {
           if (isNotFound(error)) return null;
           throw error;
@@ -348,7 +348,7 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
           metadata: `purpose:${SANDBOX_METADATA_MARKER}`,
           limit: 200,
         });
-        return vms.map((vm) => ({ sandbox: client.vms.ref(vm.id), sandboxId: vm.id }));
+        return vms.map((vm) => ({ instance: client.vms.ref(vm.id), instanceId: vm.id }));
       },
 
       destroy: async (config: FreestyleConfig, sandboxId: string) => {
@@ -395,9 +395,9 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         }
       },
 
-      getInfo: async (sandbox: Vm): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: Vm): Promise<InstanceInfo> => {
         const data = await sandbox.data();
-        const status: SandboxInfo['status'] =
+        const status: InstanceInfo['status'] =
           data.state === 'running' || data.state === 'starting'
             ? 'running'
             : data.state === 'stopped' || data.state === 'paused' || data.state === 'pausing'

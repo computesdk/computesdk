@@ -10,8 +10,8 @@
 import { Sandbox, SandboxNotFoundError } from 'railway';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, RunCommandOptions, SandboxInfo } from '@computesdk/provider';
-import type { CreateSandboxOptions, FileEntry } from 'computesdk';
+import type { CommandResult, RunCommandOptions, InstanceInfo } from '@computesdk/provider';
+import type { CreateInstanceOptions, FileEntry } from 'computesdk';
 
 type RailwaySandbox = Sandbox;
 
@@ -64,7 +64,7 @@ function resolveClientOptions(config: RailwayConfig): RailwayClientOptions {
 }
 
 /** Map Railway's sandbox status onto the ComputeSDK status enum. */
-function mapStatus(status: string): SandboxInfo['status'] {
+function mapStatus(status: string): InstanceInfo['status'] {
   switch (status) {
     case 'RUNNING':
     case 'CREATING':
@@ -115,8 +115,8 @@ function composeCommand(command: string, options?: RunCommandOptions): string {
 export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
   name: 'railway',
   methods: {
-    sandbox: {
-      create: async (config: RailwayConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: RailwayConfig, options?: CreateInstanceOptions) => {
         const client = resolveClientOptions(config);
 
         try {
@@ -132,7 +132,7 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
               : {}),
           });
 
-          return { sandbox, sandboxId: sandbox.id };
+          return { instance: sandbox, instanceId: sandbox.id };
         } catch (error) {
           throw new Error(
             `Failed to create Railway sandbox: ${error instanceof Error ? error.message : String(error)}`
@@ -144,7 +144,7 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
         const client = resolveClientOptions(config);
         try {
           const sandbox = await Sandbox.connect(sandboxId, client);
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch (error) {
           // Only a missing sandbox maps to null; surface auth/network/config errors.
           if (error instanceof SandboxNotFoundError) return null;
@@ -159,12 +159,12 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
           const connected = await Promise.allSettled(
             infos.map(async (info) => {
               const sandbox = await Sandbox.connect(info.id, client);
-              return { sandbox, sandboxId: info.id };
+              return { instance: sandbox, instanceId: info.id };
             })
           );
           return connected
             .filter(
-              (r): r is PromiseFulfilledResult<{ sandbox: RailwaySandbox; sandboxId: string }> =>
+              (r): r is PromiseFulfilledResult<{ instance: RailwaySandbox; instanceId: string }> =>
                 r.status === 'fulfilled'
             )
             .map((r) => r.value);
@@ -214,7 +214,7 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
         }
       },
 
-      getInfo: async (sandbox: RailwaySandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: RailwaySandbox): Promise<InstanceInfo> => ({
         id: sandbox.id,
         provider: 'railway',
         status: mapStatus(sandbox.status),

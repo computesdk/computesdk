@@ -8,7 +8,7 @@
 import { Box, EphemeralBox } from '@upstash/box';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 export type UpstashSandboxInstance = Box | EphemeralBox;
 
@@ -57,9 +57,9 @@ function resolvePath(sandbox: UpstashSandboxInstance, path: string): string {
 export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
   name: 'upstash',
   methods: {
-    sandbox: {
+    instances: {
       // Collection operations (map to compute.sandbox.*)
-      create: async (config: UpstashConfig, options?: CreateSandboxOptions) => {
+      create: async (config: UpstashConfig, options?: CreateInstanceOptions) => {
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.UPSTASH_BOX_API_KEY) || '';
 
         if (!apiKey) {
@@ -134,9 +134,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
             box = ephemeralBox;
           }
 
-          return {
-            sandbox: box,
-            sandboxId: box.id,
+          return { instance: box, instanceId: box.id,
           };
         } catch (error) {
           if (error instanceof Error) {
@@ -163,9 +161,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         try {
           const box = await Box.get(sandboxId, { apiKey });
 
-          return {
-            sandbox: box,
-            sandboxId: box.id,
+          return { instance: box, instanceId: box.id,
           };
         } catch (error) {
           return null;
@@ -177,9 +173,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
 
         try {
           const boxes = await Box.list({ apiKey });
-          return boxes.map((boxData: any) => ({
-            sandbox: boxData,
-            sandboxId: boxData.id,
+          return boxes.map((boxData: any) => ({ instance: boxData, instanceId: boxData.id,
           }));
         } catch (error) {
           return [];
@@ -248,10 +242,10 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         }
       },
 
-      getInfo: async (sandbox: UpstashSandboxInstance): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: UpstashSandboxInstance): Promise<InstanceInfo> => {
         const { status } = await sandbox.getStatus();
 
-        const universalStatus: SandboxInfo['status'] =
+        const universalStatus: InstanceInfo['status'] =
           (status === 'creating' || status === 'idle' || status === 'running') ? 'running' :
             status === 'error' ? 'error' :
               'stopped';

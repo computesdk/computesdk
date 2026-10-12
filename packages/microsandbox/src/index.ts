@@ -4,12 +4,12 @@ import { performance } from 'node:perf_hooks';
 import { defineProvider, createConfigGate } from '@computesdk/provider';
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
   ListSnapshotsOptions,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 import type {
   DefaultBackend,
@@ -238,21 +238,21 @@ function requireLocal(backendKind: 'local' | 'cloud', capability: string): void 
   }
 }
 
-function timeoutFor(config: MicrosandboxConfig, options?: CreateSandboxOptions): number {
+function timeoutFor(config: MicrosandboxConfig, options?: CreateInstanceOptions): number {
   return options?.timeout ?? config.timeout ?? DEFAULT_TIMEOUT_MS;
 }
 
-function cpusFor(config: MicrosandboxConfig, options?: CreateSandboxOptions): number {
+function cpusFor(config: MicrosandboxConfig, options?: CreateInstanceOptions): number {
   return options?.cpus ?? options?.vcpus ?? options?.cpu ?? config.cpus ?? DEFAULT_CPUS;
 }
 
-function memoryFor(config: MicrosandboxConfig, options?: CreateSandboxOptions): number {
+function memoryFor(config: MicrosandboxConfig, options?: CreateInstanceOptions): number {
   return options?.memoryMiB ?? options?.memoryMib ?? options?.memMiB ?? options?.memoryMb ?? options?.memory ?? config.memoryMib ?? DEFAULT_MEMORY_MIB;
 }
 
 function normalizePorts(
   config: MicrosandboxConfig,
-  options?: CreateSandboxOptions,
+  options?: CreateInstanceOptions,
 ): MicrosandboxPort[] {
   const raw = [
     ...(config.ports ?? []),
@@ -361,7 +361,7 @@ async function connectedSandbox(sandbox: MicrosandboxSandbox): Promise<NativeSan
   return sandbox.sandbox;
 }
 
-function mapStatus(status: string): SandboxInfo['status'] {
+function mapStatus(status: string): InstanceInfo['status'] {
   if (status === 'running' || status === 'draining') return 'running';
   if (status === 'stopped') return 'stopped';
   return 'error';
@@ -510,7 +510,7 @@ const _microsandbox = defineProvider<
 >({
   name: PROVIDER,
   methods: {
-    sandbox: {
+    instances: {
       create: async (config, options) => withBackend(selectBackend(config), async (sdk) => {
         options?.signal?.throwIfAborted();
         const backendKind = sdk.defaultBackendKind();
@@ -589,9 +589,7 @@ const _microsandbox = defineProvider<
         sandboxBackends.set(sandbox, selectBackend(config));
         sandboxPortBinds.set(sandbox, bindAddressesFor(ports));
 
-        return {
-          sandbox,
-          sandboxId: name,
+        return { instance: sandbox, instanceId: name,
         };
       }),
 
@@ -609,7 +607,7 @@ const _microsandbox = defineProvider<
       }),
 
       list: async (config) => withBackend(selectBackend(config), async ({ Sandbox }) => {
-        const sandboxes: Array<{ sandbox: MicrosandboxSandbox; sandboxId: string }> = [];
+        const sandboxes: Array<{ instance: MicrosandboxSandbox; instanceId: string }> = [];
         let cursor: string | undefined;
         do {
           const page = await Sandbox.listWith((list) => {
@@ -618,8 +616,8 @@ const _microsandbox = defineProvider<
             return configured;
           });
           sandboxes.push(...page.sandboxes.map((handle) => ({
-            sandbox: handleFromNative(handle, selectBackend(config), config.timeout ?? DEFAULT_TIMEOUT_MS),
-            sandboxId: handle.name,
+            instance: handleFromNative(handle, selectBackend(config), config.timeout ?? DEFAULT_TIMEOUT_MS),
+            instanceId: handle.name,
           })));
           cursor = page.nextCursor;
         } while (cursor);

@@ -11,7 +11,7 @@ import { defineProvider } from '@computesdk/provider'
 
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
   ListSnapshotsOptions,
@@ -175,7 +175,7 @@ function firstNumber(...values: unknown[]): number | undefined {
 }
 
 /** Maps ComputeSDK's create options onto Runtime's create body. */
-function createBody(config: RuntimeConfig, options: CreateSandboxOptions = {}): CreateSandbox {
+function createBody(config: RuntimeConfig, options: CreateInstanceOptions = {}): CreateSandbox {
   const image = options.templateId ?? options.image
   if (image && options.snapshotId) {
     throw new Error('Runtime starts a sandbox from an image or a snapshot, not both')
@@ -268,8 +268,8 @@ async function runCommand(
 export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, RuntimeSnapshot>({
   name: 'runtime',
   methods: {
-    sandbox: {
-      create: async (config: RuntimeConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: RuntimeConfig, options?: CreateInstanceOptions) => {
         const env = validateEnvironment(options?.envs)
         const body = createBody(config, options)
         const client = await getClient(config)
@@ -282,7 +282,7 @@ export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, Runt
           // The lease Runtime was given: whole seconds, rounded up.
           ...(body.timeoutSeconds === undefined ? {} : { timeoutMs: body.timeoutSeconds * 1000 }),
         })
-        return { sandbox, sandboxId: sandbox.id }
+        return { instance: sandbox, instanceId: sandbox.id }
       },
 
       getById: async (config: RuntimeConfig, sandboxId: string) => {
@@ -290,7 +290,7 @@ export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, Runt
         try {
           const sandbox = await client.sandboxes.get(sandboxId)
           if (sandbox.state === 'stopped' || sandbox.state === 'stopping') return null
-          return { sandbox: track(sandbox, config), sandboxId: sandbox.id }
+          return { instance: track(sandbox, config), instanceId: sandbox.id }
         } catch (error) {
           if (isNotFound(error)) return null
           throw error
@@ -300,9 +300,9 @@ export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, Runt
       list: async (config: RuntimeConfig) => {
         const client = await getClient(config)
         const page = await client.sandboxes.list()
-        const sandboxes: Array<{ sandbox: RuntimeSandbox; sandboxId: string }> = []
+        const sandboxes: Array<{ instance: RuntimeSandbox; instanceId: string }> = []
         for await (const sandbox of page) {
-          sandboxes.push({ sandbox: track(sandbox, config), sandboxId: sandbox.id })
+          sandboxes.push({ instance: track(sandbox, config), instanceId: sandbox.id })
         }
         return sandboxes
       },

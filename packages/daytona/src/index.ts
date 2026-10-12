@@ -5,7 +5,7 @@
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 /**
  * Daytona-specific configuration options
@@ -25,8 +25,8 @@ export interface DaytonaConfig {
 export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
   methods: {
-    sandbox: {
-      create: async (config: DaytonaConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: DaytonaConfig, options?: CreateInstanceOptions) => {
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.DAYTONA_API_KEY) || '';
 
         if (!apiKey) {
@@ -87,7 +87,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           const session = await daytona.create(createParams as any, createOptions);
           const sandboxId = session.id;
 
-          return { sandbox: session, sandboxId };
+          return { instance: session, instanceId: sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('API key')) {
@@ -106,7 +106,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         try {
           const daytona = new Daytona({ apiKey: apiKey });
           const session = await daytona.get(sandboxId);
-          return { sandbox: session, sandboxId };
+          return { instance: session, instanceId: sandboxId };
         } catch (error) {
           if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
             return null;
@@ -123,7 +123,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           // /api/sandbox/paginated pagination was retired in @daytonaio/sdk v0.180.0).
           const sandboxes = [];
           for await (const session of daytona.list()) {
-            sandboxes.push({ sandbox: session, sandboxId: session.id });
+            sandboxes.push({ instance: session, instanceId: session.id });
           }
           return sandboxes;
         } catch (error) {
@@ -170,7 +170,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
-      getInfo: async (sandbox: DaytonaSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: DaytonaSandbox): Promise<InstanceInfo> => {
         return {
           id: sandbox.id,
           provider: 'daytona',

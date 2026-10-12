@@ -15,10 +15,10 @@
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider';
 
 const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
@@ -118,7 +118,7 @@ function directBinding(config: CloudflareConfig): CloudflareSandboxBinding {
 }
 
 function sandboxOptions(
-  options?: CreateSandboxOptions
+  options?: CreateInstanceOptions
 ): CloudflareSandboxOptions | undefined {
   const { vcpu, memoryMib, diskMb, image } = options ?? {};
   const selected: CloudflareSandboxOptions = Object.fromEntries(
@@ -395,10 +395,10 @@ function parseFindOutput(stdout: string): FileEntry[] {
 export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
   name: 'cloudflare',
   methods: {
-    sandbox: {
+    instances: {
       create: async (
         config: CloudflareConfig,
-        options?: CreateSandboxOptions
+        options?: CreateInstanceOptions
       ) => {
         const envVars = { ...config.envVars, ...options?.envs };
         const timeoutMs = executionTimeout(
@@ -489,7 +489,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           };
           try {
             const result = await bridgeExec(sandbox, 'true');
-            return result.exitCode === 0 ? { sandbox, sandboxId } : null;
+            return result.exitCode === 0 ? { instance: sandbox, instanceId: sandboxId } : null;
           } catch {
             return null;
           }
@@ -563,7 +563,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         }
       },
 
-      getInfo: async (cfSandbox: CloudflareSandbox): Promise<SandboxInfo> => {
+      getInfo: async (cfSandbox: CloudflareSandbox): Promise<InstanceInfo> => {
         try {
           const result = await exec(cfSandbox, 'true');
           if (result.exitCode !== 0) throw new Error(result.stderr);

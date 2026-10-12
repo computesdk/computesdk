@@ -26,7 +26,7 @@ import {
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import { randomUUID } from 'node:crypto';
 import { defineProvider } from '@computesdk/provider';
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from 'computesdk';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from 'computesdk';
 import { sq, buildCommand, wrapForCapture, parseWrappedResult, friendlyError, clampSessionTimeout } from './internal.js';
 
 /** The built-in managed code interpreter. */
@@ -174,8 +174,8 @@ async function runOrThrow(sandbox: AgentCoreSandbox, command: string, failure: s
 const _provider = defineProvider<AgentCoreSandbox, AgentCoreConfig>({
   name: 'agentcore',
   methods: {
-    sandbox: {
-      create: async (config: AgentCoreConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: AgentCoreConfig, options?: CreateInstanceOptions) => {
         const client = createClient(config);
         const codeInterpreterIdentifier = config.codeInterpreterIdentifier || DEFAULT_CODE_INTERPRETER;
         // Per-create `timeout` (ms) wins over config; clamp into AgentCore's
@@ -207,7 +207,7 @@ const _provider = defineProvider<AgentCoreSandbox, AgentCoreConfig>({
             sessionTimeoutSeconds,
           };
           // Encode both identifier and session into the portable sandboxId.
-          return { sandbox, sandboxId: `${codeInterpreterIdentifier}::${response.sessionId}` };
+          return { instance: sandbox, instanceId: `${codeInterpreterIdentifier}::${response.sessionId}` };
         } catch (error) {
           throw friendlyError('starting an AgentCore session', error);
         }
@@ -229,7 +229,7 @@ const _provider = defineProvider<AgentCoreSandbox, AgentCoreConfig>({
             createdAt: response.createdAt ? new Date(response.createdAt) : new Date(),
             sessionTimeoutSeconds: response.sessionTimeoutSeconds ?? DEFAULT_SESSION_TIMEOUT_SECONDS,
           };
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch {
           return null;
         }
@@ -238,7 +238,7 @@ const _provider = defineProvider<AgentCoreSandbox, AgentCoreConfig>({
       list: async (config: AgentCoreConfig) => {
         const client = createClient(config);
         const codeInterpreterIdentifier = config.codeInterpreterIdentifier || DEFAULT_CODE_INTERPRETER;
-        const results: Array<{ sandbox: AgentCoreSandbox; sandboxId: string }> = [];
+        const results: Array<{ instance: AgentCoreSandbox; instanceId: string }> = [];
         try {
           // Page through all READY sessions.
           let nextToken: string | undefined;
@@ -261,7 +261,7 @@ const _provider = defineProvider<AgentCoreSandbox, AgentCoreConfig>({
                 // sandbox reports the default. Use getById for the true value.
                 sessionTimeoutSeconds: DEFAULT_SESSION_TIMEOUT_SECONDS,
               };
-              results.push({ sandbox, sandboxId: `${sandbox.codeInterpreterIdentifier}::${sandbox.sessionId}` });
+              results.push({ instance: sandbox, instanceId: `${sandbox.codeInterpreterIdentifier}::${sandbox.sessionId}` });
             }
             nextToken = response.nextToken;
           } while (nextToken);
@@ -305,7 +305,7 @@ const _provider = defineProvider<AgentCoreSandbox, AgentCoreConfig>({
       // Reports cached creation-time metadata. status is always 'running' (like
       // the e2b/leap0 siblings); use getById for authoritative liveness, which
       // returns null once a session has terminated.
-      getInfo: async (sandbox: AgentCoreSandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: AgentCoreSandbox): Promise<InstanceInfo> => ({
         id: `${sandbox.codeInterpreterIdentifier}::${sandbox.sessionId}`,
         provider: 'agentcore',
         status: 'running',

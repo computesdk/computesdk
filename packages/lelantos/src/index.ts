@@ -21,7 +21,7 @@
 import { Sandbox as E2BSandbox, CommandExitError } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 
@@ -165,8 +165,8 @@ function connectOpts(config: LelantosConfig): Record<string, any> {
 export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
   name: 'lelantos',
   methods: {
-    sandbox: {
-      create: async (config: LelantosConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: LelantosConfig, options?: CreateInstanceOptions) => {
         const apiKey = resolveApiKey(config);
 
         if (!apiKey) {
@@ -210,7 +210,7 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
           if (!sandbox.sandboxId) throw new Error('Lelantos create() returned sandbox without an ID');
           sandboxId = sandbox.sandboxId;
 
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('API key')) {
@@ -227,7 +227,7 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
       getById: async (config: LelantosConfig, sandboxId: string) => {
         try {
           const sandbox = await E2BSandbox.connect(sandboxId, connectOpts(config));
-          return { sandbox, sandboxId };
+          return { instance: sandbox, instanceId: sandboxId };
         } catch { return null; }
       },
 
@@ -238,7 +238,7 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
           return items.map((sandbox) => {
             const listedSandbox = sandbox as unknown as E2BSandbox & { id?: string; sandboxId?: string };
             const sandboxId = listedSandbox.id || listedSandbox.sandboxId || 'lelantos-unknown';
-            return { sandbox: listedSandbox, sandboxId };
+            return { instance: listedSandbox, instanceId: sandboxId };
           });
         } catch { return []; }
       },
@@ -307,7 +307,7 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
         return { stdout: '', stderr: message, exitCode: 1, durationMs: Date.now() - startTime };
       },
 
-      getInfo: async (sandbox: E2BSandbox): Promise<SandboxInfo> => ({
+      getInfo: async (sandbox: E2BSandbox): Promise<InstanceInfo> => ({
         id: sandbox.sandboxId || 'lelantos-unknown',
         provider: 'lelantos',
         status: 'running',

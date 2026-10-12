@@ -10,8 +10,8 @@ import {
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   RunCommandOptions,
 } from '@computesdk/provider';
 import {
@@ -72,7 +72,7 @@ async function execWithReadiness<T>(
   return result;
 }
 
-interface NorthflankCreateOptions extends CreateSandboxOptions {
+interface NorthflankCreateOptions extends CreateInstanceOptions {
   runtime?: Runtime;
   image?: string;
   ports?: NorthflankPortInput[];
@@ -82,7 +82,7 @@ interface NorthflankCreateOptions extends CreateSandboxOptions {
   ephemeralStorageSize?: number;
 }
 
-function readCreateOptions(options?: CreateSandboxOptions): NorthflankCreateOptions {
+function readCreateOptions(options?: CreateInstanceOptions): NorthflankCreateOptions {
   return (options ?? {}) as NorthflankCreateOptions;
 }
 
@@ -164,8 +164,8 @@ function withCommandOptions(command: string, options?: RunCommandOptions): strin
 const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, NorthflankConfig>({
   name: PROVIDER,
   methods: {
-    sandbox: {
-      create: async (config: NorthflankConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: NorthflankConfig, options?: CreateInstanceOptions) => {
         const opts = readCreateOptions(options);
         const client = buildClient(config);
         const p = prefix(config);
@@ -219,8 +219,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
           data,
         });
         const serviceId = created.data.id;
-        return {
-          sandbox: {
+        return { instance: {
             serviceId,
             serviceName,
             runtime,
@@ -230,8 +229,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
             api: client,
             instanceName: undefined,
             ready: false,
-          },
-          sandboxId: serviceId,
+          }, instanceId: serviceId,
         };
       },
 
@@ -245,8 +243,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
           if (!service.name.startsWith(prefix(config))) {
             throw new Error(`Service ${sandboxId} is not managed by ComputeSDK`);
           }
-          return {
-            sandbox: {
+          return { instance: {
               serviceId: service.id,
               serviceName: service.name,
               runtime: config.runtime ?? 'node',
@@ -256,8 +253,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
               api: client,
               instanceName: undefined,
               ready: false,
-            },
-            sandboxId: service.id,
+            }, instanceId: service.id,
           };
         } catch (error) {
           if (is404(error)) return null;
@@ -269,7 +265,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
         const client = buildClient(config);
         const p = prefix(config);
         const runtime = config.runtime ?? 'node';
-        const results: Array<{ sandbox: NorthflankSandboxHandle; sandboxId: string }> = [];
+        const results: Array<{ instance: NorthflankSandboxHandle; instanceId: string }> = [];
         let cursor: string | undefined;
 
         do {
@@ -279,8 +275,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
           });
           for (const svc of res.data.services ?? []) {
             if (!svc.name?.startsWith(p)) continue;
-            results.push({
-              sandbox: {
+            results.push({ instance: {
                 serviceId: svc.id,
                 serviceName: svc.name,
                 runtime,
@@ -290,8 +285,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
                 api: client,
                 instanceName: undefined,
                 ready: false,
-              },
-              sandboxId: svc.id,
+              }, instanceId: svc.id,
             });
           }
           cursor = res.pagination?.hasNextPage ? res.pagination.cursor : undefined;
@@ -346,7 +340,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
         }
       },
 
-      getInfo: async (sandbox: NorthflankSandboxHandle): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: NorthflankSandboxHandle): Promise<InstanceInfo> => {
         const res = await sandbox.api.get.service({
           parameters: serviceParams(sandbox.config, sandbox.serviceId),
         });

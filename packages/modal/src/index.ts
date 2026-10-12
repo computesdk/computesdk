@@ -4,7 +4,7 @@
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
 import { ModalClient, SandboxFilesystemNotFoundError } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
@@ -48,7 +48,7 @@ export interface ModalConfig {
   appName?: string;
 }
 
-export interface ModalCreateSandboxOptions extends CreateSandboxOptions {
+export interface ModalCreateSandboxOptions extends CreateInstanceOptions {
   daemonSsePort?: number | false;
 }
 
@@ -64,8 +64,7 @@ interface ModalInternalConfig extends ModalConfig {
 
 
 interface ModalSandbox {
-  sandbox: ModalNativeSandbox;
-  sandboxId: string;
+  instance: ModalNativeSandbox; instanceId: string;
 }
 
 /** The framework-supplied command runner handed to filesystem callbacks. */
@@ -122,8 +121,8 @@ async function resolveSandboxPath(
 const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
   name: 'modal',
   methods: {
-    sandbox: {
-      create: async (config: ModalInternalConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: ModalInternalConfig, options?: CreateInstanceOptions) => {
         try {
           const client = config._client;
 
@@ -173,7 +172,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           const sandbox = await client.sandboxes.create(app, image, sandboxOptions);
           const sandboxId = sandbox.sandboxId;
 
-          return { sandbox: { sandbox, sandboxId }, sandboxId };
+          return { instance: { instance: sandbox, instanceId: sandboxId }, instanceId: sandboxId };
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('credentials')) {
@@ -191,7 +190,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         try {
           const client = config._client;
           const sandbox = await client.sandboxes.fromId(sandboxId);
-          return { sandbox: { sandbox, sandboxId }, sandboxId };
+          return { instance: { instance: sandbox, instanceId: sandboxId }, instanceId: sandboxId };
         } catch { return null; }
       },
 
@@ -218,7 +217,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           
-          const process = await modalSandbox.sandbox.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe' });
+          const process = await modalSandbox.instance.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe' });
           const [stdout, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           return { stdout: stdout || '', stderr: stderr || '', exitCode: exitCode || 0, durationMs: Date.now() - startTime };
         } catch (error) {
@@ -226,26 +225,26 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         }
       },
 
-      getInfo: async (modalSandbox: ModalSandbox): Promise<SandboxInfo> => {
+      getInfo: async (modalSandbox: ModalSandbox): Promise<InstanceInfo> => {
         let status: 'running' | 'stopped' | 'error' = 'running';
         try {
-          const pollResult = await modalSandbox.sandbox.poll();
+          const pollResult = await modalSandbox.instance.poll();
           if (pollResult !== null) status = pollResult === 0 ? 'stopped' : 'error';
         } catch { status = 'running'; }
 
         return {
-          id: modalSandbox.sandboxId,
+          id: modalSandbox.instanceId,
           provider: 'modal',
           status,
           createdAt: new Date(),
           timeout: 300000,
-          metadata: { modalSandboxId: modalSandbox.sandboxId, realModalImplementation: true, runtime: 'node' }
+          metadata: { modalSandboxId: modalSandbox.instanceId, realModalImplementation: true, runtime: 'node' }
         };
       },
 
       getUrl: async (modalSandbox: ModalSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
-          const tunnels = await modalSandbox.sandbox.tunnels();
+          const tunnels = await modalSandbox.instance.tunnels();
           const tunnel = tunnels[options.port];
           if (!tunnel) throw new Error(`No tunnel found for port ${options.port}. Available ports: ${Object.keys(tunnels).join(', ')}`);
           let url = tunnel.url;
@@ -260,7 +259,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         readFile: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<string> => {
           const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            return await modalSandbox.sandbox.filesystem.readText(resolved);
+            return await modalSandbox.instance.filesystem.readText(resolved);
           } catch (error) {
             throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
@@ -268,7 +267,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         writeFile: async (modalSandbox: ModalSandbox, path: string, content: string, runCommand: CommandRunner): Promise<void> => {
           const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            await modalSandbox.sandbox.filesystem.writeText(content, resolved);
+            await modalSandbox.instance.filesystem.writeText(content, resolved);
           } catch (error) {
             throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
           }
@@ -276,7 +275,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         mkdir: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<void> => {
           const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            await modalSandbox.sandbox.filesystem.makeDirectory(resolved, { createParents: true });
+            await modalSandbox.instance.filesystem.makeDirectory(resolved, { createParents: true });
           } catch (error) {
             throw new Error(`mkdir failed: ${error instanceof Error ? error.message : String(error)}`);
           }
@@ -284,7 +283,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         readdir: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<FileEntry[]> => {
           const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            const entries = await modalSandbox.sandbox.filesystem.listFiles(resolved);
+            const entries = await modalSandbox.instance.filesystem.listFiles(resolved);
             return entries.map((entry) => ({
               name: entry.name,
               type: entry.type === 'directory' ? 'directory' as const : 'file' as const,
@@ -298,7 +297,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         exists: async (modalSandbox: ModalSandbox, path: string, runCommand: CommandRunner): Promise<boolean> => {
           const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            await modalSandbox.sandbox.filesystem.stat(resolved);
+            await modalSandbox.instance.filesystem.stat(resolved);
             return true;
           } catch (error) {
             if (error instanceof SandboxFilesystemNotFoundError) return false;
@@ -313,7 +312,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           }
           const resolved = await resolveSandboxPath(modalSandbox, path, runCommand);
           try {
-            await modalSandbox.sandbox.filesystem.remove(resolved, { recursive: true });
+            await modalSandbox.instance.filesystem.remove(resolved, { recursive: true });
           } catch (error) {
             if (error instanceof SandboxFilesystemNotFoundError) return;
             throw new Error(`rm failed: ${error instanceof Error ? error.message : String(error)}`);

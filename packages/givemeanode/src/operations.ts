@@ -10,7 +10,7 @@
  * outside the ComputeSDK workspace is the mapping itself.
  *
  * The types here are structural rather than imported, and match
- * ComputeSDK's by shape: `CommandResult`, `FileEntry` and `SandboxInfo`
+ * ComputeSDK's by shape: `CommandResult`, `FileEntry` and `InstanceInfo`
  * are all plain data.
  */
 

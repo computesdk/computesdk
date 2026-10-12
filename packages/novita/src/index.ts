@@ -3,7 +3,7 @@ import type { BuildOptions, SandboxOpts, SnapshotInfo, TemplateClass, TemplateIn
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult, CreateTemplateOptions, Provider, ProviderTemplateManager,
-  RunCommandOptions, SandboxInfo,
+  RunCommandOptions, InstanceInfo,
 } from '@computesdk/provider';
 
 export type NovitaSandbox = Awaited<ReturnType<Novita['sandbox']['create']>>;
@@ -112,7 +112,7 @@ function snapshotInfo(snapshot: SnapshotInfo): NovitaSnapshot {
 const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaTemplate, NovitaSnapshot>({
   name: 'novita',
   methods: {
-    sandbox: {
+    instances: {
       create: async (config, options) => {
         if (options?.templateId && options?.snapshotId) {
           throw new Error('Specify either templateId or snapshotId, not both.');
@@ -129,12 +129,12 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
         };
         const sandbox = await sdk.sandbox.create(options?.templateId || options?.snapshotId || 'base', createOptions);
         if (!sandbox.sandboxId) throw new Error('Novita create() returned a sandbox without an ID.');
-        return { sandbox, sandboxId: sandbox.sandboxId };
+        return { instance: sandbox, instanceId: sandbox.sandboxId };
       },
       getById: async (config, sandboxId) => {
         try {
           const sandbox = await client(config).sandbox.connect(sandboxId);
-          return { sandbox, sandboxId: sandbox.sandboxId };
+          return { instance: sandbox, instanceId: sandbox.sandboxId };
         } catch (error) {
           if (error instanceof NotFoundError) return null;
           throw error;
@@ -144,11 +144,11 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
         const sdk = client(config);
         // Connecting to a paused sandbox would resume it, so list active sandboxes only.
         const items = await collectPages(sdk.sandbox.list({ query: { state: ['running'] } }));
-        const sandboxes: Array<{ sandbox: NovitaSandbox; sandboxId: string }> = [];
+        const sandboxes: Array<{ instance: NovitaSandbox; instanceId: string }> = [];
         for (const item of items) {
           try {
             const sandbox = await sdk.sandbox.connect(item.sandboxId);
-            sandboxes.push({ sandbox, sandboxId: sandbox.sandboxId });
+            sandboxes.push({ instance: sandbox, instanceId: sandbox.sandboxId });
           } catch (error) {
             // A sandbox can expire between listing and connecting.
             if (!(error instanceof NotFoundError)) throw error;
@@ -162,7 +162,7 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
       },
       runCommand,
       streamCommand: runCommand,
-      getInfo: async (sandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox): Promise<InstanceInfo> => {
         const info = await sandbox.getInfo();
         return {
           id: info.sandboxId,

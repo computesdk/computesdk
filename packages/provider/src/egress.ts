@@ -1,7 +1,7 @@
 /**
- * Egress router setup — writes the self-contained on-box proxy shim into a
- * sandbox and starts it as a daemon job. Runs once at sandbox create when the
- * caller passes `CreateSandboxOptions.egress`.
+ * Egress router setup — writes the self-contained on-box proxy shim into an
+ * instance and starts it as a daemon job. Runs once at instance create when
+ * the caller passes `CreateInstanceOptions.egress`.
  *
  * The shim holds no credentials: its config carries the injector URL, an
  * injector token, host rules and a mode — the off-box injector does the
@@ -11,13 +11,13 @@
 import { egressShimScript } from 'daemond';
 import type {
   ProcessHandle,
-  SandboxEgressInfo,
-  SandboxEgressOptions,
-  SandboxFileSystem,
+  InstanceEgressInfo,
+  InstanceEgressOptions,
+  InstanceFileSystem,
 } from './types/index.js';
 import { randomBytes } from 'node:crypto';
 
-/** Root dir inside the sandbox; each router instance gets a subdirectory. */
+/** Root dir inside the instance; each router gets a subdirectory. */
 export const EGRESS_SHIM_DIR = '/tmp/computesdk-egress';
 
 /** Points at the most recent router's info so reconnects can recover it. */
@@ -28,7 +28,7 @@ const READY_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 250;
 
 interface EgressHost {
-  readonly filesystem: SandboxFileSystem;
+  readonly filesystem: InstanceFileSystem;
   startProcess(command: string): Promise<ProcessHandle>;
 }
 
@@ -41,7 +41,7 @@ function isLoopbackHost(host: string): boolean {
   return normalized === 'localhost' || normalized === '::1' || normalized.startsWith('127.');
 }
 
-function validateEgressOptions(egress: SandboxEgressOptions): void {
+function validateEgressOptions(egress: InstanceEgressOptions): void {
   if (!egress || typeof egress !== 'object') {
     throw new Error('egress: options must be an object');
   }
@@ -88,7 +88,7 @@ const nodeResolverFor = (shimPath: string, configPath: string) =>
   'if [ -z "$NODE_BIN" ]; then ' +
   'NODE_BIN="$(ls -d "${HOME:-/tmp}/.computesdk/daemond/node-v"*-linux-*/bin/node 2>/dev/null | head -n 1)"; ' +
   'fi; ' +
-  'if [ -z "$NODE_BIN" ]; then echo "egress: no JavaScript runtime found in sandbox" >&2; exit 127; fi; ' +
+  'if [ -z "$NODE_BIN" ]; then echo "egress: no JavaScript runtime found in instance" >&2; exit 127; fi; ' +
   `exec "$NODE_BIN" ${shimPath} ${configPath}`;
 
 interface ReadyMarker {
@@ -112,24 +112,24 @@ function findMarker(stdout: string, prefix: string): Record<string, unknown> | u
   return undefined;
 }
 
-/**
- * Recovers the router info of a sandbox after a reconnect (getById/list) by
- * reading the pointer file the most recent setup wrote. Returns undefined
- * when the sandbox has no router or the filesystem read fails.
- */
-async function readSandboxFile(sandbox: EgressHost, path: string, timeoutMs = 5_000): Promise<string> {
+async function readInstanceFile(instance: EgressHost, path: string, timeoutMs = 5_000): Promise<string> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
-    sandbox.filesystem.readFile(path),
+    instance.filesystem.readFile(path),
     new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('sandbox read timed out')), timeoutMs);
+      timer = setTimeout(() => reject(new Error('instance read timed out')), timeoutMs);
     }),
   ]).finally(() => clearTimeout(timer));
 }
 
-export async function readSandboxEgress(sandbox: EgressHost): Promise<SandboxEgressInfo | undefined> {
+/**
+ * Recovers the router info of an instance after a reconnect (getById/list) by
+ * reading the pointer file the most recent setup wrote. Returns undefined
+ * when the instance has no router or the filesystem read fails.
+ */
+export async function readInstanceEgress(instance: EgressHost): Promise<InstanceEgressInfo | undefined> {
   try {
-    const parsed = JSON.parse(await readSandboxFile(sandbox, POINTER_PATH));
+    const parsed = JSON.parse(await readInstanceFile(instance, POINTER_PATH));
     if (!parsed || typeof parsed !== 'object' || typeof parsed.proxyUrl !== 'string') {
       return undefined;
     }
@@ -137,26 +137,29 @@ export async function readSandboxEgress(sandbox: EgressHost): Promise<SandboxEgr
     // info while its process still exists on the box — and is actually the
     // shim, since the kernel can hand a dead router's pid to something else.
     if (typeof parsed.pid === 'number') {
-      const cmdline = await readSandboxFile(sandbox, `/proc/${parsed.pid}/cmdline`);
+      const cmdline = await readInstanceFile(instance, `/proc/${parsed.pid}/cmdline`);
       if (!cmdline.includes('egress-shim')) return undefined;
     }
-    return parsed as SandboxEgressInfo;
+    return parsed as InstanceEgressInfo;
   } catch {
     /* no pointer file, dead router, or unreadable filesystem */
   }
   return undefined;
 }
 
+/** @deprecated Use {@link readInstanceEgress}. */
+export const readSandboxEgress = readInstanceEgress;
+
 /**
- * Writes the shim + config into the sandbox, starts the router via
+ * Writes the shim + config into the instance, starts the router via
  * `startProcess`, and waits for its EGRESS_READY marker. Returns the
- * `SandboxEgressInfo` callers expose as `sandbox.egress`.
+ * `InstanceEgressInfo` callers expose as `instance.egress`.
  */
-export async function setupSandboxEgress(
-  sandbox: EgressHost,
-  egress: SandboxEgressOptions,
+export async function setupInstanceEgress(
+  instance: EgressHost,
+  egress: InstanceEgressOptions,
   providerName: string
-): Promise<SandboxEgressInfo> {
+): Promise<InstanceEgressInfo> {
   validateEgressOptions(egress);
 
   const config = {
@@ -167,7 +170,7 @@ export async function setupSandboxEgress(
     port: egress.port ?? 0,
   };
 
-  // Each router gets its own workdir so two routers on one sandbox never
+  // Each router gets its own workdir so two routers on one instance never
   // share a CA or host rules; the shim treats the config's directory as its
   // workdir.
   const instanceDir = `${EGRESS_SHIM_DIR}/${randomBytes(8).toString('hex')}`;
@@ -175,16 +178,16 @@ export async function setupSandboxEgress(
   const configPath = `${instanceDir}/config.json`;
 
   try {
-    await sandbox.filesystem.mkdir(EGRESS_SHIM_DIR).catch(() => {});
-    await sandbox.filesystem.mkdir(instanceDir);
-    await sandbox.filesystem.writeFile(shimPath, egressShimScript());
-    await sandbox.filesystem.writeFile(configPath, JSON.stringify(config));
+    await instance.filesystem.mkdir(EGRESS_SHIM_DIR).catch(() => {});
+    await instance.filesystem.mkdir(instanceDir);
+    await instance.filesystem.writeFile(shimPath, egressShimScript());
+    await instance.filesystem.writeFile(configPath, JSON.stringify(config));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`egress: provider "${providerName}" cannot host the egress router — ${detail}`);
   }
 
-  const handle = await sandbox.startProcess(nodeResolverFor(shimPath, configPath));
+  const handle = await instance.startProcess(nodeResolverFor(shimPath, configPath));
 
   const deadline = Date.now() + READY_TIMEOUT_MS;
   let lastStdout = '';
@@ -197,7 +200,7 @@ export async function setupSandboxEgress(
     const ready = findMarker(lastStdout, READY_PREFIX);
     if (ready && typeof ready.port === 'number' && typeof ready.caCertPath === 'string') {
       const marker = ready as unknown as ReadyMarker;
-      const info: SandboxEgressInfo = {
+      const info: InstanceEgressInfo = {
         proxyUrl: `http://127.0.0.1:${marker.port}`,
         caCertPath: marker.caCertPath,
         caBundlePath: marker.caBundlePath,
@@ -206,7 +209,7 @@ export async function setupSandboxEgress(
         processJobId: handle.jobId,
       };
       // Best-effort pointer for reconnects (getById/list); not fatal.
-      await sandbox.filesystem
+      await instance.filesystem
         .writeFile(POINTER_PATH, JSON.stringify(info))
         .catch(() => {});
       return info;
@@ -233,3 +236,6 @@ export async function setupSandboxEgress(
     await sleep(POLL_INTERVAL_MS);
   }
 }
+
+/** @deprecated Use {@link setupInstanceEgress}. */
+export const setupSandboxEgress = setupInstanceEgress;

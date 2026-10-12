@@ -10,13 +10,13 @@ import { defineProvider } from "@computesdk/provider";
 import { posix as posixPath } from "node:path";
 import type {
   CommandResult,
-  SandboxInfo,
+  InstanceInfo,
   CreateSnapshotOptions,
   ListSnapshotsOptions,
   RunCommandOptions,
 } from "@computesdk/provider";
 import type {
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   Snapshot,
 } from "computesdk";
@@ -159,7 +159,7 @@ function parseReaddirOutput(stdout: string): FileEntry[] {
     });
 }
 
-function mapStatus(status: Runloop.DevboxView["status"]): SandboxInfo["status"] {
+function mapStatus(status: Runloop.DevboxView["status"]): InstanceInfo["status"] {
   switch (status) {
     case "scheduled":
     case "queued":
@@ -485,8 +485,8 @@ export const runloop = defineProvider<
 >({
   name: "runloop",
   methods: {
-    sandbox: {
-      create: async (config: RunloopConfig, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: RunloopConfig, options?: CreateInstanceOptions) => {
         const timeout = config.timeout;
 
         try {
@@ -545,9 +545,7 @@ export const runloop = defineProvider<
             client: client
           };
 
-          return {
-            sandbox: runloopSandbox,
-            sandboxId: dbx.id,
+          return { instance: runloopSandbox, instanceId: dbx.id,
           };
         } catch (error) {
           throw new Error(
@@ -560,9 +558,8 @@ export const runloop = defineProvider<
         try {
           const client = getRunloopClient(config);
           const devbox = await client.api.devboxes.retrieve(sandboxId);
-          return {
-            sandbox: { ...devbox, client } as RunloopSandbox,
-            sandboxId,
+          return { instance: { ...devbox, client } as RunloopSandbox,
+            instanceId: sandboxId,
           };
         } catch (error) {
           if (isHttpNotFound(error)) return null;
@@ -575,8 +572,7 @@ export const runloop = defineProvider<
         const devboxes = await collectPaginated(client.api.devboxes.list());
 
         return devboxes.map((devbox) => ({
-          sandbox: { ...devbox, client } as RunloopSandbox,
-          sandboxId: devbox.id,
+          instance: { ...devbox, client } as RunloopSandbox, instanceId: devbox.id,
         }));
       },
 
@@ -593,7 +589,7 @@ export const runloop = defineProvider<
 
       streamCommand: runCommandWithErrors,
 
-      getInfo: async (sandbox: RunloopSandbox): Promise<SandboxInfo> => {
+      getInfo: async (sandbox: RunloopSandbox): Promise<InstanceInfo> => {
         const devbox = await sandbox.client.api.devboxes.retrieve(sandbox.id);
         const keepAliveSecs = devbox.launch_parameters?.keep_alive_time_seconds;
 
@@ -602,7 +598,7 @@ export const runloop = defineProvider<
           provider: "runloop",
           status: mapStatus(devbox.status),
           createdAt: new Date(devbox.create_time_ms || Date.now()),
-          // keep_alive_time_seconds is in seconds; SandboxInfo.timeout is in milliseconds
+          // keep_alive_time_seconds is in seconds; InstanceInfo.timeout is in milliseconds
           timeout: keepAliveSecs ? keepAliveSecs * 1000 : 300000,
           metadata: {
             runloopDevboxId: devbox.id,

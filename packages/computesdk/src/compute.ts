@@ -5,14 +5,19 @@
  */
 
 import type {
-  Sandbox as SandboxInterface,
-  CreateSandboxOptions as UniversalCreateSandboxOptions,
-} from './types/universal-sandbox';
+  Instance as InstanceInterface,
+  CreateInstanceOptions as UniversalCreateInstanceOptions,
+} from './types/universal-instance';
 
-export interface CreateSandboxOptions extends UniversalCreateSandboxOptions {
+export interface CreateInstanceOptions extends UniversalCreateInstanceOptions {
   /** Optional provider name override (must match provider.name) */
   provider?: string;
 }
+
+/**
+ * @deprecated Use {@link CreateInstanceOptions} instead.
+ */
+export type CreateSandboxOptions = CreateInstanceOptions;
 
 export interface CreateSnapshotOptions {
   name?: string;
@@ -21,22 +26,28 @@ export interface CreateSnapshotOptions {
   provider?: string;
 }
 
-interface ProviderSandboxManager {
-  create(options?: CreateSandboxOptions): Promise<SandboxInterface>;
-  getById(sandboxId: string): Promise<SandboxInterface | null>;
-  list?(): Promise<SandboxInterface[]>;
-  destroy(sandboxId: string): Promise<void>;
+interface ProviderInstanceManager {
+  create(options?: CreateInstanceOptions): Promise<InstanceInterface>;
+  getById(instanceId: string): Promise<InstanceInterface | null>;
+  list?(): Promise<InstanceInterface[]>;
+  destroy(instanceId: string): Promise<void>;
 }
 
 interface ProviderSnapshotManager {
-  create(sandboxId: string, options?: { name?: string; metadata?: Record<string, any> }): Promise<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>;
+  create(instanceId: string, options?: { name?: string; metadata?: Record<string, any> }): Promise<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>;
   list(): Promise<Array<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>>;
   delete(snapshotId: string): Promise<void>;
 }
 
 export interface DirectProvider {
   readonly name?: string;
-  readonly sandbox: ProviderSandboxManager;
+  /** Instance lifecycle manager (canonical). */
+  readonly instances?: ProviderInstanceManager;
+  /**
+   * @deprecated Use `instances`. Still honored: a provider exposing only
+   * `sandbox` is treated as exposing `instances`.
+   */
+  readonly sandbox?: ProviderInstanceManager;
   readonly snapshot?: ProviderSnapshotManager;
 }
 
@@ -56,15 +67,19 @@ export interface ExplicitComputeConfig {
   fallbackOnError?: boolean;
 }
 
+function getInstanceManager(provider: DirectProvider): ProviderInstanceManager | undefined {
+  return provider.instances ?? provider.sandbox;
+}
+
 function isProviderLike(value: unknown): value is DirectProvider {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Record<string, unknown>;
-  const sandbox = candidate.sandbox as Record<string, unknown> | undefined;
+  const manager = (candidate.instances ?? candidate.sandbox) as Record<string, unknown> | undefined;
   return !!(
-    sandbox &&
-    typeof sandbox.create === 'function' &&
-    typeof sandbox.getById === 'function' &&
-    typeof sandbox.destroy === 'function'
+    manager &&
+    typeof manager.create === 'function' &&
+    typeof manager.getById === 'function' &&
+    typeof manager.destroy === 'function'
   );
 }
 
@@ -72,9 +87,13 @@ function getProviderLabel(provider: DirectProvider, index: number): string {
   return provider.name || `provider-${index + 1}`;
 }
 
-function getSandboxId(sandbox: SandboxInterface): string | undefined {
-  if ('sandboxId' in sandbox && typeof sandbox.sandboxId === 'string') {
-    return sandbox.sandboxId;
+function getInstanceId(instance: InstanceInterface): string | undefined {
+  if (typeof instance.instanceId === 'string') {
+    return instance.instanceId;
+  }
+  // Legacy provider objects that predate the instanceId rename.
+  if ('sandboxId' in instance && typeof instance.sandboxId === 'string') {
+    return instance.sandboxId;
   }
   return undefined;
 }
@@ -133,7 +152,7 @@ class ComputeManager {
   private providerStrategy: 'priority' | 'round-robin' = 'priority';
   private fallbackOnError = true;
   private roundRobinCursor = 0;
-  private sandboxProviders = new Map<string, DirectProvider>();
+  private instanceProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
@@ -142,7 +161,7 @@ class ComputeManager {
         'Options:\n' +
         '1. Configure providers: compute.setConfig({ providers: [e2b({...}), modal({...})] })\n' +
         '2. Configure a single provider: compute.setConfig({ provider: e2b({...}) })\n' +
-        '3. Use provider directly: const sdk = e2b({...}); await sdk.sandbox.create()'
+        '3. Use provider directly: const sdk = e2b({...}); await sdk.instances.create()'
       );
     }
     return this.providers;
@@ -157,10 +176,10 @@ class ComputeManager {
     return provider;
   }
 
-  private registerSandboxProvider(sandbox: SandboxInterface, provider: DirectProvider): void {
-    const sandboxId = getSandboxId(sandbox);
-    if (sandboxId) {
-      this.sandboxProviders.set(sandboxId, provider);
+  private registerInstanceProvider(instance: InstanceInterface, provider: DirectProvider): void {
+    const instanceId = getInstanceId(instance);
+    if (instanceId) {
+      this.instanceProviders.set(instanceId, provider);
     }
   }
 
@@ -182,8 +201,8 @@ class ComputeManager {
     ];
   }
 
-  private getByIdCandidates(sandboxId: string): DirectProvider[] {
-    const known = this.sandboxProviders.get(sandboxId);
+  private getByIdCandidates(instanceId: string): DirectProvider[] {
+    const known = this.instanceProviders.get(instanceId);
     if (!known) return this.getProviders();
     const providers = this.getProviders();
     return [known, ...providers.filter((p) => p !== known)];
@@ -196,12 +215,12 @@ class ComputeManager {
     return [known, ...providers.filter((p) => p !== known)];
   }
 
-  private getSnapshotCreateCandidates(sandboxId: string, preferredProviderName?: string): DirectProvider[] {
+  private getSnapshotCreateCandidates(instanceId: string, preferredProviderName?: string): DirectProvider[] {
     if (preferredProviderName) {
       return [this.getProviderByName(preferredProviderName)];
     }
 
-    const known = this.sandboxProviders.get(sandboxId);
+    const known = this.instanceProviders.get(instanceId);
     const providers = this.getProviders().filter((p) => !!p.snapshot);
 
     if (known && known.snapshot) {
@@ -211,34 +230,38 @@ class ComputeManager {
     return providers;
   }
 
-  private async createWithFallback(options?: CreateSandboxOptions): Promise<SandboxInterface> {
+  private async createWithFallback(options?: CreateInstanceOptions): Promise<InstanceInterface> {
     const preferredProviderName = options?.provider;
-    const { provider: _providerName, ...providerOptions } = options || {};
+    // `provider` is routing metadata consumed by ComputeManager. `kind` is
+    // reserved vocabulary (not yet in the type): strip it too so callers
+    // passing it via the index signature don't leak it into provider
+    // create options, where strict validators (e.g. Sail) reject it.
+    const { provider: _providerName, kind: _kind, ...providerOptions } = options || {};
     const candidates = this.getCreateCandidates(preferredProviderName);
     const canFallback = this.fallbackOnError && !preferredProviderName;
     const errors: string[] = [];
 
     for (const [index, provider] of candidates.entries()) {
       try {
-        const sandbox = await provider.sandbox.create(providerOptions);
+        const instance = await getInstanceManager(provider)!.create(providerOptions);
         if (
           providerOptions?.egress &&
           typeof providerOptions.egress === 'object' &&
           !Array.isArray(providerOptions.egress) &&
-          !sandbox.egress
+          !instance.egress
         ) {
           // The provider accepted the option but did not honor it — destroy
-          // the sandbox rather than hand back one without egress routing.
-          const orphanId = getSandboxId(sandbox);
+          // the instance rather than hand back one without egress routing.
+          const orphanId = getInstanceId(instance);
           if (orphanId) {
-            provider.sandbox.destroy(orphanId).catch(() => {});
+            getInstanceManager(provider)!.destroy(orphanId).catch(() => {});
           }
           throw new Error(
             `egress: provider "${getProviderLabel(provider, index)}" does not support the "egress" option`
           );
         }
-        this.registerSandboxProvider(sandbox, provider);
-        return sandbox;
+        this.registerInstanceProvider(instance, provider);
+        return instance;
       } catch (error) {
         // AbortErrors should not be treated as provider failures; rethrow immediately
         if (error instanceof Error && (error as any).name === 'AbortError') {
@@ -252,7 +275,7 @@ class ComputeManager {
     }
 
     throw new Error(
-      `Failed to create sandbox across ${candidates.length} provider(s).\n` +
+      `Failed to create instance across ${candidates.length} provider(s).\n` +
       errors.map((error) => `- ${error}`).join('\n')
     );
   }
@@ -262,54 +285,55 @@ class ComputeManager {
     this.providerStrategy = config.providerStrategy ?? 'priority';
     this.fallbackOnError = config.fallbackOnError ?? true;
     this.roundRobinCursor = 0;
-    this.sandboxProviders.clear();
+    this.instanceProviders.clear();
     this.snapshotProviders.clear();
   }
 
-  sandbox = {
-    create: async (options?: CreateSandboxOptions): Promise<SandboxInterface> => {
+  instances = {
+    create: async (options?: CreateInstanceOptions): Promise<InstanceInterface> => {
       return this.createWithFallback(options);
     },
 
-    getById: async (sandboxId: string): Promise<SandboxInterface | null> => {
-      for (const provider of this.getByIdCandidates(sandboxId)) {
-        const sandbox = await provider.sandbox.getById(sandboxId);
-        if (sandbox) {
-          this.registerSandboxProvider(sandbox, provider);
-          return sandbox;
+    getById: async (instanceId: string): Promise<InstanceInterface | null> => {
+      for (const provider of this.getByIdCandidates(instanceId)) {
+        const instance = await getInstanceManager(provider)!.getById(instanceId);
+        if (instance) {
+          this.registerInstanceProvider(instance, provider);
+          return instance;
         }
       }
 
-      this.sandboxProviders.delete(sandboxId);
+      this.instanceProviders.delete(instanceId);
       return null;
     },
 
-    list: async (): Promise<SandboxInterface[]> => {
-      const all: SandboxInterface[] = [];
+    list: async (): Promise<InstanceInterface[]> => {
+      const all: InstanceInterface[] = [];
 
       for (const provider of this.getProviders()) {
-        if (!provider.sandbox.list) {
+        const manager = getInstanceManager(provider)!;
+        if (!manager.list) {
           continue;
         }
 
-        const sandboxes = await provider.sandbox.list();
-        for (const sandbox of sandboxes) {
-          this.registerSandboxProvider(sandbox, provider);
+        const instances = await manager.list();
+        for (const instance of instances) {
+          this.registerInstanceProvider(instance, provider);
         }
-        all.push(...sandboxes);
+        all.push(...instances);
       }
 
       return all;
     },
 
-    destroy: async (sandboxId: string): Promise<void> => {
-      const candidates = this.getByIdCandidates(sandboxId);
+    destroy: async (instanceId: string): Promise<void> => {
+      const candidates = this.getByIdCandidates(instanceId);
       const errors: string[] = [];
 
       for (const [index, provider] of candidates.entries()) {
         try {
-          await provider.sandbox.destroy(sandboxId);
-          this.sandboxProviders.delete(sandboxId);
+          await getInstanceManager(provider)!.destroy(instanceId);
+          this.instanceProviders.delete(instanceId);
           return;
         } catch (error) {
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
@@ -317,17 +341,25 @@ class ComputeManager {
       }
 
       throw new Error(
-        `Failed to destroy sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+        `Failed to destroy instance "${instanceId}" across ${candidates.length} provider(s).\n` +
         errors.map((error) => `- ${error}`).join('\n')
       );
     },
   };
 
+  /**
+   * @deprecated Use `compute.instances`. The sandbox namespace collapsed into
+   * instances so every form of compute (sandbox, VM, baremetal) shares one API.
+   */
+  get sandbox() {
+    return this.instances;
+  }
+
   snapshot = {
-    create: async (sandboxId: string, options?: CreateSnapshotOptions): Promise<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> => {
+    create: async (instanceId: string, options?: CreateSnapshotOptions): Promise<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> => {
       const preferredProviderName = options?.provider;
       const { provider: _providerName, ...providerOptions } = options || {};
-      const candidates = this.getSnapshotCreateCandidates(sandboxId, preferredProviderName);
+      const candidates = this.getSnapshotCreateCandidates(instanceId, preferredProviderName);
       const errors: string[] = [];
 
       for (const [index, provider] of candidates.entries()) {
@@ -337,7 +369,7 @@ class ComputeManager {
         }
 
         try {
-          const snapshot = await provider.snapshot.create(sandboxId, providerOptions);
+          const snapshot = await provider.snapshot.create(instanceId, providerOptions);
           this.snapshotProviders.set(snapshot.id, provider);
           return {
             ...snapshot,
@@ -349,7 +381,7 @@ class ComputeManager {
       }
 
       throw new Error(
-        `Failed to create snapshot for sandbox "${sandboxId}" across ${candidates.length} provider(s).\n` +
+        `Failed to create snapshot for instance "${instanceId}" across ${candidates.length} provider(s).\n` +
         errors.map((error) => `- ${error}`).join('\n')
       );
     },

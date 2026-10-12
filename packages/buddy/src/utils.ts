@@ -463,7 +463,7 @@ export interface BuddySandboxData {
 
 /**
  * Buddy's sandbox resource carries no creation date (only projects and
- * snapshots do), and `SandboxInfo.createdAt` is a required `Date`, so a handle
+ * snapshots do), and `InstanceInfo.createdAt` is a required `Date`, so a handle
  * rebuilt by `getById` or `list` can only record when it was reconnected.
  * `getInfo` marks that case with `metadata.createdAtIsReconnectTime`.
  */

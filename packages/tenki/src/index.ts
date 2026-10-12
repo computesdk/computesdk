@@ -15,7 +15,7 @@
  */
 
 import { defineProvider, escapeShellArg } from "@computesdk/provider";
-import type { RunCommandOptions, CommandResult, SandboxInfo, CreateSandboxOptions, FileEntry } from "computesdk";
+import type { RunCommandOptions, CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry } from "computesdk";
 import {
   TenkiSandbox,
   Session,
@@ -104,7 +104,7 @@ function rememberSession(session: Session, config: TenkiConfig): Session {
   return session;
 }
 
-function mapStatus(state: SessionState): SandboxInfo["status"] {
+function mapStatus(state: SessionState): InstanceInfo["status"] {
   switch (state) {
     case "RUNNING":
     case "CREATING":
@@ -121,7 +121,7 @@ function mapStatus(state: SessionState): SandboxInfo["status"] {
   }
 }
 
-function toCreateOptions(config: TenkiConfig, options?: CreateSandboxOptions): CreateOptions {
+function toCreateOptions(config: TenkiConfig, options?: CreateInstanceOptions): CreateOptions {
   const opts: CreateOptions = {};
   const workspaceId = config.workspaceId ?? process.env.TENKI_WORKSPACE_ID;
   if (workspaceId) opts.workspaceId = workspaceId;
@@ -135,7 +135,7 @@ function toCreateOptions(config: TenkiConfig, options?: CreateSandboxOptions): C
   if (options?.snapshotId) opts.snapshotId = options.snapshotId;
   if (options?.timeout) opts.maxDurationMs = options.timeout;
 
-  // Resources: per-call override (via CreateSandboxOptions' index signature)
+  // Resources: per-call override (via CreateInstanceOptions' index signature)
   // wins over provider-level defaults.
   const cpuCores = (options as Record<string, unknown> | undefined)?.cpuCores ?? config.cpuCores;
   const memoryMb = (options as Record<string, unknown> | undefined)?.memoryMb ?? config.memoryMb;
@@ -237,18 +237,18 @@ function basename(path: string): string {
 export const tenki = defineProvider<Session, TenkiConfig>({
   name: "tenki",
   methods: {
-    sandbox: {
+    instances: {
       create: async (config, options) => {
         const client = getClient(config);
         const session = await client.createAndWait(toCreateOptions(config, options));
-        return { sandbox: rememberSession(session, config), sandboxId: session.id };
+        return { instance: rememberSession(session, config), instanceId: session.id };
       },
 
       getById: async (config, sandboxId) => {
         const client = getClient(config);
         try {
           const session = await client.get(sandboxId);
-          return { sandbox: rememberSession(session, config), sandboxId: session.id };
+          return { instance: rememberSession(session, config), instanceId: session.id };
         } catch (err) {
           if (isMissingSession(err)) return null;
           throw err;
@@ -258,9 +258,7 @@ export const tenki = defineProvider<Session, TenkiConfig>({
       list: async (config) => {
         const client = getClient(config);
         const sessions = await client.list();
-        return sessions.map((session) => ({
-          sandbox: rememberSession(session, config),
-          sandboxId: session.id,
+        return sessions.map((session) => ({ instance: rememberSession(session, config), instanceId: session.id,
         }));
       },
 

@@ -15,10 +15,9 @@ function createMockProvider(name: string) {
     specialMethod: vi.fn().mockReturnValue(`${name}-specific`)
   }
 
-  return {
-    name,
-    sandbox: {
+  const instances = {
       create: vi.fn().mockResolvedValue({
+        instanceId: 'test-123',
         sandboxId: 'test-123',
         provider: name,
         runCommand: vi.fn().mockResolvedValue({
@@ -52,6 +51,11 @@ function createMockProvider(name: string) {
       list: vi.fn().mockResolvedValue([]),
       destroy: vi.fn()
     }
+
+  return {
+    name,
+    instances,
+    sandbox: instances
   }
 }
 

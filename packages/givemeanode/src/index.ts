@@ -18,10 +18,10 @@
 import { defineProvider } from '@computesdk/provider'
 import type {
   CommandResult,
-  CreateSandboxOptions,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
-  SandboxInfo,
+  InstanceInfo,
 } from '@computesdk/provider'
 
 import { GmnClient, type GmnClientOptions } from './client.js'
@@ -145,8 +145,8 @@ const provider = defineProvider<
 >({
   name: 'givemeanode',
   methods: {
-    sandbox: {
-      create: async (config: ConfigWithClient, options?: CreateSandboxOptions) => {
+    instances: {
+      create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {
         const sandbox = await ops.createSandbox(
           getClient(config),
           config.ramGib,
@@ -154,17 +154,17 @@ const provider = defineProvider<
           options && { ...options, egress: asGmnEgress(options.egress) },
           config.execRetries,
         )
-        return { sandbox, sandboxId: sandbox.id }
+        return { instance: sandbox, instanceId: sandbox.id }
       },
 
       getById: async (config: ConfigWithClient, sandboxId: string) => {
         const sandbox = await ops.getSandbox(getClient(config), sandboxId, config.execRetries)
-        return sandbox ? { sandbox, sandboxId } : null
+        return sandbox ? { instance: sandbox, instanceId: sandboxId } : null
       },
 
       list: async (config: ConfigWithClient) => {
         const all = await ops.listSandboxes(getClient(config), config.execRetries)
-        return all.map(sandbox => ({ sandbox, sandboxId: sandbox.id }))
+        return all.map(sandbox => ({ instance: sandbox, instanceId: sandbox.id }))
       },
 
       destroy: async (config: ConfigWithClient, sandboxId: string) => {
@@ -174,7 +174,7 @@ const provider = defineProvider<
       runCommand: (sandbox: GivemeanodeSandbox, command: string, options?: RunCommandOptions) =>
         ops.runCommand(sandbox, command, options) as Promise<CommandResult>,
 
-      getInfo: (sandbox: GivemeanodeSandbox) => ops.sandboxInfo(sandbox) as Promise<SandboxInfo>,
+      getInfo: (sandbox: GivemeanodeSandbox) => ops.sandboxInfo(sandbox) as Promise<InstanceInfo>,
 
       // A public HTTPS URL for a port inside the sandbox. The request
       // never arrives as a packet on the guest's interface: the host
