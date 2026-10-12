@@ -1142,7 +1142,11 @@ class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotMa
   }
 
   async list(options?: ListSnapshotsOptions): Promise<TSnapshot[]> {
-    return await this.methods.list(this.config, options);
+    // Legacy implementations still read `sandboxId`; keep both keys populated.
+    const normalized = options
+      ? { ...options, sandboxId: options.instanceId ?? options.sandboxId }
+      : options;
+    return await this.methods.list(this.config, normalized);
   }
 
   async delete(snapshotId: string): Promise<void> {

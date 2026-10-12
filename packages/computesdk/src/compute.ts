@@ -189,7 +189,14 @@ class ComputeManager {
   private getCreateCandidates(preferredProviderName?: string, kind?: ComputeKind): DirectProvider[] {
     const providers = this.getProviders();
     if (preferredProviderName) {
-      return [this.getProviderByName(preferredProviderName)];
+      const provider = this.getProviderByName(preferredProviderName);
+      if (kind !== undefined && (provider.kind ?? 'sandbox') !== kind) {
+        throw new Error(
+          `Provider "${preferredProviderName}" cannot create an instance of kind "${kind}" ` +
+          `(its declared kind is "${provider.kind ?? 'sandbox'}").`
+        );
+      }
+      return [provider];
     }
 
     const matching = kind === undefined
@@ -239,7 +246,9 @@ class ComputeManager {
 
   private async createWithFallback(options?: CreateInstanceOptions): Promise<InstanceInterface> {
     const preferredProviderName = options?.provider;
-    const { provider: _providerName, ...providerOptions } = options || {};
+    // `provider`/`kind` are routing metadata consumed by ComputeManager — do not
+    // forward them into provider create options (strict validators reject them).
+    const { provider: _providerName, kind: _kind, ...providerOptions } = options || {};
     const candidates = this.getCreateCandidates(preferredProviderName, options?.kind);
     const canFallback = this.fallbackOnError && !preferredProviderName;
     const errors: string[] = [];
