@@ -7,13 +7,13 @@
  */
 
 /**
- * The form of compute a provider provisions.
+ * The lifecycle class of compute a provider provisions.
  *
- * - `'sandbox'`: ephemeral isolated environments (E2B, Modal, Daytona, ...)
- * - `'vm'`: virtual machines
- * - `'baremetal'`: dedicated physical hosts
+ * Only `'sandbox'` exists today: ephemeral isolated environments
+ * (E2B, Modal, Daytona, ...). Other classes — `'vm'`, `'metal'` —
+ * are added to this union when a provider declares them.
  */
-export type ComputeKind = 'sandbox' | 'vm' | 'baremetal';
+export type ComputeKind = 'sandbox';
 
 /**
  * Code execution result
@@ -312,8 +312,8 @@ export interface InstanceEgressInfo {
  */
 export interface CreateInstanceOptions extends InstanceResourceOptions {
   /**
-   * Restrict creation to providers of a given compute form
-   * (`'sandbox' | 'vm' | 'baremetal'`). Providers declare their form via
+   * Restrict creation to providers of a given lifecycle class
+   * (see `ComputeKind`). Providers declare their class via
    * `ProviderConfig.kind` (default `'sandbox'`). Unset = any provider.
    */
   kind?: ComputeKind;

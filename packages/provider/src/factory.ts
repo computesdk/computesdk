@@ -348,8 +348,8 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
 export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any, TSnapshot = any> {
   name: string;
   /**
-   * The form of compute this provider provisions
-   * (`'sandbox' | 'vm' | 'baremetal'`). Defaults to `'sandbox'`.
+   * The lifecycle class of compute this provider provisions
+   * (see `ComputeKind`). Defaults to `'sandbox'`.
    */
   kind?: ComputeKind;
   methods: {
