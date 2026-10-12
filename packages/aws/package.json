@@ -1,17 +1,22 @@
 {
-  "name": "@computesdk/aws-ec2",
+  "name": "@computesdk/aws",
   "version": "1.0.0",
-  "description": "AWS EC2 Spot provider for ComputeSDK - sandboxes on EC2 Spot instances via instant fleets, commands over SSM Run Command",
+  "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command",
   "author": "Garrison",
   "license": "MIT",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+    "./ec2": {
+      "types": "./dist/ec2/index.d.ts",
+      "import": "./dist/ec2/index.mjs",
+      "require": "./dist/ec2/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "ec2": [
+        "./dist/ec2/index.d.ts"
+      ]
     }
   },
   "files": [
@@ -60,7 +65,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/computesdk/computesdk.git",
-    "directory": "packages/aws-ec2"
+    "directory": "packages/aws"
   },
   "homepage": "https://www.computesdk.com",
   "bugs": {

@@ -1,18 +1,18 @@
 import { runProviderTestSuite } from '@computesdk/test-utils';
 import { describe, expect, it } from 'vitest';
-import { awsEc2, instanceTypesOf, type AwsEc2Config, type AwsEc2Sandbox } from '../index';
+import { ec2, instanceTypesOf, type Ec2Config, type Ec2Sandbox } from '../index';
 
 /**
- * Set AWS_EC2_INTEGRATION_CONFIG to a JSON AwsEc2Config to run against real AWS, e.g.
+ * Set AWS_EC2_INTEGRATION_CONFIG to a JSON Ec2Config to run against real AWS, e.g.
  * '{"launchTemplate":"my-template","region":"us-east-2","instanceType":"m7a.large"}'
  */
 const raw = process.env.AWS_EC2_INTEGRATION_CONFIG;
-const config: AwsEc2Config = { readyTimeoutMs: 180_000, ...(raw ? JSON.parse(raw) : { launchTemplate: '' }) };
+const config: Ec2Config = { readyTimeoutMs: 180_000, ...(raw ? JSON.parse(raw) : { launchTemplate: '' }) };
 const enabled = !!raw && !!config.launchTemplate;
 
 runProviderTestSuite({
   name: 'aws-ec2',
-  provider: awsEc2(config),
+  provider: ec2(config),
   supportsFilesystem: false,
   supportsGetUrl: false,
   skipIntegration: !enabled,
@@ -21,10 +21,10 @@ runProviderTestSuite({
 
 describe.runIf(enabled)('aws-ec2 lifecycle', () => {
   it('launches a managed instance, runs commands over SSM, and terminates it', async () => {
-    const provider = awsEc2(config);
+    const provider = ec2(config);
     const sandbox = await provider.sandbox.create({ name: `csdk-it-${Date.now()}` });
     try {
-      const native = sandbox.getInstance() as AwsEc2Sandbox;
+      const native = sandbox.getInstance() as Ec2Sandbox;
       expect(native.tags['computesdk:managed']).toBe('true');
       expect(native.lifecycle).toBe(config.spot ? 'spot' : 'on-demand');
       const menu = instanceTypesOf(config);

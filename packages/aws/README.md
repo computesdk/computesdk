@@ -1,4 +1,12 @@
-# @computesdk/aws-ec2
+# @computesdk/aws
+
+AWS providers for ComputeSDK, one product per subpath:
+
+| Import | Product |
+|---|---|
+| `@computesdk/aws/ec2` | EC2 instances (on-demand or Spot), commands over SSM |
+
+## EC2
 
 AWS EC2 provider for ComputeSDK. Each sandbox is one EC2 instance launched from your launch template, on-demand
 by default or Spot when you opt in. Commands run over
@@ -8,16 +16,16 @@ There is no agent or gateway on the box and no inbound ports: the preinstalled S
 ## Installation
 
 ```bash
-npm install @computesdk/aws-ec2
+npm install @computesdk/aws
 ```
 
 ## Usage
 
 ```typescript
-import { awsEc2 } from '@computesdk/aws-ec2';
+import { ec2 } from '@computesdk/aws/ec2';
 
 // On-demand, everything else comes from the launch template
-const compute = awsEc2({ launchTemplate: 'my-template' }); // region from AWS_REGION
+const compute = ec2({ launchTemplate: 'my-template' }); // region from AWS_REGION
 
 const sandbox = await compute.sandbox.create();
 const result = await sandbox.runCommand('node -v', { env: { CI: '1' }, cwd: '/tmp', timeout: 60_000 });
@@ -28,9 +36,9 @@ await sandbox.destroy();
 ### Spot
 
 ```typescript
-import { awsEc2, isAwsEc2CapacityError } from '@computesdk/aws-ec2';
+import { ec2, isEc2CapacityError } from '@computesdk/aws/ec2';
 
-const compute = awsEc2({
+const compute = ec2({
   region: 'us-east-2',
   launchTemplate: 'computesdk-market-medium',
   instanceType: [
@@ -43,7 +51,7 @@ const compute = awsEc2({
 try {
   const sandbox = await compute.sandbox.create({ name: 'bench-1', metadata: { listing: 'lst_42' } });
 } catch (error) {
-  if (isAwsEc2CapacityError(error)) console.log('No Spot capacity right now:', error.codes);
+  if (isEc2CapacityError(error)) console.log('No Spot capacity right now:', error.codes);
   else throw error;
 }
 ```
@@ -79,7 +87,7 @@ There are no API keys in config. Pass a credential provider for short-lived cred
 ```typescript
 import { awsCredentialsProvider } from '@vercel/functions/oidc';
 
-awsEc2({ launchTemplate: 'my-template', credentials: awsCredentialsProvider({ roleArn: process.env.AWS_ROLE_ARN! }) });
+ec2({ launchTemplate: 'my-template', credentials: awsCredentialsProvider({ roleArn: process.env.AWS_ROLE_ARN! }) });
 ```
 
 ## Behavior
@@ -88,8 +96,8 @@ awsEc2({ launchTemplate: 'my-template', credentials: awsCredentialsProvider({ ro
 - **Tags**: instances and volumes are tagged `computesdk:managed=true` (IAM policies can be conditioned on it),
   `computesdk:sandbox-name` when `name` is set, and every string `metadata` value (sanitized to EC2 tag limits, max 50 tags).
 - **Capacity**: when no instance launches because of capacity, price, or quota errors, `create` throws
-  `AwsEc2CapacityError` (`code: 'AWS_EC2_CAPACITY_UNAVAILABLE'`, `codes`, `errors`). Other fleet failures throw `AwsEc2FleetError`.
-- **Readiness**: `create` returns once the instance is `Online` in SSM. On timeout (`AwsEc2ReadyTimeoutError`) or any
+  `Ec2CapacityError` (`code: 'AWS_EC2_CAPACITY_UNAVAILABLE'`, `codes`, `errors`). Other fleet failures throw `Ec2FleetError`.
+- **Readiness**: `create` returns once the instance is `Online` in SSM. On timeout (`Ec2ReadyTimeoutError`) or any
   error the instance is terminated before throwing. `create({ timeout })` overrides `readyTimeoutMs`.
 - **Commands run as root** via `AWS-RunShellScript`. `env` is exported and `cwd` is entered in the same script;
   `timeout` maps to SSM `executionTimeout` (seconds, rounded up). Timed-out commands return exit code `124`.
@@ -105,6 +113,6 @@ awsEc2({ launchTemplate: 'my-template', credentials: awsCredentialsProvider({ ro
 ```bash
 pnpm test   # unit tests (mocked AWS)
 
-# real AWS: any AwsEc2Config as JSON
+# real AWS: any Ec2Config as JSON
 AWS_EC2_INTEGRATION_CONFIG='{"launchTemplate":"my-template","region":"us-east-2","instanceType":"m7a.large"}' pnpm test
 ```

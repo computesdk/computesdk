@@ -19,30 +19,30 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { escapeShellArg } from '@computesdk/provider';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  AwsEc2CapacityError,
-  AwsEc2FleetError,
-  AwsEc2ReadyTimeoutError,
+  Ec2CapacityError,
+  Ec2FleetError,
+  Ec2ReadyTimeoutError,
   MANAGED_TAG_KEY,
   SANDBOX_NAME_TAG_KEY,
   SSM_INLINE_OUTPUT_LIMIT,
-  awsEc2,
+  ec2,
   buildOverrides,
   buildScript,
   buildTags,
-  isAwsEc2CapacityError,
+  isEc2CapacityError,
   outputS3Key,
-  type AwsEc2Config,
-  type AwsEc2Sandbox,
+  type Ec2Config,
+  type Ec2Sandbox,
 } from '../index';
 
-const ec2 = mockClient(EC2Client);
+const ec2Mock = mockClient(EC2Client);
 const ssm = mockClient(SSMClient);
 const s3 = mockClient(S3Client);
 
 const INSTANCE_ID = 'i-0123456789abcdef0';
 const COMMAND_ID = 'cmd-0001';
 
-function makeConfig(overrides: Partial<AwsEc2Config> = {}): AwsEc2Config {
+function makeConfig(overrides: Partial<Ec2Config> = {}): Ec2Config {
   return {
     region: 'us-east-2',
     launchTemplate: 'computesdk-market-medium',
@@ -77,18 +77,18 @@ function notFound() {
 }
 
 function mockLaunch(instance: Instance = ec2Instance()) {
-  ec2.on(CreateFleetCommand).resolves({ Instances: [{ InstanceIds: [INSTANCE_ID], Lifecycle: 'spot' }], Errors: [] });
+  ec2Mock.on(CreateFleetCommand).resolves({ Instances: [{ InstanceIds: [INSTANCE_ID], Lifecycle: 'spot' }], Errors: [] });
   ssm.on(DescribeInstanceInformationCommand).resolves({
     InstanceInformationList: [{ InstanceId: INSTANCE_ID, PingStatus: 'Online' }],
   });
-  ec2.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: INSTANCE_ID }] });
-  ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [instance] }] });
-  ec2.on(TerminateInstancesCommand).resolves({});
+  ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: INSTANCE_ID }] });
+  ec2Mock.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [instance] }] });
+  ec2Mock.on(TerminateInstancesCommand).resolves({});
 }
 
-async function launch(config: AwsEc2Config = makeConfig()) {
+async function launch(config: Ec2Config = makeConfig()) {
   mockLaunch();
-  return awsEc2(config).sandbox.create();
+  return ec2(config).sandbox.create();
 }
 
 function mockCommand(invocation: Record<string, unknown>) {
@@ -97,7 +97,7 @@ function mockCommand(invocation: Record<string, unknown>) {
 }
 
 beforeEach(() => {
-  ec2.reset();
+  ec2Mock.reset();
   ssm.reset();
   s3.reset();
 });
@@ -109,13 +109,13 @@ afterEach(() => {
 describe('create', () => {
   it('sends an instant spot fleet over every instance type x subnet', async () => {
     mockLaunch();
-    const sandbox = await awsEc2(makeConfig()).sandbox.create({
+    const sandbox = await ec2(makeConfig()).sandbox.create({
       name: 'bench-1',
       metadata: { listing: 'lst_42', 'bad key!': 'v@l#', count: 3 as unknown as string },
     });
 
     expect(sandbox.sandboxId).toBe(INSTANCE_ID);
-    const input = ec2.commandCalls(CreateFleetCommand)[0].args[0].input;
+    const input = ec2Mock.commandCalls(CreateFleetCommand)[0].args[0].input;
     expect(input.Type).toBe('instant');
     expect(input.TargetCapacitySpecification).toEqual({ TotalTargetCapacity: 1, DefaultTargetCapacityType: 'spot' });
     expect(input.SpotOptions).toEqual({ AllocationStrategy: 'price-capacity-optimized', MaxTotalPrice: '0.05' });
@@ -154,15 +154,15 @@ describe('create', () => {
 
   it('honours launchTemplateVersion and omits MaxTotalPrice when unset', async () => {
     mockLaunch();
-    await awsEc2(makeConfig({ launchTemplateVersion: '7', spot: true })).sandbox.create();
-    const input = ec2.commandCalls(CreateFleetCommand)[0].args[0].input;
+    await ec2(makeConfig({ launchTemplateVersion: '7', spot: true })).sandbox.create();
+    const input = ec2Mock.commandCalls(CreateFleetCommand)[0].args[0].input;
     expect(input.LaunchTemplateConfigs![0].LaunchTemplateSpecification!.Version).toBe('7');
     expect(input.SpotOptions).toEqual({ AllocationStrategy: 'price-capacity-optimized' });
   });
 
   it('exposes instance metadata on the native sandbox and getInfo', async () => {
     const sandbox = await launch();
-    const native = sandbox.getInstance() as AwsEc2Sandbox;
+    const native = sandbox.getInstance() as Ec2Sandbox;
     expect(native).toMatchObject({
       instanceId: INSTANCE_ID,
       region: 'us-east-2',
@@ -183,8 +183,8 @@ describe('create', () => {
     });
   });
 
-  it('throws AwsEc2CapacityError with the AWS codes when no capacity is available', async () => {
-    ec2.on(CreateFleetCommand).resolves({
+  it('throws Ec2CapacityError with the AWS codes when no capacity is available', async () => {
+    ec2Mock.on(CreateFleetCommand).resolves({
       Instances: [],
       Errors: [
         {
@@ -197,25 +197,25 @@ describe('create', () => {
       ],
     });
 
-    const error = await awsEc2(makeConfig()).sandbox.create().catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(AwsEc2CapacityError);
-    expect(isAwsEc2CapacityError(error)).toBe(true);
-    const capacity = error as AwsEc2CapacityError;
+    const error = await ec2(makeConfig()).sandbox.create().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Ec2CapacityError);
+    expect(isEc2CapacityError(error)).toBe(true);
+    const capacity = error as Ec2CapacityError;
     expect(capacity.code).toBe('AWS_EC2_CAPACITY_UNAVAILABLE');
     expect(capacity.codes).toEqual(['InsufficientInstanceCapacity', 'SpotMaxPriceTooLow']);
     expect(capacity.errors[0]).toMatchObject({ instanceType: 'c5d.large', subnetId: 'subnet-a' });
     expect(ssm.commandCalls(DescribeInstanceInformationCommand)).toHaveLength(0);
-    expect(ec2.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
+    expect(ec2Mock.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
   });
 
-  it('throws a non-capacity AwsEc2FleetError for configuration errors', async () => {
-    ec2.on(CreateFleetCommand).resolves({
+  it('throws a non-capacity Ec2FleetError for configuration errors', async () => {
+    ec2Mock.on(CreateFleetCommand).resolves({
       Instances: [],
       Errors: [{ ErrorCode: 'InvalidLaunchTemplateName.NotFoundException', ErrorMessage: 'missing' }],
     });
-    const error = await awsEc2(makeConfig()).sandbox.create().catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(AwsEc2FleetError);
-    expect(isAwsEc2CapacityError(error)).toBe(false);
+    const error = await ec2(makeConfig()).sandbox.create().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Ec2FleetError);
+    expect(isEc2CapacityError(error)).toBe(false);
   });
 
   it('polls SSM until the instance is Online', async () => {
@@ -225,20 +225,20 @@ describe('create', () => {
       .resolvesOnce({ InstanceInformationList: [{ InstanceId: INSTANCE_ID, PingStatus: 'ConnectionLost' }] })
       .resolves({ InstanceInformationList: [{ InstanceId: INSTANCE_ID, PingStatus: 'Online' }] });
 
-    await awsEc2(makeConfig()).sandbox.create();
+    await ec2(makeConfig()).sandbox.create();
     const calls = ssm.commandCalls(DescribeInstanceInformationCommand);
     expect(calls).toHaveLength(3);
     expect(calls[0].args[0].input.Filters).toEqual([{ Key: 'InstanceIds', Values: [INSTANCE_ID] }]);
-    expect(ec2.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
+    expect(ec2Mock.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
   });
 
   it('terminates the instance when it never comes Online', async () => {
     mockLaunch();
     ssm.on(DescribeInstanceInformationCommand).resolves({ InstanceInformationList: [] });
 
-    const error = await awsEc2(makeConfig({ readyTimeoutMs: 20 })).sandbox.create().catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(AwsEc2ReadyTimeoutError);
-    const terminations = ec2.commandCalls(TerminateInstancesCommand);
+    const error = await ec2(makeConfig({ readyTimeoutMs: 20 })).sandbox.create().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Ec2ReadyTimeoutError);
+    const terminations = ec2Mock.commandCalls(TerminateInstancesCommand);
     expect(terminations).toHaveLength(1);
     expect(terminations[0].args[0].input.InstanceIds).toEqual([INSTANCE_ID]);
   });
@@ -246,36 +246,36 @@ describe('create', () => {
   it('prefers options.timeout over readyTimeoutMs', async () => {
     mockLaunch();
     ssm.on(DescribeInstanceInformationCommand).resolves({ InstanceInformationList: [] });
-    const error = await awsEc2(makeConfig({ readyTimeoutMs: 60_000 })).sandbox.create({ timeout: 10 }).catch((e: unknown) => e);
-    expect((error as AwsEc2ReadyTimeoutError).timeoutMs).toBe(10);
+    const error = await ec2(makeConfig({ readyTimeoutMs: 60_000 })).sandbox.create({ timeout: 10 }).catch((e: unknown) => e);
+    expect((error as Ec2ReadyTimeoutError).timeoutMs).toBe(10);
   });
 
   it('terminates the instance when the SSM wait fails', async () => {
     mockLaunch();
     ssm.on(DescribeInstanceInformationCommand).rejects(new Error('AccessDenied'));
-    await expect(awsEc2(makeConfig()).sandbox.create()).rejects.toThrow('AccessDenied');
-    expect(ec2.commandCalls(TerminateInstancesCommand)).toHaveLength(1);
+    await expect(ec2(makeConfig()).sandbox.create()).rejects.toThrow('AccessDenied');
+    expect(ec2Mock.commandCalls(TerminateInstancesCommand)).toHaveLength(1);
   });
 
   it('validates required config and region', async () => {
-    await expect(awsEc2(makeConfig({ launchTemplate: '' })).sandbox.create()).rejects.toThrow('launchTemplate');
-    await expect(awsEc2(makeConfig({ region: undefined })).sandbox.create()).rejects.toThrow('AWS_REGION');
+    await expect(ec2(makeConfig({ launchTemplate: '' })).sandbox.create()).rejects.toThrow('launchTemplate');
+    await expect(ec2(makeConfig({ region: undefined })).sandbox.create()).rejects.toThrow('AWS_REGION');
     process.env.AWS_REGION = 'us-east-2';
     mockLaunch();
-    await expect(awsEc2(makeConfig({ region: undefined })).sandbox.create()).resolves.toBeTruthy();
+    await expect(ec2(makeConfig({ region: undefined })).sandbox.create()).resolves.toBeTruthy();
   });
 });
 
 describe('create (on-demand)', () => {
-  const onDemand = (overrides: Partial<AwsEc2Config> = {}) =>
+  const onDemand = (overrides: Partial<Ec2Config> = {}) =>
     makeConfig({ spot: undefined, subnetIds: undefined, instanceType: undefined, ...overrides });
 
   it('uses RunInstances with only a launch template', async () => {
     mockLaunch(ec2Instance({ InstanceLifecycle: undefined }));
-    const sandbox = await awsEc2(onDemand()).sandbox.create({ name: 'od-1' });
+    const sandbox = await ec2(onDemand()).sandbox.create({ name: 'od-1' });
 
-    expect(ec2.commandCalls(CreateFleetCommand)).toHaveLength(0);
-    const input = ec2.commandCalls(RunInstancesCommand)[0].args[0].input;
+    expect(ec2Mock.commandCalls(CreateFleetCommand)).toHaveLength(0);
+    const input = ec2Mock.commandCalls(RunInstancesCommand)[0].args[0].input;
     expect(input).toMatchObject({
       MinCount: 1,
       MaxCount: 1,
@@ -286,37 +286,37 @@ describe('create (on-demand)', () => {
     expect(input).not.toHaveProperty('InstanceMarketOptions');
     expect(input.TagSpecifications!.map((spec) => spec.ResourceType)).toEqual(['instance', 'volume']);
     expect(input.TagSpecifications![0].Tags).toContainEqual({ Key: MANAGED_TAG_KEY, Value: 'true' });
-    expect((sandbox.getInstance() as AwsEc2Sandbox).lifecycle).toBe('on-demand');
+    expect((sandbox.getInstance() as Ec2Sandbox).lifecycle).toBe('on-demand');
   });
 
   it('passes a single instanceType and a launch template id', async () => {
     mockLaunch();
-    await awsEc2(onDemand({ launchTemplate: 'lt-0abc123', instanceType: 'm7a.large' })).sandbox.create();
-    const input = ec2.commandCalls(RunInstancesCommand)[0].args[0].input;
+    await ec2(onDemand({ launchTemplate: 'lt-0abc123', instanceType: 'm7a.large' })).sandbox.create();
+    const input = ec2Mock.commandCalls(RunInstancesCommand)[0].args[0].input;
     expect(input.InstanceType).toBe('m7a.large');
     expect(input.LaunchTemplate).toEqual({ LaunchTemplateId: 'lt-0abc123', Version: '$Default' });
   });
 
-  it('maps RunInstances capacity errors to AwsEc2CapacityError', async () => {
+  it('maps RunInstances capacity errors to Ec2CapacityError', async () => {
     mockLaunch();
-    ec2.on(RunInstancesCommand).rejects(Object.assign(new Error('no room'), { name: 'InsufficientInstanceCapacity' }));
-    const error = await awsEc2(onDemand({ instanceType: 'm7a.large' })).sandbox.create().catch((e: unknown) => e);
-    expect(isAwsEc2CapacityError(error)).toBe(true);
-    expect((error as AwsEc2CapacityError).codes).toEqual(['InsufficientInstanceCapacity']);
-    expect(ec2.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
+    ec2Mock.on(RunInstancesCommand).rejects(Object.assign(new Error('no room'), { name: 'InsufficientInstanceCapacity' }));
+    const error = await ec2(onDemand({ instanceType: 'm7a.large' })).sandbox.create().catch((e: unknown) => e);
+    expect(isEc2CapacityError(error)).toBe(true);
+    expect((error as Ec2CapacityError).codes).toEqual(['InsufficientInstanceCapacity']);
+    expect(ec2Mock.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
   });
 
   it('rethrows other RunInstances errors', async () => {
     mockLaunch();
-    ec2.on(RunInstancesCommand).rejects(Object.assign(new Error('bad'), { name: 'UnauthorizedOperation' }));
-    await expect(awsEc2(onDemand()).sandbox.create()).rejects.toThrow('bad');
+    ec2Mock.on(RunInstancesCommand).rejects(Object.assign(new Error('bad'), { name: 'UnauthorizedOperation' }));
+    await expect(ec2(onDemand()).sandbox.create()).rejects.toThrow('bad');
   });
 
   it('falls back across several types with an on-demand fleet', async () => {
     mockLaunch();
-    await awsEc2(onDemand({ instanceType: ['m7a.large', 'm5a.large'] })).sandbox.create();
-    expect(ec2.commandCalls(RunInstancesCommand)).toHaveLength(0);
-    const input = ec2.commandCalls(CreateFleetCommand)[0].args[0].input;
+    await ec2(onDemand({ instanceType: ['m7a.large', 'm5a.large'] })).sandbox.create();
+    expect(ec2Mock.commandCalls(RunInstancesCommand)).toHaveLength(0);
+    const input = ec2Mock.commandCalls(CreateFleetCommand)[0].args[0].input;
     expect(input.TargetCapacitySpecification).toEqual({ TotalTargetCapacity: 1, DefaultTargetCapacityType: 'on-demand' });
     expect(input).not.toHaveProperty('SpotOptions');
     expect(input.LaunchTemplateConfigs![0].Overrides).toEqual([{ InstanceType: 'm7a.large' }, { InstanceType: 'm5a.large' }]);
@@ -324,8 +324,8 @@ describe('create (on-demand)', () => {
 
   it('uses a fleet when subnets are given', async () => {
     mockLaunch();
-    await awsEc2(onDemand({ subnetIds: ['subnet-a'] })).sandbox.create();
-    expect(ec2.commandCalls(CreateFleetCommand)[0].args[0].input.LaunchTemplateConfigs![0].Overrides).toEqual([{ SubnetId: 'subnet-a' }]);
+    await ec2(onDemand({ subnetIds: ['subnet-a'] })).sandbox.create();
+    expect(ec2Mock.commandCalls(CreateFleetCommand)[0].args[0].input.LaunchTemplateConfigs![0].Overrides).toEqual([{ SubnetId: 'subnet-a' }]);
   });
 });
 
@@ -473,8 +473,8 @@ describe('runCommand', () => {
 
 describe('getById', () => {
   it('returns a managed running instance', async () => {
-    ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance()] }] });
-    const sandbox = await awsEc2(makeConfig()).sandbox.getById(INSTANCE_ID);
+    ec2Mock.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance()] }] });
+    const sandbox = await ec2(makeConfig()).sandbox.getById(INSTANCE_ID);
     expect(sandbox?.sandboxId).toBe(INSTANCE_ID);
   });
 
@@ -484,26 +484,26 @@ describe('getById', () => {
     ['terminated', ec2Instance({ State: { Name: 'terminated' } })],
     ['shutting-down', ec2Instance({ State: { Name: 'shutting-down' } })],
   ])('returns null for %s instances', async (_label, instance) => {
-    ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [instance] }] });
-    expect(await awsEc2(makeConfig()).sandbox.getById(INSTANCE_ID)).toBeNull();
+    ec2Mock.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [instance] }] });
+    expect(await ec2(makeConfig()).sandbox.getById(INSTANCE_ID)).toBeNull();
   });
 
   it('returns null when the instance does not exist', async () => {
-    ec2.on(DescribeInstancesCommand).rejects(notFound());
-    expect(await awsEc2(makeConfig()).sandbox.getById(INSTANCE_ID)).toBeNull();
-    ec2.on(DescribeInstancesCommand).resolves({ Reservations: [] });
-    expect(await awsEc2(makeConfig()).sandbox.getById(INSTANCE_ID)).toBeNull();
+    ec2Mock.on(DescribeInstancesCommand).rejects(notFound());
+    expect(await ec2(makeConfig()).sandbox.getById(INSTANCE_ID)).toBeNull();
+    ec2Mock.on(DescribeInstancesCommand).resolves({ Reservations: [] });
+    expect(await ec2(makeConfig()).sandbox.getById(INSTANCE_ID)).toBeNull();
   });
 });
 
 describe('list', () => {
   it('filters on the managed tag and live states', async () => {
-    ec2.on(DescribeInstancesCommand).resolves({
+    ec2Mock.on(DescribeInstancesCommand).resolves({
       Reservations: [{ Instances: [ec2Instance(), ec2Instance({ InstanceId: 'i-second' })] }],
     });
-    const sandboxes = await awsEc2(makeConfig()).sandbox.list();
+    const sandboxes = await ec2(makeConfig()).sandbox.list();
     expect(sandboxes.map((sandbox) => sandbox.sandboxId)).toEqual([INSTANCE_ID, 'i-second']);
-    expect(ec2.commandCalls(DescribeInstancesCommand)[0].args[0].input.Filters).toEqual([
+    expect(ec2Mock.commandCalls(DescribeInstancesCommand)[0].args[0].input.Filters).toEqual([
       { Name: `tag:${MANAGED_TAG_KEY}`, Values: ['true'] },
       { Name: 'instance-state-name', Values: ['pending', 'running'] },
     ]);
@@ -512,30 +512,30 @@ describe('list', () => {
 
 describe('destroy', () => {
   it('terminates a managed instance', async () => {
-    ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance()] }] });
-    ec2.on(TerminateInstancesCommand).resolves({});
-    await awsEc2(makeConfig()).sandbox.destroy(INSTANCE_ID);
-    expect(ec2.commandCalls(TerminateInstancesCommand)[0].args[0].input).toEqual({ InstanceIds: [INSTANCE_ID] });
+    ec2Mock.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance()] }] });
+    ec2Mock.on(TerminateInstancesCommand).resolves({});
+    await ec2(makeConfig()).sandbox.destroy(INSTANCE_ID);
+    expect(ec2Mock.commandCalls(TerminateInstancesCommand)[0].args[0].input).toEqual({ InstanceIds: [INSTANCE_ID] });
   });
 
   it('is a no-op for missing or terminated instances', async () => {
-    ec2.on(DescribeInstancesCommand).rejects(notFound());
-    await expect(awsEc2(makeConfig()).sandbox.destroy(INSTANCE_ID)).resolves.toBeUndefined();
-    ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance({ State: { Name: 'terminated' } })] }] });
-    await expect(awsEc2(makeConfig()).sandbox.destroy(INSTANCE_ID)).resolves.toBeUndefined();
-    expect(ec2.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
+    ec2Mock.on(DescribeInstancesCommand).rejects(notFound());
+    await expect(ec2(makeConfig()).sandbox.destroy(INSTANCE_ID)).resolves.toBeUndefined();
+    ec2Mock.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance({ State: { Name: 'terminated' } })] }] });
+    await expect(ec2(makeConfig()).sandbox.destroy(INSTANCE_ID)).resolves.toBeUndefined();
+    expect(ec2Mock.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
   });
 
   it('treats a NotFound race on TerminateInstances as success', async () => {
-    ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance()] }] });
-    ec2.on(TerminateInstancesCommand).rejects(notFound());
-    await expect(awsEc2(makeConfig()).sandbox.destroy(INSTANCE_ID)).resolves.toBeUndefined();
+    ec2Mock.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance()] }] });
+    ec2Mock.on(TerminateInstancesCommand).rejects(notFound());
+    await expect(ec2(makeConfig()).sandbox.destroy(INSTANCE_ID)).resolves.toBeUndefined();
   });
 
   it('refuses to terminate instances it does not manage', async () => {
-    ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance({ Tags: [] })] }] });
-    await expect(awsEc2(makeConfig()).sandbox.destroy(INSTANCE_ID)).rejects.toThrow('Refusing to terminate');
-    expect(ec2.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
+    ec2Mock.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [ec2Instance({ Tags: [] })] }] });
+    await expect(ec2(makeConfig()).sandbox.destroy(INSTANCE_ID)).rejects.toThrow('Refusing to terminate');
+    expect(ec2Mock.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
   });
 });
 

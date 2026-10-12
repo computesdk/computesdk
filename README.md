@@ -295,7 +295,7 @@ Install the provider packages you need and pass their instances into `compute.se
 
 ```bash
 npm install @computesdk/archil           # Archil provider
-npm install @computesdk/aws-ec2          # AWS EC2 provider
+npm install @computesdk/aws              # AWS providers (EC2: @computesdk/aws/ec2)
 npm install @computesdk/beam             # Beam provider
 npm install @computesdk/blaxel           # Blaxel provider
 npm install @computesdk/brezel           # Brezel provider
@@ -341,7 +341,7 @@ const sandbox = await e2bCompute.sandbox.create();
 
 See individual provider READMEs for details:
 - **[@computesdk/archil](./packages/archil)** - Disk-attached command-execution sandboxes
-- **[@computesdk/aws-ec2](./packages/aws-ec2)** - On-demand or Spot EC2 instances, commands over SSM Run Command
+- **[@computesdk/aws](./packages/aws)** - AWS providers; `@computesdk/aws/ec2`: on-demand or Spot EC2 instances, commands over SSM Run Command
 - **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
 - **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
 - **[@computesdk/brezel](./packages/brezel)** - Self-hosted Firecracker sandboxes with immutable environments

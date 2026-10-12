@@ -71,12 +71,12 @@ export const CAPACITY_ERROR_CODES: ReadonlySet<string> = new Set([
   'UnfulfillableCapacity',
 ]);
 
-export interface AwsEc2SpotOptions {
+export interface Ec2SpotOptions {
   /** Max total Spot price per hour, e.g. "0.05". */
   maxPricePerHour?: string;
 }
 
-export interface AwsEc2Config {
+export interface Ec2Config {
   /** Launch template name or id (`lt-...`). It owns AMI, IMDS, root volume, security group, networking, and instance profile. */
   launchTemplate: string;
   /** Launch template version (default "$Default"). */
@@ -88,7 +88,7 @@ export interface AwsEc2Config {
   /** Subnets to launch into, one per AZ. Default: the launch template's. */
   subnetIds?: string[];
   /** Launch Spot capacity instead of on-demand (default). */
-  spot?: boolean | AwsEc2SpotOptions;
+  spot?: boolean | Ec2SpotOptions;
   /** Static credentials or a provider function. Omit to use the default AWS SDK credential chain. */
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider;
   /** How long `create` waits for the instance to come Online in SSM (default 120000). */
@@ -101,16 +101,16 @@ export interface AwsEc2Config {
   outputS3KeyPrefix?: string;
 }
 
-export type AwsEc2Lifecycle = 'spot' | 'on-demand';
+export type Ec2Lifecycle = 'spot' | 'on-demand';
 
 /** Native sandbox handle exposed via `getInstance()`. */
-export interface AwsEc2Sandbox {
+export interface Ec2Sandbox {
   instanceId: string;
   region: string;
   instanceType?: string;
   availabilityZone?: string;
   subnetId?: string;
-  lifecycle: AwsEc2Lifecycle;
+  lifecycle: Ec2Lifecycle;
   launchTime: Date;
   state: string;
   privateIpAddress?: string;
@@ -118,7 +118,7 @@ export interface AwsEc2Sandbox {
   tags: Record<string, string>;
 }
 
-export interface AwsEc2FleetErrorDetail {
+export interface Ec2FleetErrorDetail {
   code?: string;
   message?: string;
   instanceType?: string;
@@ -127,11 +127,11 @@ export interface AwsEc2FleetErrorDetail {
 }
 
 /** The launch produced no instance. `errors` holds the AWS errors (one per fleet override). */
-export class AwsEc2FleetError extends Error {
-  readonly errors: AwsEc2FleetErrorDetail[];
-  constructor(message: string, errors: AwsEc2FleetErrorDetail[]) {
+export class Ec2FleetError extends Error {
+  readonly errors: Ec2FleetErrorDetail[];
+  constructor(message: string, errors: Ec2FleetErrorDetail[]) {
     super(message);
-    this.name = 'AwsEc2FleetError';
+    this.name = 'Ec2FleetError';
     this.errors = errors;
   }
   get codes(): string[] {
@@ -140,25 +140,25 @@ export class AwsEc2FleetError extends Error {
 }
 
 /** No capacity (or quota/price headroom) across the configured instance types and subnets. */
-export class AwsEc2CapacityError extends AwsEc2FleetError {
+export class Ec2CapacityError extends Ec2FleetError {
   readonly code = 'AWS_EC2_CAPACITY_UNAVAILABLE';
-  constructor(message: string, errors: AwsEc2FleetErrorDetail[]) {
+  constructor(message: string, errors: Ec2FleetErrorDetail[]) {
     super(message, errors);
-    this.name = 'AwsEc2CapacityError';
+    this.name = 'Ec2CapacityError';
   }
 }
 
 /** The instance launched but never came Online in SSM; it has been terminated. */
-export class AwsEc2ReadyTimeoutError extends Error {
+export class Ec2ReadyTimeoutError extends Error {
   constructor(readonly instanceId: string, readonly timeoutMs: number) {
     super(`EC2 instance ${instanceId} did not come Online in SSM within ${timeoutMs}ms; it was terminated.`);
-    this.name = 'AwsEc2ReadyTimeoutError';
+    this.name = 'Ec2ReadyTimeoutError';
   }
 }
 
 /** Works across bundle copies where `instanceof` does not. */
-export function isAwsEc2CapacityError(error: unknown): error is AwsEc2CapacityError {
-  return error instanceof AwsEc2CapacityError || (error instanceof Error && error.name === 'AwsEc2CapacityError');
+export function isEc2CapacityError(error: unknown): error is Ec2CapacityError {
+  return error instanceof Ec2CapacityError || (error instanceof Error && error.name === 'Ec2CapacityError');
 }
 
 interface Clients {
@@ -168,28 +168,28 @@ interface Clients {
 }
 
 interface Context {
-  config: AwsEc2Config;
+  config: Ec2Config;
   region: string;
   clients: Clients;
 }
 
-const clientCache = new WeakMap<AwsEc2Config, Context>();
+const clientCache = new WeakMap<Ec2Config, Context>();
 /** Keeps clients/credentials off the public `getInstance()` object. */
-const sandboxContexts = new WeakMap<AwsEc2Sandbox, Context>();
+const sandboxContexts = new WeakMap<Ec2Sandbox, Context>();
 
-function resolveRegion(config: AwsEc2Config): string {
+function resolveRegion(config: Ec2Config): string {
   const region = config.region ?? process.env.AWS_REGION;
   if (!region) {
     throw new Error(
       'Missing AWS region for aws-ec2.\n\n' +
-      'Pass it: awsEc2({ region: "us-east-2", ... })\n' +
+      'Pass it: ec2({ region: "us-east-2", ... })\n' +
       'Or set AWS_REGION in your environment.'
     );
   }
   return region;
 }
 
-function contextFor(config: AwsEc2Config): Context {
+function contextFor(config: Ec2Config): Context {
   const cached = clientCache.get(config);
   if (cached) return cached;
   const region = resolveRegion(config);
@@ -207,17 +207,17 @@ function contextFor(config: AwsEc2Config): Context {
   return context;
 }
 
-function contextForSandbox(sandbox: AwsEc2Sandbox): Context {
+function contextForSandbox(sandbox: Ec2Sandbox): Context {
   const context = sandboxContexts.get(sandbox);
   if (!context) throw new Error(`aws-ec2 client state is unavailable for instance ${sandbox.instanceId}.`);
   return context;
 }
 
-function validateLaunchConfig(config: AwsEc2Config): void {
+function validateLaunchConfig(config: Ec2Config): void {
   if (!config.launchTemplate) {
     throw new Error(
       'Missing aws-ec2 config: launchTemplate.\n\n' +
-      'Pass it: awsEc2({ launchTemplate: "my-template" })'
+      'Pass it: ec2({ launchTemplate: "my-template" })'
     );
   }
 }
@@ -260,23 +260,23 @@ export function buildTags(options?: CreateInstanceOptions): Tag[] {
   return [...tags].map(([Key, Value]) => ({ Key, Value }));
 }
 
-export function instanceTypesOf(config: AwsEc2Config): string[] {
+export function instanceTypesOf(config: Ec2Config): string[] {
   const { instanceType } = config;
   return (Array.isArray(instanceType) ? instanceType : instanceType ? [instanceType] : []).filter(Boolean);
 }
 
-export function spotOptionsOf(config: AwsEc2Config): AwsEc2SpotOptions | undefined {
+export function spotOptionsOf(config: Ec2Config): Ec2SpotOptions | undefined {
   if (!config.spot) return undefined;
   return config.spot === true ? {} : config.spot;
 }
 
 /** Fleet is only needed for Spot or to fall back across several instance types/subnets. */
-export function usesFleet(config: AwsEc2Config): boolean {
+export function usesFleet(config: Ec2Config): boolean {
   return !!spotOptionsOf(config) || instanceTypesOf(config).length > 1 || (config.subnetIds?.length ?? 0) > 0;
 }
 
 /** Instance type x subnet product; a missing dimension falls back to the launch template's value. */
-export function buildOverrides(config: AwsEc2Config): FleetLaunchTemplateOverridesRequest[] {
+export function buildOverrides(config: Ec2Config): FleetLaunchTemplateOverridesRequest[] {
   const types: Array<string | undefined> = instanceTypesOf(config);
   const subnets: Array<string | undefined> = config.subnetIds?.length ? config.subnetIds : [];
   if (!types.length && !subnets.length) return [];
@@ -288,14 +288,14 @@ export function buildOverrides(config: AwsEc2Config): FleetLaunchTemplateOverrid
   );
 }
 
-function launchTemplateSpec(config: AwsEc2Config): LaunchTemplateSpecification & FleetLaunchTemplateSpecificationRequest {
+function launchTemplateSpec(config: Ec2Config): LaunchTemplateSpecification & FleetLaunchTemplateSpecificationRequest {
   const Version = config.launchTemplateVersion ?? DEFAULT_LAUNCH_TEMPLATE_VERSION;
   return /^lt-[0-9a-f]+$/.test(config.launchTemplate)
     ? { LaunchTemplateId: config.launchTemplate, Version }
     : { LaunchTemplateName: config.launchTemplate, Version };
 }
 
-function fleetErrorDetail(error: CreateFleetError): AwsEc2FleetErrorDetail {
+function fleetErrorDetail(error: CreateFleetError): Ec2FleetErrorDetail {
   const overrides = error.LaunchTemplateAndOverrides?.Overrides;
   return {
     code: error.ErrorCode,
@@ -323,8 +323,8 @@ function isGone(instance: Ec2Instance): boolean {
   return state === 'terminated' || state === 'shutting-down';
 }
 
-function sandboxFromEc2(context: Context, instance: Ec2Instance): AwsEc2Sandbox {
-  const sandbox: AwsEc2Sandbox = {
+function sandboxFromEc2(context: Context, instance: Ec2Instance): Ec2Sandbox {
+  const sandbox: Ec2Sandbox = {
     instanceId: instance.InstanceId!,
     region: context.region,
     instanceType: instance.InstanceType,
@@ -381,13 +381,13 @@ async function launchWithRunInstances(context: Context, options?: CreateInstance
       TagSpecifications: tagSpecifications(options),
     }));
     const instanceId = result.Instances?.[0]?.InstanceId;
-    if (!instanceId) throw new AwsEc2FleetError('EC2 RunInstances launched no instance.', []);
+    if (!instanceId) throw new Ec2FleetError('EC2 RunInstances launched no instance.', []);
     return instanceId;
   } catch (error) {
     const code = errorName(error);
     if (code && CAPACITY_ERROR_CODES.has(code)) {
       const detail = { code, message: (error as Error).message, instanceType };
-      throw new AwsEc2CapacityError(`No EC2 capacity for ${config.launchTemplate} (${code}).`, [detail]);
+      throw new Ec2CapacityError(`No EC2 capacity for ${config.launchTemplate} (${code}).`, [detail]);
     }
     throw error;
   }
@@ -421,9 +421,9 @@ async function launchWithFleet(context: Context, options?: CreateInstanceOptions
     const codes = [...new Set(errors.map((error) => error.code).filter(Boolean))];
     const summary = codes.length ? codes.join(', ') : 'no error reported';
     if (errors.length === 0 || errors.every((error) => error.code && CAPACITY_ERROR_CODES.has(error.code))) {
-      throw new AwsEc2CapacityError(`No EC2 ${spot ? 'Spot ' : ''}capacity for ${config.launchTemplate} (${summary}).`, errors);
+      throw new Ec2CapacityError(`No EC2 ${spot ? 'Spot ' : ''}capacity for ${config.launchTemplate} (${summary}).`, errors);
     }
-    throw new AwsEc2FleetError(`EC2 CreateFleet launched no instance (${summary}).`, errors);
+    throw new Ec2FleetError(`EC2 CreateFleet launched no instance (${summary}).`, errors);
   }
 
   // Instant fleets can return extra instances on retries of the same token; keep only the first.
@@ -449,13 +449,13 @@ async function waitForSsmOnline(context: Context, instanceId: string, timeoutMs:
       return;
     }
     const remaining = deadline - Date.now();
-    if (remaining <= 0) throw new AwsEc2ReadyTimeoutError(instanceId, timeoutMs);
+    if (remaining <= 0) throw new Ec2ReadyTimeoutError(instanceId, timeoutMs);
     await sleep(Math.min(interval, remaining));
     interval = Math.min(interval * 1.5, MAX_POLL_INTERVAL_MS);
   }
 }
 
-async function createSandbox(config: AwsEc2Config, options?: CreateInstanceOptions) {
+async function createSandbox(config: Ec2Config, options?: CreateInstanceOptions) {
   validateLaunchConfig(config);
   const context = contextFor(config);
   options?.signal?.throwIfAborted();
@@ -529,7 +529,7 @@ function exitCodeFor(invocation: GetCommandInvocationCommandOutput): number {
   }
 }
 
-async function runCommand(sandbox: AwsEc2Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
+async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
   const context = contextForSandbox(sandbox);
   const { config, clients } = context;
   const startedAt = Date.now();
@@ -599,7 +599,7 @@ function mapStatus(state: string): InstanceInfo['status'] {
   return 'error';
 }
 
-export const awsEc2 = defineProvider<AwsEc2Sandbox, AwsEc2Config>({
+export const ec2 = defineProvider<Ec2Sandbox, Ec2Config>({
   name: PROVIDER,
   methods: {
     instances: {
@@ -614,7 +614,7 @@ export const awsEc2 = defineProvider<AwsEc2Sandbox, AwsEc2Config>({
 
       list: async (config) => {
         const context = contextFor(config);
-        const sandboxes: Array<{ instance: AwsEc2Sandbox; instanceId: string }> = [];
+        const sandboxes: Array<{ instance: Ec2Sandbox; instanceId: string }> = [];
         const pages = paginateDescribeInstances({ client: context.clients.ec2 }, {
           Filters: [
             { Name: `tag:${MANAGED_TAG_KEY}`, Values: ['true'] },
