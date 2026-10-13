@@ -49,7 +49,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "gravixlayer": "^0.1.34"
+    "gravixlayer": "^0.1.36"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
