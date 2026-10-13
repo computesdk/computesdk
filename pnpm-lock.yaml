@@ -2831,8 +2831,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       workpaper:
-        specifier: ^0.2.2
-        version: 0.2.2
+        specifier: ^0.2.3
+        version: 0.2.3
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -9134,8 +9134,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  workpaper@0.2.2:
-    resolution: {integrity: sha512-jK1iRtMtPg11BvR5uo/yY13h92jVBIkcEWxA6jmj4c4HcE6UCcwNLHCkpdnQ893GDND+9Mxy/bK67eAG4jbotg==}
+  workpaper@0.2.3:
+    resolution: {integrity: sha512-3FPCAeD8qZ5NVO7uQZ9zEGpvh6Jm1bN8NGhRncToBXnnhnh7q6qBSJJ62ney0b9Wlnc44VsVrL3YWu81rv6q+g==}
     engines: {node: '>=18'}
 
   wrangler@4.136.1:
@@ -16701,7 +16701,7 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260921.1
       '@cloudflare/workerd-windows-64': 1.20260921.1
 
-  workpaper@0.2.2: {}
+  workpaper@0.2.3: {}
 
   wrangler@4.136.1(@types/node@20.19.5)(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:

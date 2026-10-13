@@ -113,7 +113,7 @@ export const workpaper = defineProvider<Computer, ConfigWithClient>({
         id: computer.id,
         provider: 'workpaper',
         status: computer.running ? 'running' : 'stopped',
-        createdAt: new Date(),
+        createdAt: computer.startedAt,
         timeout: Math.max(0, computer.stopsAt.getTime() - Date.now()),
         metadata: { name: computer.name, cpus: computer.cpus, memoryMB: computer.memoryMB },
       }),
@@ -132,12 +132,12 @@ export const workpaper = defineProvider<Computer, ConfigWithClient>({
         },
 
         mkdir: async (computer: Computer, path: string, runCommand: FsRunCommand): Promise<void> => {
-          const r = await runCommand(computer, `mkdir -p "${escapeShellArg(path)}"`)
+          const r = await runCommand(computer, `mkdir -p -- "${escapeShellArg(path)}"`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `Failed to create directory: ${path}`)
         },
 
         readdir: async (computer: Computer, path: string, runCommand: FsRunCommand): Promise<FileEntry[]> => {
-          const r = await runCommand(computer, `ls -la "${escapeShellArg(path)}"`)
+          const r = await runCommand(computer, `ls -la -- "${escapeShellArg(path)}"`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot read directory: ${path}`)
           const entries: FileEntry[] = []
           for (const line of r.stdout.split('\n')) {
@@ -161,7 +161,7 @@ export const workpaper = defineProvider<Computer, ConfigWithClient>({
         },
 
         remove: async (computer: Computer, path: string, runCommand: FsRunCommand): Promise<void> => {
-          const r = await runCommand(computer, `rm -rf "${escapeShellArg(path)}"`)
+          const r = await runCommand(computer, `rm -rf -- "${escapeShellArg(path)}"`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `Failed to remove: ${path}`)
         },
       },

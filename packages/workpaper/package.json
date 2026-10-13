@@ -51,7 +51,7 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "workpaper": "^0.2.2",
+    "workpaper": "^0.2.3",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
