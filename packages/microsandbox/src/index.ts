@@ -20,6 +20,7 @@ import type {
 const PROVIDER = 'microsandbox' as const;
 const LABEL_MARKER = 'computesdk.sandbox';
 const LABEL_METADATA_PREFIX = 'computesdk.metadata.';
+const LABEL_CREATE_ATTEMPT = 'computesdk.create-attempt';
 const SNAPSHOT_LABEL_MARKER = 'computesdk.snapshot';
 const SNAPSHOT_LABEL_SANDBOX = 'computesdk.sandbox-id';
 const DEFAULT_IMAGE = 'alpine:3.21';
@@ -518,6 +519,7 @@ const _microsandbox = defineProvider<
         const timeoutMs = timeoutFor(config, options);
         const metadata = options?.metadata ?? {};
         const ports = normalizePorts(config, options);
+        const attempt = randomUUID();
         let builder = sdk.Sandbox.builder(name);
 
         if (options?.snapshotId) {
@@ -536,6 +538,7 @@ const _microsandbox = defineProvider<
           .idleTimeout(Math.max(1, Math.ceil(timeoutMs / 1000)))
           .labels({
             [LABEL_MARKER]: 'true',
+            [LABEL_CREATE_ATTEMPT]: attempt,
             ...encodeMetadata(metadata),
           });
 
@@ -558,8 +561,11 @@ const _microsandbox = defineProvider<
           native = await builder.create();
         } catch (error) {
           // Cloud create can fail (e.g. readiness wait expired) after the named sandbox exists.
+          // Only remove it if this attempt created it, never a same-name sandbox owned by someone else.
           try {
-            await removeSandbox(await sdk.Sandbox.get(name));
+            const handle = await sdk.Sandbox.get(name);
+            const labels = (handle.config() as RecoveredConfig).labels;
+            if (labels?.[LABEL_CREATE_ATTEMPT] === attempt) await removeSandbox(handle);
           } catch (cleanupError) {
             if (!isNotFound(cleanupError)) {
               console.warn(`[microsandbox] Failed-create cleanup failed for ${JSON.stringify(name)}; check and remove it manually.`);

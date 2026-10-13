@@ -18,6 +18,7 @@ const mock = vi.hoisted(() => ({
   removeAttempts: 0,
   createError: null as Error | null,
   createdStatus: 'running',
+  skipHandleOnError: false,
 }));
 
 vi.mock('microsandbox', () => {
@@ -152,6 +153,7 @@ vi.mock('microsandbox', () => {
       });
       handle.native = sandbox;
       handle.status = mock.createdStatus;
+      if (mock.createError && mock.skipHandleOnError) throw mock.createError;
       mock.handles.set(this.name, handle);
       if (mock.createError) throw mock.createError;
       return sandbox;
@@ -212,6 +214,7 @@ beforeEach(async () => {
   mock.removeAttempts = 0;
   mock.createError = null;
   mock.createdStatus = 'running';
+  mock.skipHandleOnError = false;
 });
 
 describe('microsandbox provider', () => {
@@ -449,6 +452,19 @@ describe('microsandbox provider', () => {
     expect(mock.stopAttempts).toBe(1);
     expect(mock.removeAttempts).toBe(1);
     expect(mock.handles.has('readiness')).toBe(false);
+  });
+
+  it('does not remove an existing same-name sandbox when create fails', async () => {
+    const provider = microsandbox({ apiKey: 'key' });
+    await provider.sandbox.create({ name: 'worker-1' });
+    const existing = mock.handles.get('worker-1');
+    mock.createError = new Error('sandbox already exists');
+    // Simulate a rejected duplicate: create throws without replacing the existing sandbox.
+    mock.skipHandleOnError = true;
+    await expect(provider.sandbox.create({ name: 'worker-1' })).rejects.toThrow('already exists');
+    expect(mock.stopAttempts).toBe(0);
+    expect(mock.removeAttempts).toBe(0);
+    expect(mock.handles.get('worker-1')).toBe(existing);
   });
 
   it('keeps the create error when failed-create cleanup also fails', async () => {
