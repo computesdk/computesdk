@@ -17,7 +17,7 @@ const compute = daytona({
   apiKey: process.env.DAYTONA_API_KEY
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('python -c "print(\"Hello from Daytona!\")"');
 console.log(result.stdout);
@@ -110,13 +110,13 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // List all sandboxes
-const sandboxes = await compute.sandbox.list();
+const sandboxes = await compute.instances.list();
 
 // Get existing sandbox
-const existing = await compute.sandbox.getById('sandbox-id');
+const existing = await compute.instances.getById('sandbox-id');
 
 // Destroy sandbox
-await compute.sandbox.destroy('sandbox-id');
+await compute.instances.destroy('sandbox-id');
 ```
 
 ## Error Handling
@@ -126,7 +126,7 @@ import { daytona } from '@computesdk/daytona';
 
 try {
   const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   
   const result = await sandbox.runCommand('invalid code');
 } catch (error) {
@@ -148,7 +148,7 @@ try {
 import { daytona } from '@computesdk/daytona';
 
 const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python - <<'PY'
 import json
@@ -176,7 +176,7 @@ await sandbox.destroy();
 import { daytona } from '@computesdk/daytona';
 
 const compute = daytona({ apiKey: process.env.DAYTONA_API_KEY });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create data file
 await sandbox.filesystem.writeFile('/workspace/data.json', 

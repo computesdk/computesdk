@@ -24,7 +24,7 @@ import { upstash } from '@computesdk/upstash';
 
 const compute = upstash({ apiKey: process.env.UPSTASH_BOX_API_KEY });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python - <<'PY'
 import pandas as pd
@@ -145,7 +145,7 @@ const snapshot = await compute.snapshot.create(sandbox.id, {
 console.log(snapshot.id, snapshot.metadata);
 
 // Restore from a snapshot
-const restored = await compute.sandbox.create({
+const restored = await compute.instances.create({
   snapshotId: snapshot.id,
 });
 ```
@@ -158,10 +158,10 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.status, info.createdAt);
 
 // Reconnect to existing sandbox
-const existing = await compute.sandbox.getById('box-id');
+const existing = await compute.instances.getById('box-id');
 
 // List all sandboxes
-const sandboxes = await compute.sandbox.list();
+const sandboxes = await compute.instances.list();
 
 // Destroy sandbox
 await sandbox.destroy();
@@ -174,7 +174,7 @@ import { upstash } from '@computesdk/upstash';
 
 try {
   const compute = upstash({ apiKey: process.env.UPSTASH_BOX_API_KEY });
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
 
   const result = await sandbox.runCommand('invalid code');
 } catch (error) {
@@ -196,7 +196,7 @@ try {
 import { upstash } from '@computesdk/upstash';
 
 const compute = upstash({ apiKey: process.env.UPSTASH_BOX_API_KEY });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create project structure
 await sandbox.filesystem.mkdir('/analysis/data');
@@ -243,7 +243,7 @@ await sandbox.destroy();
 import { upstash } from '@computesdk/upstash';
 
 const compute = upstash({ apiKey: process.env.UPSTASH_BOX_API_KEY });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Write a simple server
 await sandbox.filesystem.writeFile('/server.js', `

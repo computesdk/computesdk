@@ -131,7 +131,7 @@ After installing a provider and setting credentials, verify everything works:
 import { e2b } from '@computesdk/e2b';
 
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('echo "Hello from ComputeSDK!"');
 console.log(result.stdout); // "Hello from ComputeSDK!"

@@ -48,7 +48,7 @@ import { sail } from '@computesdk/sail';
 
 const compute = sail({ app: 'my-app' });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const result = await sandbox.runCommand('node --version');
 console.log(result.stdout);
 

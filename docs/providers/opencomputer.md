@@ -26,7 +26,7 @@ compute.setConfig({
   provider: opencomputer({ apiKey: process.env.OPENCOMPUTER_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create({ templateId: 'base' });
+const sandbox = await compute.instances.create({ templateId: 'base' });
 
 const result = await sandbox.runCommand('node --version');
 console.log(result.stdout);
@@ -56,15 +56,15 @@ Per-create options such as `templateId`, `timeout`, `envs`, `metadata`, `memory`
 ComputeSDK snapshots map to OpenComputer checkpoints:
 
 ```typescript
-const snapshot = await compute.snapshot.create(sandbox.sandboxId, {
+const snapshot = await compute.snapshot.create(sandbox.instanceId, {
   name: 'configured',
 });
 
-const clone = await compute.sandbox.create({ snapshotId: snapshot.id });
+const clone = await compute.instances.create({ snapshotId: snapshot.id });
 
 await compute.snapshot.delete(snapshot.id);
 ```
 
-Snapshot IDs returned by this provider are formatted as `sandboxId:checkpointId` because OpenComputer deletes checkpoints under their source sandbox. Raw OpenComputer checkpoint IDs are also accepted when creating a sandbox from a checkpoint.
+Snapshot IDs returned by this provider are formatted as `instanceId:checkpointId` because OpenComputer deletes checkpoints under their source sandbox. Raw OpenComputer checkpoint IDs are also accepted when creating a sandbox from a checkpoint.
 
 Snapshots default to OpenComputer `disk_only` checkpoints with `promoteToFull: true`. Override with `metadata: { kind: 'full' }` or `metadata: { promoteToFull: false }` when needed.

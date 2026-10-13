@@ -33,7 +33,7 @@ compute.setConfig({
   provider: lelantos({ apiKey: process.env.LELANTOS_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python3 - <<'PY'
 import platform
@@ -101,7 +101,7 @@ const provider = lelantos({
 - ✅ **EU-native microVMs** — Firecracker isolation on Hetzner bare-metal in the EU
 - ✅ **Command Execution** — Run shell commands in the sandbox, with real exit codes surfaced (non-zero exits are returned, not masked)
 - ✅ **Filesystem Operations** — Read, write, list, mkdir, exists, remove
-- ✅ **Per-port Preview URLs** — `getUrl({ port })` returns `https://{port}-{sandboxId}.{domain}`
+- ✅ **Per-port Preview URLs** — `getUrl({ port })` returns `https://{port}-{instanceId}.{domain}`
 - ✅ **Snapshots & Templates** — Snapshot a running sandbox; list/delete templates
 - ✅ **Domain / apiUrl threaded everywhere** — control-plane calls always target your Lelantos slot
 
@@ -140,7 +140,7 @@ await sandbox.filesystem.remove('/tmp/hello.py');
 ```typescript
 // Expose a server running on port 3000 inside the sandbox
 const url = await sandbox.getUrl({ port: 3000 });
-// => https://3000-<sandboxId>.lelantos.ai
+// => https://3000-<instanceId>.lelantos.ai
 ```
 
 ### Sandbox Management
@@ -159,7 +159,7 @@ import { lelantos } from '@computesdk/lelantos';
 
 try {
   const compute = lelantos({ apiKey: process.env.LELANTOS_API_KEY });
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
 } catch (error) {
   if (error.message.includes('Missing Lelantos API key')) {
     console.error('Set LELANTOS_API_KEY environment variable');

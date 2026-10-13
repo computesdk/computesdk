@@ -7,7 +7,7 @@
 1. **Direct provider mode** — import a provider package (e.g. `@computesdk/e2b`) and use the returned instance as your compute object. Best for single-provider apps.
 2. **Core `compute` from `computesdk`** — import `compute` from the `computesdk` package and configure it with one or more provider instances. Best when you want resilient routing, round-robin load balancing, or a single module-level entrypoint that multiple files share.
 
-Both modes expose the same shape: `compute.sandbox.*` for sandbox lifecycle and operations, and `compute.snapshot.*` for snapshot management (when supported by the provider).
+Both modes expose the same shape: `compute.instances.*` for sandbox lifecycle and operations, and `compute.snapshot.*` for snapshot management (when supported by the provider).
 
 Every provider package depends on `computesdk`, so it is always installed alongside them — the choice between the two modes is purely about what you import.
 
@@ -50,7 +50,7 @@ import { e2b } from '@computesdk/e2b';
 
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const result = await sandbox.runCommand('echo "Hello!"');
 console.log(result.stdout);
 await sandbox.destroy();
@@ -80,7 +80,7 @@ compute.setConfig({
   provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 await sandbox.runCommand('echo "Hello!"');
 await sandbox.destroy();
 ```
@@ -107,10 +107,10 @@ compute.setConfig({
 });
 
 // Uses the configured strategy
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Override for one call
-const gpuSandbox = await compute.sandbox.create({ provider: 'modal' });
+const gpuSandbox = await compute.instances.create({ provider: 'modal' });
 ```
 
 ### Callable Form
@@ -226,7 +226,7 @@ compute.setConfig({
 });
 
 // Tries e2b first; falls back to modal only if e2b throws
-await compute.sandbox.create();
+await compute.instances.create();
 ```
 
 Use when you have a preferred provider and want the others purely as a safety net.
@@ -241,9 +241,9 @@ compute.setConfig({
   providerStrategy: 'round-robin',
 });
 
-await compute.sandbox.create(); // e2b
-await compute.sandbox.create(); // modal
-await compute.sandbox.create(); // e2b
+await compute.instances.create(); // e2b
+await compute.instances.create(); // modal
+await compute.instances.create(); // e2b
 ```
 
 Failover via `fallbackOnError` still applies: if the round-robin pick fails, the next provider is tried.
@@ -266,7 +266,7 @@ compute.setConfig({
 });
 
 // If e2b throws, the error propagates — modal is never tried
-await compute.sandbox.create();
+await compute.instances.create();
 ```
 
 **Notes:**
@@ -280,14 +280,14 @@ await compute.sandbox.create();
 
 ## Per-Call Provider Override
 
-Most `compute.sandbox.*` methods accept an optional `provider` field to target a specific provider by name, bypassing the strategy:
+Most `compute.instances.*` methods accept an optional `provider` field to target a specific provider by name, bypassing the strategy:
 
 ```typescript
 // Force this sandbox onto Modal, regardless of strategy
-const gpuSandbox = await compute.sandbox.create({ provider: 'modal' });
+const gpuSandbox = await compute.instances.create({ provider: 'modal' });
 
 // Target a specific provider for a snapshot
-const snap = await compute.snapshot.create(sandboxId, { provider: 'e2b' });
+const snap = await compute.snapshot.create(instanceId, { provider: 'e2b' });
 ```
 
 The override must match a configured provider's `.name` exactly. If not, a descriptive error is thrown listing the configured providers.
@@ -300,9 +300,9 @@ The override must match a configured provider's `.name` exactly. If not, a descr
 
 For sandboxes created through `compute`, the owning provider is tracked internally. Operations that act on an existing sandbox prefer the owning provider first:
 
-* `compute.sandbox.destroy(sandboxId)`
-* `compute.sandbox.getById(sandboxId)`
-* `compute.snapshot.create(sandboxId, options)`
+* `compute.instances.destroy(instanceId)`
+* `compute.instances.getById(instanceId)`
+* `compute.snapshot.create(instanceId, options)`
 * `compute.snapshot.delete(snapshotId)`
 
 Affinity is **preferred, not exclusive**: if the owning provider fails, ComputeSDK falls through to the other configured providers.
@@ -317,18 +317,18 @@ Affinity is **preferred, not exclusive**: if the owning provider fails, ComputeS
 
 ***
 
-## `compute.sandbox.*`
+## `compute.instances.*`
 
-The full sandbox API is documented in [compute.sandbox](computesandbox/). Summary of available methods:
+`compute.sandbox` remains as a deprecated alias for `compute.instances`. The full sandbox API is documented in [compute.instances](./compute.instances.md). Summary of available methods:
 
 | Method               | Purpose                                                                    |
 | -------------------- | -------------------------------------------------------------------------- |
 | `create(options?)`   | Provision a new sandbox                                                    |
-| `getById(sandboxId)` | Reconnect to an existing sandbox                                           |
+| `getById(instanceId)` | Reconnect to an existing sandbox                                           |
 | `list()`             | List active sandboxes (aggregated across providers in multi-provider mode) |
-| `destroy(sandboxId)` | Tear down a sandbox                                                        |
+| `destroy(instanceId)` | Tear down a sandbox                                                        |
 
-All of these accept a `provider` override where applicable. See [Sandbox](sandbox/) for the instance methods (`runCommand`, `filesystem.*`).
+All of these accept a `provider` override where applicable. See [Instance](./Instance.md) for the instance methods (`runCommand`, `filesystem.*`).
 
 <br>
 
@@ -340,13 +340,13 @@ Available when at least one configured provider supports snapshots.
 
 | Method                        | Purpose                                              |
 | ----------------------------- | ---------------------------------------------------- |
-| `create(sandboxId, options?)` | Capture a snapshot of a running sandbox              |
+| `create(instanceId, options?)` | Capture a snapshot of a running sandbox              |
 | `list()`                      | List snapshots across providers that support listing |
 | `delete(snapshotId)`          | Delete a snapshot                                    |
 
 ```typescript
-const sandbox = await compute.sandbox.create();
-const snap = await compute.snapshot.create(sandbox.sandboxId, {
+const sandbox = await compute.instances.create();
+const snap = await compute.snapshot.create(sandbox.instanceId, {
   name: 'post-setup',
   metadata: { owner: 'team-backend' },
 });
@@ -371,7 +371,7 @@ ComputeSDK surfaces descriptive, aggregated errors when all candidates fail:
 
 ```typescript
 try {
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
 } catch (error) {
   // Example message:
   // Failed to create sandbox across 2 provider(s).
@@ -411,7 +411,7 @@ compute.setConfig({
 });
 
 async function runUserCode(userId: string, code: string) {
-  const sandbox = await compute.sandbox.create({
+  const sandbox = await compute.instances.create({
     timeout: 5 * 60 * 1000,
     metadata: { userId },
     envs: { USER_ID: userId },
@@ -438,8 +438,8 @@ async function runUserCode(userId: string, code: string) {
 
 ## Related
 
-* [compute.sandbox](computesandbox/) — sandbox lifecycle methods
-* [Sandbox](sandbox/) — sandbox instance methods (code, commands, filesystem, terminal)
+* [compute.instances](./compute.instances.md) — sandbox lifecycle methods
+* [Instance](./Instance.md) — sandbox instance methods (code, commands, filesystem, terminal)
 * [Introduction](../getting-started/introduction/) — high-level overview
 * [Installation](../getting-started/installation/) — provider setup and credentials
 * [Quick Start](../getting-started/quick-start/) — minimal end-to-end walkthrough

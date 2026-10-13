@@ -32,7 +32,7 @@ compute.setConfig({
   provider: opencomputer({ apiKey: process.env.OPENCOMPUTER_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create({ templateId: 'base' });
+const sandbox = await compute.instances.create({ templateId: 'base' });
 
 const result = await sandbox.runCommand('echo "Hello from OpenComputer"');
 console.log(result.stdout);
@@ -77,22 +77,22 @@ interface OpenComputerConfig {
 
 ## Snapshots
 
-OpenComputer checkpoints are scoped to a source sandbox. This provider returns snapshot IDs in the form `sandboxId:checkpointId` so ComputeSDK can later delete the checkpoint.
+OpenComputer checkpoints are scoped to a source sandbox. This provider returns snapshot IDs in the form `instanceId:checkpointId` so ComputeSDK can later delete the checkpoint.
 
 ```typescript
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
-const snapshot = await compute.snapshot.create(sandbox.sandboxId, {
+const snapshot = await compute.snapshot.create(sandbox.instanceId, {
   name: 'ready-state',
 });
 
-const clone = await compute.sandbox.create({ snapshotId: snapshot.id });
+const clone = await compute.instances.create({ snapshotId: snapshot.id });
 
 await compute.snapshot.delete(snapshot.id);
 await clone.destroy();
 await sandbox.destroy();
 ```
 
-You can also pass a raw OpenComputer checkpoint ID to `compute.sandbox.create({ snapshotId })` when you only need to fork from it.
+You can also pass a raw OpenComputer checkpoint ID to `compute.instances.create({ snapshotId })` when you only need to fork from it.
 
 Snapshots default to OpenComputer `disk_only` checkpoints with `promoteToFull: true`. Override with `metadata: { kind: 'full' }` or `metadata: { promoteToFull: false }` when needed.

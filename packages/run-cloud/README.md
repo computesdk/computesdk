@@ -31,7 +31,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   templateId: 'runcloud/agent-base',
   name: 'agent-task',
 });
@@ -42,13 +42,13 @@ console.log(result.stdout);
 await sandbox.filesystem.writeFile('/tmp/result.txt', result.stdout);
 console.log(await sandbox.filesystem.readFile('/tmp/result.txt'));
 
-const snapshot = await compute.snapshot.create(sandbox.sandboxId, {
+const snapshot = await compute.snapshot.create(sandbox.instanceId, {
   name: 'after-setup',
 });
 
 await sandbox.destroy();
 
-const restored = await compute.sandbox.create({
+const restored = await compute.instances.create({
   snapshotId: snapshot.id,
   name: 'restored-task',
 });

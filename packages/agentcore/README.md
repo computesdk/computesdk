@@ -47,7 +47,7 @@ import { agentcore } from '@computesdk/agentcore';
 // Uses the default AWS credential chain; region from env or config.
 compute.setConfig({ defaultProvider: agentcore({ region: 'us-west-2' }) });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('echo "Hello from AgentCore" && python3 -c "print(2 + 2)"');
 console.log(result.stdout); // Hello from AgentCore\n4
@@ -132,7 +132,7 @@ sandbox (`runCommand('curl -sL URL -o /tmp/file')`) or base64 it over `runComman
 
 ```typescript
 const info = await sandbox.getInfo();          // { id, provider, status, createdAt, timeout, metadata }
-const existing = await provider.sandbox.getById(sandbox.sandboxId);  // or null if terminated
+const existing = await provider.sandbox.getById(sandbox.instanceId);  // or null if terminated
 const all = await provider.sandbox.list();     // READY sessions
 await sandbox.destroy();
 ```
@@ -143,7 +143,7 @@ await sandbox.destroy();
 
 ```typescript
 try {
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
 } catch (err) {
   // e.g. "Missing AWS region for AgentCore. Pass it: agentcore({ region: 'us-west-2' }) ..."
   // or   "AWS authentication failed for AgentCore. Check your credentials ..."
@@ -160,7 +160,7 @@ try {
 ### Data processing
 
 ```typescript
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 await sandbox.filesystem.writeFile('/tmp/data.csv', 'value\n10\n20\n30\n');
 const result = await sandbox.runCommand(`python3 - <<'PY'
@@ -176,7 +176,7 @@ await sandbox.destroy();
 
 ### As an AI agent tool
 
-The universal `Sandbox` interface maps cleanly onto agent-framework tools — wrap each
+The universal `InstanceInterface` interface maps cleanly onto agent-framework tools — wrap each
 method in a tool and hand them to your agent (works with any agent SDK):
 
 ```typescript

@@ -17,7 +17,7 @@ const compute = isorun({
   apiKey: process.env.ISORUN_API_KEY,
 })
 
-const sandbox = await compute.sandbox.create({ runtime: 'node' })
+const sandbox = await compute.instances.create({ runtime: 'node' })
 
 const result = await sandbox.runCommand('node -v')
 console.log(result.stdout) // v22.x.x
@@ -50,7 +50,7 @@ await sandbox.filesystem.remove('/app/output')
 
 // Lifecycle
 const info = await sandbox.getInfo()
-const all = await compute.sandbox.list()
+const all = await compute.instances.list()
 await sandbox.destroy()
 ```
 

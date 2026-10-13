@@ -91,7 +91,7 @@ const compute = cloudRun({
   sandboxSecret: process.env.CLOUD_RUN_SANDBOX_SECRET,
 })
 
-const sandbox = await compute.sandbox.create()
+const sandbox = await compute.instances.create()
 
 const result = await sandbox.runCommand('echo hello')
 console.log(result.stdout)
@@ -111,7 +111,7 @@ const compute = cloudRun({
   write: true,
 })
 
-const sandbox = await compute.sandbox.create()
+const sandbox = await compute.instances.create()
 await sandbox.runCommand('echo hello > /tmp/hello.txt')
 const result = await sandbox.runCommand('cat /tmp/hello.txt')
 console.log(result.stdout)
@@ -128,7 +128,7 @@ const compute = cloudRun({
   write: true,
 })
 
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   envs: { NODE_ENV: 'production' },
 })
 

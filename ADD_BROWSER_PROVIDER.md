@@ -10,7 +10,7 @@ If your service runs code in a sandbox rather than hosting a browser, you want t
 guide instead.
 
 Browser providers are built with `defineBrowserProvider` from `@computesdk/provider`
-and expose `methods.session` (instead of `methods.sandbox`). Reference packages:
+and expose `methods.session` (instead of `methods.instances`). Reference packages:
 [packages/browserbase](packages/browserbase), [packages/browseruse](packages/browseruse),
 [packages/kernel](packages/kernel), [packages/steel](packages/steel).
 

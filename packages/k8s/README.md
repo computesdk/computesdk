@@ -20,7 +20,7 @@ const compute = k8s({
   runtime: 'node',
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('node -e "console.log(\"hello from k8s\")"');
 console.log(result.stdout);

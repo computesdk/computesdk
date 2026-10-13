@@ -20,7 +20,7 @@ import { freestyle } from '@computesdk/freestyle';
 
 const compute = freestyle({ apiKey: process.env.FREESTYLE_API_KEY });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('node -v');
 console.log(result.stdout); // "v22.19.0\n"
@@ -60,7 +60,7 @@ interface FreestyleConfig {
 | `runCommand` | ✅ |
 | Filesystem: read, write, readdir, mkdir, exists, remove | ✅ (native) |
 | Snapshots: create, list, delete | ✅ |
-| Reconnect by id (`compute.sandbox.getById`) | ✅ |
+| Reconnect by id (`compute.instances.getById`) | ✅ |
 | List sandboxes | ✅ (VMs this provider created) |
 | `getUrl` (per-port URL) | ❌ — map a domain via [`freestyle.domains`](https://docs.freestyle.sh) |
 

@@ -53,7 +53,7 @@ const compute = isorun({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from Isorun!"');
@@ -89,4 +89,4 @@ interface IsorunConfig {
 ### Notes
 
 * The default command/sandbox timeout is 300000 ms (5 minutes).
-* The `isorun` SDK exposes extra capabilities without ComputeSDK slots — `fork(n)`, `hibernate()` / `resume()`, and `setTimeout(seconds)`. Reach the raw instance via `compute.sandbox.getInstance(sandbox)`.
+* The `isorun` SDK exposes extra capabilities without ComputeSDK slots — `fork(n)`, `hibernate()` / `resume()`, and `setTimeout(seconds)`. Reach the raw instance via `sandbox.getInstance()`.

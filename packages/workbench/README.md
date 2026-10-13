@@ -139,7 +139,7 @@ When you create a sandbox using `create()`, it automatically becomes your curren
 ```javascript
 > create({ namespace: "h" })
 ✅ Switched to sandbox sandbox-123
-{ sandboxId: 'sandbox-123', provider: 'e2b', metadata: {} }
+{ instanceId: 'sandbox-123', provider: 'e2b', metadata: {} }
 e2b:sandbox-123>  // Prompt shows you're now on this sandbox
 
 > ls('/home')  // Runs on sandbox-123

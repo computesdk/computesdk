@@ -54,7 +54,7 @@ const compute = lelantos({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from Lelantos!"');
@@ -78,7 +78,7 @@ interface LelantosConfig {
   /**
    * Lelantos control-plane + sandbox domain, e.g. `'lelantos.ai'`. The e2b SDK
    * derives the control-plane URL as `https://api.${domain}` and the sandbox
-   * preview host as `{port}-{sandboxId}.${domain}`. If not provided, falls back
+   * preview host as `{port}-{instanceId}.${domain}`. If not provided, falls back
    * to the `LELANTOS_DOMAIN` then `E2B_DOMAIN` environment variable, then
    * defaults to `'lelantos.ai'`.
    */
@@ -104,7 +104,7 @@ interface LelantosConfig {
 | `destroy`    | ✅         |                                                                                                                                          |
 | `runCommand` | ✅         | Supports `env`, `cwd`, `background`. Real non-zero exit codes are returned, not thrown. Transient infra errors are retried with backoff. |
 | `getInfo`    | ✅         |                                                                                                                                          |
-| `getUrl`     | ✅         | Returns `https://{port}-{sandboxId}.{domain}` for the given port.                                                                        |
+| `getUrl`     | ✅         | Returns `https://{port}-{instanceId}.{domain}` for the given port.                                                                        |
 | `filesystem` | ✅         | `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove` (native e2b files).                                                      |
 | `snapshot`   | ✅         | `compute.snapshot.create` snapshots a running sandbox; `list` / `delete` map to templates.                                               |
 | `template`   | partial   | `list` / `delete` supported; `create` throws — build via the E2B template protocol / CLI or `snapshot.create()`.                         |

@@ -33,7 +33,7 @@ import { buddy } from '@computesdk/buddy';
 
 const compute = buddy();
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('echo "hello from buddy"');
 console.log(result.stdout);
@@ -99,7 +99,7 @@ installation, set `apiUrl` instead.
 Beyond the cross-provider options, `create` accepts:
 
 ```ts
-await compute.sandbox.create({
+await compute.instances.create({
   // Expose ports up front, so getUrl needs no extra round trip
   ports: [3000, { port: 443, type: 'TLS', region: 'EU' }],
   // Resources — either a preset, or cpu/memory that map onto one
@@ -117,7 +117,7 @@ await compute.sandbox.create({
 ## Exposing ports
 
 ```ts
-const sandbox = await compute.sandbox.create({ ports: [3000] });
+const sandbox = await compute.instances.create({ ports: [3000] });
 await sandbox.runCommand('npx serve -l 3000', { background: true });
 
 const url = await sandbox.getUrl({ port: 3000 });
@@ -152,14 +152,14 @@ A snapshot is a disk image taken from a live sandbox, and doubles as the reusabl
 image other providers call a template.
 
 ```ts
-const snapshot = await compute.snapshot.create(sandbox.sandboxId, { name: 'with-deps' });
+const snapshot = await compute.snapshot.create(sandbox.instanceId, { name: 'with-deps' });
 
 await compute.snapshot.list();                                 // the whole project
-await compute.snapshot.list({ sandboxId: sandbox.sandboxId });  // one sandbox
+await compute.snapshot.list({ instanceId: sandbox.instanceId });  // one sandbox
 await compute.snapshot.delete(snapshot.id);
 
 // Booting from it is a normal create
-const prepared = await compute.sandbox.create({ snapshotId: snapshot.id });
+const prepared = await compute.instances.create({ snapshotId: snapshot.id });
 ```
 
 Buddy creates snapshots asynchronously and they cannot be restored until they turn

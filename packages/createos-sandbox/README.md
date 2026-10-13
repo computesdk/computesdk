@@ -23,7 +23,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create({ memoryMb: 1024, image: "devbox:1" });
+const sandbox = await compute.instances.create({ memoryMb: 1024, image: "devbox:1" });
 const { stdout } = await sandbox.runCommand("echo hello");
 await sandbox.filesystem.writeFile("/tmp/x.txt", "hi");
 await sandbox.destroy();

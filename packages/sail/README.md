@@ -47,7 +47,7 @@ import { sail } from '@computesdk/sail';
 
 const compute = sail({ app: 'my-app' });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const result = await sandbox.runCommand('node --version');
 console.log(result.stdout);
 
@@ -64,7 +64,7 @@ import { compute } from 'computesdk';
 import { sail } from '@computesdk/sail';
 
 compute.setConfig({ provider: sail({ app: 'my-app' }) });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 ```
 
 ## Supported Operations

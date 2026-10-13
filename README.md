@@ -52,7 +52,7 @@ compute.setConfig({
   provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('python -c "print(\'Hello World!\')"');
 console.log(result.stdout); // "Hello World!"
@@ -126,7 +126,7 @@ compute.setConfig({
   provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 ```
 
 ### Multi-Provider Configuration
@@ -151,10 +151,10 @@ compute.setConfig({
 });
 
 // Uses configured strategy
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Force a specific provider for one call
-const modalSandbox = await compute.sandbox.create({ provider: 'modal' });
+const modalSandbox = await compute.instances.create({ provider: 'modal' });
 ```
 
 ### Switching Providers at Runtime
@@ -169,7 +169,7 @@ compute.setConfig({
   provider: e2b({ apiKey: process.env.E2B_API_KEY }),
 });
 
-const e2bSandbox = await compute.sandbox.create();
+const e2bSandbox = await compute.instances.create();
 await e2bSandbox.runCommand('python -c "import pandas as pd"');
 await e2bSandbox.destroy();
 
@@ -181,7 +181,7 @@ compute.setConfig({
   }),
 });
 
-const modalSandbox = await compute.sandbox.create();
+const modalSandbox = await compute.instances.create();
 await modalSandbox.runCommand('python -c "import torch; print(torch.cuda.is_available())"');
 await modalSandbox.destroy();
 ```
@@ -192,20 +192,20 @@ await modalSandbox.destroy();
 
 ```typescript
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create with options
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   runtime: 'python',
   timeout: 300000,
   metadata: { userId: '123' }
 });
 
 // Get existing sandbox
-const sandbox = await compute.sandbox.getById('sandbox-id');
+const sandbox = await compute.instances.getById('sandbox-id');
 
 // List sandboxes
-const sandboxes = await compute.sandbox.list();
+const sandboxes = await compute.instances.list();
 
 // Destroy sandbox
 await sandbox.destroy();
@@ -252,7 +252,7 @@ await sandbox.filesystem.remove('/tmp/hello.py');
 ```typescript
 import { compute } from 'computesdk';
 
-const sandbox = await compute.sandbox.create({ runtime: 'python' });
+const sandbox = await compute.instances.create({ runtime: 'python' });
 
 // Create project structure
 await sandbox.filesystem.mkdir('/analysis');
@@ -406,11 +406,11 @@ Full TypeScript support with comprehensive type definitions:
 
 ```typescript
 import type { 
-  Sandbox,
-  SandboxInfo,
+  InstanceInterface,
+  InstanceInfo,
   CodeResult,
   CommandResult,
-  CreateSandboxOptions
+  CreateInstanceOptions
 } from 'computesdk';
 ```
 

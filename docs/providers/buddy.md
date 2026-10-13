@@ -54,7 +54,7 @@ import { buddy } from '@computesdk/buddy';
 
 compute.setConfig({ provider: buddy() });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('echo "hello from buddy"');
 console.log(result.stdout);
@@ -94,7 +94,7 @@ A token issued by one installation is not valid on the others.
 ### Create options
 
 ```typescript
-await compute.sandbox.create({
+await compute.instances.create({
   ports: [3000, { port: 443, type: 'TLS' }],
   resources: '4x8',                  // or cpu / memory, which map onto a preset
   firstBootCommands: 'npm ci',       // runs once, when the sandbox first boots
@@ -119,7 +119,7 @@ Output is streamed as the command runs, with stdout and stderr kept apart, and `
 ## Exposing Ports
 
 ```typescript
-const sandbox = await compute.sandbox.create({ ports: [3000] });
+const sandbox = await compute.instances.create({ ports: [3000] });
 await sandbox.runCommand('npx serve -l 3000', { background: true });
 
 const url = await sandbox.getUrl({ port: 3000 });
@@ -145,13 +145,13 @@ The first filesystem call on a sandbox waits for first-boot setup to finish. Bud
 ## Snapshots
 
 ```typescript
-const snapshot = await compute.snapshot.create(sandbox.sandboxId, { name: 'with-deps' });
+const snapshot = await compute.snapshot.create(sandbox.instanceId, { name: 'with-deps' });
 
 await compute.snapshot.list();
-await compute.snapshot.list({ sandboxId: sandbox.sandboxId });
+await compute.snapshot.list({ instanceId: sandbox.instanceId });
 await compute.snapshot.delete(snapshot.id);
 
-const prepared = await compute.sandbox.create({ snapshotId: snapshot.id });
+const prepared = await compute.instances.create({ snapshotId: snapshot.id });
 ```
 
 Buddy creates snapshots asynchronously and they cannot be restored until they turn `CREATED`, so `create` waits for that. Buddy has no separate template entity, so `compute.template.list` and `compute.template.delete` alias the snapshot methods, and `compute.template.create` throws with a pointer to `compute.snapshot.create`.

@@ -49,7 +49,7 @@ const compute = miosa({
   apiKey: process.env.MIOSA_API_KEY,
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const result = await sandbox.runCommand('node -v');
 console.log(result.stdout);
 await sandbox.destroy();
