@@ -2,6 +2,7 @@ import { defineProvider } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
 import type { Sandbox, SandboxInstance } from '@tangle-network/sandbox';
 import { createIdentity } from './identity';
+import { assertAllocationId, createdAllocationId } from './create-failure';
 
 export interface TangleConfig {
   /** API key, or TANGLE_API_KEY. */
@@ -34,6 +35,31 @@ async function createClient(config: ResolvedConfig): Promise<Sandbox> {
   });
 }
 
+async function removeInstance(client: Sandbox, instanceId: string): Promise<void> {
+  const instance = await client.get(instanceId);
+  if (instance === null) return;
+  assertAllocationId(instanceId, instance.id);
+  try {
+    await instance.delete({ until: 'removed' });
+  } catch (deletionError) {
+    let remaining: SandboxInstance | null;
+    try {
+      remaining = await client.get(instanceId);
+    } catch (confirmationError) {
+      throw new AggregateError(
+        [deletionError, confirmationError],
+        'Tangle removal and its absence check failed for ' + instanceId + '.',
+        { cause: deletionError },
+      );
+    }
+    if (remaining !== null) throw deletionError;
+    return;
+  }
+  if (await client.get(instanceId) !== null) {
+    throw new Error('Tangle did not confirm removal of instance ' + instanceId + '.');
+  }
+}
+
 const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
   name: 'tangle',
   methods: {
@@ -55,22 +81,39 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
         const cpuCores = options.cpu ?? config.cpu;
         const memoryMB = options.memory ?? config.memory;
         const diskGB = options.disk ?? config.disk;
-        const instance = await client.createIsolated({
-          name: identity.name,
-          idempotencyKey: identity.idempotencyKey,
-          ...(image !== undefined ? { environment: image } : {}),
-          agent: false,
-          ephemeral: true,
-          ...(cpuCores !== undefined || memoryMB !== undefined || diskGB !== undefined
-            ? { resources: { cpuCores, memoryMB, diskGB } } : {}),
-          env: options.envs,
-          metadata: options.metadata,
-          egressPolicy: { mode: 'open' },
-          ...(timeout !== undefined ? { maxLifetimeSeconds: Math.ceil(timeout / 1000) } : {}),
-        }, {
-          timeoutMs: config.createTimeout,
-          signal: options.signal,
-        });
+        let instance: SandboxInstance;
+        try {
+          instance = await client.createIsolated({
+            name: identity.name,
+            idempotencyKey: identity.idempotencyKey,
+            ...(image !== undefined ? { environment: image } : {}),
+            agent: false,
+            ephemeral: true,
+            ...(cpuCores !== undefined || memoryMB !== undefined || diskGB !== undefined
+              ? { resources: { cpuCores, memoryMB, diskGB } } : {}),
+            env: options.envs,
+            metadata: options.metadata,
+            egressPolicy: { mode: 'open' },
+            ...(timeout !== undefined ? { maxLifetimeSeconds: Math.ceil(timeout / 1000) } : {}),
+          }, {
+            timeoutMs: config.createTimeout,
+            signal: options.signal,
+          });
+        } catch (creationError) {
+          const allocationId = createdAllocationId(creationError, identity.idempotencyKey);
+          if (allocationId !== undefined) {
+            try {
+              await removeInstance(client, allocationId);
+            } catch (cleanupError) {
+              throw new AggregateError(
+                [creationError, cleanupError],
+                'Tangle creation failed and cleanup could not be confirmed for ' + allocationId + '.',
+                { cause: creationError },
+              );
+            }
+          }
+          throw creationError;
+        }
         return { instance, instanceId: instance.id };
       },
 
@@ -91,19 +134,7 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
       },
 
       destroy: async (config, instanceId) => {
-        const client = await createClient(config);
-        const instance = await client.get(instanceId);
-        if (instance === null) return;
-        try {
-          await instance.delete({ until: 'removed' });
-        } catch (error) {
-          // A concurrent deletion is successful only when the API confirms absence.
-          if (await client.get(instanceId) !== null) throw error;
-          return;
-        }
-        if (await client.get(instanceId) !== null) {
-          throw new Error('Tangle did not confirm removal of instance ' + instanceId + '.');
-        }
+        await removeInstance(await createClient(config), instanceId);
       },
 
       runCommand: async (

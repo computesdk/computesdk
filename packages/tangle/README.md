@@ -51,11 +51,20 @@ Per-create `cpu`, `memory`, `disk`, `image` (or `templateId`), `timeout`,
 repeat requests must also keep their other options unchanged. Independent creates
 receive fresh keys. `signal` is forwarded to the SDK's create request.
 
-Creation failure recovery remains unqualified: the pinned SDK can allocate an
-instance and then throw a readiness error without its allocation ID or create
-receipt. A bounded list returning no matches cannot rule out a late allocation.
-This provider does not promise automatic cleanup or safe replay of that failure;
-the native SDK must preserve the allocation receipt before this path is qualified.
+Failed-create cleanup requires a native `PartialFailureError` that carries the
+original allocation ID and this call's idempotency key, plus a create receipt
+confirming `created` and `idempotencyKeyApplied: true`. For that exact allocation,
+the provider requests removal and checks API absence before rethrowing the original
+creation error. Replayed, unknown and incomplete receipts never authorize deletion.
+If cleanup or its confirmation fails, an `AggregateError` retains the creation and
+cleanup errors, with the original creation error as its cause.
+
+This recovery path remains unqualified with the pinned SDK: version 0.60.14 can
+lose that allocation context on readiness failure. Its native fix must be normally
+published and the provider's dependency updated before real qualification.
+Pre-response ambiguity also remains unresolved; a bounded list with no matches
+cannot rule out a late allocation. This package does not promise automatic recovery
+or safe replay of every create failure.
 
 The provider does not convert memory or disk units, guess account limits, or
 promise a particular isolation technology. The native SDK/API owns those properties.
