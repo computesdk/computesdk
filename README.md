@@ -95,6 +95,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **HopX** | `HOPX_API_KEY` | Fast ephemeral sandboxes |
 | **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
 | **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
+| **Lizard** | `LIZARD_API_KEY`, `LIZARD_PROJECT_ID` | Lizard Sandboxes with native command streaming, files and authenticated port URLs |
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
 | **Microsandbox** | `MSB_API_KEY` or `MSB_PROFILE` for cloud; none for explicit local mode | Hardware-isolated microVMs on local machines or microsandbox cloud |
 | **MIOSA** | `MIOSA_API_KEY` | Snapshot-backed Firecracker microVM sandboxes with native filesystem and preview URLs |
@@ -314,6 +315,7 @@ npm install @computesdk/gravixlayer      # GravixLayer provider
 npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
 npm install @computesdk/lightning        # Lightning AI provider
+npm install @computesdk/lizard           # Lizard Sandboxes provider
 npm install @computesdk/modal            # Modal provider
 npm install @computesdk/microsandbox     # Local and cloud microsandbox provider
 npm install @computesdk/miosa            # MIOSA provider
@@ -359,6 +361,7 @@ See individual provider READMEs for details:
 - **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
 - **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
 - **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
+- **[@computesdk/lizard](./packages/lizard)** - Lizard Sandboxes with command streaming, files and authenticated port URLs
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
 - **[@computesdk/miosa](./packages/miosa)** - Snapshot-backed Firecracker microVMs with native filesystem, preview URLs, and checkpoints
 - **[@computesdk/mosaic](./packages/mosaic)** - Firecracker microVMs with preview URLs, snapshots, and container-image environments
@@ -443,3 +446,4 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 [computesdk.com](https://computesdk.com)
 
 </div>
+
