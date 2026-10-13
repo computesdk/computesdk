@@ -117,7 +117,7 @@ ec2({ launchTemplate: 'my-template', credentials: awsCredentialsProvider({ roleA
   error the instance is terminated before throwing. `create({ timeout })` overrides `readyTimeoutMs`.
 - **Commands run as root** via `AWS-RunShellScript`. `env` is exported and `cwd` is entered in the same script;
   `timeout` maps to SSM `executionTimeout` (seconds, rounded up). Timed-out commands return exit code `124`.
-- **Large output**: SSM returns at most 24,000 characters per stream inline. Larger output is written to
+- **Large output**: SSM returns at most 24,000 characters of stdout and 8,000 of stderr inline. Larger output is written to
   `/tmp/computesdk-ssm/` on the instance and read back in ~17 KB chunks (a few SSM calls in parallel, then deleted),
   so it arrives complete but slower: roughly 15–30 s per MB. Each stream keeps its last `maxOutputBytes` (default
   4 MiB) and stderr notes any cut. For big output, set `outputS3Bucket` (the instance profile needs `s3:PutObject`

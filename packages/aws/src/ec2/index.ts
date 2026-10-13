@@ -52,6 +52,8 @@ const COMMAND_DEADLINE_SLACK_MS = 60_000;
 const DEFAULT_EXECUTION_TIMEOUT_S = 3_600;
 /** GetCommandInvocation returns at most this many characters per stream. */
 export const SSM_INLINE_OUTPUT_LIMIT = 24_000;
+/** SSM returns only the first 8,000 characters of stderr inline. */
+export const SSM_INLINE_STDERR_LIMIT = 8_000;
 export const SPILL_MARKER = '__COMPUTESDK_SPILL__';
 const SPILL_DIR = '/tmp/computesdk-ssm';
 /** 17,000 bytes base64-encode to 22,668 characters, under the inline limit. */
@@ -554,7 +556,7 @@ function exitCodeFor(invocation: GetCommandInvocationCommandOutput): number {
 
 /**
  * Runs `script` with stdout/stderr redirected to files. Small output is printed as usual and the files removed;
- * output over the inline limit stays on disk and only `SPILL_MARKER <stdoutBytes> <stderrBytes>` is printed.
+ * output over the inline limits (24,000 stdout / 8,000 stderr) stays on disk and only `SPILL_MARKER <stdoutBytes> <stderrBytes>` is printed.
  */
 export function spillScript(script: string, id: string): string {
   const out = `${SPILL_DIR}/${id}.out`;
@@ -566,7 +568,7 @@ export function spillScript(script: string, id: string): string {
     `) >${out} 2>${err}`,
     '__csdk_rc=$?',
     `__csdk_so=$(wc -c <${out} | tr -d ' '); __csdk_se=$(wc -c <${err} | tr -d ' ')`,
-    `if [ "$__csdk_so" -le ${SSM_INLINE_OUTPUT_LIMIT} ] && [ "$__csdk_se" -le ${SSM_INLINE_OUTPUT_LIMIT} ]; then`,
+    `if [ "$__csdk_so" -le ${SSM_INLINE_OUTPUT_LIMIT} ] && [ "$__csdk_se" -le ${SSM_INLINE_STDERR_LIMIT} ]; then`,
     `  cat ${out}; cat ${err} >&2; rm -f ${out} ${err}`,
     'else',
     `  echo "${SPILL_MARKER} $__csdk_so $__csdk_se"`,
@@ -657,7 +659,7 @@ interface SpilledStream {
 const chunkRead = (file: string, offset: number) =>
   `tail -c +${offset + 1} ${file} | head -c ${READBACK_CHUNK_BYTES} | base64 | tr -d '\\n'`;
 
-/** Reads spilled output back in base64 chunks (one stdout + one stderr chunk per SSM command), then deletes it. */
+/** Reads spilled output back in base64 chunks, one per SSM command and always on stdout (stderr is capped at 8,000), then deletes it. */
 async function readSpilled(
   context: Context,
   sandbox: Ec2Sandbox,
@@ -671,19 +673,16 @@ async function readSpilled(
   };
   const out = stream('out', sizes.stdout);
   const err = stream('err', sizes.stderr);
-  const commands = Array.from({ length: Math.max(out.chunks.length, err.chunks.length) }, (_, i) => i);
+  const reads = [out, err].flatMap((spilled) => Array.from({ length: spilled.chunks.length }, (_, index) => ({ spilled, index })));
 
   try {
-    await inParallel(commands, READBACK_CONCURRENCY, async (i) => {
-      const parts: string[] = [];
-      if (i < out.chunks.length) parts.push(chunkRead(out.file, out.start + i * READBACK_CHUNK_BYTES));
-      if (i < err.chunks.length) parts.push(`{ ${chunkRead(err.file, err.start + i * READBACK_CHUNK_BYTES)}; } >&2`);
-      const invocation = await ssmRunOk(context, sandbox, parts.join('\n'), 'reading back command output');
-      if (i < out.chunks.length) out.chunks[i] = Buffer.from((invocation.StandardOutputContent ?? '').trim(), 'base64');
-      if (i < err.chunks.length) err.chunks[i] = Buffer.from((invocation.StandardErrorContent ?? '').trim(), 'base64');
+    await inParallel(reads, READBACK_CONCURRENCY, async ({ spilled, index }) => {
+      const script = chunkRead(spilled.file, spilled.start + index * READBACK_CHUNK_BYTES);
+      const invocation = await ssmRunOk(context, sandbox, script, 'reading back command output');
+      spilled.chunks[index] = Buffer.from((invocation.StandardOutputContent ?? '').trim(), 'base64');
     });
   } finally {
-    await ssmRun(context, sandbox, `rm -f ${out.file} ${err.file}`, READBACK_TIMEOUT_S).catch(() => {});
+    await removeSpilled(context, sandbox, id);
   }
 
   const notes: string[] = [];
@@ -691,6 +690,19 @@ async function readSpilled(
     if (s.start > 0) notes.push(`[aws-ec2] ${name} truncated to the last ${s.size - s.start} of ${s.size} bytes (maxOutputBytes)`);
   }
   return { stdout: Buffer.concat(out.chunks).toString('utf8'), stderr: Buffer.concat(err.chunks).toString('utf8'), notes };
+}
+
+/** Best effort and not awaited past SendCommand: a cleanup must never fail or delay the caller. */
+async function removeSpilled(context: Context, sandbox: Ec2Sandbox, id: string): Promise<void> {
+  try {
+    await context.clients.ssm.send(new SendCommandCommand({
+      DocumentName: 'AWS-RunShellScript',
+      InstanceIds: [sandbox.instanceId],
+      Parameters: { commands: [`rm -f ${SPILL_DIR}/${id}.out ${SPILL_DIR}/${id}.err`], executionTimeout: ['60'] },
+    }));
+  } catch {
+    // the instance may already be gone
+  }
 }
 
 async function spilledSizes(context: Context, sandbox: Ec2Sandbox, id: string): Promise<{ stdout: number; stderr: number }> {
@@ -722,12 +734,14 @@ async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCom
   const spillId = !config.outputS3Bucket && !options?.background ? randomUUID() : undefined;
   const script = buildScript(command, options);
 
-  const { commandId, invocation } = await ssmRun(
-    context,
-    sandbox,
-    spillId ? spillScript(script, spillId) : script,
-    executionTimeoutS,
-  );
+  let run: SsmRun;
+  try {
+    run = await ssmRun(context, sandbox, spillId ? spillScript(script, spillId) : script, executionTimeoutS);
+  } catch (error) {
+    if (spillId) await removeSpilled(context, sandbox, spillId);
+    throw error;
+  }
+  const { commandId, invocation } = run;
 
   let stdout = invocation.StandardOutputContent ?? '';
   let stderr = invocation.StandardErrorContent ?? '';
@@ -752,7 +766,7 @@ async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCom
       stdout.length >= SSM_INLINE_OUTPUT_LIMIT
         ? readS3Output(context, outputS3Key(config.outputS3KeyPrefix, commandId, sandbox.instanceId, 'stdout'), stdout)
         : stdout,
-      stderr.length >= SSM_INLINE_OUTPUT_LIMIT
+      stderr.length >= SSM_INLINE_STDERR_LIMIT
         ? readS3Output(context, outputS3Key(config.outputS3KeyPrefix, commandId, sandbox.instanceId, 'stderr'), stderr)
         : stderr,
     ]);

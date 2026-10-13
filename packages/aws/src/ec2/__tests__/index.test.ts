@@ -26,6 +26,7 @@ import {
   SANDBOX_NAME_TAG_KEY,
   SPILL_MARKER,
   SSM_INLINE_OUTPUT_LIMIT,
+  SSM_INLINE_STDERR_LIMIT,
   ec2,
   buildOverrides,
   buildScript,
@@ -443,7 +444,8 @@ describe('runCommand', () => {
     const script = spillScript('echo hi', 'abc');
     expect(script).toMatch(/^mkdir -p \/tmp\/computesdk-ssm/);
     expect(script).toContain('(\necho hi\n) >/tmp/computesdk-ssm/abc.out 2>/tmp/computesdk-ssm/abc.err');
-    expect(script).toContain(`-le ${SSM_INLINE_OUTPUT_LIMIT} ]`);
+    expect(script).toContain(`"$__csdk_so" -le ${SSM_INLINE_OUTPUT_LIMIT} ]`);
+    expect(script).toContain(`"$__csdk_se" -le ${SSM_INLINE_STDERR_LIMIT} ]`);
     expect(script).toContain(`echo "${SPILL_MARKER} $__csdk_so $__csdk_se"`);
     expect(script.endsWith('exit $__csdk_rc')).toBe(true);
   });
@@ -464,13 +466,10 @@ describe('runCommand', () => {
       if (script.startsWith('echo "$(wc')) {
         return { Status: 'Success', StandardOutputContent: `${files.out.length} ${files.err.length}\n` };
       }
-      const read = (ext: 'out' | 'err') => {
-        const m = new RegExp(`tail -c \\+(\\d+) \\S+\\.${ext} \\| head -c (\\d+)`).exec(script);
-        if (!m) return '';
-        const offset = Number(m[1]) - 1;
-        return files[ext].subarray(offset, offset + Number(m[2])).toString('base64');
-      };
-      return { Status: 'Success', StandardOutputContent: read('out'), StandardErrorContent: read('err') };
+      const m = /tail -c \+(\d+) \S+\.(out|err) \| head -c (\d+)/.exec(script)!;
+      const offset = Number(m[1]) - 1;
+      const file = files[m[2] as 'out' | 'err'];
+      return { Status: 'Success', StandardOutputContent: file.subarray(offset, offset + Number(m[3])).toString('base64') };
     });
     return [...scripts.values()];
   }
@@ -489,10 +488,22 @@ describe('runCommand', () => {
     const result = await sandbox.runCommand('big');
 
     expect(result).toMatchObject({ stdout: out.toString('utf8'), stderr: 'warn\n', exitCode: 3 });
-    expect(readBacks()).toHaveLength(Math.ceil(out.length / 17_000));
+    expect(readBacks()).toHaveLength(Math.ceil(out.length / 17_000) + 1);
     const cleanups = ssm.commandCalls(SendCommandCommand).filter((call) => call.args[0].input.Parameters!.commands![0]!.startsWith('rm -f'));
     expect(cleanups).toHaveLength(1);
     expect(s3.calls()).toHaveLength(0);
+  });
+
+  it('reads large stderr back on stdout, past the 8,000-character stderr limit', async () => {
+    const sandbox = await launch();
+    const err = Buffer.from('e'.repeat(30_000));
+    mockSpill({ out: Buffer.from('ok\n'), err }, { Status: 'Success', ResponseCode: 0, StandardOutputContent: `${SPILL_MARKER} 3 ${err.length}` });
+
+    const result = await sandbox.runCommand('noisy');
+
+    expect(result).toMatchObject({ stdout: 'ok\n', stderr: err.toString('utf8') });
+    expect(readBacks().every((script) => !script.includes('>&2'))).toBe(true);
+    expect(readBacks()).toHaveLength(1 + Math.ceil(err.length / 17_000));
   });
 
   it('keeps only the last maxOutputBytes of a spilled stream and says so', async () => {
@@ -577,6 +588,8 @@ describe('runCommand', () => {
       Date.now = realNow;
     }
     expect(ssm.commandCalls(CancelCommandCommand)).toHaveLength(1);
+    const cleanup = ssm.commandCalls(SendCommandCommand).map((call) => call.args[0].input.Parameters!.commands![0]!).at(-1);
+    expect(cleanup).toMatch(/^rm -f \/tmp\/computesdk-ssm\/[0-9a-f-]+\.out \/tmp\/computesdk-ssm\/[0-9a-f-]+\.err$/);
   });
 });
 
