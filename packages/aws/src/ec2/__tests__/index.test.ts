@@ -528,6 +528,18 @@ describe('runCommand', () => {
     expect(result.stderr).toContain('[aws-ec2] command timed out after 1s');
   });
 
+  it('removes spill files when SSM reports the command cancelled', async () => {
+    const sandbox = await launch();
+    mockCommand({ Status: 'Cancelled', ResponseCode: -1, StandardOutputContent: '' });
+
+    const result = await sandbox.runCommand('sleep 999');
+
+    expect(result.exitCode).toBe(130);
+    const scripts = ssm.commandCalls(SendCommandCommand).map((call) => call.args[0].input.Parameters!.commands![0]!);
+    expect(scripts).toHaveLength(2);
+    expect(scripts[1]).toMatch(/^rm -f \/tmp\/computesdk-ssm\/[0-9a-f-]+\.out \/tmp\/computesdk-ssm\/[0-9a-f-]+\.err$/);
+  });
+
   it('does not wrap background commands', async () => {
     const sandbox = await launch();
     mockCommand({ Status: 'Success', ResponseCode: 0, StandardOutputContent: '' });
