@@ -45,7 +45,7 @@ const compute = cloudflare({
   sandboxApiKey: process.env.CLOUDFLARE_SANDBOX_API_KEY,
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(
   "node -e 'console.log(\"Hello from Cloudflare!\")'"
@@ -111,7 +111,7 @@ const compute = cloudflare({
 Or per-sandbox at creation time:
 
 ```typescript
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   envs: { NODE_ENV: 'production' },
 });
 ```
@@ -121,7 +121,7 @@ const sandbox = await compute.sandbox.create({
 Choose the size and image of a new sandbox when you create it:
 
 ```typescript
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   vcpu: 2,
   memoryMib: 6144,
   diskMb: 12000,

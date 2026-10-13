@@ -1,8 +1,10 @@
-# Sandbox (interface)
+# Instance (interface)
 
 ## Overview
 
-Methods available for interacting with a compute sandbox.
+Methods available for interacting with a compute sandbox instance. Exported as the `InstanceInterface` type (`Instance` internally).
+
+> **Deprecated alias:** the `Sandbox` / `SandboxInterface` type names still work as aliases for `InstanceInterface`.
 
 <br/>
 <br/>
@@ -236,9 +238,9 @@ Get information about the sandbox including status, provider, and metadata.
 
 **Parameters:** None
 
-**Returns:** `Promise<SandboxInfo>` - Sandbox information including status and configuration
+**Returns:** `Promise<InstanceInfo>` - Sandbox information including status and configuration
 
-**SandboxInfo interface:**
+**InstanceInfo interface:**
 - `id` (string): Unique identifier for the sandbox
 - `provider` (string): Provider hosting the sandbox (e.g., 'e2b', 'modal', 'docker')
 - `status` (string): Current sandbox status ('running' | 'stopped' | 'error')

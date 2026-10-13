@@ -60,7 +60,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   name: 'computesdk-demo',
   envs: {
     APP_ENV: 'dev',
@@ -81,7 +81,7 @@ await sandbox.destroy();
 Snapshot operations require `tenantId` because Quilt validates `X-Tenant-Id` on snapshot routes.
 
 ```typescript
-const snapshot = await provider.snapshot?.create(sandbox.sandboxId, {
+const snapshot = await provider.snapshot?.create(sandbox.instanceId, {
   name: 'baseline',
   metadata: { branch: 'main' },
 });

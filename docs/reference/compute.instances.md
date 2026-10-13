@@ -1,9 +1,11 @@
-# compute.sandbox
+# compute.instances
 
 
 ## Overview
 
 Core methods for creating, destroying, listing, and retrieving sandbox instances.
+
+> **Deprecated alias:** `compute.sandbox` still works as an alias for `compute.instances` — prefer `compute.instances` in new code.
 
 
 ---
@@ -14,7 +16,7 @@ Create a new compute sandbox instance.
 
 **Parameters:**
 
-- `options` (CreateSandboxOptions, optional): Configuration options for sandbox creation
+- `options` (CreateInstanceOptions, optional): Configuration options for sandbox creation
   - `timeout` (number, optional): Sandbox execution timeout in milliseconds
   - `templateId` (string, optional): Provider-agnostic template or image identifier to boot from
   - `snapshotId` (string, optional): Snapshot ID to restore from; each provider maps this to its native concept (E2B template, Daytona snapshot, Modal image, etc.)
@@ -24,16 +26,16 @@ Create a new compute sandbox instance.
   - `name`, `namespace`, `directory` (string, optional): Provider-specific naming/placement hints
   - Additional provider-specific properties are passed through (e.g. `domain` for E2B)
 
-**Returns:** `Promise<Sandbox>` - New sandbox instance ready for code execution and commands
+**Returns:** `Promise<InstanceInterface>` - New sandbox instance ready for code execution and commands
 
-**Sandbox instance properties:**
-- `sandboxId` (string): Unique identifier for the sandbox
+**Instance properties:**
+- `instanceId` (string): Unique identifier for the sandbox
 - `provider` (string): Provider hosting the sandbox (e.g., 'e2b', 'modal', 'vercel')
-- `filesystem` (SandboxFileSystem): File system operations interface
+- `filesystem` (InstanceFileSystem): File system operations interface
 - Core methods: `runCommand()`, `getInfo()`, `getUrl()`, `destroy()`
-- See [Sandbox API Reference](./Sandbox.md) for complete interface documentation
+- See [Instance API Reference](./Instance.md) for complete interface documentation
 
-**CreateSandboxOptions interface:**
+**CreateInstanceOptions interface:**
 ```typescript
 {
   timeout?: number;                // Execution timeout in milliseconds
@@ -57,17 +59,17 @@ import { e2b } from '@computesdk/e2b';
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 // Basic sandbox creation
-const sandbox = await compute.sandbox.create();
-console.log(sandbox.sandboxId);  // "sb_abc123..."
+const sandbox = await compute.instances.create();
+console.log(sandbox.instanceId);  // "sb_abc123..."
 console.log(sandbox.provider);   // "e2b"
 
 // With timeout (30 minutes)
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   timeout: 30 * 60 * 1000
 });
 
 // With environment variables
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   envs: {
     API_KEY: 'your-api-key',
     NODE_ENV: 'production',
@@ -76,12 +78,12 @@ const sandbox = await compute.sandbox.create({
 });
 
 // With provider template/image
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   templateId: 'your-template-id'
 });
 
 // With custom metadata
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   metadata: {
     userId: 'user-123',
     projectId: 'proj-456',
@@ -90,7 +92,7 @@ const sandbox = await compute.sandbox.create({
 });
 
 // With multiple options combined
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   timeout: 60 * 60 * 1000,  // 1 hour
   templateId: 'your-template-id',
   envs: {
@@ -105,7 +107,7 @@ const sandbox = await compute.sandbox.create({
 
 // Error handling - missing credentials
 try {
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
 } catch (error) {
   console.error('Failed to create sandbox:', error.message);
 }
@@ -113,7 +115,7 @@ try {
 
 **Notes:**
 - Configure your provider by importing and initializing a provider package (e.g., `@computesdk/e2b`) with your credentials
-- Each call creates a new sandbox instance with a unique `sandboxId`
+- Each call creates a new sandbox instance with a unique `instanceId`
 - The `timeout` option sets maximum sandbox lifetime; sandboxes auto-terminate after this period
 - The `templateId` parameter is provider-specific (refers to templates, images, or runtime environments)
 - Environment variables set via `envs` are available to all commands and code executed in the sandbox
@@ -124,13 +126,13 @@ try {
 
 ---
 
-## `destroy(sandboxId)`
+## `destroy(instanceId)`
 
 Destroy a sandbox and clean up all associated resources.
 
 **Parameters:**
 
-- `sandboxId` (string, required): Unique identifier of the sandbox to destroy
+- `instanceId` (string, required): Unique identifier of the sandbox to destroy
 
 **Returns:** `Promise<void>` - Resolves when sandbox is successfully destroyed
 
@@ -144,16 +146,16 @@ import { e2b } from '@computesdk/e2b';
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 // Basic cleanup after use
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 // ... use sandbox ...
 await sandbox.destroy();
 
 // Alternative: destroy by ID
-await compute.sandbox.destroy(sandbox.sandboxId);
+await compute.instances.destroy(sandbox.instanceId);
 
 // Batch cleanup - destroy multiple sandboxes
-const sandboxIds = ['sb_123...', 'sb_456...', 'sb_789...'];
-await Promise.all(sandboxIds.map(id => compute.sandbox.destroy(id)));
+const instanceIds = ['sb_123...', 'sb_456...', 'sb_789...'];
+await Promise.all(instanceIds.map(id => compute.instances.destroy(id)));
 
 // With error handling
 try {
@@ -166,7 +168,7 @@ try {
 // Best practice: ensure cleanup with finally block
 let sandbox;
 try {
-  sandbox = await compute.sandbox.create();
+  sandbox = await compute.instances.create();
   await sandbox.runCommand('echo "Hello"');
 } finally {
   if (sandbox) {
@@ -176,7 +178,7 @@ try {
 ```
 
 **Notes:**
-- You can call `sandbox.destroy()` directly on the sandbox instance, or `compute.sandbox.destroy(sandboxId)` with the ID
+- You can call `sandbox.destroy()` directly on the sandbox instance, or `compute.instances.destroy(instanceId)` with the ID
 - Destroying a sandbox terminates all running processes and releases all allocated resources
 - This operation is idempotent - calling destroy on an already-destroyed sandbox succeeds without error
 - Best practice: Use `finally` blocks or cleanup handlers to ensure sandboxes are destroyed even if errors occur
@@ -187,22 +189,22 @@ try {
 
 ---
 
-## `getById(sandboxId)`
+## `getById(instanceId)`
 
 Retrieve an existing sandbox instance by its unique identifier.
 
 **Parameters:**
 
-- `sandboxId` (string, required): Unique identifier of the sandbox to retrieve
+- `instanceId` (string, required): Unique identifier of the sandbox to retrieve
 
-**Returns:** `Promise<Sandbox | null>` - Sandbox instance if found, or `null` if the sandbox doesn't exist
+**Returns:** `Promise<InstanceInterface | null>` - Sandbox instance if found, or `null` if the sandbox doesn't exist
 
-**Sandbox instance properties:**
-- `sandboxId` (string): Unique identifier for the sandbox
+**Instance properties:**
+- `instanceId` (string): Unique identifier for the sandbox
 - `provider` (string): Provider hosting the sandbox
-- `filesystem` (SandboxFileSystem): File system operations interface
+- `filesystem` (InstanceFileSystem): File system operations interface
 - Core methods: `runCommand()`, `getInfo()`, `getUrl()`, `destroy()`
-- See [Sandbox API Reference](./Sandbox.md) for complete interface documentation
+- See [Instance API Reference](./Instance.md) for complete interface documentation
 
 **Examples:**
 
@@ -212,8 +214,8 @@ import { e2b } from '@computesdk/e2b';
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 // Reconnect to existing sandbox by ID
-const sandboxId = 'sb_abc123...';
-const sandbox = await compute.sandbox.getById(sandboxId);
+const instanceId = 'sb_abc123...';
+const sandbox = await compute.instances.getById(instanceId);
 
 if (sandbox) {
   const result = await sandbox.runCommand('echo "Reconnected!"');
@@ -222,30 +224,30 @@ if (sandbox) {
 
 // Store ID and reconnect later
 // Step 1: Create and store ID
-const newSandbox = await compute.sandbox.create();
-const storedId = newSandbox.sandboxId;
+const newSandbox = await compute.instances.create();
+const storedId = newSandbox.instanceId;
 // Store storedId in database, config file, etc.
 
 // Step 2: Later, retrieve using stored ID
-const retrievedSandbox = await compute.sandbox.getById(storedId);
+const retrievedSandbox = await compute.instances.getById(storedId);
 if (retrievedSandbox) {
   await retrievedSandbox.runCommand('npm install');
 }
 
 // Check if sandbox exists before using
-const sandbox = await compute.sandbox.getById(sandboxId);
+const sandbox = await compute.instances.getById(instanceId);
 
 if (sandbox === null) {
   console.log('Sandbox not found - creating new one');
-  const newSandbox = await compute.sandbox.create();
+  const newSandbox = await compute.instances.create();
 } else {
   console.log('Sandbox found - using existing one');
   await sandbox.runCommand('echo "Still active!"');
 }
 
 // Graceful handling of missing sandbox
-const sandboxId = 'sb_might_not_exist...';
-const sandbox = await compute.sandbox.getById(sandboxId);
+const instanceId = 'sb_might_not_exist...';
+const sandbox = await compute.instances.getById(instanceId);
 
 if (sandbox) {
   // Sandbox exists - use it
@@ -277,10 +279,10 @@ import { e2b } from '@computesdk/e2b';
 
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
-const sandboxes = await compute.sandbox.list();
+const sandboxes = await compute.instances.list();
 
 for (const sandbox of sandboxes) {
-  console.log(sandbox.sandboxId);
+  console.log(sandbox.instanceId);
 }
 ```
 

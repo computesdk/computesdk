@@ -59,7 +59,7 @@ const compute = givemeanode({
   apiKey: process.env.GMN_TOKEN,
 })
 
-const sandbox = await compute.sandbox.create()
+const sandbox = await compute.instances.create()
 
 const result = await sandbox.runCommand('node -v')
 console.log(result.stdout) // v24.19.0
@@ -87,7 +87,7 @@ await sandbox.destroy()
 Pass any container image by digest:
 
 ```typescript
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   image: 'ghcr.io/acme/task@sha256:abc...',
 })
 ```
@@ -99,8 +99,8 @@ per sandbox:
 const template = await compute.template.create({
   image: 'ghcr.io/acme/task@sha256:abc...',
 })
-const a = await compute.sandbox.create({ templateId: template.id })
-const b = await compute.sandbox.create({ templateId: template.id })
+const a = await compute.instances.create({ templateId: template.id })
+const b = await compute.instances.create({ templateId: template.id })
 ```
 
 - **The reference must be digest-pinned.** A tag is refused: it can be
@@ -166,8 +166,8 @@ the first request. An idle session does not keep the process alive.
 ## Snapshots
 
 ```typescript
-const snapshot = await compute.snapshot.create(sandbox.sandboxId)
-const copy = await compute.sandbox.create({ snapshotId: snapshot.id })
+const snapshot = await compute.snapshot.create(sandbox.instanceId)
+const copy = await compute.instances.create({ snapshotId: snapshot.id })
 ```
 
 This is the fastest way to get N copies of a prepared environment.

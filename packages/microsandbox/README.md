@@ -29,7 +29,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const result = await sandbox.runCommand('node --version');
 console.log(result.stdout);
 await sandbox.destroy();
@@ -51,7 +51,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 await sandbox.filesystem.writeFile('/tmp/hello.js', 'console.log("hello")');
 console.log((await sandbox.runCommand('node /tmp/hello.js')).stdout);
 await sandbox.destroy();

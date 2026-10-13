@@ -17,7 +17,7 @@ const compute = gravixlayer({
   apiKey: process.env.GRAVIXLAYER_API_KEY,
 })
 
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   templateId: 'base-small',
 })
 const result = await sandbox.runCommand('node --version')

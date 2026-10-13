@@ -36,7 +36,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   templateId: 'coding-agent',
   memory: 256,
 });

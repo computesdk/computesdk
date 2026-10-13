@@ -175,7 +175,7 @@ The `pnpm-workspace.yaml` already includes `packages/*`, so your new package is 
 
 ## 2. Implement the Provider
 
-Use `defineProvider` from `@computesdk/provider` to define your provider. It takes two type parameters -- `TSandbox` (your provider's native sandbox object) and `TConfig` (your configuration type) -- and an object with your provider name and method implementations.
+Use `defineProvider` from `@computesdk/provider` to define your provider. It takes two type parameters -- `TInstance` (your provider's native sandbox object) and `TConfig` (your configuration type) -- and an object with your provider name and method implementations.
 
 ```typescript
 // src/index.ts
@@ -183,8 +183,8 @@ import { defineProvider } from '@computesdk/provider';
 import type { ProviderConfig } from '@computesdk/provider';
 import type {
   CommandResult,
-  SandboxInfo,
-  CreateSandboxOptions,
+  InstanceInfo,
+  CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
 } from 'computesdk';
@@ -200,26 +200,26 @@ interface MyProviderConfig extends ProviderConfig {
 export const myProvider = defineProvider<any, MyProviderConfig>({
   name: 'my-provider',
   methods: {
-    sandbox: {
+    instances: {
       // --- Collection operations ---
 
       create: async (config, options) => {
         const sandbox = await myAPI.createSandbox(config.apiKey, options);
-        return { sandbox, sandboxId: sandbox.id };
+        return { instance: sandbox, instanceId: sandbox.id };
       },
 
-      getById: async (config, sandboxId) => {
-        const sandbox = await myAPI.getSandbox(config.apiKey, sandboxId);
-        return sandbox ? { sandbox, sandboxId } : null;
+      getById: async (config, instanceId) => {
+        const sandbox = await myAPI.getSandbox(config.apiKey, instanceId);
+        return sandbox ? { instance: sandbox, instanceId } : null;
       },
 
       list: async (config) => {
         const sandboxes = await myAPI.listSandboxes(config.apiKey);
-        return sandboxes.map(s => ({ sandbox: s, sandboxId: s.id }));
+        return sandboxes.map(s => ({ instance: s, instanceId: s.id }));
       },
 
-      destroy: async (config, sandboxId) => {
-        await myAPI.destroySandbox(config.apiKey, sandboxId);
+      destroy: async (config, instanceId) => {
+        await myAPI.destroySandbox(config.apiKey, instanceId);
       },
 
       // --- Instance operations ---
@@ -249,17 +249,17 @@ export const myProvider = defineProvider<any, MyProviderConfig>({
 
 ## 3. Sandbox Methods
 
-Every provider must define the `SandboxMethods<TSandbox, TConfig>` interface. The methods below are all required keys, but not every provider can support every operation. For methods your provider doesn't support, throw a descriptive error explaining the limitation.
+Every provider must define the `InstanceMethods<TInstance, TConfig>` interface under `methods.instances` (`methods.sandbox` remains a deprecated alias). The methods below are all required keys, but not every provider can support every operation. For methods your provider doesn't support, throw a descriptive error explaining the limitation.
 
 ### Core methods (must be fully implemented)
 
 | Method | Signature | Description |
 |---|---|---|
-| `create` | `(config, options?) => Promise<{ sandbox, sandboxId }>` | Create a new sandbox |
-| `getById` | `(config, sandboxId) => Promise<{ sandbox, sandboxId } \| null>` | Get sandbox by ID |
-| `destroy` | `(config, sandboxId) => Promise<void>` | Destroy a sandbox |
+| `create` | `(config, options?) => Promise<{ instance, instanceId }>` | Create a new sandbox |
+| `getById` | `(config, instanceId) => Promise<{ instance, instanceId } \| null>` | Get sandbox by ID |
+| `destroy` | `(config, instanceId) => Promise<void>` | Destroy a sandbox |
 | `runCommand` | `(sandbox, command, args?, options?) => Promise<CommandResult>` | Run a shell command |
-| `getInfo` | `(sandbox) => Promise<SandboxInfo>` | Get sandbox info |
+| `getInfo` | `(sandbox) => Promise<InstanceInfo>` | Get sandbox info |
 
 ### Methods that can throw "not supported"
 
@@ -267,7 +267,7 @@ If your provider can't support these, define them but throw a clear error:
 
 | Method | Signature | Description |
 |---|---|---|
-| `list` | `(config) => Promise<Array<{ sandbox, sandboxId }>>` | List all sandboxes |
+| `list` | `(config) => Promise<Array<{ instance, instanceId }>>` | List all sandboxes |
 | `getUrl` | `(sandbox, { port, protocol? }) => Promise<string>` | Get URL for a port |
 
 ```typescript
@@ -285,7 +285,7 @@ interface CommandResult {
   exitCode: number;
 }
 
-interface SandboxInfo {
+interface InstanceInfo {
   id: string;
   status: 'running' | 'stopped' | 'error';
   createdAt: Date;
@@ -329,7 +329,7 @@ For providers that support sandbox templates/images:
 
 ```typescript
 methods: {
-  sandbox: { /* ... */ },
+  instances: { /* ... */ },
   template: {
     create: async (config, options) => { /* ... */ },
     getById: async (config, templateId) => { /* ... */ },
@@ -429,7 +429,7 @@ const compute = myProvider({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from My Provider!"');

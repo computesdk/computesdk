@@ -44,7 +44,7 @@ const compute = docker({
 });
 
 // Create a sandbox and run Python
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const result = await sandbox.runCommand('python -c "print(\"Hello from Python\")"');
 console.log(result.stdout.trim()); // Hello from Python
 
@@ -65,7 +65,7 @@ const compute = docker({
   },
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('node -e "console.log(\"Hello, World!\")"');
 console.log(result.stdout.trim()); // Hello, World!
@@ -196,7 +196,7 @@ Interactive terminals aren’t exposed. Use `runCommand('…')` for non-interact
 ### Sandbox Management
 
 ```ts
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 await sandbox.getInfo(); // { id, provider, status, createdAt, timeout, metadata }
 await sandbox.getUrl({ port, protocol?: 'http' | 'https' });
@@ -225,7 +225,7 @@ if (res.exitCode !== 0) {
 ### Data Science Workflow (Python)
 
 ```ts
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 await sandbox.runCommand('python3 -m pip install --no-cache-dir pandas');
 await sandbox.filesystem.writeFile('/workspace/app.py', `
 import pandas as pd
@@ -239,7 +239,7 @@ await sandbox.destroy();
 ### Stateful Loop
 
 ```ts
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 await sandbox.runCommand('echo boot > /tmp/state');
 const res = await sandbox.runCommand('cat /tmp/state'); // 'boot'
 await sandbox.destroy();
@@ -248,7 +248,7 @@ await sandbox.destroy();
 ### Background Process + Ports
 
 ```ts
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 await sandbox.runCommand('python3 -m http.server 8080', { background: true });
 const url = await sandbox.getUrl({ port: 8080 });
 console.log('Serving at', url);

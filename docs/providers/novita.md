@@ -53,7 +53,7 @@ const compute = novita({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 try {
   // Run a command
@@ -77,7 +77,7 @@ interface NovitaConfig {
 ```
 
 `novita({})` reads the API key from the environment. Set
-`compute.sandbox.create({ timeout: 600_000 })` to override the default lifetime
+`compute.instances.create({ timeout: 600_000 })` to override the default lifetime
 for a sandbox. A command's `runCommand(..., { timeout })` is a separate deadline.
 
 Create from a template with `templateId` or restore a snapshot with `snapshotId`.
@@ -89,9 +89,9 @@ Creation also supports `envs`, `metadata`, `secure`, `allowInternetAccess`,
 
 | Method | Notes |
 | --- | --- |
-| `compute.sandbox.create()` | Creates a sandbox from a template or snapshot. |
-| `compute.sandbox.getById(id)` | Connects to a sandbox; returns `null` when it is not found. Connecting may resume a paused sandbox. |
-| `compute.sandbox.list()` | Fetches all pages of running sandboxes and connects to each. Connections may extend sandbox lifetime. |
+| `compute.instances.create()` | Creates a sandbox from a template or snapshot. |
+| `compute.instances.getById(id)` | Connects to a sandbox; returns `null` when it is not found. Connecting may resume a paused sandbox. |
+| `compute.instances.list()` | Fetches all pages of running sandboxes and connects to each. Connections may extend sandbox lifetime. |
 | `sandbox.destroy()` | Deletes the sandbox; succeeds if it is already gone. |
 | `sandbox.runCommand()` | Supports `cwd`, `env`, `timeout`, background execution, and native `onStdout` / `onStderr` streaming. |
 | `sandbox.getInfo()` | Reads current sandbox information from Novita. |

@@ -59,7 +59,7 @@ const compute = k8s({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from k8s!"');
@@ -81,7 +81,7 @@ Each sandbox is a single Pod with one container:
 * **Annotations**: any `metadata` you pass to `create()` is stored as `computesdk.io/meta-<key>`. Non-string values are JSON-stringified.
 * **Restart policy**: `Never`. Pods are one-shot; recreate the sandbox if the container dies.
 
-`compute.sandbox.list()` returns Pods in the configured `namespace` that match `computesdk.io/managed=true`. Sandboxes in other namespaces are not returned.
+`compute.instances.list()` returns Pods in the configured `namespace` that match `computesdk.io/managed=true`. Sandboxes in other namespaces are not returned.
 
 ### Run Commands
 
@@ -105,7 +105,7 @@ Background commands are launched with `nohup` and their combined stdout/stderr i
 Pass environment variables to the Pod at creation time:
 
 ```typescript
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   envs: {
     API_KEY: 'your-api-key',
     DATABASE_URL: 'postgresql://localhost:5432/mydb',
@@ -131,7 +131,7 @@ const compute = k8s({
   urlTemplate: '{protocol}://{service}.{namespace}.svc.cluster.local:{port}',
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const url = await sandbox.getUrl({ port: 3000 });
 // http://computesdk-sbx-abc123-svc.default.svc.cluster.local:3000
 ```
@@ -176,4 +176,4 @@ Kubeconfig loading precedence:
 * The provider never creates Kubernetes Services. `getUrl` is purely template-based — set `urlTemplate` to match your existing routing setup (ingress, gateway, or DNS).
 * Pod resource requests and limits are fixed (250m / 256Mi requests, 1 CPU / 1Gi limits). Set `image` if you need a different runtime; CPU/memory are not yet configurable.
 * Pods use `restartPolicy: Never`. If the container exits, the sandbox is gone — create a new one.
-* `compute.sandbox.list()` only scans the namespace configured on the provider; it does not enumerate across namespaces.
+* `compute.instances.list()` only scans the namespace configured on the provider; it does not enumerate across namespaces.

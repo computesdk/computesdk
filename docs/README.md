@@ -103,7 +103,7 @@ import { e2b } from '@computesdk/e2b';
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 // Create a sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello World!"');
@@ -175,10 +175,10 @@ compute.setConfig({
 });
 
 // Uses the configured strategy
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Override per call to target a specific provider by name
-const gpuSandbox = await compute.sandbox.create({ provider: 'modal' });
+const gpuSandbox = await compute.instances.create({ provider: 'modal' });
 ```
 
 **Strategies**

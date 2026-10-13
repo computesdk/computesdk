@@ -32,7 +32,7 @@ compute.setConfig({
   provider: lightning({ apiKey: process.env.LIGHTNING_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('echo "Hello from Lightning"');
 console.log(result.stdout);
@@ -102,16 +102,16 @@ import { lightning } from '@computesdk/lightning';
 
 compute.setConfig({ provider: lightning() });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Capture (waits until the snapshot is `ready`)
-const snapshot = await compute.snapshot.create(sandbox.sandboxId);
+const snapshot = await compute.snapshot.create(sandbox.instanceId);
 
 // List (optionally scoped to a source sandbox)
-const snapshots = await compute.snapshot.list({ sandboxId: sandbox.sandboxId });
+const snapshots = await compute.snapshot.list({ instanceId: sandbox.instanceId });
 
 // Restore into a fresh sandbox
-const restored = await compute.sandbox.create({ snapshotId: snapshot.id });
+const restored = await compute.instances.create({ snapshotId: snapshot.id });
 
 // Delete
 await compute.snapshot.delete(snapshot.id);

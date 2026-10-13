@@ -28,7 +28,7 @@ compute.setConfig({
   provider: superserve({ apiKey: process.env.SUPERSERVE_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('node -v');
 console.log(result.stdout);
@@ -77,7 +77,7 @@ superserve({
 Boots a new microVM. Common options:
 
 ```typescript
-await compute.sandbox.create({
+await compute.instances.create({
   templateId: 'superserve/python-3.11',    // optional, defaults to superserve/base
   timeout: 60_000,                          // auto-pause timeout in ms
   envs: { API_KEY: 'value' },
@@ -161,10 +161,10 @@ ComputeSDK's `stopped`, `failed` as `error`, and every other state as
 
 ```typescript
 const items = await provider.sandbox.list();      // read-only, no side effects
-const sandbox = await provider.sandbox.getById(items[0].sandboxId);
+const sandbox = await provider.sandbox.getById(items[0].instanceId);
 ```
 
-`list()` is read-only — it returns `SandboxInfo` stubs without opening a
+`list()` is read-only — it returns `InstanceInfo` stubs without opening a
 session. To actually operate on a listed entry, call `getById(id)`.
 
 Note that `getById()` issues `POST /activate` on the sandbox, which
@@ -185,20 +185,20 @@ require a build spec (`from` + `steps`), which the ComputeSDK
 ### Snapshots
 
 ```typescript
-const snapshot = await provider.snapshot!.create(sandbox.sandboxId, {
+const snapshot = await provider.snapshot!.create(sandbox.instanceId, {
   name: 'before-upgrade',
 });
 
 // Boot a new sandbox from it; processes that were running continue.
 const fork = await provider.sandbox.create({ snapshotId: snapshot.id });
 
-const snapshots = await provider.snapshot!.list({ sandboxId: sandbox.sandboxId });
+const snapshots = await provider.snapshot!.list({ instanceId: sandbox.instanceId });
 await provider.snapshot!.delete(snapshot.id);
 ```
 
 A snapshot saves a sandbox's memory and disk and is kept until deleted, even
 after the original sandbox is gone. Snapshots are listed per sandbox: pass
-`sandboxId` to `list()`, which returns an empty list without it.
+`instanceId` to `list()`, which returns an empty list without it.
 `snapshot.create()` connects to the sandbox first, which resumes it if it is
 paused. See the
 [snapshots guide](https://docs.superserve.ai/sandbox/snapshots).
@@ -209,7 +209,7 @@ Common errors and how to recover:
 
 ```typescript
 try {
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
 } catch (error) {
   const msg = error instanceof Error ? error.message : String(error);
 

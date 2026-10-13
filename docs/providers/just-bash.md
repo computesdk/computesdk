@@ -43,7 +43,7 @@ import { justBash } from '@computesdk/just-bash';
 const compute = justBash({});
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from just-bash!"');

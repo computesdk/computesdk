@@ -27,7 +27,7 @@ import { e2b } from '@computesdk/e2b';
 const compute = e2b({ apiKey: process.env.E2B_API_KEY });
 
 // Create a sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello World!"');
@@ -81,7 +81,7 @@ ComputeSDK methods throw exceptions for API/network failures. For command execut
 
 ```typescript
 try {
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   const result = await sandbox.runCommand('some-command');
 } catch (error) {
   console.error('Failed:', error.message);
@@ -98,7 +98,7 @@ Always destroy sandboxes when done to avoid resource leaks and unnecessary costs
 // ✅ Recommended: Use try-finally
 let sandbox;
 try {
-  sandbox = await compute.sandbox.create();
+  sandbox = await compute.instances.create();
   await sandbox.runCommand('echo "Hello"');
 } finally {
   await sandbox?.destroy();

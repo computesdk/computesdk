@@ -35,7 +35,7 @@ import { compute } from 'computesdk';
 import { novita } from '@computesdk/novita';
 
 compute.setConfig({ provider: novita({}) });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 await sandbox.destroy();
 ```
 
@@ -103,7 +103,7 @@ available through `sandbox.getInstance()` or a separate `Novita` client.
 ## Snapshots
 
 ```typescript
-const snapshot = await sdk.snapshot!.create(sandbox.sandboxId);
+const snapshot = await sdk.snapshot!.create(sandbox.instanceId);
 const restored = await sdk.sandbox.create({ snapshotId: snapshot.id });
 try {
   console.log(await restored.runCommand('ls /tmp'));
@@ -113,7 +113,7 @@ try {
 await sdk.snapshot!.delete(snapshot.id);
 ```
 
-Snapshot creation pauses the source sandbox. `snapshot.list({ sandboxId, limit })`
+Snapshot creation pauses the source sandbox. `snapshot.list({ instanceId, limit })`
 supports filtering by source and a total result limit, fetching additional pages
 as needed. Snapshots return `id`, `snapshotId`, and `provider`; the SDK does not
 provide creation timestamps. Snapshot names and metadata are not supported.

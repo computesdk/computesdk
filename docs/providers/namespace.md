@@ -48,8 +48,8 @@ const compute = namespace({
 });
 
 // Create a new sandbox
-const sandbox = await compute.sandbox.create();
-console.log(`Sandbox created: ${sandbox.sandboxId}`);
+const sandbox = await compute.instances.create();
+console.log(`Sandbox created: ${sandbox.instanceId}`);
 
 // Get sandbox info
 const info = await sandbox.getInfo();
@@ -70,7 +70,7 @@ const compute = namespace({
   memoryMegabytes: 8192,
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 ```
 
 ### Configuration Reference
@@ -114,6 +114,6 @@ interface NamespaceConfig {
 
 ## Next Steps
 
-* Learn about [sandbox lifecycle management](../reference/compute.sandbox)
-* Explore [Sandbox methods](../reference/sandbox/)
+* Learn about [sandbox lifecycle management](../reference/compute.instances)
+* Explore [Instance methods](../reference/Instance.md)
 * View the [@computesdk/namespace package](https://github.com/computesdk/computesdk/blob/main/packages/namespace/README.md)

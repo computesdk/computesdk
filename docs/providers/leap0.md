@@ -51,10 +51,10 @@ const compute = leap0({
 });
 
 // Create sandbox (uses the default template from config)
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Or override the template at create time via templateId
-const sandbox2 = await compute.sandbox.create({
+const sandbox2 = await compute.instances.create({
   templateId: 'system/code-interpreter:v0.1.0',
 });
 

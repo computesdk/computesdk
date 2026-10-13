@@ -36,7 +36,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('echo "hello from Railway"');
 console.log(result.stdout);

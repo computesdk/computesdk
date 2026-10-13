@@ -28,7 +28,7 @@ const compute = codesandbox({
   timeout: 600000 // 10 minutes
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('node -e "console.log(\"Hello from CodeSandbox!\")"');
 console.log(result.stdout);
@@ -143,10 +143,10 @@ const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
 // Resume existing sandbox
-const existing = await compute.sandbox.getById('sandbox-id');
+const existing = await compute.instances.getById('sandbox-id');
 
 // Hibernate sandbox (saves state)
-await compute.sandbox.destroy('sandbox-id'); // Actually hibernates
+await compute.instances.destroy('sandbox-id'); // Actually hibernates
 
 // Note: CodeSandbox doesn't support listing all sandboxes
 // Each sandbox is managed individually

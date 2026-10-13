@@ -52,7 +52,7 @@ const compute = arker({
 });
 
 // Create sandbox (forks the `ubuntu-small` golden by default)
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from Arker!"');
@@ -83,6 +83,6 @@ interface ArkerConfig {
 
 ### Notes
 
-- **Creation is fork-only.** Direct VM creation is disabled; `create()` forks a source VM — a golden/template by name (`templateId` or `source`, `ubuntu-small` by default) or a specific VM by id (`snapshotId`). The `sandboxId` returned by `create()` can be passed back as a `snapshotId` to branch from that sandbox's state; there is no separate snapshot store. `snapshotId` wins if both are given.
+- **Creation is fork-only.** Direct VM creation is disabled; `create()` forks a source VM — a golden/template by name (`templateId` or `source`, `ubuntu-small` by default) or a specific VM by id (`snapshotId`). The `instanceId` returned by `create()` can be passed back as a `snapshotId` to branch from that sandbox's state; there is no separate snapshot store. `snapshotId` wins if both are given.
 - **`getUrl` is not supported** and throws. VMs forked with network reachability enabled get a stable per-VM hostname — see the [Arker SDK](https://github.com/ArkerHQ/arker-sdk) fork network options.
 - **Automatic retries.** The underlying `@arker-ai/sdk` retries transient failures (HTTP 429/502/503/504 and transient backend errors).

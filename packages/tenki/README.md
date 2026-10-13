@@ -30,7 +30,7 @@ import { tenki } from '@computesdk/tenki';
 
 compute.setConfig({ provider: tenki({ apiKey: process.env.TENKI_API_KEY }) });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand('echo "Hello from Tenki!"');
 console.log(result.stdout);
@@ -78,7 +78,7 @@ Workspace API keys infer their workspace server-side. Set `workspaceId`, or `TEN
 Per-sandbox resource overrides are accepted on `create`:
 
 ```typescript
-await compute.sandbox.create({ cpuCores: 4, memoryMb: 8192 });
+await compute.instances.create({ cpuCores: 4, memoryMb: 8192 });
 ```
 
 ## Feature support

@@ -50,7 +50,7 @@ const compute = freestyle({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from Freestyle!"');
@@ -94,4 +94,4 @@ await sandbox.filesystem.exists('/tmp/app.js');
 await sandbox.filesystem.remove('/tmp/app.js');
 ```
 
-Snapshots (`compute.snapshot.create` / `list` / `delete`) and reconnect-by-id (`compute.sandbox.getById`) are supported. `getUrl` is not: Freestyle exposes VMs through mapped domains ([`freestyle.domains`](https://docs.freestyle.sh)), not a stock per-port URL.
+Snapshots (`compute.snapshot.create` / `list` / `delete`) and reconnect-by-id (`compute.instances.getById`) are supported. `getUrl` is not: Freestyle exposes VMs through mapped domains ([`freestyle.domains`](https://docs.freestyle.sh)), not a stock per-port URL.

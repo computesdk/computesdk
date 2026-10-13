@@ -48,7 +48,7 @@ compute.setConfig({
   }),
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 console.log((await sandbox.runCommand('python --version')).stdout);
 await sandbox.destroy();
 ```
@@ -96,13 +96,13 @@ const provider = microsandbox({
 });
 
 compute.setConfig({ provider });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 console.log(await sandbox.getUrl({ port: 3000 }));
 
-const snapshot = await provider.snapshot.create(sandbox.sandboxId, {
+const snapshot = await provider.snapshot.create(sandbox.instanceId, {
   name: 'configured',
 });
-const restored = await compute.sandbox.create({ snapshotId: snapshot.id });
+const restored = await compute.instances.create({ snapshotId: snapshot.id });
 ```
 
 Snapshot creation stops the sandbox, captures its writable root disk, and restarts it. Files on that disk survive, but tmpfs paths such as `/tmp` and running processes are not part of the snapshot. Microsandbox cloud currently returns explicit unsupported errors for `getUrl` and snapshot operations because the cloud backend does not yet publish guest ports or provide disk snapshots.

@@ -53,7 +53,7 @@ const compute = superserve({
 });
 
 // Create sandbox
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Run a command
 const result = await sandbox.runCommand('echo "Hello from Superserve!"');
@@ -82,13 +82,13 @@ interface SuperserveConfig {
 | ------------ | --------- | ------------------------------------------------------------------------------------------------------------- |
 | `create`     | ✅         | Boots a Firecracker microVM; accepts `templateId` to boot from a template or `snapshotId` to boot a snapshot. |
 | `getById`    | ✅         | Connects to a sandbox by id (issues `POST /activate`, auto-resumes paused).                                   |
-| `list`       | ✅         | Read-only — returns `SandboxInfo` stubs without opening a session.                                            |
+| `list`       | ✅         | Read-only — returns `InstanceInfo` stubs without opening a session.                                            |
 | `destroy`    | ✅         | Kills the sandbox by id.                                                                                      |
 | `runCommand` | ✅         | Supports `cwd`, `env`, `timeout`, `background`, and live output via `onStdout`/`onStderr`.                    |
 | `getInfo`    | ✅         | `paused` and `deleted` map to `stopped`, `failed` to `error`, otherwise `running`.                            |
 | `filesystem` | ✅         | `readFile`/`writeFile` use the data plane; `mkdir`/`readdir`/`exists`/`remove` are shell fallbacks.           |
 | `getUrl`     | ✅         | Publishes the port (1024–65535) and returns its preview URL. Published ports are public by default.           |
-| `snapshot`   | ✅         | `create`, `list` (per sandbox — pass `sandboxId`), and `delete`. Snapshots capture memory and disk.           |
+| `snapshot`   | ✅         | `create`, `list` (per sandbox — pass `instanceId`), and `delete`. Snapshots capture memory and disk.           |
 
 ### Notes
 

@@ -49,9 +49,9 @@ const result = await provider.sandbox.runCommand(sandbox, 'echo hello > /mnt/not
 console.log(result.stdout); // "hello"
 
 // Look up later by disk id:
-const byId = await provider.sandbox.getById(sandbox.sandboxId);
+const byId = await provider.sandbox.getById(sandbox.instanceId);
 
-await provider.sandbox.destroy(sandbox.sandboxId);
+await provider.sandbox.destroy(sandbox.instanceId);
 ```
 
 `create()` requires top-level `diskId` as the target disk id.
@@ -76,12 +76,12 @@ await sandbox.runCommand('npm ci', { cwd: '/repo' });
 await sandbox.runCommand('npm test', { cwd: '/repo' });
 
 // Paused sandboxes are resumed automatically on getById/runCommand.
-const resumed = await provider.sandbox.getById(sandbox.sandboxId);
+const resumed = await provider.sandbox.getById(sandbox.instanceId);
 
-await provider.sandbox.destroy(sandbox.sandboxId); // deletes the sandbox
+await provider.sandbox.destroy(sandbox.instanceId); // deletes the sandbox
 ```
 
-Sandbox `create` accepts generic `CreateSandboxOptions` fields (`vcpus`/`cpu`/`cpus`,
+Sandbox `create` accepts generic `CreateInstanceOptions` fields (`vcpus`/`cpu`/`cpus`,
 `memory`/`memoryMiB`, `image`/`templateId`, `envs`, `timeout` (ms → `maxTtlSeconds`))
 plus the Archil-specific keys shown above.
 

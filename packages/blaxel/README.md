@@ -21,7 +21,7 @@ const compute = blaxel({
   ports: [3000, 8080]                  // Exposed ports
 });
 
-const sandbox = await compute.sandbox.create({
+const sandbox = await compute.instances.create({
   timeout: 3600000,   // 1 hour timeout (minimum: 5 minutes — Blaxel rejects
                       // a ttl under 5m; anything shorter is raised to 5m
                       // with a warning)
@@ -175,7 +175,7 @@ const customSandbox = await provider.sandbox.create({
 
 // Reconnect to existing sandbox
 const existing = await provider.sandbox.create({ 
-  sandboxId: 'blaxel-1234567890' 
+  instanceId: 'blaxel-1234567890' 
 });
 
 // Get sandbox by ID
@@ -295,7 +295,7 @@ const compute = blaxel({
   ports: [3000]
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const instance = sandbox.getInstance(); // Typed as SandboxInstance
 
 // Use Blaxel-specific features directly
@@ -336,7 +336,7 @@ try {
     workspace: process.env.BL_WORKSPACE,
     apiKey: process.env.BL_API_KEY
   });
-  const sandbox = await compute.sandbox.create();
+  const sandbox = await compute.instances.create();
   
   const result = await sandbox.runCommand('invalid code');
 } catch (error) {
@@ -366,7 +366,7 @@ const compute = blaxel({
   workspace: process.env.BL_WORKSPACE,
   apiKey: process.env.BL_API_KEY
 });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`python - <<'PY'
 import json
@@ -397,7 +397,7 @@ const compute = blaxel({
   workspace: process.env.BL_WORKSPACE,
   apiKey: process.env.BL_API_KEY
 });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create data file
 await sandbox.filesystem.writeFile('/tmp/data.json', 
@@ -437,7 +437,7 @@ const compute = blaxel({
   workspace: process.env.BL_WORKSPACE,
   apiKey: process.env.BL_API_KEY
 });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Install dependencies
 await sandbox.runCommand('pip install requests beautifulsoup4');
@@ -480,7 +480,7 @@ const compute = blaxel({
   apiKey: process.env.BL_API_KEY,
   ports: [3000]
 });
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 // Create a simple API server
 await sandbox.filesystem.writeFile('/tmp/server.js', `

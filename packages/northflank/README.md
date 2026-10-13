@@ -32,7 +32,7 @@ const compute = northflank({
   runtime: 'node',
 });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 
 const result = await sandbox.runCommand(`node -e "console.log('hello from northflank')"`);
 console.log(result.stdout);
@@ -94,7 +94,7 @@ You can also pass `internalDeployment` on a per-sandbox basis to `create()`; it 
 `create()` accepts these provider-specific options on top of the standard ones:
 
 ```ts
-await compute.sandbox.create({
+await compute.instances.create({
   runtime: 'python',                    // overrides config.runtime
   image: 'my-registry/custom:tag',      // overrides config.image and the runtime default
   ports: [{ name: 'app', internalPort: 3000 }], // overrides config.ports
@@ -165,10 +165,10 @@ Filesystem operations send paths as plain argv elements to the exec proxy (e.g. 
 
 ```ts
 // List managed sandboxes (filtered by servicePrefix)
-const sandboxes = await compute.sandbox.list();
+const sandboxes = await compute.instances.list();
 
 // Look up by service ID (slug of the service name)
-const sandbox = await compute.sandbox.getById('computesdk-1700000000-abc123');
+const sandbox = await compute.instances.getById('computesdk-1700000000-abc123');
 
 // Inspect — refetches the live deployment status
 const info = await sandbox.getInfo();

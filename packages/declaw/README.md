@@ -19,7 +19,7 @@ import { declaw } from '@computesdk/declaw';
 
 const compute = declaw({ apiKey: process.env.DECLAW_API_KEY });
 
-const sandbox = await compute.sandbox.create();
+const sandbox = await compute.instances.create();
 const result = await sandbox.runCommand('node -v');
 console.log(result.stdout); // v20.x.x
 await sandbox.destroy();
