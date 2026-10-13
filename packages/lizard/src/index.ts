@@ -24,7 +24,7 @@ function connection(config: LizardConfig): ConnectionOpts {
   if (!apiKey?.trim()) {
     throw new Error('Set LIZARD_API_KEY or pass apiKey. Create a project-scoped key with Lizard CLI: lizard keys create computesdk --project <project-id>.');
   }
-  return { apiKey, apiUrl: config.apiUrl ?? process.env.LIZARD_API_URL };
+  return { apiKey, apiUrl: config.apiUrl?.trim() || process.env.LIZARD_API_URL?.trim() || undefined };
 }
 
 function projectId(config: LizardConfig): string {
@@ -192,12 +192,12 @@ const createLizard = defineProvider<Sandbox, LizardConfig>({
           createdAt: new Date(info.startedAt),
           timeout: Number.isFinite(end) && Number.isFinite(start) ? Math.max(0, end - start) : 0,
           metadata: {
-            ...info.metadata,
             template: info.template,
             region: info.region,
             runtime: info.runtime,
             size: info.size,
             nativeStatus: info.status,
+            ...info.metadata,
           },
         };
       },

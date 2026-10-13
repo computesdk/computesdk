@@ -77,6 +77,19 @@ describe('Lizard provider', () => {
     }));
   });
 
+  it.each([
+    { label: 'empty environment', env: '', configured: undefined, expected: undefined },
+    { label: 'blank environment', env: '  ', configured: undefined, expected: undefined },
+    { label: 'empty config', env: 'https://env.example.test', configured: '', expected: 'https://env.example.test' },
+    { label: 'explicit config', env: 'https://env.example.test', configured: 'https://config.example.test', expected: 'https://config.example.test' },
+  ])('uses the endpoint fallback for $label', async ({ env, configured, expected }) => {
+    vi.stubEnv('LIZARD_API_URL', env);
+    await lizard({ ...config, apiUrl: configured }).instances.create();
+    expect(Sandbox.create).toHaveBeenCalledWith('interpreter', expect.objectContaining({
+      apiUrl: expected,
+    }));
+  });
+
   it('rejects invalid options before creating a sandbox', async () => {
     const provider = lizard(config);
     await expect(provider.instances.create({ timeout: -1 })).rejects.toThrow('timeout');
@@ -195,6 +208,18 @@ describe('Lizard provider', () => {
       id: 'sb-test', provider: 'lizard', status: 'running', timeout: 300000,
       createdAt: new Date('2026-10-14T00:00:00Z'), metadata: { purpose: 'test' },
     });
+  });
+
+  it('preserves caller metadata when names overlap with native fields', async () => {
+    const labels = { template: 'task-template', region: 'billing-eu', runtime: 'task-runtime', size: 'team-size', nativeStatus: 'task-status' };
+    native.getInfo.mockResolvedValue({
+      sandboxId: 'sb-test', status: 'running', template: 'interpreter',
+      startedAt: '2026-10-14T00:00:00Z', endAt: '2026-10-14T00:05:00Z',
+      metadata: labels,
+    });
+    const instance = await lizard(config).instances.create({ metadata: labels });
+    expect((await instance.getInfo()).metadata).toMatchObject(labels);
+    expect(Sandbox.create).toHaveBeenCalledWith('interpreter', expect.objectContaining({ metadata: labels }));
   });
 
   it('maps files and never hides account or expired-sandbox errors', async () => {
