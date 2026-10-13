@@ -24,6 +24,7 @@ import {
   Ec2ReadyTimeoutError,
   MANAGED_TAG_KEY,
   SANDBOX_NAME_TAG_KEY,
+  SPILL_MARKER,
   SSM_INLINE_OUTPUT_LIMIT,
   ec2,
   buildOverrides,
@@ -31,6 +32,7 @@ import {
   buildTags,
   isEc2CapacityError,
   outputS3Key,
+  spillScript,
   type Ec2Config,
   type Ec2Sandbox,
 } from '../index';
@@ -352,9 +354,10 @@ describe('runCommand', () => {
     expect(input.DocumentName).toBe('AWS-RunShellScript');
     expect(input.InstanceIds).toEqual([INSTANCE_ID]);
     expect(input.Parameters!.executionTimeout).toEqual(['5']);
-    expect(input.Parameters!.commands).toEqual([
-      `export FOO="${escapeShellArg(env.FOO)}"\ncd "/tmp/my dir" || exit 1\necho hi`,
-    ]);
+    expect(input.Parameters!.commands).toHaveLength(1);
+    expect(input.Parameters!.commands![0]).toContain(
+      `\n(\nexport FOO="${escapeShellArg(env.FOO)}"\ncd "/tmp/my dir" || exit 1\necho hi\n) >/tmp/computesdk-ssm/`,
+    );
     expect(input.Parameters!.commands![0]).toContain('a \\"quoted\\" \\$HOME \\`x\\` \\\\ value');
     expect(input).not.toHaveProperty('OutputS3BucketName');
   });
@@ -436,13 +439,89 @@ describe('runCommand', () => {
     await expect(sandbox.runCommand('echo')).rejects.toThrow('ThrottlingException');
   });
 
-  it('returns truncated inline output when no S3 bucket is configured', async () => {
+  it('wraps the script so large output spills to files', () => {
+    const script = spillScript('echo hi', 'abc');
+    expect(script).toMatch(/^mkdir -p \/tmp\/computesdk-ssm/);
+    expect(script).toContain('(\necho hi\n) >/tmp/computesdk-ssm/abc.out 2>/tmp/computesdk-ssm/abc.err');
+    expect(script).toContain(`-le ${SSM_INLINE_OUTPUT_LIMIT} ]`);
+    expect(script).toContain(`echo "${SPILL_MARKER} $__csdk_so $__csdk_se"`);
+    expect(script.endsWith('exit $__csdk_rc')).toBe(true);
+  });
+
+  /** Fakes the instance: the main script reports `main`; read-back scripts slice `files`. */
+  function mockSpill(files: { out: Buffer; err: Buffer }, main: Record<string, unknown>) {
+    const scripts = new Map<string, string>();
+    let n = 0;
+    ssm.on(SendCommandCommand).callsFake((input) => {
+      const id = `cmd-${n++}`;
+      scripts.set(id, input.Parameters.commands[0]);
+      return { Command: { CommandId: id } };
+    });
+    ssm.on(GetCommandInvocationCommand).callsFake((input) => {
+      const script = scripts.get(input.CommandId)!;
+      if (script.startsWith('mkdir -p')) return main;
+      if (script.startsWith('rm -f')) return { Status: 'Success' };
+      if (script.startsWith('echo "$(wc')) {
+        return { Status: 'Success', StandardOutputContent: `${files.out.length} ${files.err.length}\n` };
+      }
+      const read = (ext: 'out' | 'err') => {
+        const m = new RegExp(`tail -c \\+(\\d+) \\S+\\.${ext} \\| head -c (\\d+)`).exec(script);
+        if (!m) return '';
+        const offset = Number(m[1]) - 1;
+        return files[ext].subarray(offset, offset + Number(m[2])).toString('base64');
+      };
+      return { Status: 'Success', StandardOutputContent: read('out'), StandardErrorContent: read('err') };
+    });
+    return [...scripts.values()];
+  }
+
+  const readBacks = () =>
+    ssm.commandCalls(SendCommandCommand).map((call) => call.args[0].input.Parameters!.commands![0]!).filter((c) => c.includes('base64'));
+
+  it('reads spilled output back exactly, across chunk and UTF-8 boundaries', async () => {
     const sandbox = await launch();
-    const truncated = 'x'.repeat(SSM_INLINE_OUTPUT_LIMIT);
-    mockCommand({ Status: 'Success', ResponseCode: 0, StandardOutputContent: truncated });
-    const result = await sandbox.runCommand('yes | head -c 100000');
-    expect(result.stdout).toHaveLength(SSM_INLINE_OUTPUT_LIMIT);
+    const out = Buffer.from(`x${'é'.repeat(30_000)}`);
+    mockSpill(
+      { out, err: Buffer.from('warn\n') },
+      { Status: 'Failed', ResponseCode: 3, StandardOutputContent: `${SPILL_MARKER} ${out.length} 5\n` },
+    );
+
+    const result = await sandbox.runCommand('big');
+
+    expect(result).toMatchObject({ stdout: out.toString('utf8'), stderr: 'warn\n', exitCode: 3 });
+    expect(readBacks()).toHaveLength(Math.ceil(out.length / 17_000));
+    const cleanups = ssm.commandCalls(SendCommandCommand).filter((call) => call.args[0].input.Parameters!.commands![0]!.startsWith('rm -f'));
+    expect(cleanups).toHaveLength(1);
     expect(s3.calls()).toHaveLength(0);
+  });
+
+  it('keeps only the last maxOutputBytes of a spilled stream and says so', async () => {
+    const sandbox = await launch(makeConfig({ maxOutputBytes: 20_000 }));
+    const out = Buffer.from('a'.repeat(10_000) + 'b'.repeat(40_000));
+    mockSpill({ out, err: Buffer.alloc(0) }, { Status: 'Success', ResponseCode: 0, StandardOutputContent: `${SPILL_MARKER} ${out.length} 0` });
+
+    const result = await sandbox.runCommand('big');
+
+    expect(result.stdout).toBe('b'.repeat(20_000));
+    expect(result.stderr).toBe('[aws-ec2] stdout truncated to the last 20000 of 50000 bytes (maxOutputBytes)');
+    expect(readBacks()).toHaveLength(2);
+  });
+
+  it('recovers partial output after a timeout', async () => {
+    const sandbox = await launch();
+    mockSpill({ out: Buffer.from('partial\n'), err: Buffer.alloc(0) }, { Status: 'TimedOut', ResponseCode: -1, StandardOutputContent: '' });
+
+    const result = await sandbox.runCommand('sleep 999', { timeout: 1_000 });
+
+    expect(result).toMatchObject({ stdout: 'partial\n', exitCode: 124 });
+    expect(result.stderr).toContain('[aws-ec2] command timed out after 1s');
+  });
+
+  it('does not wrap background commands', async () => {
+    const sandbox = await launch();
+    mockCommand({ Status: 'Success', ResponseCode: 0, StandardOutputContent: '' });
+    await sandbox.runCommand('sleep 60', { background: true });
+    expect(ssm.commandCalls(SendCommandCommand)[0].args[0].input.Parameters!.commands![0]).toMatch(/^nohup /);
   });
 
   it('reads full output from S3 when the inline output is truncated', async () => {
@@ -458,6 +537,7 @@ describe('runCommand', () => {
     const input = ssm.commandCalls(SendCommandCommand)[0].args[0].input;
     expect(input.OutputS3BucketName).toBe('csdk-output');
     expect(input.OutputS3KeyPrefix).toBe('runs/');
+    expect(input.Parameters!.commands![0]).not.toContain('computesdk-ssm');
     expect(result.stdout).toBe(full);
     expect(result.stderr).toBe('warn');
     const gets = s3.commandCalls(GetObjectCommand);
