@@ -596,6 +596,30 @@ test("seed launcher uses configured SSE port", async () => {
   }
 });
 
+test("seed launcher binds the configured SSE host", async () => {
+  const name = `seed-script-sse-host-${process.pid}`;
+  const script = daemonSeedScript({ name, sseHost: "0.0.0.0" });
+  const launched = await runSeedLauncher(script, ["pwd"]);
+  try {
+    const sseUrl = new URL(launched.daemon.sseUrl);
+    assert.equal(sseUrl.hostname, "0.0.0.0");
+    const status = await new Promise((resolve, reject) => {
+      const req = http.get(`http://127.0.0.1:${sseUrl.port}/events?token=wrong`, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      });
+      req.on("error", reject);
+    });
+    assert.equal(status, 401);
+  } finally {
+    await stopDaemon(name, launched.token);
+  }
+});
+
+test("seed launcher rejects an sseHost that is not an IP address", () => {
+  assert.throws(() => daemonSeedScript({ sseHost: "0.0.0.0;rm" }), /sseHost must be an IPv4 or IPv6 address/);
+});
+
 test("seed launcher replaces a daemon speaking an older protocol on the same socket and port", async () => {
   const reserved = await reserveTcpPort();
   const targetPort = reserved.port;

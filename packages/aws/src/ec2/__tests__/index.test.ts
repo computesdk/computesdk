@@ -586,8 +586,30 @@ describe('helpers', () => {
     expect(tags.every((tag) => tag.Value!.length <= 256)).toBe(true);
   });
 
-  it('getUrl is unsupported', async () => {
+  it('getUrl needs a previewDomain', async () => {
     const sandbox = await launch();
-    await expect(sandbox.getUrl({ port: 3000 })).rejects.toThrow('does not support getUrl');
+    await expect(sandbox.getUrl({ port: 3000 })).rejects.toThrow('needs a preview gateway');
+  });
+
+  it('getUrl returns the preview gateway URL', async () => {
+    const sandbox = await launch(makeConfig({ previewDomain: 'Preview.Example.com.' }));
+    expect(await sandbox.getUrl({ port: 3000 })).toBe(`https://3000-${INSTANCE_ID}.us-east-2.preview.example.com`);
+    expect(await sandbox.getUrl({ port: 38989, protocol: 'wss' })).toBe(
+      `wss://38989-${INSTANCE_ID}.us-east-2.preview.example.com`,
+    );
+    await expect(sandbox.getUrl({ port: 22 })).rejects.toThrow('Invalid preview port');
+  });
+
+  it('binds daemond to all interfaces only with a previewDomain', async () => {
+    const seedHosts: string[] = [];
+    for (const previewDomain of [undefined, 'preview.example.com']) {
+      ssm.reset();
+      const sandbox = await launch(makeConfig({ previewDomain }));
+      mockCommand({ Status: 'Success', ResponseCode: 0, StandardOutputContent: '', StandardErrorContent: '' });
+      await sandbox.startProcess('sleep 1').catch(() => undefined);
+      const script = ssm.commandCalls(SendCommandCommand)[0]!.args[0].input.Parameters!.commands!.join('\n');
+      seedHosts.push(/sseHost\W+([0-9.]+)/.exec(script)![1]!);
+    }
+    expect(seedHosts).toEqual(['127.0.0.1', '0.0.0.0']);
   });
 });

@@ -35,6 +35,8 @@ import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, CreateInstanceOptions, InstanceInfo, RunCommandOptions } from 'computesdk';
 
+import { previewHostname } from './preview';
+
 const PROVIDER = 'aws-ec2';
 
 export const MANAGED_TAG_KEY = 'computesdk:managed';
@@ -99,6 +101,11 @@ export interface Ec2Config {
   outputS3Bucket?: string;
   /** Key prefix inside `outputS3Bucket`. */
   outputS3KeyPrefix?: string;
+  /**
+   * Domain served by the preview gateway (`computesdk-aws-ec2-gateway up`). Enables `getUrl`:
+   * `https://<port>-<instanceId>.<region>.<previewDomain>`, and binds daemond's event port so streaming works.
+   */
+  previewDomain?: string;
 }
 
 export type Ec2Lifecycle = 'spot' | 'on-demand';
@@ -684,9 +691,17 @@ export const ec2 = defineProvider<Ec2Sandbox, Ec2Config>({
         };
       },
 
-      getUrl: async () => {
-        throw new Error('aws-ec2 does not support getUrl: instances accept no inbound traffic (commands run over SSM).');
+      getUrl: async (sandbox, { port, protocol }) => {
+        const { previewDomain } = contextForSandbox(sandbox).config;
+        if (!previewDomain) {
+          throw new Error(
+            'aws-ec2 getUrl needs a preview gateway: run `npx computesdk-aws-ec2-gateway up` and pass ec2({ previewDomain }).',
+          );
+        }
+        return `${protocol ?? 'https'}://${previewHostname(previewDomain, sandbox.region, sandbox.instanceId, port)}`;
       },
+
+      daemonSseHost: (sandbox) => (contextForSandbox(sandbox).config.previewDomain ? '0.0.0.0' : undefined),
 
       getInstance: (sandbox) => sandbox,
     },

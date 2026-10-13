@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isIP } from "node:net";
 import type { SeedCommandOptions, SeedInput, SeedInvocationResult, SeedScriptConfig } from "./types.js";
 
 // Bump whenever the launcher<->daemon wire protocol changes. The launcher
@@ -15,6 +16,7 @@ function loadSeedLauncherRuntimeSource(): string {
 function createLauncherScript(config: {
   name: string;
   socket?: string;
+  sseHost: string;
   ssePort: number;
   sseStrictPort: boolean;
   maxJobOutputBytes?: number;
@@ -54,7 +56,7 @@ function createLauncherScript(config: {
     "function parseInput(argv){if(argv.length===0)throw new Error('seed launcher requires a command or JSON payload');if(argv.length===1){let raw=argv[0];if(raw.startsWith('b64:'))raw=Buffer.from(raw.slice(4),'base64').toString('utf8');try{const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(typeof parsed.command==='string'||typeof parsed.wait==='string'||typeof parsed.status==='string'||typeof parsed.kill==='string'||typeof parsed.stdin==='string'||typeof parsed.closeStdin==='string'))return parsed}catch{}return {command:raw,args:[]}}return {command:argv[0],args:argv.slice(1)}}",
     "function buildRequest(input,token,requestId){if(typeof input.stdin==='string')return {message:{id:requestId,type:'stdin',token,payload:{jobId:input.stdin,data:String(input.data??''),encoding:input.encoding==='base64'?'base64':'utf8'}},timeoutMs:30000};if(typeof input.closeStdin==='string')return {message:{id:requestId,type:'closeStdin',token,payload:{jobId:input.closeStdin}},timeoutMs:5000};if(typeof input.wait==='string'){const t=Number.isFinite(input.timeoutMs)?Number(input.timeoutMs):undefined;return {message:{id:requestId,type:'wait',token,payload:{jobId:input.wait,timeoutMs:t}},timeoutMs:(t===undefined?7*24*3600*1000:Math.max(1000,t))+2000}}if(typeof input.status==='string')return {message:{id:requestId,type:'status',token,payload:{jobId:input.status}},timeoutMs:5000};if(typeof input.kill==='string')return {message:{id:requestId,type:'kill',token,payload:{jobId:input.kill,signal:typeof input.signal==='string'?input.signal:undefined}},timeoutMs:5000};const detach=input.detach===true;const t=Number.isFinite(input.timeoutMs)?Number(input.timeoutMs):undefined;return {message:{id:requestId,type:'exec',token,payload:{command:input.command,args:Array.isArray(input.args)?input.args:[],cwd:typeof input.cwd==='string'?input.cwd:undefined,env:input.env&&typeof input.env==='object'?input.env:undefined,shell:input.shell===true,timeoutMs:t,detach,stdin:input.stdin===true}},timeoutMs:detach?10000:Math.max(1000,t||60000)+2000}}",
     "async function replaceDaemon(token,state,health){try{await request({id:'stop-'+Date.now(),type:'stop',token},2000)}catch{}const pid=(health&&Number.isFinite(health.pid)&&health.pid)||(state&&Number.isFinite(state.pid)&&state.pid)||null;const deadline=Date.now()+5000;while(Date.now()<deadline){let alive=false;try{await request({id:'health-'+Date.now(),type:'health',token},500);alive=true}catch{}if(!alive){try{fs.unlinkSync(socketPath)}catch{}return}if(pid){try{process.kill(pid,Date.now()>deadline-2000?'SIGKILL':'SIGTERM')}catch{}}await sleep(100)}throw new Error('seed launcher could not replace daemon speaking protocol '+String(health&&health.version)+' with '+VERSION)}",
-    "async function ensureDaemon(){mkdirp(path.dirname(socketPath));mkdirp(baseDir);fs.writeFileSync(daemonFile,DAEMON_SOURCE,'utf8');const state=readState();const token=state&&typeof state.token==='string'&&state.token?state.token:randomToken();let reused=false;let health=null;try{health=await waitForHealthy(token,500);reused=true}catch{}if(health&&health.version!==VERSION){await replaceDaemon(token,state,health);health=null;reused=false}if(!health){const encoded=Buffer.from(JSON.stringify({version:VERSION,name:CONFIG.name,token,socket:socketPath,stateFile,sseHost:'127.0.0.1',ssePort:Number.isFinite(CONFIG.ssePort)?Number(CONFIG.ssePort):38989,sseStrictPort:CONFIG.sseStrictPort===true,maxJobOutputBytes:CONFIG.maxJobOutputBytes,jobRetentionMs:CONFIG.jobRetentionMs}),'utf8').toString('base64');const child=spawn(process.execPath,[daemonFile,encoded],{detached:true,stdio:'ignore',env:process.env});child.unref();health=await waitForHealthy(token,8000,'ssePort='+String(CONFIG.ssePort)+', sseStrictPort='+(CONFIG.sseStrictPort===true?'true':'false'));writeState({version:VERSION,name:CONFIG.name,pid:child.pid||null,token,socket:socketPath,ssePort:health.sseUrl?Number(new URL(health.sseUrl).port):null,startedAt:Date.now()});}return {token,reused,health}}",
+    "async function ensureDaemon(){mkdirp(path.dirname(socketPath));mkdirp(baseDir);fs.writeFileSync(daemonFile,DAEMON_SOURCE,'utf8');const state=readState();const token=state&&typeof state.token==='string'&&state.token?state.token:randomToken();let reused=false;let health=null;try{health=await waitForHealthy(token,500);reused=true}catch{}if(health&&health.version!==VERSION){await replaceDaemon(token,state,health);health=null;reused=false}if(!health){const encoded=Buffer.from(JSON.stringify({version:VERSION,name:CONFIG.name,token,socket:socketPath,stateFile,sseHost:CONFIG.sseHost,ssePort:Number.isFinite(CONFIG.ssePort)?Number(CONFIG.ssePort):38989,sseStrictPort:CONFIG.sseStrictPort===true,maxJobOutputBytes:CONFIG.maxJobOutputBytes,jobRetentionMs:CONFIG.jobRetentionMs}),'utf8').toString('base64');const child=spawn(process.execPath,[daemonFile,encoded],{detached:true,stdio:'ignore',env:process.env});child.unref();health=await waitForHealthy(token,8000,'ssePort='+String(CONFIG.ssePort)+', sseStrictPort='+(CONFIG.sseStrictPort===true?'true':'false'));writeState({version:VERSION,name:CONFIG.name,pid:child.pid||null,token,socket:socketPath,ssePort:health.sseUrl?Number(new URL(health.sseUrl).port):null,startedAt:Date.now()});}return {token,reused,health}}",
     "async function main(){const input=parseInput(process.argv.slice(1));const ensure=await ensureDaemon();const requestId=(input.requestId&&String(input.requestId))||('req-'+Date.now()+'-'+Math.random().toString(16).slice(2));const req=buildRequest(input,ensure.token,requestId);const execResponse=await request(req.message,req.timeoutMs);if(execResponse.type==='error'){throw new Error(String(execResponse.payload&&execResponse.payload.message||'seed launcher request failed'))}const result={token:ensure.token,requestId,daemon:{reused:ensure.reused,pid:ensure.health&&Number.isFinite(Number(ensure.health.pid))?Number(ensure.health.pid):null,sseUrl:ensure.health&&typeof ensure.health.sseUrl==='string'?ensure.health.sseUrl:''},command:execResponse.payload};process.stdout.write(JSON.stringify(result)+'\\n')}",
     "main().catch((err)=>{process.stderr.write(String(err&&err.stack?err.stack:err)+'\\n');process.exit(1)})",
   ].join(";");
@@ -67,17 +69,26 @@ export function daemonSeedScript(config?: SeedScriptConfig): string {
 
   const name = config?.name?.trim() || "daemond-seed";
   const socket = config?.socket;
+  const sseHost = parseSseHost(config?.sseHost);
   const ssePort = parseSsePort(config?.ssePort);
   const sseStrictPort = config?.sseStrictPort === true;
   const maxJobOutputBytes = parsePositiveInteger(config?.maxJobOutputBytes, "maxJobOutputBytes");
   const jobRetentionMs = parsePositiveInteger(config?.jobRetentionMs, "jobRetentionMs");
-  return createLauncherScript({ name, socket, ssePort, sseStrictPort, maxJobOutputBytes, jobRetentionMs });
+  return createLauncherScript({ name, socket, sseHost, ssePort, sseStrictPort, maxJobOutputBytes, jobRetentionMs });
 }
 
 function parsePositiveInteger(value: number | undefined, field: string): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`daemond: ${field} must be a positive integer`);
+  }
+  return value;
+}
+
+function parseSseHost(value: string | undefined): string {
+  if (value === undefined) return "127.0.0.1";
+  if (!isIP(value)) {
+    throw new Error("daemond: sseHost must be an IPv4 or IPv6 address");
   }
   return value;
 }

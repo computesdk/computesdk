@@ -212,6 +212,23 @@ describe('startProcess', () => {
     expect(methods.runCommand).toHaveBeenCalledTimes(2)
   })
 
+  it('seeds the daemon with the provider\'s daemonSseHost', async () => {
+    const state = { job: freshJob(), stdinWrites: [] as string[] }
+    const methods = { ...makeMethods(state), daemonSseHost: () => '0.0.0.0' }
+    daemonSeedScriptCommand.mockImplementation((_config: unknown, payload: unknown) =>
+      typeof payload === 'string' ? payload : JSON.stringify(payload)
+    )
+    const provider = defineProvider({ name: 'mock', methods: { sandbox: methods } })({ apiKey: 'k' })
+    const sandbox = await provider.sandbox.create()
+
+    await sandbox.startProcess('cat')
+
+    for (const call of daemonSeedScriptCommand.mock.calls) {
+      expect(call[0]).toEqual({ ssePort: 38989, sseHost: '0.0.0.0' })
+    }
+    expect(daemonSeedScriptCommand).toHaveBeenCalledTimes(2)
+  })
+
   it('sends stdin writes as base64 with base64 argv encoding', async () => {
     const state = { job: freshJob(), stdinWrites: [] as string[] }
     const { provider } = makeSandbox(state)

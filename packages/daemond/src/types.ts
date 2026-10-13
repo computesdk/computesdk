@@ -1,6 +1,12 @@
 export interface SeedScriptConfig {
   name?: string;
   socket?: string;
+  /**
+   * Address the daemon's SSE server binds to (default "127.0.0.1"). Set
+   * "0.0.0.0" only where a gateway in front of the sandbox reaches the port
+   * over the network instead of an in-sandbox tunnel.
+   */
+  sseHost?: string;
   ssePort?: number;
   sseStrictPort?: boolean;
   /** Per-stream buffered-output cap for detached jobs (default 4 MiB). */

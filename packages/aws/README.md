@@ -11,7 +11,8 @@ AWS providers for ComputeSDK, one product per subpath:
 AWS EC2 provider for ComputeSDK. Each sandbox is one EC2 instance launched from your launch template, on-demand
 by default or Spot when you opt in. Commands run over
 [SSM Run Command](https://docs.aws.amazon.com/systems-manager/latest/userguide/run-command.html) (`AWS-RunShellScript`).
-There is no agent or gateway on the box and no inbound ports: the preinstalled SSM agent dials out.
+There is no agent on the box and no public inbound ports: the preinstalled SSM agent dials out. An optional
+regional [preview gateway](#preview-urls) adds `getUrl` and streaming.
 
 ## Installation
 
@@ -67,6 +68,7 @@ try {
 | `spot` | no | `true` or `{ maxPricePerHour }` for Spot. Default: on-demand |
 | `credentials` | no | `AwsCredentialIdentity` or `AwsCredentialIdentityProvider`. Default: AWS SDK credential chain |
 | `launchTemplateVersion` | no | Default `$Default` |
+| `previewDomain` | no | Domain served by the [preview gateway](#preview-urls); enables `getUrl` and streaming |
 
 Advanced: `readyTimeoutMs` (default `120000`), `pollIntervalMs` (default `2000`),
 `outputS3Bucket` / `outputS3KeyPrefix` (full command output, see below).
@@ -90,6 +92,44 @@ import { awsCredentialsProvider } from '@vercel/functions/oidc';
 ec2({ launchTemplate: 'my-template', credentials: awsCredentialsProvider({ roleArn: process.env.AWS_ROLE_ARN! }) });
 ```
 
+## Preview URLs
+
+`getUrl` and streamed output (`onStdout`, which reads daemond's event port) need a route to the box. Run the
+preview gateway once per region: a small Caddy instance in the sandboxes' VPC with an Elastic IP and a wildcard
+Let's Encrypt certificate (DNS challenge through Route 53, using the gateway's instance role).
+
+```
+https://3000-i-0abc.us-east-2.preview.example.com
+  → *.us-east-2.preview.example.com (Route 53 A → Elastic IP)
+  → Caddy → i-0abc.us-east-2.compute.internal:3000 (private; only the gateway's security group may connect)
+```
+
+```bash
+npx computesdk-aws-ec2-gateway up \
+  --region us-east-2 --domain preview.example.com \
+  --subnet-ids subnet-a,subnet-b --launch-template my-template
+```
+
+```typescript
+const compute = ec2({ launchTemplate: 'my-template', region: 'us-east-2', previewDomain: 'preview.example.com' });
+const url = await sandbox.getUrl({ port: 3000 }); // https://3000-i-0abc.us-east-2.preview.example.com
+```
+
+The domain must be in (or be) a public Route 53 hosted zone; pass `--create-zone` to create one and delegate to the
+printed name servers. `up` is safe to re-run and:
+
+- creates the gateway security group (443 from anywhere) and allows it into the launch template's security groups
+  on `--ports` (default `1024-65535`), or `--box-security-groups`;
+- enables resource-name DNS records on the subnets, so `i-….<region>.compute.internal` resolves (instances
+  launched afterwards only);
+- creates an IAM role limited to `_acme-challenge` TXT records in that zone (plus SSM access for debugging);
+- launches a `t4g.micro` Amazon Linux 2023 instance (`--instance-type`) that installs Caddy with the
+  `caddy-dns/route53` plugin, attaches an Elastic IP, and points `*.<region>.<domain>` at it.
+
+Everything is tagged `computesdk:gateway=<region>.<domain>`; `down --region … --domain …` removes it all except the
+hosted zone. With `previewDomain` set, daemond binds its event port on `0.0.0.0` so the gateway can reach it (the
+port still requires the daemon's token). Apps must listen on `0.0.0.0` too. Anyone with a URL can reach that port.
+
 ## Behavior
 
 - **Sandbox ID** is the EC2 instance ID.
@@ -106,7 +146,8 @@ ec2({ launchTemplate: 'my-template', credentials: awsCredentialsProvider({ roleA
 - `getById` returns `null` for unknown, terminated/shutting-down, or untagged instances. `list` returns managed
   `pending`/`running` instances. `destroy` is idempotent and refuses to terminate untagged instances.
 - `getInstance()` / `getInfo().metadata` expose instance type, AZ, subnet, lifecycle (`spot`/`on-demand`), and launch time.
-- Not supported: `getUrl` (no inbound traffic) and the filesystem API.
+- `getUrl` returns `https://<port>-<instanceId>.<region>.<previewDomain>` (ports 1000-65535) and throws without
+  `previewDomain`. Not supported: the filesystem API.
 
 ## Testing
 

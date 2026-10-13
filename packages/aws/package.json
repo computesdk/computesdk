@@ -1,9 +1,12 @@
 {
   "name": "@computesdk/aws",
   "version": "1.0.0",
-  "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command",
+  "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command, optional Caddy preview gateway",
   "author": "Garrison",
   "license": "MIT",
+  "bin": {
+    "computesdk-aws-ec2-gateway": "./dist/ec2/gateway.mjs"
+  },
   "exports": {
     "./ec2": {
       "types": "./dist/ec2/index.d.ts",
@@ -34,6 +37,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-ec2": "3.1078.0",
+    "@aws-sdk/client-iam": "3.1078.0",
+    "@aws-sdk/client-route-53": "3.1078.0",
     "@aws-sdk/client-s3": "3.1078.0",
     "@aws-sdk/client-ssm": "3.1078.0",
     "@aws-sdk/types": "3.973.15",

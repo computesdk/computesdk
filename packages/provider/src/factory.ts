@@ -306,6 +306,14 @@ export interface InstanceMethods<TInstance = any, TConfig = any> {
   getInfo: (instance: TInstance) => Promise<InstanceInfo>;
   getUrl: (instance: TInstance, options: { port: number; protocol?: string }) => Promise<string>;
 
+  /**
+   * Address the daemond SSE server binds to inside the instance (default
+   * `127.0.0.1`). A provider whose `getUrl` routes to the instance over the
+   * network (e.g. a reverse proxy in its VPC) rather than an in-instance tunnel
+   * returns `0.0.0.0` here so that route reaches the daemon.
+   */
+  daemonSseHost?: (instance: TInstance) => string | undefined;
+
   // Optional provider-specific typed getInstance method
   getInstance?: (instance: TInstance) => TInstance;
 
@@ -474,6 +482,11 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     return this.instance;
   }
 
+  private daemonSeedConfig(): { ssePort: number; sseHost?: string } {
+    const sseHost = this.methods.daemonSseHost?.(this.instance);
+    return sseHost ? { ssePort: DEFAULT_DAEMON_SSE_PORT, sseHost } : { ssePort: DEFAULT_DAEMON_SSE_PORT };
+  }
+
   private async resolveDaemonSseUrl(
     rawUrl: string,
     expectedToken: string
@@ -541,7 +554,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
       };
 
       const daemonCommand = daemonSeedScriptCommand(
-        { ssePort: DEFAULT_DAEMON_SSE_PORT },
+        this.daemonSeedConfig(),
         daemonPayload
       );
 
@@ -636,7 +649,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
         requestId: createDaemonRequestId(),
       };
       const bootstrapCommand = daemonSeedScriptCommand(
-        { ssePort: DEFAULT_DAEMON_SSE_PORT },
+        this.daemonSeedConfig(),
         bootstrapPayload
       );
       const bootstrapResult = await this.methods.runCommand(this.instance, bootstrapCommand, forwardedOptions);
@@ -664,7 +677,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     }
   ): Promise<{ invocation: SeedInvocationResult; result: CommandResult }> {
     const command = daemonSeedScriptCommand(
-      { ssePort: DEFAULT_DAEMON_SSE_PORT },
+      this.daemonSeedConfig(),
       payload,
       opts?.argvEncoding ? { argvEncoding: opts.argvEncoding } : undefined
     );
