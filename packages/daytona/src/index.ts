@@ -158,10 +158,25 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 
-          const response = await sandbox.process.executeCommand(fullCommand);
+          // executeCommand returns one merged `result` — separate stderr by
+          // redirecting it to a file and cat'ing it back behind a delimiter.
+          const errFile = `/tmp/.computesdk-stderr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          const delim = '__COMPUTESDK_STDERR__';
+          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; echo "${delim}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+
+          const response = await sandbox.process.executeCommand(
+            wrapped,
+            undefined,
+            undefined,
+            options?.timeout !== undefined ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined,
+          );
+          const merged = response.result || '';
+          const delimIdx = merged.lastIndexOf(delim);
+          const stdout = delimIdx === -1 ? merged : merged.substring(0, delimIdx);
+          const stderr = delimIdx === -1 ? '' : merged.substring(delimIdx + delim.length).replace(/^\n/, '');
           return {
-            stdout: response.result || '',
-            stderr: '',
+            stdout,
+            stderr,
             exitCode: response.exitCode || 0,
             durationMs: Date.now() - startTime
           };

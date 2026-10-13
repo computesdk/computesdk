@@ -102,8 +102,22 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           }
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          const output = await client.commands.run(fullCommand);
-          return { stdout: output, stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
+          // commands.run returns a bare output string — capture the real exit
+          // code and stderr in-band via a delimiter + stderr file.
+          const errFile = `/tmp/.computesdk-stderr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          const delim = '__COMPUTESDK_EXIT__';
+          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __cs_ec=$?; echo "${delim}$__cs_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+          const output = await client.commands.run(wrapped);
+          const delimIdx = output.lastIndexOf(delim);
+          if (delimIdx === -1) {
+            return { stdout: output, stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
+          }
+          const after = output.substring(delimIdx + delim.length);
+          const newlineIdx = after.indexOf('\n');
+          const exitCode = parseInt(newlineIdx === -1 ? after : after.substring(0, newlineIdx), 10) || 0;
+          const stderr = newlineIdx === -1 ? '' : after.substring(newlineIdx + 1);
+          const stdout = output.substring(0, delimIdx).replace(/\n$/, '');
+          return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }

@@ -172,6 +172,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
             cmd: 'sh', args: ['-c', fullCommand],
             cwd: options?.cwd, detached: options?.background,
             stdout: stdout?.sink, stderr: stderr?.sink,
+            timeoutMs: options?.timeout,
           });
           return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
         } catch (error) {

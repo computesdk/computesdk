@@ -108,6 +108,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         const startTime = Date.now();
 
         const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
+        const errDelimiter = `__COMPUTESDK_STDERR_${Date.now()}__`;
         let shellCmd = command;
 
         if (options?.cwd) shellCmd = `cd ${escapeShellArg(options.cwd)} && ${shellCmd}`;
@@ -120,7 +121,11 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           shellCmd = `${envPrefix} ${shellCmd}`;
         }
 
-        shellCmd = `${shellCmd} 2>&1; echo "${delimiter}$?"`;
+        // The exec endpoint returns one combined stream — keep stdout/stderr
+        // separated by redirecting stderr to a file and cat'ing it behind a
+        // delimiter, then the exit-code delimiter.
+        const errFile = `/tmp/.computesdk-stderr-${Date.now()}`;
+        shellCmd = `{ ${shellCmd} ; } 2>${escapeShellArg(errFile)}; __sp_ec=$?; echo "${delimiter}$__sp_ec"; echo "${errDelimiter}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
 
         const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/exec`);
         url.searchParams.set('cmd', 'bash');
@@ -137,17 +142,20 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           if (!res.ok) return { stdout: '', stderr: raw, exitCode: 1, durationMs: Date.now() - startTime };
 
           const delimIdx = raw.lastIndexOf(delimiter);
-          let output: string;
-          let exitCode: number;
-          if (delimIdx !== -1) {
-            output = stripControlChars(raw.substring(0, delimIdx));
-            exitCode = parseInt(raw.substring(delimIdx + delimiter.length).trim(), 10) || 0;
-          } else {
-            output = stripControlChars(raw);
-            exitCode = 0;
+          if (delimIdx === -1) {
+            return { stdout: stripControlChars(raw), stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
           }
-
-          return { stdout: exitCode === 0 ? output : '', stderr: exitCode !== 0 ? output : '', exitCode, durationMs: Date.now() - startTime };
+          const stdout = stripControlChars(raw.substring(0, delimIdx));
+          const after = raw.substring(delimIdx + delimiter.length);
+          const nlIdx = after.indexOf('\n');
+          const exitCode = parseInt((nlIdx === -1 ? after : after.substring(0, nlIdx)).trim(), 10) || 0;
+          let stderr = '';
+          if (nlIdx !== -1) {
+            const rest = after.substring(nlIdx + 1);
+            const errIdx = rest.lastIndexOf(errDelimiter);
+            if (errIdx !== -1) stderr = stripControlChars(rest.substring(errIdx + errDelimiter.length)).replace(/^\n/, '');
+          }
+          return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
