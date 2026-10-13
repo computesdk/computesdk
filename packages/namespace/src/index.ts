@@ -61,6 +61,23 @@ function isGoneInstance(
 }
 
 /**
+ * Raw Namespace API fields passed through on create (snake_case, as in
+ * CreateInstanceRequest / ContainerRequest). Fields the provider sets itself
+ * take precedence.
+ */
+function plainObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/** The image is chosen by `image`; a passthrough selector would conflict. */
+function withoutImageSelector(fields: Record<string, unknown>): Record<string, unknown> {
+  const { image_ref: _imageRef, known_image_id: _knownImageId, ...rest } = fields;
+  return rest;
+}
+
+/**
  * Namespace provider configuration
  */
 export interface NamespaceConfig {
@@ -188,6 +205,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
         try {
           const requestBody = {
+            ...plainObject(options?.instanceOptions),
             shape: {
               virtual_cpu: config.virtualCpu || 2,
               memory_megabytes: config.memoryMegabytes || 4096,
@@ -206,6 +224,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               }],
             }),
             containers: [{
+              ...withoutImageSelector(plainObject(options?.containerOptions)),
               name: containerName,
               ...(image === undefined
                 ? { known_image_id: 'builtin:base' }
