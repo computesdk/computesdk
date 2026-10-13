@@ -293,7 +293,19 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             ['sh', '-c', fullCommand],
             { wait: true } as Parameters<SandboxInstance['exec']>[1],
           );
-          await proc.wait();
+          // beam's exec has no timeout option — enforce it here by killing
+          // the process when the deadline passes.
+          if (options?.timeout !== undefined) {
+            const outcome = await Promise.race([
+              proc.wait().then(() => 'done' as const),
+              new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), options.timeout)),
+            ]);
+            if (outcome === 'timeout') {
+              await proc.kill().catch(() => {});
+            }
+          } else {
+            await proc.wait();
+          }
           sandboxReadiness.set(sandbox, Promise.resolve());
           const [stdoutStr, stderrStr] = await Promise.all([proc.stdout.read(), proc.stderr.read()]);
           return { stdout: stdoutStr || '', stderr: stderrStr || '', exitCode: proc.exitCode || 0, durationMs: Date.now() - startTime };

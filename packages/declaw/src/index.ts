@@ -135,7 +135,10 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 
         try {
-          const result = await sandbox.commands.run(fullCommand);
+          const result = await sandbox.commands.run(fullCommand, {
+            timeout: options?.timeout !== undefined ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined,
+            requestTimeout: options?.timeout !== undefined ? options.timeout + 30_000 : undefined,
+          });
           return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
           const wrapped: any = (error as any)?.result;
