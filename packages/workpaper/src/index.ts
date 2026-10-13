@@ -39,14 +39,15 @@ function getClient(config: ConfigWithClient): Workpaper {
   return config.__client
 }
 
-/** The smallest size with at least the requested vCPUs and memory. */
-function sizeFor(config: WorkpaperConfig, options?: CreateInstanceOptions): Size {
+/** The smallest size with at least the requested vCPUs and memory; refuses more than the largest. */
+export function sizeFor(config: WorkpaperConfig, options?: CreateInstanceOptions): Size {
   const vcpus = options?.vcpus ?? 0
   const memMiB = options?.memMiB ?? 0
   if (!vcpus && !memMiB) return config.size ?? 'small'
   if (vcpus <= 2 && memMiB <= 4096) return 'small'
   if (vcpus <= 4 && memMiB <= 8192) return 'large'
-  return 'xlarge'
+  if (vcpus <= 8 && memMiB <= 16384) return 'xlarge'
+  throw new Error(`Workpaper computers go up to 8 vCPUs and 16384 MiB; requested ${vcpus} vCPUs, ${memMiB} MiB`)
 }
 
 const DEFAULT_TIMEOUT_MS = 300_000
