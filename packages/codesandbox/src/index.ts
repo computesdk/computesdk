@@ -8,8 +8,6 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
-type HibernateCapableSandbox = CodesandboxSandbox & { hibernate: () => Promise<void>; };
-
 export interface CodesandboxConfig {
   /** CodeSandbox API key - if not provided, will fallback to CSB_API_KEY environment variable */
   apiKey?: string;
@@ -168,7 +166,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         const sdk = new CodeSandbox(apiKey);
         try {
           const sandbox = await sdk.sandboxes.resume(sandboxId);
-          await (sandbox as HibernateCapableSandbox).hibernate();
+          await sdk.sandboxes.hibernate(sandboxId);
           return { id: sandbox.id, provider: 'codesandbox', createdAt: new Date(), metadata: { name: options?.name, bootupType: sandbox.bootupType } };
         } catch (error) {
           throw new Error(`Failed to create CodeSandbox snapshot: ${error instanceof Error ? error.message : String(error)}`);
