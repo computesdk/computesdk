@@ -1,5 +1,22 @@
 # @computesdk/daytona
 
+## 1.7.43
+
+### Patch Changes
+
+- 8faaa66: Fix `snapshot.create` calling `daytona.snapshot.create({ workspaceId, name })` — that API registers a declarative snapshot from an `Image` definition, so the call crashed with `Cannot read properties of undefined (reading 'contextList')`. It now captures the running sandbox's filesystem via the stable `Sandbox.createSnapshot(name)` and returns the snapshot name as its id, which `sandbox.create({ snapshotId: name })` restores. Bumps `@daytonaio/sdk` to `^0.224.0` where `createSnapshot` is stable. Also fix `snapshot.list`/`template.list` returning Daytona's paginated `{ items, total, ... }` object where the framework expects an array — they now return the mapped `items`.
+- f08bfc4: Follow-up to the runCommand semantics fixes:
+
+  - **daytona**: the stderr-separator wrapper always exited 0, collapsing the real exit code — the real code is now emitted in-band and parsed back out.
+  - **beam**: `exec({wait: true})` blocks server-side until the command finishes, so the timeout timer started too late. The adapter now launches with `wait: false` when a timeout is requested, starts the deadline clock before the launch call, clears the timer once the process exits, and reports exit code 124 on timeout instead of 0.
+  - **daytona, codesandbox**: in-band delimiters are now unique per call so command output containing the marker text can't mask the real delimiter.
+
+- 0c30a8f: Fix `runCommand` contract violations found by the sandbox CI capabilities benchmark:
+
+  - **Timeout dropped**: modal, vercel, declaw, and tensorlake never forwarded `options.timeout` to the underlying SDK (`timeoutMs`/`timeout` fields). Beam has no native timeout option, so the adapter now kills the process when the deadline passes.
+  - **Merged stdout/stderr**: daytona, codesandbox, and sprites only expose one combined output stream; the adapters now redirect stderr to a temp file and parse it back behind a delimiter so `stderr` is populated correctly. Upstash already returns `stderr` — the adapter now forwards it.
+  - **Exit code collapsed**: codesandbox hardcoded `exitCode: 0`; it now captures the real exit code in-band.
+
 ## 1.7.42
 
 ### Patch Changes

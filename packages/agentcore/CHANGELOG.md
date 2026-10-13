@@ -1,5 +1,15 @@
 # @computesdk/agentcore
 
+## 0.1.13
+
+### Patch Changes
+
+- df6960f: Deprecate `@computesdk/agentcore`: it is now a thin re-export of `@computesdk/aws/agentcore`. Existing imports keep working; switch to `import { agentcore } from '@computesdk/aws/agentcore'`.
+- Updated dependencies [df6960f]
+- Updated dependencies [a646a73]
+- Updated dependencies [2b6f707]
+  - @computesdk/aws@1.0.2
+
 ## 0.1.12
 
 ### Patch Changes

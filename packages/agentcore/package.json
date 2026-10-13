@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/agentcore",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Deprecated: use @computesdk/aws/agentcore. Thin re-export of the AWS Bedrock AgentCore Code Interpreter provider for ComputeSDK.",
   "author": "ComputeSDK",
   "license": "MIT",
