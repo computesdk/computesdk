@@ -1,5 +1,11 @@
 # @computesdk/isorun
 
+## 0.1.12
+
+### Patch Changes
+
+- 436964b: Wire `sandbox.create({ snapshotId })` to `Isorun.restore(snapshotId)` — the option was silently ignored, so restoring a snapshot booted a fresh image without the snapshotted filesystem.
+
 ## 0.1.11
 
 ### Patch Changes
