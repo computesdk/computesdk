@@ -293,7 +293,7 @@ await sandbox.destroy();
 
 #### As an AI agent tool
 
-The universal `Sandbox` interface maps cleanly onto agent-framework tools — wrap each
+The universal `InstanceInterface` interface maps cleanly onto agent-framework tools — wrap each
 method in a tool and hand them to your agent (works with any agent SDK):
 
 ```typescript
