@@ -284,7 +284,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.40(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.60)(@computesdk/modal@1.9.16)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.41(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.61)(@computesdk/modal@1.9.17)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -1320,7 +1320,7 @@ importers:
         version: link:../computesdk
       isorun:
         specifier: ^1.0.0
-        version: 1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
+        version: 1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.6.5))(zod@4.6.5)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -2168,7 +2168,7 @@ importers:
         version: link:../computesdk
       withruntime:
         specifier: ^0.6.1
-        version: 0.6.1(zod@4.4.3)
+        version: 0.6.1(zod@4.6.5)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -2457,6 +2457,40 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/tangle:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@tangle-network/sandbox':
+        specifier: 0.60.14
+        version: 0.60.14
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/tenki:
     dependencies:
       '@computesdk/provider':
@@ -2628,7 +2662,7 @@ importers:
         version: link:../provider
       '@upstash/box':
         specifier: ^0.5.5
-        version: 0.5.5(zod@4.4.3)
+        version: 0.5.5(zod@4.6.5)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3230,17 +3264,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.40':
-    resolution: {integrity: sha512-3Fiinac8C2+sZERbQa/frggyZVVCeqGBM4yvXTPIA5LIBVXREqjklZBSr+ued7bwnPdrgrdU6e1ElIayDX6fcw==}
+  '@computesdk/daytona@1.7.41':
+    resolution: {integrity: sha512-Sh/Uokho9RgW1643/la/ewUHOtNK15BF8QTcmMmXuLiQ5ZDgfC58nZeFZGhxFvhW2PK9OalHEn0YQ3xzATTY5Q==}
 
-  '@computesdk/e2b@1.7.60':
-    resolution: {integrity: sha512-e80kbcp0eN0RQLFuV1V6fPOQG7recQZRKLLjl212JfKdpOlaa7Cx5Hei8Ysh6zFP6lnXm8fF6i5xcgNBi2Ng3Q==}
+  '@computesdk/e2b@1.7.61':
+    resolution: {integrity: sha512-geXNhV1cgizEgVYoBtExNWh06jp1lDVnoz48nj3Yu3AWEWLoQHYEeZELnoC19ALNGa5xmHPjasLkHIelVzAiLw==}
 
-  '@computesdk/modal@1.9.16':
-    resolution: {integrity: sha512-QHdMpH7XnAxQBQ/BQKrMh7VuYRWULFSfs8NnjRqxdra1a8XBqPLbIbwmzZ34i2kSuwuzj7nCtpqKN7I+uDm9SQ==}
+  '@computesdk/modal@1.9.17':
+    resolution: {integrity: sha512-fdM0SJl/Kv9igEm/vCXKqap/sIcZrjPqgdAz/7i97PMl7JMD93C57Ohwqd0dB22/pcveaPkTJ6G6o8xHoqwb+w==}
 
-  '@computesdk/provider@2.1.12':
-    resolution: {integrity: sha512-4RBBdM6Kpna3ak3UXfQPnSzTNH1zpo96g8h736vmKGlUJ7uCv4d4hHnuxaKyXp6Z89BN8xhe6osOULglbaHCfw==}
+  '@computesdk/provider@2.1.13':
+    resolution: {integrity: sha512-ZXC6nwhU5BbYAhfJ+4snRo0HWfMIB0onI6FWkH86+01kr/xU4Qf/qaF5XsJm0KzyNk1GUpRNLOFigGz4BZi0pg==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -4317,6 +4351,10 @@ packages:
       ws:
         optional: true
 
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
+    engines: {node: '>= 20.19.0'}
+
   '@nodable/entities@2.1.0':
     resolution: {integrity: sha512-nyT7T3nbMyBI/lvr6L5TyWbFJAI9FTgVRakNoBqCD+PmID8DzFrrNdLLtHMwMszOtqZa8PAOV24ZqDnQrhQINA==}
 
@@ -5220,6 +5258,43 @@ packages:
   '@superserve/sdk@0.9.3':
     resolution: {integrity: sha512-JzGiaNFiaB/fMNnL+Zm6OdE7yGau5zkqPyESX3Sr3piisFwgbGyDnKT21cucW1iA3BEMg2XBIVsuXw6WF6dUIw==}
 
+  '@tangle-network/agent-core@0.10.3':
+    resolution: {integrity: sha512-PMnibf/yXFlMjIpCwF8jzJJdfFp3Wm/eIj6n7tLZ5vBIB4tsinyk+iOBQd85K4ASYbU1qX/kGbz+jN5/mxaBNA==}
+    peerDependencies:
+      '@modelcontextprotocol/sdk': ^1.30.0
+    peerDependenciesMeta:
+      '@modelcontextprotocol/sdk':
+        optional: true
+
+  '@tangle-network/agent-interface@2.20.1':
+    resolution: {integrity: sha512-f6o+YkPcTb8cOpNaSdJ8/SqJcA3d8LYL4XSaIr6pjF3f/WAGuU79h5nnXA69Pwxbqc4Zn0e7w/S6CFiDMa5Tcg==}
+
+  '@tangle-network/agent-interface@3.2.0':
+    resolution: {integrity: sha512-bGHzgO0M/qvMg3OR3Di7440a/9JJ1KddGKl1cJ+DZ5g3HuP2Cl7sLvEiCOFb4lyBioYWWPv7zYRwlMWx0dYY2g==}
+
+  '@tangle-network/agent-trace-contract@2.0.0':
+    resolution: {integrity: sha512-lq2hp3gg8FsNVA3yZAyuj3NvL57pJTsI6sUF8cYwVsUXA8QZlrO78SqRPRslWxf/sMFHxXhusOuDQ3YxVv12bw==}
+
+  '@tangle-network/sandbox@0.60.14':
+    resolution: {integrity: sha512-CyOjFHoQXbhJMG4sEQQcjrHDonOCj9MRYyKw/A/Y59TpyLw2GNNULUv2xzu3EWHb2S0CZ0HjWPgmDc0AFdA4xQ==}
+    peerDependencies:
+      '@mastra/core': ^1.36.0
+      '@modelcontextprotocol/sdk': ^1.30.0
+      ai: ^6.0.175 || ^7.0.107
+      openai: ^6.36.0
+      viem: ^2.0.0
+    peerDependenciesMeta:
+      '@mastra/core':
+        optional: true
+      '@modelcontextprotocol/sdk':
+        optional: true
+      ai:
+        optional: true
+      openai:
+        optional: true
+      viem:
+        optional: true
+
   '@tenkicloud/sandbox@1.4.0':
     resolution: {integrity: sha512-1fio6b1I+5gK9uw8UkHYkcdNU0EDzswL2I1/6RRQfC5cAqmO6YjIlvnbn2Ia5APhqufHvPrHVbKZfwq0gp8tXA==}
     engines: {node: '>=18'}
@@ -5997,8 +6072,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.10:
-    resolution: {integrity: sha512-I99mW+7BfB24ilVbCpTQ7pglda8sETuRsbedwGHDQx/DRTLLtDGHQVfME17gVPvBUCRttbEe/qjY5ZEHUn/eBA==}
+  computesdk@4.1.11:
+    resolution: {integrity: sha512-vBvKWvW7uG5udz4hOqN04VN58Q+3DkoGv8qoW3NXJd96TpyVQmW7X1EJcizo2qq1DiH+TpI04jfXJoWHh9s5sQ==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -8376,6 +8451,15 @@ packages:
   spawndamnit@3.0.1:
     resolution: {integrity: sha512-MmnduQUuHCoFckZoWnXsTg7JaiLBJrKFj9UI2MbRPGaJeVpsLcVBu6P/IGZovziM/YBsellCmsprgNA+w0CzVg==}
 
+  spdx-exceptions@2.5.0:
+    resolution: {integrity: sha512-PiU42r+xO4UbUS1buo3LPJkjlO7430Xn5SVAhdpzzsPHsjbYVflnnFdATgabnLude+Cqu25p6N+g2lw/PFsa4w==}
+
+  spdx-expression-parse@5.0.0:
+    resolution: {integrity: sha512-vngmw3Rgn+o2arXNbnZaj5UtOEBuWBfvaI+Wc8GFfykIhA5/vdK9/Sp/XkLv63dykz2rxKDvKEHupF5P0FORcQ==}
+
+  spdx-license-ids@3.0.24:
+    resolution: {integrity: sha512-cLS9TtWkIQFyLkJ3/5aFQAOHOSKTlOs/7WDut/XPSdjom1fJhUdkepeJAKXa9Y05+FabHd0sti+Et559vDtkpQ==}
+
   split-ca@1.0.1:
     resolution: {integrity: sha512-Q5thBSxp5t8WPTTJQS59LrGqOZqOsrhDGDVm8azCqIBjSBd7nd9o2PM+mDulQQkh8h//4U6hFZnc/mul8t5pWQ==}
 
@@ -8543,6 +8627,9 @@ packages:
 
   tar-stream@3.1.7:
     resolution: {integrity: sha512-qJj60CXt7IU1Ffyc3NJMjh6EkuCFej46zUqJ4J7pqYlThyd9bO0XBTmcOIhSzZJVWfsLks0+nle/j538YAW9RQ==}
+
+  tar-stream@3.2.1:
+    resolution: {integrity: sha512-nqsEO8zLZJvrOMdEwkA0QdCLFbetHMn95Zqu4fKwX+hkaTWJPZZOrxx/PwtxoK0MMGQmBQNRW3CPs8IFYQz4cQ==}
 
   tar@6.2.1:
     resolution: {integrity: sha512-DZ4yORTwrbTj/7MZYq2w+/ZFdI6OZ/f9SFHR+71gIVUZhOQPHzVCLpvRnPgyaMpfWxxk/4ONva3GQSyNIKRv6A==}
@@ -9290,6 +9377,9 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+
 snapshots:
 
   '@alcalzone/ansi-tokenize@0.2.0':
@@ -9304,15 +9394,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.40(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.60)(@computesdk/modal@1.9.16)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.41(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.61)(@computesdk/modal@1.9.17)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.40(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@computesdk/e2b': 1.7.60
-      '@computesdk/modal': 1.9.16
+      '@computesdk/daytona': 1.7.41(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@computesdk/e2b': 1.7.61
+      '@computesdk/modal': 1.9.17
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -9991,35 +10081,35 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.40(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@computesdk/daytona@1.7.41(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
-      '@computesdk/provider': 2.1.12
+      '@computesdk/provider': 2.1.13
       '@daytonaio/sdk': 0.192.0(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      computesdk: 4.1.10
+      computesdk: 4.1.11
     transitivePeerDependencies:
       - debug
       - supports-color
       - ws
     optional: true
 
-  '@computesdk/e2b@1.7.60':
+  '@computesdk/e2b@1.7.61':
     dependencies:
-      '@computesdk/provider': 2.1.12
-      computesdk: 4.1.10
+      '@computesdk/provider': 2.1.13
+      computesdk: 4.1.11
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.16':
+  '@computesdk/modal@1.9.17':
     dependencies:
-      '@computesdk/provider': 2.1.12
-      computesdk: 4.1.10
+      '@computesdk/provider': 2.1.13
+      computesdk: 4.1.11
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.12':
+  '@computesdk/provider@2.1.13':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.10
+      computesdk: 4.1.11
       daemond: 0.1.8
     optional: true
 
@@ -10846,6 +10936,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.6.5)':
+    dependencies:
+      '@hono/node-server': 1.19.9(hono@4.12.27)
+      ajv: 8.18.0
+      ajv-formats: 3.0.1(ajv@8.18.0)
+      content-type: 1.0.5
+      cors: 2.8.5
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.6
+      express: 5.2.1
+      express-rate-limit: 8.2.1(express@5.2.1)
+      hono: 4.12.27
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.1
+      zod: 4.6.5
+      zod-to-json-schema: 3.25.1(zod@4.6.5)
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   '@mongodb-js/zstd@7.0.0':
     dependencies:
       node-addon-api: 8.6.0
@@ -10857,6 +10970,8 @@ snapshots:
       openapi-fetch: 0.17.0
     optionalDependencies:
       ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+
+  '@noble/hashes@2.4.0': {}
 
   '@nodable/entities@2.1.0': {}
 
@@ -12020,6 +12135,36 @@ snapshots:
 
   '@superserve/sdk@0.9.3': {}
 
+  '@tangle-network/agent-core@0.10.3':
+    dependencies:
+      '@tangle-network/agent-interface': 3.2.0
+      '@tangle-network/agent-trace-contract': 2.0.0
+      zod: 4.6.5
+
+  '@tangle-network/agent-interface@2.20.1':
+    dependencies:
+      '@noble/hashes': 2.4.0
+      spdx-expression-parse: 5.0.0
+      zod: 4.6.5
+
+  '@tangle-network/agent-interface@3.2.0':
+    dependencies:
+      '@noble/hashes': 2.4.0
+      spdx-expression-parse: 5.0.0
+      zod: 4.6.5
+
+  '@tangle-network/agent-trace-contract@2.0.0': {}
+
+  '@tangle-network/sandbox@0.60.14':
+    dependencies:
+      '@tangle-network/agent-core': 0.10.3
+      '@tangle-network/agent-interface': 2.20.1
+      tar-stream: 3.2.1
+      zod: 4.6.5
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+
   '@tenkicloud/sandbox@1.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
@@ -12324,10 +12469,10 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@upstash/box@0.5.5(zod@4.4.3)':
+  '@upstash/box@0.5.5(zod@4.6.5)':
     dependencies:
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.1(zod@4.4.3)
+      zod: 4.6.5
+      zod-to-json-schema: 3.25.1(zod@4.6.5)
 
   '@vercel/oidc@3.2.0': {}
 
@@ -12615,11 +12760,9 @@ snapshots:
 
   balanced-match@4.0.3: {}
 
-  bare-events@2.6.0:
-    optional: true
+  bare-events@2.6.0: {}
 
-  bare-events@2.8.2:
-    optional: true
+  bare-events@2.8.2: {}
 
   bare-fs@4.7.1:
     dependencies:
@@ -12630,15 +12773,12 @@ snapshots:
       fast-fifo: 1.3.2
     transitivePeerDependencies:
       - bare-abort-controller
-    optional: true
 
-  bare-os@3.9.1:
-    optional: true
+  bare-os@3.9.1: {}
 
   bare-path@3.0.0:
     dependencies:
       bare-os: 3.9.1
-    optional: true
 
   bare-stream@2.13.1(bare-events@2.6.0):
     dependencies:
@@ -12646,12 +12786,10 @@ snapshots:
       teex: 1.0.1
     optionalDependencies:
       bare-events: 2.6.0
-    optional: true
 
   bare-url@2.4.3:
     dependencies:
       bare-path: 3.0.0
-    optional: true
 
   base64-js@1.5.1: {}
 
@@ -13044,7 +13182,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.10:
+  computesdk@4.1.11:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.8
@@ -13594,7 +13732,6 @@ snapshots:
       bare-events: 2.8.2
     transitivePeerDependencies:
       - bare-abort-controller
-    optional: true
 
   events@3.3.0: {}
 
@@ -14297,7 +14434,7 @@ snapshots:
     dependencies:
       ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  isorun@1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3):
+  isorun@1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.6.5))(zod@4.6.5):
     dependencies:
       '@currentspace/http3': 0.8.5
       undici: 8.3.0
@@ -14306,8 +14443,8 @@ snapshots:
       '@isorun/http-transport-linux-arm64-musl': 0.8.8
       '@isorun/http-transport-linux-x64-gnu': 0.8.8
       '@isorun/http-transport-linux-x64-musl': 0.8.8
-      '@modelcontextprotocol/sdk': 1.26.0(zod@4.4.3)
-      zod: 4.4.3
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.6.5)
+      zod: 4.6.5
 
   istanbul-lib-coverage@3.2.2: {}
 
@@ -15794,6 +15931,15 @@ snapshots:
       cross-spawn: 7.0.6
       signal-exit: 4.1.0
 
+  spdx-exceptions@2.5.0: {}
+
+  spdx-expression-parse@5.0.0:
+    dependencies:
+      spdx-exceptions: 2.5.0
+      spdx-license-ids: 3.0.24
+
+  spdx-license-ids@3.0.24: {}
+
   split-ca@1.0.1: {}
 
   sprintf-js@1.0.3: {}
@@ -15866,7 +16012,6 @@ snapshots:
       text-decoder: 1.2.3
     transitivePeerDependencies:
       - bare-abort-controller
-    optional: true
 
   string-argv@0.3.2: {}
 
@@ -15991,6 +16136,16 @@ snapshots:
       fast-fifo: 1.3.2
       streamx: 2.22.1
 
+  tar-stream@3.2.1:
+    dependencies:
+      b4a: 1.6.7
+      bare-fs: 4.7.1
+      fast-fifo: 1.3.2
+      streamx: 2.25.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+
   tar@6.2.1:
     dependencies:
       chownr: 2.0.0
@@ -16029,7 +16184,6 @@ snapshots:
       streamx: 2.25.0
     transitivePeerDependencies:
       - bare-abort-controller
-    optional: true
 
   tensorlake-native-darwin-arm64@0.5.135:
     optional: true
@@ -16644,11 +16798,11 @@ snapshots:
     dependencies:
       string-width: 7.2.0
 
-  withruntime@0.6.1(zod@4.4.3):
+  withruntime@0.6.1(zod@4.6.5):
     dependencies:
       undici: 7.29.1
     optionalDependencies:
-      zod: 4.4.3
+      zod: 4.6.5
 
   word-wrap@1.2.5: {}
 
@@ -16810,8 +16964,14 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  zod-to-json-schema@3.25.1(zod@4.6.5):
+    dependencies:
+      zod: 4.6.5
+
   zod@3.25.76: {}
 
   zod@4.3.5: {}
 
   zod@4.4.3: {}
+
+  zod@4.6.5: {}
