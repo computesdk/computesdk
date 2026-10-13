@@ -44,6 +44,8 @@ const s3 = mockClient(S3Client);
 
 const INSTANCE_ID = 'i-0123456789abcdef0';
 const COMMAND_ID = 'cmd-0001';
+const HOME_LINE =
+  'if [ -z "${HOME:-}" ]; then HOME=$(getent passwd "$(id -u)" | cut -d: -f6); export HOME="${HOME:-/root}"; fi';
 
 function makeConfig(overrides: Partial<Ec2Config> = {}): Ec2Config {
   return {
@@ -357,7 +359,7 @@ describe('runCommand', () => {
     expect(input.Parameters!.executionTimeout).toEqual(['5']);
     expect(input.Parameters!.commands).toHaveLength(1);
     expect(input.Parameters!.commands![0]).toContain(
-      `\n(\nexport FOO="${escapeShellArg(env.FOO)}"\ncd "/tmp/my dir" || exit 1\necho hi\n) >/tmp/computesdk-ssm/`,
+      `\n(\n${HOME_LINE}\nexport FOO="${escapeShellArg(env.FOO)}"\ncd "/tmp/my dir" || exit 1\necho hi\n) >/tmp/computesdk-ssm/`,
     );
     expect(input.Parameters!.commands![0]).toContain('a \\"quoted\\" \\$HOME \\`x\\` \\\\ value');
     expect(input).not.toHaveProperty('OutputS3BucketName');
@@ -367,9 +369,13 @@ describe('runCommand', () => {
     expect(() => buildScript('true', { env: { 'BAD;rm -rf /': 'x' } })).toThrow('Invalid environment variable name');
   });
 
+  it('defaults HOME, which the SSM agent leaves unset', () => {
+    expect(buildScript('true').split('\n')[0]).toBe(HOME_LINE);
+  });
+
   it('detaches background commands', () => {
     expect(buildScript(`echo 'x' > /tmp/o`, { background: true })).toBe(
-      `nohup /bin/sh -c 'echo '\\''x'\\'' > /tmp/o' >/dev/null 2>&1 &`
+      `${HOME_LINE}\nnohup /bin/sh -c 'echo '\\''x'\\'' > /tmp/o' >/dev/null 2>&1 &`
     );
   });
 
@@ -532,7 +538,7 @@ describe('runCommand', () => {
     const sandbox = await launch();
     mockCommand({ Status: 'Success', ResponseCode: 0, StandardOutputContent: '' });
     await sandbox.runCommand('sleep 60', { background: true });
-    expect(ssm.commandCalls(SendCommandCommand)[0].args[0].input.Parameters!.commands![0]).toMatch(/^nohup /);
+    expect(ssm.commandCalls(SendCommandCommand)[0].args[0].input.Parameters!.commands![0]).toMatch(/^if [^\n]*\nnohup /);
   });
 
   it('reads full output from S3 when the inline output is truncated', async () => {
@@ -682,5 +688,13 @@ describe('helpers', () => {
   it('getUrl is unsupported', async () => {
     const sandbox = await launch();
     await expect(sandbox.getUrl({ port: 3000 })).rejects.toThrow('does not support getUrl');
+  });
+
+  it('getUrl delegates to the configured ingress seam', async () => {
+    const sandbox = await launch({
+      ...makeConfig(),
+      getUrl: async (instance, { port }) => `https://${instance.instanceId}-${port}.example.test`,
+    });
+    await expect(sandbox.getUrl({ port: 3000 })).resolves.toBe(`https://${INSTANCE_ID}-3000.example.test`);
   });
 });
