@@ -1,5 +1,12 @@
 # @computesdk/cli
 
+## 2.5.2
+
+### Patch Changes
+
+- Updated dependencies [ef8770f]
+  - computesdk@4.1.12
+
 ## 2.5.1
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @computesdk/upstash
 
+## 0.3.19
+
+### Patch Changes
+
+- ef8770f: Docs: update examples to the canonical `compute.instances` API (`Instance*` type names, `instanceId`, `methods.instances`). `compute.sandbox` / `Sandbox*` / `methods.sandbox` remain working deprecated aliases.
+- Updated dependencies [ef8770f]
+  - @computesdk/provider@2.1.14
+  - computesdk@4.1.12
+
 ## 0.3.18
 
 ### Patch Changes
