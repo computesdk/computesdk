@@ -248,11 +248,13 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
         try {
-          const snapshot = await (daytona as any).snapshot.create({
-            workspaceId: sandboxId,
-            name: options?.name || `snapshot-${Date.now()}`
-          });
-          return snapshot;
+          const name = options?.name || `snapshot-${Date.now()}`;
+          // `daytona.snapshot.create` registers a declarative snapshot from an
+          // Image definition, not the filesystem of a running sandbox — the
+          // runtime-FS capture lives on the Sandbox instance (experimental API).
+          const sandbox = await daytona.get(sandboxId);
+          await (sandbox as any)._experimental_createSnapshot(name);
+          return { id: name, provider: 'daytona', createdAt: new Date(), metadata: { name } };
         } catch (error) {
           throw new Error(`Failed to create Daytona snapshot: ${error instanceof Error ? error.message : String(error)}`);
         }
