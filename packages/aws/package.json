@@ -1,10 +1,15 @@
 {
   "name": "@computesdk/aws",
   "version": "1.0.1",
-  "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command",
+  "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command. @computesdk/aws/agentcore: Bedrock AgentCore Code Interpreter sessions",
   "author": "Garrison",
   "license": "MIT",
   "exports": {
+    "./agentcore": {
+      "types": "./dist/agentcore/index.d.ts",
+      "import": "./dist/agentcore/index.mjs",
+      "require": "./dist/agentcore/index.js"
+    },
     "./ec2": {
       "types": "./dist/ec2/index.d.ts",
       "import": "./dist/ec2/index.mjs",
@@ -14,6 +19,9 @@
   },
   "typesVersions": {
     "*": {
+      "agentcore": [
+        "./dist/agentcore/index.d.ts"
+      ],
       "ec2": [
         "./dist/ec2/index.d.ts"
       ]
@@ -33,6 +41,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "3.1078.0",
     "@aws-sdk/client-ec2": "3.1078.0",
     "@aws-sdk/client-s3": "3.1078.0",
     "@aws-sdk/client-ssm": "3.1078.0",
@@ -57,6 +66,9 @@
     "ec2",
     "spot",
     "ssm",
+    "agentcore",
+    "bedrock",
+    "code-interpreter",
     "sandbox",
     "code-execution",
     "cloud",
