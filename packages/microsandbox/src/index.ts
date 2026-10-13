@@ -476,7 +476,7 @@ async function retry<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 async function removeSandbox(handle: NativeSandboxHandle): Promise<void> {
-  if (handle.status === 'running' || handle.status === 'draining') {
+  if (handle.status !== 'stopped' && handle.status !== 'crashed') {
     await retry(() => handle.stopWithTimeout(10_000));
   }
   await retry(() => handle.remove());
@@ -553,7 +553,20 @@ const _microsandbox = defineProvider<
           }
         }
 
-        const native = await builder.create();
+        let native: Awaited<ReturnType<typeof builder.create>>;
+        try {
+          native = await builder.create();
+        } catch (error) {
+          // Cloud create can fail (e.g. readiness wait expired) after the named sandbox exists.
+          try {
+            await removeSandbox(await sdk.Sandbox.get(name));
+          } catch (cleanupError) {
+            if (!isNotFound(cleanupError)) {
+              console.warn(`[microsandbox] Failed-create cleanup failed for ${JSON.stringify(name)}; check and remove it manually.`);
+            }
+          }
+          throw error;
+        }
         if (options?.signal?.aborted) {
           let stopped = false;
           let handle: NativeSandboxHandle | undefined;
