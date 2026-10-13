@@ -69,6 +69,7 @@
     "@computesdk/hopx": "workspace:*",
     "@computesdk/declaw": "workspace:*",
     "@computesdk/isorun": "workspace:*",
+    "@computesdk/workpaper": "workspace:*",
     "@computesdk/modal": "workspace:*",
     "@computesdk/microsandbox": "workspace:*",
     "@computesdk/runloop": "workspace:*",
@@ -127,6 +128,9 @@
       "optional": true
     },
     "@computesdk/isorun": {
+      "optional": true
+    },
+    "@computesdk/workpaper": {
       "optional": true
     },
     "@computesdk/beam": {
