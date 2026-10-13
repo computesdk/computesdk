@@ -29,6 +29,7 @@ Providers are platforms that provide sandboxes. Each package under `@computesdk/
 | Package                        | Provider     |
 | ------------------------------ | ------------ |
 | `@computesdk/archil`           | Archil       |
+| `@computesdk/aws/agentcore`    | AWS Bedrock AgentCore |
 | `@computesdk/beam`             | Beam         |
 | `@computesdk/blaxel`           | Blaxel       |
 | `@computesdk/buddy`            | Buddy        |
