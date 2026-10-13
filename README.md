@@ -301,7 +301,7 @@ npm install @computesdk/beam             # Beam provider
 npm install @computesdk/blaxel           # Blaxel provider
 npm install @computesdk/brezel           # Brezel provider
 npm install @computesdk/buddy            # Buddy provider
-npm install @computesdk/cloud-run        # Google Cloud Run provider
+npm install @computesdk/gcp              # Google Cloud providers (Cloud Run: @computesdk/gcp/cloud-run)
 npm install @computesdk/cloudflare       # Cloudflare provider
 npm install @computesdk/codesandbox      # CodeSandbox provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
@@ -347,7 +347,7 @@ See individual provider READMEs for details:
 - **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
 - **[@computesdk/brezel](./packages/brezel)** - Self-hosted Firecracker sandboxes with immutable environments
 - **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
-- **[@computesdk/cloud-run](./packages/cloud-run)** - Google Cloud Run sandboxes
+- **[@computesdk/gcp](./packages/gcp)** - Google Cloud providers: Cloud Run sandboxes via `@computesdk/gcp/cloud-run`
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
 - **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch

@@ -22,6 +22,7 @@ import {
   getProviderSetupHelp,
   isValidProvider,
   loadProvider,
+  getProviderPackage,
   getProviderConfig,
   PROVIDER_NAMES,
   type ProviderName,
@@ -195,8 +196,9 @@ export async function createSandbox(state: WorkbenchState): Promise<void> {
     
     // Better error message if provider package not installed
     if (error instanceof Error && error.message.includes('Cannot find module')) {
-      logError(`Provider package @computesdk/${providerName} is not installed.`);
-      console.log(`\nInstall it with: ${c.cyan(`npm install @computesdk/${providerName}`)}\n`);
+      const providerPackage = getProviderPackage(providerName);
+      logError(`Provider package ${providerPackage} is not installed.`);
+      console.log(`\nInstall it with: ${c.cyan(`npm install ${providerPackage}`)}\n`);
     }
     
     // Show the actual error for debugging
