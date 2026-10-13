@@ -1,5 +1,13 @@
 # @computesdk/runloop
 
+## 1.3.66
+
+### Patch Changes
+
+- Updated dependencies [ef8770f]
+  - @computesdk/provider@2.1.14
+  - computesdk@4.1.12
+
 ## 1.3.65
 
 ### Patch Changes

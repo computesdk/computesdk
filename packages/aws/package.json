@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/aws",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command",
   "author": "Garrison",
   "license": "MIT",

@@ -1,5 +1,45 @@
 # @computesdk/workbench
 
+## 33.0.8
+
+### Patch Changes
+
+- ef8770f: Docs: update examples to the canonical `compute.instances` API (`Instance*` type names, `instanceId`, `methods.instances`). `compute.sandbox` / `Sandbox*` / `methods.sandbox` remain working deprecated aliases.
+- 06db519: Load the Cloud Run provider from `@computesdk/gcp/cloud-run`, falling back to the deprecated `@computesdk/cloud-run` for existing installs. `@computesdk/gcp` is added as an optional peer dependency, and install hints for `cloud-run` now point at `@computesdk/gcp`.
+- Updated dependencies [06db519]
+- Updated dependencies [ef8770f]
+- Updated dependencies [06db519]
+  - @computesdk/cloud-run@0.1.17
+  - @computesdk/blaxel@1.6.32
+  - @computesdk/cloudflare@2.1.4
+  - @computesdk/codesandbox@1.5.61
+  - @computesdk/collimate@0.1.11
+  - @computesdk/daytona@1.7.42
+  - @computesdk/declaw@0.2.18
+  - @computesdk/e2b@1.7.62
+  - @computesdk/freestyle@0.2.11
+  - @computesdk/isorun@0.1.11
+  - @computesdk/just-bash@0.4.25
+  - @computesdk/k8s@0.2.14
+  - @computesdk/lelantos@0.2.12
+  - @computesdk/microsandbox@0.1.12
+  - @computesdk/modal@1.9.18
+  - @computesdk/namespace@1.6.28
+  - @computesdk/northflank@1.1.13
+  - @computesdk/novita@0.0.8
+  - @computesdk/provider@2.1.14
+  - @computesdk/tenki@0.1.14
+  - @computesdk/upstash@0.3.19
+  - @computesdk/vercel@1.7.44
+  - computesdk@4.1.12
+  - @computesdk/gcp@0.1.1
+  - @computesdk/agentuity@0.0.22
+  - @computesdk/beam@0.3.16
+  - @computesdk/hopx@0.2.37
+  - @computesdk/runloop@1.3.66
+  - @computesdk/secure-exec@0.1.21
+  - @computesdk/sprites@0.1.24
+
 ## 33.0.7
 
 ### Patch Changes
