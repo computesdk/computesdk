@@ -61,8 +61,19 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
     instances: {
       create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {
         const client = getClient(config)
-        const runtime = (options?.runtime as Runtime | undefined) ?? 'node'
         const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
+        if (options?.snapshotId) {
+          if (options?.vcpus || options?.memMiB || options?.diskMiB) {
+            throw new Error('Isorun snapshot restores cannot override vcpus/memMiB/diskMiB — restores inherit the snapshot\'s resources')
+          }
+          const restored = await client.restore(options.snapshotId)
+          // `restore` takes no options, so apply the requested expiry via setTimeout
+          // (the post-hoc equivalent of CreateOptions.timeoutSec).
+          await restored.setTimeout(Math.max(1, Math.ceil(timeoutMs / 1000)))
+          sandboxTimeouts.set(restored, timeoutMs)
+          return { instance: restored, instanceId: restored.id }
+        }
+        const runtime = (options?.runtime as Runtime | undefined) ?? 'node'
         const sandbox = await client.create({
           image: options?.image || defaultImage(runtime),
           vcpus: options?.vcpus,
