@@ -251,9 +251,12 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           const name = options?.name || `snapshot-${Date.now()}`;
           // `daytona.snapshot.create` registers a declarative snapshot from an
           // Image definition, not the filesystem of a running sandbox — the
-          // runtime-FS capture lives on the Sandbox instance (experimental API).
-          const sandbox = await daytona.get(sandboxId);
-          await (sandbox as any)._experimental_createSnapshot(name);
+          // runtime-FS capture lives on the Sandbox instance. It's stable as
+          // `createSnapshot` in newer SDKs; the pinned range only exposes the
+          // `_experimental_createSnapshot` alias, so prefer stable and fall back.
+          const sandbox = await daytona.get(sandboxId) as any;
+          const createSnapshot = sandbox.createSnapshot ?? sandbox._experimental_createSnapshot;
+          await createSnapshot.call(sandbox, name);
           return { id: name, provider: 'daytona', createdAt: new Date(), metadata: { name } };
         } catch (error) {
           throw new Error(`Failed to create Daytona snapshot: ${error instanceof Error ? error.message : String(error)}`);
