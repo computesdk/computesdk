@@ -289,17 +289,20 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 
+          // wait:true makes the gateway block until the command finishes, so a
+          // client-side timeout must launch with wait:false to get the process
+          // handle up front and kill it when the deadline passes.
           const proc = await sandbox.exec(
             ['sh', '-c', fullCommand],
-            { wait: true } as Parameters<SandboxInstance['exec']>[1],
+            { wait: options?.timeout === undefined } as Parameters<SandboxInstance['exec']>[1],
           );
-          // beam's exec has no timeout option — enforce it here by killing
-          // the process when the deadline passes.
           if (options?.timeout !== undefined) {
+            let timer: ReturnType<typeof setTimeout> | undefined;
             const outcome = await Promise.race([
               proc.wait().then(() => 'done' as const),
-              new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), options.timeout)),
+              new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), options.timeout); }),
             ]);
+            clearTimeout(timer);
             if (outcome === 'timeout') {
               await proc.kill().catch(() => {});
             }
