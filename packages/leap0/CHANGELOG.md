@@ -1,5 +1,13 @@
 # @computesdk/leap0
 
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [ef8770f]
+  - @computesdk/provider@2.1.14
+  - computesdk@4.1.12
+
 ## 0.1.10
 
 ### Patch Changes

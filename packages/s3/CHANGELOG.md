@@ -1,5 +1,12 @@
 # @computesdk/s3
 
+## 1.2.15
+
+### Patch Changes
+
+- Updated dependencies [ef8770f]
+  - @computesdk/provider@2.1.14
+
 ## 1.2.14
 
 ### Patch Changes

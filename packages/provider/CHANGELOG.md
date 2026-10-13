@@ -1,5 +1,14 @@
 # @computesdk/provider
 
+## 2.1.14
+
+### Patch Changes
+
+- ef8770f: Docs: update examples to the canonical `compute.instances` API (`Instance*` type names, `instanceId`, `methods.instances`). `compute.sandbox` / `Sandbox*` / `methods.sandbox` remain working deprecated aliases.
+- Updated dependencies [ef8770f]
+  - computesdk@4.1.12
+  - daemond@0.1.8
+
 ## 2.1.13
 
 ### Patch Changes
