@@ -34,8 +34,10 @@ Use the Google Cloud Run sandbox provider for ComputeSDK to run isolated command
 
 ## Install and set up the Cloud Run provider
 
+The Cloud Run provider ships in the `@computesdk/gcp` package as the `@computesdk/gcp/cloud-run` subpath. The old `@computesdk/cloud-run` package is deprecated and re-exports the same provider.
+
 ```bash
-npm install @computesdk/cloud-run
+npm install @computesdk/gcp
 ```
 
 The Google Cloud Run provider works in two modes:
@@ -68,7 +70,7 @@ Cloud Run supports two execution modes for sandbox sessions:
 ## Use the Cloud Run provider
 
 ```typescript
-import { cloudRun } from '@computesdk/cloud-run';
+import { cloudRun } from '@computesdk/gcp/cloud-run';
 
 const compute = cloudRun({
   sandboxUrl: process.env.CLOUD_RUN_SANDBOX_URL,
