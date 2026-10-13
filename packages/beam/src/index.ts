@@ -289,26 +289,36 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 
-          const proc = await sandbox.exec(
-            ['sh', '-c', fullCommand],
-            { wait: true } as Parameters<SandboxInstance['exec']>[1],
-          );
-          // beam's exec has no timeout option — enforce it here by killing
-          // the process when the deadline passes.
-          if (options?.timeout !== undefined) {
-            const outcome = await Promise.race([
-              proc.wait().then(() => 'done' as const),
-              new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), options.timeout)),
-            ]);
+          // wait:true makes the gateway block until the command finishes, so a
+          // client-side timeout must launch with wait:false to get the process
+          // handle up front. The deadline clock covers the launch call too.
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const deadline = options?.timeout !== undefined
+            ? new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), options.timeout); })
+            : undefined;
+          let timedOut = false;
+          let proc: Awaited<ReturnType<SandboxInstance['exec']>>;
+          try {
+            proc = await sandbox.exec(
+              ['sh', '-c', fullCommand],
+              { wait: options?.timeout === undefined } as Parameters<SandboxInstance['exec']>[1],
+            );
+            const outcome = deadline
+              ? await Promise.race([proc.wait().then(() => 'done' as const), deadline])
+              : (await proc.wait(), 'done' as const);
             if (outcome === 'timeout') {
+              timedOut = true;
               await proc.kill().catch(() => {});
             }
-          } else {
-            await proc.wait();
+          } finally {
+            clearTimeout(timer);
           }
           sandboxReadiness.set(sandbox, Promise.resolve());
           const [stdoutStr, stderrStr] = await Promise.all([proc.stdout.read(), proc.stderr.read()]);
-          return { stdout: stdoutStr || '', stderr: stderrStr || '', exitCode: proc.exitCode || 0, durationMs: Date.now() - startTime };
+          const stderr = timedOut
+            ? `Command timed out after ${options?.timeout}ms` + (stderrStr ? `\n${stderrStr}` : '')
+            : stderrStr || '';
+          return { stdout: stdoutStr || '', stderr, exitCode: timedOut ? 124 : (proc.exitCode || 0), durationMs: Date.now() - startTime };
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }

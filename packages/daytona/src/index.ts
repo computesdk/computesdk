@@ -161,8 +161,10 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           // executeCommand returns one merged `result` — separate stderr by
           // redirecting it to a file and cat'ing it back behind a delimiter.
           const errFile = `/tmp/.computesdk-stderr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          const delim = '__COMPUTESDK_STDERR__';
-          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; echo "${delim}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+          const delim = `__COMPUTESDK_STDERR_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
+          // Capture the real exit code in-band — the wrapper's own exit code is
+          // always the cleanup's (0), not the command's.
+          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __dy_ec=$?; echo "${delim}$__dy_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
 
           const response = await sandbox.process.executeCommand(
             wrapped,
@@ -172,12 +174,20 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           );
           const merged = response.result || '';
           const delimIdx = merged.lastIndexOf(delim);
-          const stdout = delimIdx === -1 ? merged : merged.substring(0, delimIdx);
-          const stderr = delimIdx === -1 ? '' : merged.substring(delimIdx + delim.length).replace(/^\n/, '');
+          let stdout = merged;
+          let stderr = '';
+          let exitCode = response.exitCode || 0;
+          if (delimIdx !== -1) {
+            stdout = merged.substring(0, delimIdx).replace(/\n$/, '');
+            const after = merged.substring(delimIdx + delim.length);
+            const newlineIdx = after.indexOf('\n');
+            exitCode = parseInt(newlineIdx === -1 ? after : after.substring(0, newlineIdx), 10) || 0;
+            stderr = newlineIdx === -1 ? '' : after.substring(newlineIdx + 1);
+          }
           return {
             stdout,
             stderr,
-            exitCode: response.exitCode || 0,
+            exitCode,
             durationMs: Date.now() - startTime
           };
         } catch (error) {
