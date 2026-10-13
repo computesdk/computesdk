@@ -161,7 +161,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           // executeCommand returns one merged `result` — separate stderr by
           // redirecting it to a file and cat'ing it back behind a delimiter.
           const errFile = `/tmp/.computesdk-stderr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          const delim = '__COMPUTESDK_STDERR__';
+          const delim = `__COMPUTESDK_STDERR_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
           // Capture the real exit code in-band — the wrapper's own exit code is
           // always the cleanup's (0), not the command's.
           const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __dy_ec=$?; echo "${delim}$__dy_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
