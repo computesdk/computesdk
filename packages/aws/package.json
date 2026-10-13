@@ -1,0 +1,74 @@
+{
+  "name": "@computesdk/aws",
+  "version": "1.0.0",
+  "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command",
+  "author": "Garrison",
+  "license": "MIT",
+  "exports": {
+    "./ec2": {
+      "types": "./dist/ec2/index.d.ts",
+      "import": "./dist/ec2/index.mjs",
+      "require": "./dist/ec2/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "ec2": [
+        "./dist/ec2/index.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ec2": "3.1078.0",
+    "@aws-sdk/client-s3": "3.1078.0",
+    "@aws-sdk/client-ssm": "3.1078.0",
+    "@aws-sdk/types": "3.973.15",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "aws-sdk-client-mock": "4.1.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "keywords": [
+    "computesdk",
+    "aws",
+    "ec2",
+    "spot",
+    "ssm",
+    "sandbox",
+    "code-execution",
+    "cloud",
+    "provider"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/aws"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  }
+}
