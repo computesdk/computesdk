@@ -128,22 +128,10 @@ importers:
 
   packages/agentcore:
     dependencies:
-      '@aws-sdk/client-bedrock-agentcore':
-        specifier: ^3.1076.0
-        version: 3.1078.0
-      '@aws-sdk/types':
-        specifier: ^3.973.15
-        version: 3.973.15
-      '@computesdk/provider':
+      '@computesdk/aws':
         specifier: workspace:*
-        version: link:../provider
-      computesdk:
-        specifier: workspace:*
-        version: link:../computesdk
+        version: link:../aws
     devDependencies:
-      '@computesdk/test-utils':
-        specifier: workspace:*
-        version: link:../test-utils
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.41
@@ -319,6 +307,9 @@ importers:
 
   packages/aws:
     dependencies:
+      '@aws-sdk/client-bedrock-agentcore':
+        specifier: 3.1078.0
+        version: 3.1078.0
       '@aws-sdk/client-ec2':
         specifier: 3.1078.0
         version: 3.1078.0

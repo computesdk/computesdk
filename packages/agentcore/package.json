@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/agentcore",
   "version": "0.1.10",
-  "description": "AWS Bedrock AgentCore Code Interpreter provider for ComputeSDK - secure, session-based code execution sandboxes",
+  "description": "Deprecated: use @computesdk/aws/agentcore. Thin re-export of the AWS Bedrock AgentCore Code Interpreter provider for ComputeSDK.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -15,7 +15,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -28,13 +29,9 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "computesdk": "workspace:*",
-    "@computesdk/provider": "workspace:*",
-    "@aws-sdk/client-bedrock-agentcore": "^3.1076.0",
-    "@aws-sdk/types": "^3.973.15"
+    "@computesdk/aws": "workspace:*"
   },
   "devDependencies": {
-    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
@@ -53,7 +50,8 @@
     "code-interpreter",
     "cloud",
     "provider",
-    "agents"
+    "agents",
+    "deprecated"
   ],
   "repository": {
     "type": "git",
@@ -63,5 +61,6 @@
   "homepage": "https://www.computesdk.com",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
-  }
+  },
+  "deprecated": "Use @computesdk/aws/agentcore instead."
 }
