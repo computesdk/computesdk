@@ -262,7 +262,12 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       list: async (config: DaytonaConfig) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
-        try { return await (daytona as any).snapshot.list(); } catch { return []; }
+        try {
+          const res = await (daytona as any).snapshot.list();
+          return (res?.items ?? []).map((s: { id: string; name: string; createdAt: Date; state: string }) => ({
+            id: s.id, provider: 'daytona', createdAt: s.createdAt, metadata: { name: s.name, state: s.state },
+          }));
+        } catch { return []; }
       },
       delete: async (config: DaytonaConfig, snapshotId: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
@@ -278,7 +283,12 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       list: async (config: DaytonaConfig) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
-        try { return await (daytona as any).snapshot.list(); } catch { return []; }
+        try {
+          const res = await (daytona as any).snapshot.list();
+          return (res?.items ?? []).map((s: { id: string; name: string; createdAt: Date; state: string }) => ({
+            id: s.id, provider: 'daytona', createdAt: s.createdAt, metadata: { name: s.name, state: s.state },
+          }));
+        } catch { return []; }
       },
       delete: async (config: DaytonaConfig, templateId: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
