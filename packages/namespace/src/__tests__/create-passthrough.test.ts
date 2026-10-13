@@ -70,6 +70,25 @@ describe('namespace create passthrough', () => {
     expect(body.containers[0].docker_sock_path).toBe('/var/run/docker.sock');
   });
 
+  it('drops passthrough image selectors so the request has exactly one', async () => {
+    const calls = mockFetch();
+    const provider = namespace({ token: 'ns_test' });
+    await provider.sandbox.create({
+      containerOptions: { image_ref: 'other:latest', nsc_state_path: '/var/run/nsc' },
+    } as any);
+    const container = calls[0].body.containers[0];
+    expect(container.known_image_id).toBe('builtin:base');
+    expect(container).not.toHaveProperty('image_ref');
+    expect(container.nsc_state_path).toBe('/var/run/nsc');
+
+    await provider.sandbox.create({
+      image: 'node:22',
+      containerOptions: { known_image_id: 'builtin:base' },
+    } as any);
+    expect(calls[1].body.containers[0].image_ref).toBe('node:22');
+    expect(calls[1].body.containers[0]).not.toHaveProperty('known_image_id');
+  });
+
   it('ignores non-object passthrough values', async () => {
     const calls = mockFetch();
     const provider = namespace({ token: 'ns_test' });

@@ -71,6 +71,12 @@ function plainObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+/** The image is chosen by `image`; a passthrough selector would conflict. */
+function withoutImageSelector(fields: Record<string, unknown>): Record<string, unknown> {
+  const { image_ref: _imageRef, known_image_id: _knownImageId, ...rest } = fields;
+  return rest;
+}
+
 /**
  * Namespace provider configuration
  */
@@ -218,7 +224,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               }],
             }),
             containers: [{
-              ...plainObject(options?.containerOptions),
+              ...withoutImageSelector(plainObject(options?.containerOptions)),
               name: containerName,
               ...(image === undefined
                 ? { known_image_id: 'builtin:base' }
