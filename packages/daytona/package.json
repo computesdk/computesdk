@@ -30,7 +30,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "@daytonaio/sdk": "^0.192.0"
+    "@daytonaio/sdk": "^0.224.0"
   },
   "keywords": [
     "computesdk",

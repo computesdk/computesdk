@@ -248,11 +248,13 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
         try {
-          const snapshot = await (daytona as any).snapshot.create({
-            workspaceId: sandboxId,
-            name: options?.name || `snapshot-${Date.now()}`
-          });
-          return snapshot;
+          const name = options?.name || `snapshot-${Date.now()}`;
+          // `daytona.snapshot.create` registers a declarative snapshot from an
+          // Image definition, not the filesystem of a running sandbox — the
+          // runtime-FS capture lives on the Sandbox instance.
+          const sandbox = await daytona.get(sandboxId);
+          await sandbox.createSnapshot(name);
+          return { id: name, provider: 'daytona', createdAt: new Date(), metadata: { name } };
         } catch (error) {
           throw new Error(`Failed to create Daytona snapshot: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -260,7 +262,12 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       list: async (config: DaytonaConfig) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
-        try { return await (daytona as any).snapshot.list(); } catch { return []; }
+        try {
+          const res = await (daytona as any).snapshot.list();
+          return (res?.items ?? []).map((s: { id: string; name: string; createdAt: Date; state: string }) => ({
+            id: s.id, provider: 'daytona', createdAt: s.createdAt, metadata: { name: s.name, state: s.state },
+          }));
+        } catch { return []; }
       },
       delete: async (config: DaytonaConfig, snapshotId: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
@@ -276,7 +283,12 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       list: async (config: DaytonaConfig) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
-        try { return await (daytona as any).snapshot.list(); } catch { return []; }
+        try {
+          const res = await (daytona as any).snapshot.list();
+          return (res?.items ?? []).map((s: { id: string; name: string; createdAt: Date; state: string }) => ({
+            id: s.id, provider: 'daytona', createdAt: s.createdAt, metadata: { name: s.name, state: s.state },
+          }));
+        } catch { return []; }
       },
       delete: async (config: DaytonaConfig, templateId: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
