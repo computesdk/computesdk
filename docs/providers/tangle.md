@@ -71,6 +71,9 @@ Create options support `image` or `templateId`, resources, `name`, `metadata`,
 Instances use isolated owner context, disable agent/model provisioning and request
 open egress explicitly. No VM/container or concurrency guarantee is inferred.
 Destroy requests removal and verifies absence; cleanup errors remain errors.
+Creation-failure recovery is not qualified: native readiness errors can lose the
+allocation ID/create receipt. See the package README before relying on cleanup of
+a failed create; absence from one list does not establish that a late allocation is impossible.
 
 Filesystem helpers, preview URLs, template management, snapshot restore and
 persistent instances are not exposed. `runtime` names are not translated; use an

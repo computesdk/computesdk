@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import { defineProvider } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
 import type { Sandbox, SandboxInstance } from '@tangle-network/sandbox';
+import { createIdentity } from './identity';
 
 export interface TangleConfig {
   /** API key, or TANGLE_API_KEY. */
@@ -49,15 +49,15 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
           throw new Error('Tangle does not map runtime names; select an environment with image or templateId.');
         }
         const client = await createClient(config);
-        const attempt = randomUUID();
+        const identity = createIdentity(options);
         const image = options.image ?? options.templateId ?? config.image;
         const timeout = options.timeout ?? config.timeout;
         const cpuCores = options.cpu ?? config.cpu;
         const memoryMB = options.memory ?? config.memory;
         const diskGB = options.disk ?? config.disk;
         const instance = await client.createIsolated({
-          name: options.name ?? 'computesdk-' + attempt,
-          idempotencyKey: options.idempotencyKey ?? attempt,
+          name: identity.name,
+          idempotencyKey: identity.idempotencyKey,
           ...(image !== undefined ? { environment: image } : {}),
           agent: false,
           ephemeral: true,
