@@ -52,6 +52,13 @@ const COMMAND_DEADLINE_SLACK_MS = 60_000;
 const DEFAULT_EXECUTION_TIMEOUT_S = 3_600;
 /** GetCommandInvocation returns at most this many characters per stream. */
 export const SSM_INLINE_OUTPUT_LIMIT = 24_000;
+export const SPILL_MARKER = '__COMPUTESDK_SPILL__';
+const SPILL_DIR = '/tmp/computesdk-ssm';
+/** 17,000 bytes base64-encode to 22,668 characters, under the inline limit. */
+const READBACK_CHUNK_BYTES = 17_000;
+const READBACK_CONCURRENCY = 4;
+const READBACK_TIMEOUT_S = 120;
+const DEFAULT_MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const MAX_TAGS_PER_RESOURCE = 50;
 const MAX_TAG_KEY_LENGTH = 128;
 const MAX_TAG_VALUE_LENGTH = 256;
@@ -99,6 +106,11 @@ export interface Ec2Config {
   outputS3Bucket?: string;
   /** Key prefix inside `outputS3Bucket`. */
   outputS3KeyPrefix?: string;
+  /**
+   * Without `outputS3Bucket`, output past SSM's 24,000-character inline limit is spilled to files on the instance
+   * and read back in chunks. Each stream keeps at most its last `maxOutputBytes` bytes (default 4 MiB).
+   */
+  maxOutputBytes?: number;
 }
 
 export type Ec2Lifecycle = 'spot' | 'on-demand';
@@ -540,17 +552,48 @@ function exitCodeFor(invocation: GetCommandInvocationCommandOutput): number {
   }
 }
 
-async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
-  const context = contextForSandbox(sandbox);
+/**
+ * Runs `script` with stdout/stderr redirected to files. Small output is printed as usual and the files removed;
+ * output over the inline limit stays on disk and only `SPILL_MARKER <stdoutBytes> <stderrBytes>` is printed.
+ */
+export function spillScript(script: string, id: string): string {
+  const out = `${SPILL_DIR}/${id}.out`;
+  const err = `${SPILL_DIR}/${id}.err`;
+  return [
+    `mkdir -p ${SPILL_DIR} && chmod 700 ${SPILL_DIR}`,
+    '(',
+    script,
+    `) >${out} 2>${err}`,
+    '__csdk_rc=$?',
+    `__csdk_so=$(wc -c <${out} | tr -d ' '); __csdk_se=$(wc -c <${err} | tr -d ' ')`,
+    `if [ "$__csdk_so" -le ${SSM_INLINE_OUTPUT_LIMIT} ] && [ "$__csdk_se" -le ${SSM_INLINE_OUTPUT_LIMIT} ]; then`,
+    `  cat ${out}; cat ${err} >&2; rm -f ${out} ${err}`,
+    'else',
+    `  echo "${SPILL_MARKER} $__csdk_so $__csdk_se"`,
+    'fi',
+    'exit $__csdk_rc',
+  ].join('\n');
+}
+
+interface SsmRun {
+  commandId: string;
+  invocation: GetCommandInvocationCommandOutput;
+}
+
+/** SendCommand + poll to a terminal status; cancels when it never registers or outlives the client deadline. */
+async function ssmRun(
+  context: Context,
+  sandbox: Ec2Sandbox,
+  script: string,
+  executionTimeoutS: number | undefined,
+): Promise<SsmRun> {
   const { config, clients } = context;
   const startedAt = Date.now();
-  const executionTimeoutS = options?.timeout ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined;
-
   const sent = await clients.ssm.send(new SendCommandCommand({
     DocumentName: 'AWS-RunShellScript',
     InstanceIds: [sandbox.instanceId],
     Parameters: {
-      commands: [buildScript(command, options)],
+      commands: [script],
       ...(executionTimeoutS ? { executionTimeout: [String(executionTimeoutS)] } : {}),
     },
     ...(config.outputS3Bucket ? { OutputS3BucketName: config.outputS3Bucket } : {}),
@@ -567,11 +610,10 @@ async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCom
   const cancel = () =>
     clients.ssm.send(new CancelCommandCommand({ CommandId: commandId, InstanceIds: [sandbox.instanceId] })).catch(() => {});
 
-  let invocation: GetCommandInvocationCommandOutput | undefined;
   while (true) {
     try {
-      invocation = await clients.ssm.send(new GetCommandInvocationCommand({ CommandId: commandId, InstanceId: sandbox.instanceId }));
-      if (invocation.Status && TERMINAL_STATUSES.has(invocation.Status)) break;
+      const invocation = await clients.ssm.send(new GetCommandInvocationCommand({ CommandId: commandId, InstanceId: sandbox.instanceId }));
+      if (invocation.Status && TERMINAL_STATUSES.has(invocation.Status)) return { commandId, invocation };
     } catch (error) {
       if (errorName(error) !== 'InvocationDoesNotExist') throw error;
       if (Date.now() > registrationDeadline) {
@@ -586,10 +628,126 @@ async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCom
     await sleep(interval);
     interval = Math.min(interval * 1.5, basePoll);
   }
+}
+
+async function ssmRunOk(context: Context, sandbox: Ec2Sandbox, script: string, what: string): Promise<GetCommandInvocationCommandOutput> {
+  const { invocation } = await ssmRun(context, sandbox, script, READBACK_TIMEOUT_S);
+  if (invocation.Status !== 'Success') {
+    const detail = (invocation.StandardErrorContent ?? '').trim().slice(-400);
+    throw new Error(`aws-ec2: ${what} failed on ${sandbox.instanceId} (${invocation.Status})${detail ? `: ${detail}` : ''}`);
+  }
+  return invocation;
+}
+
+async function inParallel<T>(items: T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) await run(items[next++]!);
+  });
+  await Promise.all(workers);
+}
+
+interface SpilledStream {
+  file: string;
+  size: number;
+  start: number;
+  chunks: Buffer[];
+}
+
+const chunkRead = (file: string, offset: number) =>
+  `tail -c +${offset + 1} ${file} | head -c ${READBACK_CHUNK_BYTES} | base64 | tr -d '\\n'`;
+
+/** Reads spilled output back in base64 chunks (one stdout + one stderr chunk per SSM command), then deletes it. */
+async function readSpilled(
+  context: Context,
+  sandbox: Ec2Sandbox,
+  id: string,
+  sizes: { stdout: number; stderr: number },
+): Promise<{ stdout: string; stderr: string; notes: string[] }> {
+  const max = context.config.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+  const stream = (ext: string, size: number): SpilledStream => {
+    const start = Math.max(0, size - max);
+    return { file: `${SPILL_DIR}/${id}.${ext}`, size, start, chunks: new Array(Math.ceil((size - start) / READBACK_CHUNK_BYTES)) };
+  };
+  const out = stream('out', sizes.stdout);
+  const err = stream('err', sizes.stderr);
+  const commands = Array.from({ length: Math.max(out.chunks.length, err.chunks.length) }, (_, i) => i);
+
+  try {
+    await inParallel(commands, READBACK_CONCURRENCY, async (i) => {
+      const parts: string[] = [];
+      if (i < out.chunks.length) parts.push(chunkRead(out.file, out.start + i * READBACK_CHUNK_BYTES));
+      if (i < err.chunks.length) parts.push(`{ ${chunkRead(err.file, err.start + i * READBACK_CHUNK_BYTES)}; } >&2`);
+      const invocation = await ssmRunOk(context, sandbox, parts.join('\n'), 'reading back command output');
+      if (i < out.chunks.length) out.chunks[i] = Buffer.from((invocation.StandardOutputContent ?? '').trim(), 'base64');
+      if (i < err.chunks.length) err.chunks[i] = Buffer.from((invocation.StandardErrorContent ?? '').trim(), 'base64');
+    });
+  } finally {
+    await ssmRun(context, sandbox, `rm -f ${out.file} ${err.file}`, READBACK_TIMEOUT_S).catch(() => {});
+  }
+
+  const notes: string[] = [];
+  for (const [name, s] of [['stdout', out], ['stderr', err]] as const) {
+    if (s.start > 0) notes.push(`[aws-ec2] ${name} truncated to the last ${s.size - s.start} of ${s.size} bytes (maxOutputBytes)`);
+  }
+  return { stdout: Buffer.concat(out.chunks).toString('utf8'), stderr: Buffer.concat(err.chunks).toString('utf8'), notes };
+}
+
+async function spilledSizes(context: Context, sandbox: Ec2Sandbox, id: string): Promise<{ stdout: number; stderr: number }> {
+  const size = (ext: string) => `$(wc -c <${SPILL_DIR}/${id}.${ext} 2>/dev/null | tr -d ' ')`;
+  const invocation = await ssmRunOk(context, sandbox, `echo "${size('out')} ${size('err')}"`, 'reading output size');
+  const [stdout, stderr] = (invocation.StandardOutputContent ?? '').trim().split(/\s+/).map((n) => Number(n) || 0);
+  return { stdout: stdout ?? 0, stderr: stderr ?? 0 };
+}
+
+async function readSpilledOutput(
+  context: Context,
+  sandbox: Ec2Sandbox,
+  id: string,
+  sizes: { stdout: number; stderr: number },
+): Promise<{ stdout: string; stderr: string }> {
+  const spilled = await readSpilled(context, sandbox, id, sizes);
+  let stderr = spilled.stderr;
+  for (const note of spilled.notes) stderr += `${stderr && !stderr.endsWith('\n') ? '\n' : ''}${note}`;
+  return { stdout: spilled.stdout, stderr };
+}
+
+const SPILL_LINE = new RegExp(`^${SPILL_MARKER} (\\d+) (\\d+)$`);
+
+async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
+  const context = contextForSandbox(sandbox);
+  const { config } = context;
+  const startedAt = Date.now();
+  const executionTimeoutS = options?.timeout ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined;
+  const spillId = !config.outputS3Bucket && !options?.background ? randomUUID() : undefined;
+  const script = buildScript(command, options);
+
+  const { commandId, invocation } = await ssmRun(
+    context,
+    sandbox,
+    spillId ? spillScript(script, spillId) : script,
+    executionTimeoutS,
+  );
 
   let stdout = invocation.StandardOutputContent ?? '';
   let stderr = invocation.StandardErrorContent ?? '';
-  if (config.outputS3Bucket) {
+  if (spillId) {
+    const marker = SPILL_LINE.exec(stdout.trim());
+    // A timed-out script is killed before it prints anything; whatever it wrote is still on disk.
+    if (marker) {
+      ({ stdout, stderr } = await readSpilledOutput(context, sandbox, spillId, {
+        stdout: Number(marker[1]),
+        stderr: Number(marker[2]),
+      }));
+    } else if (invocation.Status === 'TimedOut') {
+      // Partial output is best effort: a failed read-back must not hide the timeout itself.
+      try {
+        ({ stdout, stderr } = await readSpilledOutput(context, sandbox, spillId, await spilledSizes(context, sandbox, spillId)));
+      } catch {
+        // keep the (empty) inline output
+      }
+    }
+  } else if (config.outputS3Bucket) {
     [stdout, stderr] = await Promise.all([
       stdout.length >= SSM_INLINE_OUTPUT_LIMIT
         ? readS3Output(context, outputS3Key(config.outputS3KeyPrefix, commandId, sandbox.instanceId, 'stdout'), stdout)
