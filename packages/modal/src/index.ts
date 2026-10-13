@@ -217,7 +217,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           
-          const process = await modalSandbox.instance.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe' });
+          const process = await modalSandbox.instance.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe', timeoutMs: options?.timeout });
           const [stdout, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
           return { stdout: stdout || '', stderr: stderr || '', exitCode: exitCode || 0, durationMs: Date.now() - startTime };
         } catch (error) {

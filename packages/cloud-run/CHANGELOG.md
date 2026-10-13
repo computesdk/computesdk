@@ -1,5 +1,14 @@
 # @computesdk/cloud-run
 
+## 0.1.17
+
+### Patch Changes
+
+- 06db519: Deprecated: `@computesdk/cloud-run` is now a thin re-export of `@computesdk/gcp/cloud-run`. Existing imports and `npx @computesdk/cloud-run` keep working; switch to `@computesdk/gcp/cloud-run`.
+- ef8770f: Docs: update examples to the canonical `compute.instances` API (`Instance*` type names, `instanceId`, `methods.instances`). `compute.sandbox` / `Sandbox*` / `methods.sandbox` remain working deprecated aliases.
+- Updated dependencies [06db519]
+  - @computesdk/gcp@0.1.1
+
 ## 0.1.16
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/workbench",
-  "version": "33.0.7",
+  "version": "33.0.8",
   "description": "Interactive REPL for testing ComputeSDK sandbox operations",
   "author": "Garrison",
   "license": "MIT",
@@ -61,6 +61,7 @@
     "@computesdk/blaxel": "workspace:*",
     "@computesdk/cloudflare": "workspace:*",
     "@computesdk/cloud-run": "workspace:*",
+    "@computesdk/gcp": "workspace:*",
     "@computesdk/codesandbox": "workspace:*",
     "@computesdk/daytona": "workspace:*",
     "@computesdk/e2b": "workspace:*",
@@ -110,6 +111,9 @@
       "optional": true
     },
     "@computesdk/cloud-run": {
+      "optional": true
+    },
+    "@computesdk/gcp": {
       "optional": true
     },
     "@computesdk/codesandbox": {

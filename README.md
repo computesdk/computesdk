@@ -78,6 +78,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 |----------|----------------------|-----------|
 | **Archil** | `ARCHIL_API_KEY` | Disk-attached command execution |
 | **Arker** | `ARKER_API_KEY` | Sandboxed VMs with persistent filesystems, forked from golden images |
+| **AWS Bedrock AgentCore** | `AWS_REGION` + AWS SDK credential chain (or `profile` / `credentials`) | Managed Code Interpreter sessions, no infrastructure to provision |
 | **AWS EC2** | `AWS_REGION` + AWS SDK credential chain (or a `credentials` provider) | On-demand or Spot instances from a launch template; commands over SSM |
 | **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
 | **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
@@ -295,12 +296,12 @@ Install the provider packages you need and pass their instances into `compute.se
 
 ```bash
 npm install @computesdk/archil           # Archil provider
-npm install @computesdk/aws              # AWS providers (EC2: @computesdk/aws/ec2)
+npm install @computesdk/aws              # AWS providers (@computesdk/aws/ec2, @computesdk/aws/agentcore)
 npm install @computesdk/beam             # Beam provider
 npm install @computesdk/blaxel           # Blaxel provider
 npm install @computesdk/brezel           # Brezel provider
 npm install @computesdk/buddy            # Buddy provider
-npm install @computesdk/cloud-run        # Google Cloud Run provider
+npm install @computesdk/gcp              # Google Cloud providers (Cloud Run: @computesdk/gcp/cloud-run)
 npm install @computesdk/cloudflare       # Cloudflare provider
 npm install @computesdk/codesandbox      # CodeSandbox provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
@@ -341,12 +342,12 @@ const sandbox = await e2bCompute.sandbox.create();
 
 See individual provider READMEs for details:
 - **[@computesdk/archil](./packages/archil)** - Disk-attached command-execution sandboxes
-- **[@computesdk/aws](./packages/aws)** - AWS providers; `@computesdk/aws/ec2`: on-demand or Spot EC2 instances, commands over SSM Run Command
+- **[@computesdk/aws](./packages/aws)** - AWS providers; `@computesdk/aws/ec2`: on-demand or Spot EC2 instances, commands over SSM Run Command; `@computesdk/aws/agentcore`: Bedrock AgentCore Code Interpreter sessions
 - **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
 - **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
 - **[@computesdk/brezel](./packages/brezel)** - Self-hosted Firecracker sandboxes with immutable environments
 - **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
-- **[@computesdk/cloud-run](./packages/cloud-run)** - Google Cloud Run sandboxes
+- **[@computesdk/gcp](./packages/gcp)** - Google Cloud providers: Cloud Run sandboxes via `@computesdk/gcp/cloud-run`
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
 - **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch

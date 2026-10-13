@@ -258,6 +258,7 @@ export const tensorlake = defineProvider<
             ...(options?.env &&
               Object.keys(options.env).length > 0 && { env: options.env }),
             ...(options?.cwd && { workingDir: options.cwd }),
+            ...(options?.timeout !== undefined && { timeout: options.timeout / 1000 }),
           });
 
           const durationMs = Date.now() - startTime;
