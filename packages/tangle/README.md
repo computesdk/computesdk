@@ -5,6 +5,8 @@
 
 ## Installation
 
+Requires Node.js 20.19 or newer.
+
 ```bash
 npm install computesdk @computesdk/tangle
 ```
