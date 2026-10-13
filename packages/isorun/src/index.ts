@@ -64,6 +64,9 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         const timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS
         if (options?.snapshotId) {
           const restored = await client.restore(options.snapshotId)
+          // `restore` takes no options, so apply the requested expiry via setTimeout
+          // (the post-hoc equivalent of CreateOptions.timeoutSec).
+          await restored.setTimeout(Math.max(1, Math.ceil(timeoutMs / 1000)))
           sandboxTimeouts.set(restored, timeoutMs)
           return { instance: restored, instanceId: restored.id }
         }
