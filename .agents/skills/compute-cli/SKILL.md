@@ -42,7 +42,7 @@ compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
 compute actions cancel|rerun <run-id>
 compute actions artifacts <run-id> [--job] [--out <dir>]
 compute actions providers [configure|verify|remove <provider>]
-compute actions repos [connect <cloneUrl>|enable|disable <owner/repo>]
+compute actions repos [sync|connect <cloneUrl>|enable|disable <owner/repo>]
 compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|variable]
 ```
 

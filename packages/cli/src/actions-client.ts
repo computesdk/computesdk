@@ -371,6 +371,12 @@ export interface CiRepoConnectResponse {
   discovery: CiRepoDiscovery;
 }
 
+/** `POST /api/v1/actions/repos/sync`: per-account result plus the refreshed repo list. */
+export interface CiRepoSyncResponse {
+  accounts: Array<{ account: string; error: string | null }>;
+  repos: Array<Pick<CiRepo, 'repoId' | 'fullName' | 'enabled' | 'private' | 'authType' | 'githubInstallationId'>>;
+}
+
 export interface CiRepoPatchResponse {
   fullName: string;
   enabled?: boolean;
