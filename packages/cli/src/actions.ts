@@ -1167,6 +1167,7 @@ export function registerActionsCommands(program: Command): void {
         }
         console.log(pc.dim(`${r.repos.length} repos visible`));
       });
+      if (result.accounts.some((a) => a.error !== null)) process.exitCode = 1;
     } catch (e) {
       fail(e, opts);
     }
