@@ -42,6 +42,7 @@ import {
   type CiRepo,
   type CiRepoConnectResponse,
   type CiRepoPatchResponse,
+  type CiRepoSyncResponse,
   type CiReposResponse,
   type CiRun,
   type CiRunHistory,
@@ -1148,6 +1149,25 @@ export function registerActionsCommands(program: Command): void {
         console.log(`connected  ${pc.cyan(safeTerm(r.fullName))}  ${pc.dim(`(${safeTerm(r.authType)}, ${safeTerm(r.defaultBranch)})`)}`);
         printDiscovery(r.discovery);
       });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    repos
+      .command('sync')
+      .description('Re-read the GitHub App installation so repos granted after install show up (owner/admin key)'),
+  ).action(async (opts: CommonOpts) => {
+    try {
+      const result = await (await client(opts)).post<CiRepoSyncResponse>('/api/v1/actions/repos/sync', {});
+      output(opts, result, (r) => {
+        for (const a of r.accounts) {
+          console.log(a.error === null ? `synced  ${pc.cyan(safeTerm(a.account))}` : `failed  ${pc.cyan(safeTerm(a.account))}  ${pc.red(safeTerm(a.error))}`);
+        }
+        console.log(pc.dim(`${r.repos.length} repos visible`));
+      });
+      if (result.accounts.some((a) => a.error !== null)) process.exitCode = 1;
     } catch (e) {
       fail(e, opts);
     }
