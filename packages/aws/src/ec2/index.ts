@@ -759,7 +759,11 @@ async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCom
         ({ stdout, stderr } = await readSpilledOutput(context, sandbox, spillId, await spilledSizes(context, sandbox, spillId)));
       } catch {
         // keep the (empty) inline output
+        await removeSpilled(context, sandbox, spillId);
       }
+    } else if (invocation.Status === 'Cancelled') {
+      // Cancelled outside this call: the script never reached its own cleanup.
+      await removeSpilled(context, sandbox, spillId);
     }
   } else if (config.outputS3Bucket) {
     [stdout, stderr] = await Promise.all([
