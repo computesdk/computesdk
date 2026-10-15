@@ -69,7 +69,7 @@ function getUtf8Sink() {
   return { sink, value: () => chunks.join("") };
 }
 
-export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSnapshot>({
+export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
   methods: {
     instances: {
@@ -235,12 +235,20 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
     },
 
     snapshot: {
-      create: async (config: VercelConfig, sandboxId: string) => {
+      create: async (config: VercelConfig, sandboxId: string, options?: { name?: string }) => {
         const creds = resolveCredentials(config);
         const sandbox = creds.useOidc
           ? await VercelSandbox.get({ name: sandboxId })
           : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-        return await sandbox.snapshot();
+        const snapshot = await sandbox.snapshot();
+        // @vercel/sandbox's Snapshot class exposes `snapshotId`, not `id` —
+        // map it to the ComputeSDK Snapshot shape ({ id }) consumers rely on.
+        return {
+          id: snapshot.snapshotId,
+          provider: 'vercel',
+          createdAt: snapshot.createdAt,
+          metadata: { name: options?.name, sourceSessionId: snapshot.sourceSessionId },
+        };
       },
       list: async (_config: VercelConfig) => { throw new Error(`Vercel provider does not support listing snapshots.`); },
       delete: async (config: VercelConfig, snapshotId: string) => {
