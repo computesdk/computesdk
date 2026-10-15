@@ -1,5 +1,12 @@
 # @computesdk/example-basic
 
+## 0.4.116
+
+### Patch Changes
+
+- Updated dependencies [c9d5610]
+  - @computesdk/vercel@1.7.46
+
 ## 0.4.115
 
 ### Patch Changes

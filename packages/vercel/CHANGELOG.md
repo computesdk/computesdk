@@ -1,5 +1,11 @@
 # @computesdk/vercel
 
+## 1.7.46
+
+### Patch Changes
+
+- c9d5610: fix(vercel): map snapshot.create result to the ComputeSDK Snapshot shape (`{ id }` from `snapshotId`)
+
 ## 1.7.45
 
 ### Patch Changes
