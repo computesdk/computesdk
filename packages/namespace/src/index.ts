@@ -164,23 +164,88 @@ const handleApiErrors = (response: any) => {
   }
 };
 
+/** Calls that are safe to repeat: reads, and destroys (a second destroy is a no-op). */
+const IDEMPOTENT_ENDPOINTS = new Set<string>([
+  API_ENDPOINTS.DESCRIBE_INSTANCE,
+  API_ENDPOINTS.LIST_INSTANCES,
+  API_ENDPOINTS.DESTROY_INSTANCE,
+  STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES,
+  STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS,
+  STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUME_SNAPSHOT,
+]);
+
+/** Connection failures that mean the request never reached Namespace. */
+const NOT_SENT_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
+
+const RETRY_DELAYS_MS = [250, 1000];
+
+/**
+ * Whether a failed attempt may be repeated. Any call retries `unavailable`
+ * (503: Connect's "not processed") and a connection that never opened; other
+ * 5xx and mid-request drops retry only idempotent calls, since a command or a
+ * create may already have run.
+ */
+function retryable(endpoint: string, failure: { status: number } | { error: unknown }): boolean {
+  const idempotent = IDEMPOTENT_ENDPOINTS.has(endpoint);
+  if ('status' in failure) {
+    if (failure.status === 503) return true;
+    return idempotent && failure.status >= 500;
+  }
+  const code = (failure.error as { cause?: { code?: string } })?.cause?.code;
+  return idempotent || (code !== undefined && NOT_SENT_CODES.has(code));
+}
+
+/** Namespace's error body (Connect JSON `{code, message}`), for the thrown message. */
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const text = (await response.text()).trim();
+    if (!text) return '';
+    try {
+      const body = JSON.parse(text) as { code?: string; message?: string };
+      const detail = [body.code, body.message].filter(Boolean).join(': ');
+      if (detail) return `: ${detail}`;
+    } catch {
+      // not JSON — fall through to the raw text
+    }
+    return `: ${text.slice(0, 300)}`;
+  } catch {
+    return '';
+  }
+}
+
 export const fetchNamespace = async (
   token: string,
   endpoint: string,
   options: RequestInit = {},
   baseUrl: string = 'https://us.compute.namespaceapis.com'
 ) => {
-  const response = await fetch(`${baseUrl}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      ...options.headers
+  let response: Response;
+  for (let attempt = 0; ; attempt++) {
+    const delay = RETRY_DELAYS_MS[attempt];
+    try {
+      response = await fetch(`${baseUrl}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+    } catch (error) {
+      if (delay !== undefined && retryable(endpoint, { error })) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
     }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Namespace API error: ${response.status} ${response.statusText}`);
+    if (response.ok) break;
+    if (delay !== undefined && retryable(endpoint, { status: response.status })) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      continue;
+    }
+    throw new Error(
+      `Namespace API error: ${response.status} ${response.statusText}${await errorDetail(response)}`
+    );
   }
 
   const data = await response.json();
