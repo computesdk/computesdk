@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchNamespace } from '../index';
+import { fetchNamespace, isNamespaceNotFound } from '../index';
 
 const RUN = '/namespace.cloud.compute.v1beta.CommandService/RunCommandSync';
 const DESCRIBE = '/namespace.cloud.compute.v1beta.ComputeService/DescribeInstance';
@@ -16,6 +16,7 @@ function mockFetch(steps: Step[]) {
       statusText: step.status === 200 ? 'OK' : step.status === 503 ? 'Service Unavailable' : 'Internal Server Error',
       json: async () => JSON.parse(step.body ?? '{}'),
       text: async () => step.body ?? '',
+      body: { cancel: async () => undefined },
     } as unknown as Response;
   });
   vi.stubGlobal('fetch', spy);
@@ -45,10 +46,21 @@ describe('fetchNamespace errors and retries', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
-  it('retries a command on 503 and on a connection that never opened', async () => {
-    const spy = mockFetch([{ status: 503 }, { throws: fetchFailed('ECONNREFUSED') }, { status: 200, body: '{}' }]);
+  it('retries a command only when the connection never opened', async () => {
+    const spy = mockFetch([{ throws: fetchFailed('ECONNREFUSED') }, { status: 200, body: '{}' }]);
     await expect(fetchNamespace('t', RUN, { method: 'POST' })).resolves.toEqual({});
-    expect(spy).toHaveBeenCalledTimes(3);
+    expect(spy).toHaveBeenCalledTimes(2);
+    mockFetch([{ status: 503 }]);
+    await expect(fetchNamespace('t', RUN, { method: 'POST' })).rejects.toThrow('503');
+  });
+
+  it('marks only Namespace\'s own 404 as not found', async () => {
+    mockFetch([{ status: 404 }]);
+    const notFound = await fetchNamespace('t', RUN, { method: 'POST' }).catch((e) => e);
+    expect(isNamespaceNotFound(notFound)).toBe(true);
+    mockFetch([{ status: 500, body: '{"code":"internal","message":"upstream 404"}' }]);
+    const internal = await fetchNamespace('t', RUN, { method: 'POST' }).catch((e) => e);
+    expect(isNamespaceNotFound(internal)).toBe(false);
   });
 
   it('does not repeat a command whose connection dropped mid-request', async () => {
@@ -59,7 +71,7 @@ describe('fetchNamespace errors and retries', () => {
 
   it('gives up after three attempts', async () => {
     const spy = mockFetch([{ status: 503 }, { status: 503 }, { status: 503 }]);
-    await expect(fetchNamespace('t', RUN, { method: 'POST' })).rejects.toThrow('503');
+    await expect(fetchNamespace('t', DESCRIBE, { method: 'POST' })).rejects.toThrow('503');
     expect(spy).toHaveBeenCalledTimes(3);
   });
 });

@@ -180,17 +180,14 @@ const NOT_SENT_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_E
 const RETRY_DELAYS_MS = [250, 1000];
 
 /**
- * Whether a failed attempt may be repeated. Any call retries `unavailable`
- * (503: Connect's "not processed") and a connection that never opened; other
- * 5xx and mid-request drops retry only idempotent calls, since a command or a
- * create may already have run.
+ * Whether a failed attempt may be repeated. Any call retries a connection
+ * that never opened; a 5xx (even 503 — a gateway may have forwarded it) or a
+ * mid-request drop retries only idempotent calls, since a command or a create
+ * may already have run.
  */
 function retryable(endpoint: string, failure: { status: number } | { error: unknown }): boolean {
   const idempotent = IDEMPOTENT_ENDPOINTS.has(endpoint);
-  if ('status' in failure) {
-    if (failure.status === 503) return true;
-    return idempotent && failure.status >= 500;
-  }
+  if ('status' in failure) return idempotent && failure.status >= 500;
   const code = (failure.error as { cause?: { code?: string } })?.cause?.code;
   return idempotent || (code !== undefined && NOT_SENT_CODES.has(code));
 }
@@ -212,6 +209,11 @@ async function errorDetail(response: Response): Promise<string> {
     return '';
   }
 }
+
+/** Whether a `fetchNamespace` error is Namespace's 404, not a 404 in some other error's text. */
+export const isNamespaceNotFound = (error: unknown): boolean =>
+  (error as { status?: unknown } | null)?.status === 404 ||
+  (error instanceof Error && error.message.startsWith('Namespace API error: 404'));
 
 export const fetchNamespace = async (
   token: string,
@@ -240,11 +242,14 @@ export const fetchNamespace = async (
     }
     if (response.ok) break;
     if (delay !== undefined && retryable(endpoint, { status: response.status })) {
+      // An unread body keeps its connection out of the pool.
+      await response.body?.cancel().catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, delay));
       continue;
     }
-    throw new Error(
-      `Namespace API error: ${response.status} ${response.statusText}${await errorDetail(response)}`
+    throw Object.assign(
+      new Error(`Namespace API error: ${response.status} ${response.statusText}${await errorDetail(response)}`),
+      { status: response.status }
     );
   }
 
@@ -379,7 +384,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
           return { instance: sandbox, instanceId: instanceId };
         } catch (error) {
-          if (error instanceof Error && error.message.includes('404')) return null;
+          if (isNamespaceNotFound(error)) return null;
           throw new Error(
             `Failed to get Namespace instance: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -514,7 +519,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           });
           sandbox.status = instanceStatus(responseData.metadata);
         } catch (error) {
-          if (error instanceof Error && error.message.includes('404')) {
+          if (isNamespaceNotFound(error)) {
             // DescribeInstance only reaches NotFound once the terminal
             // statuses have passed — the instance is gone either way.
             sandbox.status = 'destroyed';
