@@ -528,6 +528,33 @@ describe('runCommand', () => {
     expect(result.stderr).toContain('[aws-ec2] command timed out after 1s');
   });
 
+  const cleanups = () =>
+    ssm.commandCalls(SendCommandCommand).filter((call) => call.args[0].input.Parameters!.commands![0]!.startsWith('rm -f'));
+
+  it('removes spill files once when partial output after a timeout cannot be read back', async () => {
+    const sandbox = await launch();
+    mockSpill({ out: Buffer.from('partial\n'), err: Buffer.alloc(0) }, { Status: 'TimedOut', ResponseCode: -1, StandardOutputContent: '' });
+    ssm.on(GetCommandInvocationCommand, { CommandId: 'cmd-2' }).resolves({ Status: 'Failed', ResponseCode: 1 });
+
+    const result = await sandbox.runCommand('sleep 999', { timeout: 1_000 });
+
+    expect(result).toMatchObject({ stdout: '', exitCode: 124 });
+    expect(readBacks()).toHaveLength(1);
+    expect(cleanups()).toHaveLength(1);
+  });
+
+  it('removes spill files when the size of timed-out output cannot be read', async () => {
+    const sandbox = await launch();
+    mockSpill({ out: Buffer.from('partial\n'), err: Buffer.alloc(0) }, { Status: 'TimedOut', ResponseCode: -1, StandardOutputContent: '' });
+    ssm.on(GetCommandInvocationCommand, { CommandId: 'cmd-1' }).resolves({ Status: 'Failed', ResponseCode: 1 });
+
+    const result = await sandbox.runCommand('sleep 999', { timeout: 1_000 });
+
+    expect(result).toMatchObject({ stdout: '', exitCode: 124 });
+    expect(readBacks()).toHaveLength(0);
+    expect(cleanups()).toHaveLength(1);
+  });
+
   it('removes spill files when SSM reports the command cancelled', async () => {
     const sandbox = await launch();
     mockCommand({ Status: 'Cancelled', ResponseCode: -1, StandardOutputContent: '' });
