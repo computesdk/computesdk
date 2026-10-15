@@ -1591,6 +1591,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/lizard:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@lizard-build/sdk':
+        specifier: ^0.1.60
+        version: 0.1.60
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/microsandbox:
     dependencies:
       '@computesdk/provider':
@@ -4356,6 +4393,10 @@ packages:
   '@lightningai/sdk@2026.7.8':
     resolution: {integrity: sha512-5RUIMZ677iWAY04snNJnRUyFFoOeJudn+WGiPGUUJVihwxn8iR0HD0LnhsXAYdfFfx13wpi/ab5uohrf8ES6mg==}
     engines: {node: '>=22.0.0'}
+
+  '@lizard-build/sdk@0.1.60':
+    resolution: {integrity: sha512-eOuJ1SVYXrzKC7xMOfTX8nnsJZ/p2g97paS/1shFgRn/y85/kNlyrzG9RXwkie5+RNXe049Eqvv4mi5fmz2zEw==}
+    engines: {node: '>=18'}
 
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
@@ -11276,6 +11317,8 @@ snapshots:
     transitivePeerDependencies:
       - debug
       - supports-color
+
+  '@lizard-build/sdk@0.1.60': {}
 
   '@manypkg/find-root@1.1.0':
     dependencies:
