@@ -272,7 +272,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.41(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.61)(@computesdk/modal@1.9.17)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.42(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.62)(@computesdk/modal@1.9.18)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -2849,6 +2849,9 @@ importers:
       '@computesdk/vercel':
         specifier: workspace:*
         version: link:../vercel
+      '@computesdk/workpaper':
+        specifier: workspace:*
+        version: link:../workpaper
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2877,6 +2880,43 @@ importers:
       vitest:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/workpaper:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+      workpaper:
+        specifier: ^0.2.3
+        version: 0.2.3
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
 packages:
 
@@ -3331,17 +3371,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.41':
-    resolution: {integrity: sha512-Sh/Uokho9RgW1643/la/ewUHOtNK15BF8QTcmMmXuLiQ5ZDgfC58nZeFZGhxFvhW2PK9OalHEn0YQ3xzATTY5Q==}
+  '@computesdk/daytona@1.7.42':
+    resolution: {integrity: sha512-FpWOgN7lkYk98bC7kR2jNdqIeCR4JsUbIf+KPpWiMCDra822C7RHhl3fmdI2V61BsOX+JSlyNAtpVWUhtQEi8Q==}
 
-  '@computesdk/e2b@1.7.61':
-    resolution: {integrity: sha512-geXNhV1cgizEgVYoBtExNWh06jp1lDVnoz48nj3Yu3AWEWLoQHYEeZELnoC19ALNGa5xmHPjasLkHIelVzAiLw==}
+  '@computesdk/e2b@1.7.62':
+    resolution: {integrity: sha512-ZwCa5R+F+YkXHM3qbCNrbcCjurZUukurj1srHCXytR7bFnniCOyUFA11bSKBfJp623dysapYJpPlH/JAOJ7I4g==}
 
-  '@computesdk/modal@1.9.17':
-    resolution: {integrity: sha512-fdM0SJl/Kv9igEm/vCXKqap/sIcZrjPqgdAz/7i97PMl7JMD93C57Ohwqd0dB22/pcveaPkTJ6G6o8xHoqwb+w==}
+  '@computesdk/modal@1.9.18':
+    resolution: {integrity: sha512-/SGBOkFDCx7M1XCfFEWmZ65/d2tAUkUY6+/mf9pV84DX2riBVzYUwU/4a1RWeUbzfb9Akx1DGfVznTeP7ntguQ==}
 
-  '@computesdk/provider@2.1.13':
-    resolution: {integrity: sha512-ZXC6nwhU5BbYAhfJ+4snRo0HWfMIB0onI6FWkH86+01kr/xU4Qf/qaF5XsJm0KzyNk1GUpRNLOFigGz4BZi0pg==}
+  '@computesdk/provider@2.1.14':
+    resolution: {integrity: sha512-7uqDqxSZ4tRBS0AwirGkuKzpOPLPWGA+vP/5BeKbukFCepJEJdprRK+JzCtIkeyEhmud+2hob6WPft+Qed+elw==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -6304,8 +6344,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.11:
-    resolution: {integrity: sha512-vBvKWvW7uG5udz4hOqN04VN58Q+3DkoGv8qoW3NXJd96TpyVQmW7X1EJcizo2qq1DiH+TpI04jfXJoWHh9s5sQ==}
+  computesdk@4.1.12:
+    resolution: {integrity: sha512-wEcAKgSBDqC3EAO6rZfLE2PvPp+izIY2itWJLWVi9FI02CfWiTk47fmLp+/2FxSjYctUKGKmY5HAgCYHE+lBew==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -8594,10 +8634,6 @@ packages:
     resolution: {integrity: sha512-PcByqNyT/38F2kDNi006HAMRJaULuBzq/FOsw3qdZvX/GA9W/jamDaRskgHjubHiftXK5sIFxLNkvrXUwcof6Q==}
     engines: {node: '>= 0.4'}
 
-  shell-quote@1.8.3:
-    resolution: {integrity: sha512-ObmnIF4hXNg1BqhnHmgbDETF8dLPCggZWBjkQfhZpbszZnYur5DUljTcCHii5LC3J5E0yeO/1LIMyH+UvHQgyw==}
-    engines: {node: '>= 0.4'}
-
   shimmer@1.2.1:
     resolution: {integrity: sha512-sQTKC1Re/rM6XyFM6fIAGHRPVGvyXfgzIDvzoq608vM+jeyVD0Tu1E6Np0Kc2zAIFWIj963V2800iF/9LPieQw==}
 
@@ -9433,6 +9469,10 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
+  workpaper@0.2.3:
+    resolution: {integrity: sha512-3FPCAeD8qZ5NVO7uQZ9zEGpvh6Jm1bN8NGhRncToBXnnhnh7q6qBSJJ62ney0b9Wlnc44VsVrL3YWu81rv6q+g==}
+    engines: {node: '>=18'}
+
   wrangler@4.136.1:
     resolution: {integrity: sha512-xGdBeGMbdFJ7KgndpFyXsncg+kSQ46pD378LTFvyEGUnVvHGAF5ka1shqMpQIrg8n5AFmqajoTxi4E7w7FfEwQ==}
     engines: {node: '>=22.0.0'}
@@ -9659,15 +9699,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.41(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.61)(@computesdk/modal@1.9.17)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.42(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@computesdk/e2b@1.7.62)(@computesdk/modal@1.9.18)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.41(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@computesdk/e2b': 1.7.61
-      '@computesdk/modal': 1.9.17
+      '@computesdk/daytona': 1.7.42(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@computesdk/e2b': 1.7.62
+      '@computesdk/modal': 1.9.18
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -9978,6 +10018,17 @@ snapshots:
       events: 3.3.0
       stream-browserify: 3.0.0
       tslib: 2.8.1
+
+  '@aws-sdk/lib-storage@3.1150.0(@aws-sdk/client-s3@3.1078.0)':
+    dependencies:
+      '@aws-sdk/client-s3': 3.1078.0
+      '@smithy/core': 3.35.2
+      '@smithy/types': 4.19.0
+      buffer: 5.6.0
+      events: 3.3.0
+      stream-browserify: 3.0.0
+      tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/lib-storage@3.1150.0(@aws-sdk/client-s3@3.1150.0)':
     dependencies:
@@ -10453,35 +10504,35 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.41(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
+  '@computesdk/daytona@1.7.42(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
-      '@computesdk/provider': 2.1.13
+      '@computesdk/provider': 2.1.14
       '@daytonaio/sdk': 0.192.0(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      computesdk: 4.1.11
+      computesdk: 4.1.12
     transitivePeerDependencies:
       - debug
       - supports-color
       - ws
     optional: true
 
-  '@computesdk/e2b@1.7.61':
+  '@computesdk/e2b@1.7.62':
     dependencies:
-      '@computesdk/provider': 2.1.13
-      computesdk: 4.1.11
+      '@computesdk/provider': 2.1.14
+      computesdk: 4.1.12
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.17':
+  '@computesdk/modal@1.9.18':
     dependencies:
-      '@computesdk/provider': 2.1.13
-      computesdk: 4.1.11
+      '@computesdk/provider': 2.1.14
+      computesdk: 4.1.12
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.13':
+  '@computesdk/provider@2.1.14':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.11
+      computesdk: 4.1.12
       daemond: 0.1.8
     optional: true
 
@@ -10565,7 +10616,7 @@ snapshots:
 
   '@daytona/api-client@0.192.0':
     dependencies:
-      axios: 1.18.1
+      axios: 1.20.0
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -10580,7 +10631,7 @@ snapshots:
 
   '@daytona/toolbox-api-client@0.192.0':
     dependencies:
-      axios: 1.18.1
+      axios: 1.20.0
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -10596,7 +10647,7 @@ snapshots:
   '@daytonaio/sdk@0.192.0(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))':
     dependencies:
       '@aws-sdk/client-s3': 3.1078.0
-      '@aws-sdk/lib-storage': 3.1045.0(@aws-sdk/client-s3@3.1078.0)
+      '@aws-sdk/lib-storage': 3.1150.0(@aws-sdk/client-s3@3.1078.0)
       '@daytona/api-client': 0.192.0
       '@daytona/toolbox-api-client': 0.192.0
       '@iarna/toml': 2.2.5
@@ -10606,17 +10657,17 @@ snapshots:
       '@opentelemetry/otlp-exporter-base': 0.217.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-node': 0.217.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-base': 2.8.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.41.1
-      axios: 1.18.1
+      '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+      axios: 1.20.0
       busboy: 1.6.0
       dotenv: 17.4.2
       expand-tilde: 2.0.2
       fast-glob: 3.3.3
-      form-data: 4.0.5
+      form-data: 4.0.6
       isomorphic-ws: 5.0.0(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       pathe: 2.0.3
-      shell-quote: 1.8.3
+      shell-quote: 1.12.0
       tar: 7.5.22
     transitivePeerDependencies:
       - debug
@@ -11624,7 +11675,7 @@ snapshots:
       '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 2.7.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.41.1
+      '@opentelemetry/semantic-conventions': 1.43.0
     optional: true
 
   '@opentelemetry/exporter-prometheus@0.222.0(@opentelemetry/api@1.9.1)':
@@ -11712,7 +11763,7 @@ snapshots:
       '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.41.1
+      '@opentelemetry/semantic-conventions': 1.43.0
     optional: true
 
   '@opentelemetry/instrumentation-amqplib@0.46.1(@opentelemetry/api@1.9.1)':
@@ -11794,7 +11845,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/instrumentation': 0.217.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.41.1
+      '@opentelemetry/semantic-conventions': 1.43.0
       forwarded-parse: 2.1.2
     transitivePeerDependencies:
       - supports-color
@@ -12126,7 +12177,7 @@ snapshots:
       '@opentelemetry/api-logs': 0.217.0
       '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.7.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.41.1
+      '@opentelemetry/semantic-conventions': 1.43.0
     optional: true
 
   '@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1)':
@@ -12182,7 +12233,7 @@ snapshots:
       '@opentelemetry/sdk-metrics': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-node': 2.7.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.41.1
+      '@opentelemetry/semantic-conventions': 1.43.0
     transitivePeerDependencies:
       - supports-color
     optional: true
@@ -13790,7 +13841,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.11:
+  computesdk@4.1.12:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.8
@@ -14946,7 +14997,7 @@ snapshots:
       type-fest: 4.41.0
       widest-line: 5.0.0
       wrap-ansi: 9.0.0
-      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yoga-layout: 3.2.1
     transitivePeerDependencies:
       - bufferutil
@@ -15137,7 +15188,7 @@ snapshots:
       cssstyle: 4.6.0
       data-urls: 5.0.0
       decimal.js: 10.6.0
-      form-data: 4.0.5
+      form-data: 4.0.6
       html-encoding-sniffer: 4.0.0
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
@@ -15152,7 +15203,7 @@ snapshots:
       whatwg-encoding: 3.1.1
       whatwg-mimetype: 4.0.0
       whatwg-url: 14.2.0
-      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - bufferutil
@@ -16450,9 +16501,6 @@ snapshots:
 
   shell-quote@1.12.0: {}
 
-  shell-quote@1.8.3:
-    optional: true
-
   shimmer@1.2.1:
     optional: true
 
@@ -17457,6 +17505,8 @@ snapshots:
       '@cloudflare/workerd-linux-64': 1.20260921.1
       '@cloudflare/workerd-linux-arm64': 1.20260921.1
       '@cloudflare/workerd-windows-64': 1.20260921.1
+
+  workpaper@0.2.3: {}
 
   wrangler@4.136.1(@types/node@20.19.5)(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
