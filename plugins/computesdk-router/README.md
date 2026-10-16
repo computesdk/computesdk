@@ -16,6 +16,8 @@ OAuth discovery — nothing to configure client-side.
 - `mcp.json` — maps the plugin to the platform MCP server
   (`streamable-http`). No `headers` — auth comes from OAuth.
 - `skills/sandboxes/` — workflow skill teaching the model the tool surface.
+- `skills/actions/` — workflow skill for the Actions (CI) tools: list
+  repos/workflows/runs, tail job logs, dispatch, cancel, re-run.
 - `skills/computesdk-sdk/` — guidance for generating SDK code.
 - `assets/` — icon/logo/screenshots (placeholder art; replace with the real
   assets from the design team before submission).

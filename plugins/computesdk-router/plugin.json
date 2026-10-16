@@ -17,10 +17,10 @@
       "interface": {
         "displayName": "ComputeSDK Router",
         "shortDescription": "Run code in cloud sandboxes",
-        "longDescription": "ComputeSDK Router gives ChatGPT a real execution environment: create sandboxes, run commands, manage files, run long-lived processes, and preview exposed ports. Sandboxes are placed across sandbox providers through the ComputeSDK gateway, with a live compute market that bids for the best price.",
+        "longDescription": "ComputeSDK Router gives ChatGPT a real execution environment: create sandboxes, run commands, manage files, run long-lived processes, and preview exposed ports. It also drives the org's Actions CI — list connected repos and workflows, dispatch workflow runs, watch progress, and read job logs. Sandboxes and CI jobs are placed across providers through the ComputeSDK gateway, with a live compute market that bids for the best price.",
         "developerName": "ComputeSDK",
         "category": "Developer Tools",
-        "capabilities": ["Run code", "Manage files", "Manage processes"],
+        "capabilities": ["Run code", "Manage files", "Manage processes", "Dispatch and inspect CI runs"],
         "websiteURL": "https://www.computesdk.com",
         "privacyPolicyURL": "https://www.computesdk.com/privacy",
         "termsOfServiceURL": "https://www.computesdk.com/terms",
@@ -28,7 +28,8 @@
         "defaultPrompt": [
           "Create a sandbox and run a Python script that prints system info.",
           "Spin up a sandbox, write a small web server, and give me its preview URL.",
-          "Analyze this CSV in a fresh sandbox: load it with pandas and summarize the columns."
+          "Analyze this CSV in a fresh sandbox: load it with pandas and summarize the columns.",
+          "Show me the latest failing CI run and pull the failing step's logs."
         ],
         "brandColor": "#111bf5",
         "composerIcon": "./assets/icon.png",
