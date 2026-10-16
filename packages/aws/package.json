@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/aws",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command. @computesdk/aws/agentcore: Bedrock AgentCore Code Interpreter sessions",
   "author": "Garrison",
   "license": "MIT",
