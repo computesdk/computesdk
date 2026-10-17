@@ -56,7 +56,7 @@ Create, exec and destroy go to MIOSA's regional sandbox endpoint (`run-<region>.
 
 With `lazyCreate` on, `create()` makes no network call. The first `runCommand()` sends one request that creates the sandbox and runs the command. Any other first call (`getInfo`, `getUrl`, a filesystem call, `getById`, a snapshot) creates the sandbox first. Errors from the create surface on that first call. A first command the runner refuses (empty, too large, bad timeout) is reported as a failed command with exit code 127, creates nothing, and leaves the handle unused. A first command that runs but produces no result (deadline, spawn failure) is reported the same way and is not run again. Destroying a handle that was never used sends nothing.
 
-Until the sandbox exists, `sandboxId` is a client-side placeholder. Call `getInfo()` for the real id. The option only applies while the regional endpoint is in use.
+`sandboxId` is a client-side placeholder for the whole life of the handle, before and after the sandbox exists, because the framework fixes it when `create()` returns. It names the sandbox only inside the process that created it and is only honoured for the API key that created it. To store or pass the sandbox on, read the real id from `getInfo().id`. The option only applies while the regional endpoint is in use.
 
 ## Method → endpoint mapping
 
