@@ -8,6 +8,8 @@ import {
   readRun,
   withRun,
   withoutRun,
+  RunRefused,
+  isRunRefusal,
 } from "../lazy-create";
 
 describe("create-and-run contract", () => {
@@ -23,6 +25,14 @@ describe("create-and-run contract", () => {
         run: { command: "node -v", timeout_ms: 5000 },
       });
       expect(body).toEqual({ wait: true, persistent: false });
+    });
+  });
+
+  describe("withRun without a timeout", () => {
+    it("should leave timeout_ms out so the runner's default applies", () => {
+      expect(withRun({}, { command: "node -v" })).toEqual({
+        run: { command: "node -v" },
+      });
     });
   });
 
@@ -50,6 +60,7 @@ describe("create-and-run contract", () => {
 
       expect(actual).toEqual({
         exitCode: 0,
+        error: undefined,
         stdout: "v22\n",
         stderr: "",
         durationMs: 4,
@@ -63,10 +74,47 @@ describe("create-and-run contract", () => {
 
       expect(actual).toEqual({
         exitCode: 3,
+        error: undefined,
         stdout: "",
         stderr: "boom",
         durationMs: undefined,
       });
+    });
+
+    it("should read a null error as a command that ended", () => {
+      const actual = readRun({
+        run: { exit_code: 0, error: null, stdout: "x", stderr: "" },
+      });
+
+      expect(actual).toMatchObject({ exitCode: 0, error: undefined });
+    });
+
+    it("should read a command with no result from the exec error object", () => {
+      const actual = readRun({
+        run: {
+          exit_code: null,
+          error: { code: "EXEC_TIMEOUT", message: "deadline exceeded" },
+          stdout: "partial",
+          stderr: "",
+          duration_ms: 30000,
+        },
+      });
+
+      expect(actual).toEqual({
+        exitCode: null,
+        error: "deadline exceeded",
+        stdout: "partial",
+        stderr: "",
+        durationMs: 30000,
+      });
+    });
+
+    it("should name an error object that carries only a code", () => {
+      const actual = readRun({
+        run: { exit_code: null, error: { code: "EXEC_SPAWN_FAILED" } },
+      });
+
+      expect(actual?.error).toBe("EXEC_SPAWN_FAILED");
     });
 
     it.each([
@@ -99,6 +147,35 @@ describe("create-and-run contract", () => {
       ["background mode", { background: true }],
     ])("should refuse %s, which the request cannot carry", (_name, options) => {
       expect(canRunInCreate(options)).toBe(false);
+    });
+  });
+
+  describe("isRunRefusal", () => {
+    const runnerError = (status: number, code: string) =>
+      Object.assign(new Error(code), { name: "RunnerError", status, code });
+
+    it.each([
+      [400, "MISSING_PARAM"],
+      [400, "INVALID_PARAM"],
+      [400, "INVALID_TIMEOUT"],
+      [400, "EXEC_TIMEOUT_UNSUPPORTED"],
+      [413, "RUNNER_COMMAND_TOO_LARGE"],
+    ])("should recognise %i %s", (status, code) => {
+      expect(isRunRefusal(runnerError(status, code))).toBe(true);
+    });
+
+    it.each([
+      [400, "RUNNER_UNSUPPORTED_REQUEST"],
+      [429, "rate_limited"],
+      [500, "internal_error"],
+      [400, "NOT_FOUND"],
+    ])("should not recognise %i %s", (status, code) => {
+      expect(isRunRefusal(runnerError(status, code))).toBe(false);
+    });
+
+    it("should not recognise an error that is not from the runner", () => {
+      expect(isRunRefusal(new Error("INVALID_PARAM"))).toBe(false);
+      expect(isRunRefusal("INVALID_PARAM")).toBe(false);
     });
   });
 
@@ -202,6 +279,63 @@ describe("LazyCreate", () => {
       await lazy.begin().result.catch(() => undefined);
 
       expect(await lazy.settled()).toBeUndefined();
+    });
+  });
+
+  describe("a refused run", () => {
+    it("should reset so the next call starts its own create", async () => {
+      let calls = 0;
+      const lazy = new LazyCreate(async (r) => {
+        calls += 1;
+        if (r) throw new RunRefused(new Error("refused"));
+        return "created";
+      });
+
+      const first = lazy.begin(run);
+      await expect(first.result).rejects.toBeInstanceOf(RunRefused);
+      expect(lazy.started).toBe(false);
+
+      const second = lazy.begin();
+      expect(second.starter).toBe(true);
+      expect(await second.result).toBe("created");
+      expect(calls).toBe(2);
+    });
+
+    it("should make a call that was waiting start one plain create, shared by all waiters", async () => {
+      let calls = 0;
+      const lazy = new LazyCreate(async (r) => {
+        calls += 1;
+        if (r) throw new RunRefused(new Error("refused"));
+        return "created";
+      });
+
+      const first = lazy.begin(run);
+      const waiterA = lazy.begin();
+      const waiterB = lazy.begin();
+
+      await expect(first.result).rejects.toBeInstanceOf(RunRefused);
+      expect(await waiterA.result).toBe("created");
+      expect(await waiterB.result).toBe("created");
+      expect(calls).toBe(2);
+    });
+
+    it("should still remember any other failure", async () => {
+      const failure = new Error("boom");
+      let calls = 0;
+      const lazy = new LazyCreate<string>(async () => {
+        calls += 1;
+        throw failure;
+      });
+
+      await expect(lazy.begin(run).result).rejects.toBe(failure);
+      await expect(lazy.begin().result).rejects.toBe(failure);
+      expect(calls).toBe(1);
+    });
+
+    it("should carry the refusal's message", () => {
+      expect(new RunRefused(new Error("refused INVALID_PARAM")).message).toBe(
+        "refused INVALID_PARAM",
+      );
     });
   });
 

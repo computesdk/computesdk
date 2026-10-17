@@ -67,10 +67,11 @@ type RunnerReply = {
 };
 
 const RUN_OUTCOME = {
-  exit_code: 0,
-  stdout: "v22.1.0\n",
-  stderr: "",
   duration_ms: 3,
+  error: null,
+  exit_code: 0,
+  stderr: "",
+  stdout: "v22.1.0\n",
 };
 
 const createdWithRun = (): RunnerReply => ({
@@ -296,9 +297,9 @@ describe("lazy create", () => {
       const result = await sandbox.runCommand("node -v");
 
       expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
-      expect(creates()[0]?.body).toMatchObject({
-        run: { command: "node -v", timeout_ms: 30_000 },
-      });
+      // No timeout was asked for, so none is sent and the runner's default
+      // applies.
+      expect(creates()[0]?.body?.run).toEqual({ command: "node -v" });
       expect(result).toMatchObject({
         stdout: "v22.1.0\n",
         stderr: "",
@@ -453,6 +454,166 @@ describe("lazy create", () => {
       ) as Record<string, unknown>;
       expect(sent).not.toHaveProperty("run");
       expect(result.stdout).toBe("from-account-api\n");
+    });
+  });
+
+  describe("a command that produced no result", () => {
+    it("should report it as a failed command and not run it again", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? {
+              ...createdPlain(),
+              body: {
+                ...sandboxRecord(),
+                run: {
+                  duration_ms: 30000,
+                  error: { code: "EXEC_TIMEOUT", message: "deadline exceeded" },
+                  exit_code: null,
+                  stderr: "",
+                  stdout: "partial",
+                },
+              },
+            }
+          : execOk(),
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const result = await sandbox.runCommand("sleep 99");
+
+      expect(result).toMatchObject({
+        exitCode: 127,
+        stderr: "deadline exceeded",
+        stdout: "partial",
+      });
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+
+    it("should leave the sandbox usable afterwards", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? {
+              ...createdPlain(),
+              body: {
+                ...sandboxRecord(),
+                run: {
+                  duration_ms: 1,
+                  error: { code: "EXEC_SPAWN_FAILED" },
+                  exit_code: null,
+                  stderr: "",
+                  stdout: "",
+                },
+              },
+            }
+          : execOk(),
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.runCommand("x");
+
+      const second = await sandbox.runCommand("echo hi");
+
+      expect(second.stdout).toBe("from-exec\n");
+      expect(creates()).toHaveLength(1);
+    });
+  });
+
+  describe("a command the runner refuses", () => {
+    const refusals: Array<[number, string]> = [
+      [400, "MISSING_PARAM"],
+      [400, "INVALID_PARAM"],
+      [400, "INVALID_TIMEOUT"],
+      [400, "EXEC_TIMEOUT_UNSUPPORTED"],
+      [413, "RUNNER_COMMAND_TOO_LARGE"],
+    ];
+    const refuseRun = (status: number, code: string) => (call: RunnerCall) => {
+      if (isCreate(call) && call.body?.run !== undefined) {
+        return { status, body: { error: { code, message: `refused ${code}` } } };
+      }
+      return isCreate(call) ? createdPlain() : execOk();
+    };
+
+    it.each(refusals)(
+      "should report %i %s as a failed command, create nothing and not fall back",
+      async (status, code) => {
+        useRunners(refuseRun(status, code));
+        const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+        const sandbox = await provider.sandbox.create();
+
+        const result = await sandbox.runCommand("bad");
+
+        expect(result.exitCode).toBe(127);
+        expect(result.stderr).toMatch(new RegExp(code));
+        expect(creates()).toHaveLength(1);
+        expect(fetchMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it("should leave no materialised handle: destroying it sends nothing", async () => {
+      useRunners(refuseRun(400, "INVALID_PARAM"));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.runCommand("bad");
+
+      await sandbox.destroy();
+
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should create the sandbox normally on the next command", async () => {
+      useRunners((call) =>
+        isCreate(call) && call.body?.run?.["command" as never] === "bad"
+          ? { status: 400, body: { error: { code: "INVALID_PARAM" } } }
+          : isCreate(call)
+            ? createdWithRun()
+            : execOk(),
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.runCommand("bad");
+
+      const result = await sandbox.runCommand("node -v");
+
+      expect(creates()).toHaveLength(2);
+      expect(result.stdout).toBe("v22.1.0\n");
+    });
+
+    it("should let another call that was waiting on that create make its own plain one", async () => {
+      useRunners(refuseRun(400, "INVALID_PARAM"));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const [command] = await Promise.all([
+        sandbox.runCommand("bad"),
+        sandbox.filesystem.writeFile("/work/a.txt", "hi"),
+      ]);
+
+      expect(command.exitCode).toBe(127);
+      expect(creates()).toHaveLength(2);
+      expect(creates()[1]?.body).not.toHaveProperty("run");
+      expect(accountApiCalls()).toEqual([`POST /sandboxes/${REAL_ID}/fs/write`]);
+    });
+
+    it("should still send a create the runner does not serve to the account API without the run field", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? {
+              status: 400,
+              body: { error: { code: "RUNNER_UNSUPPORTED_REQUEST" } },
+            }
+          : execOk(),
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const result = await sandbox.runCommand("node -v");
+
+      expect(result.stdout).toBe("from-account-api\n");
+      const sent = JSON.parse(
+        String((fetchMock.mock.calls[0]?.[1] as { body: string }).body),
+      ) as Record<string, unknown>;
+      expect(sent).not.toHaveProperty("run");
     });
   });
 

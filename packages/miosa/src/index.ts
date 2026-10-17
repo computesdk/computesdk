@@ -13,11 +13,12 @@ import { defineProvider, escapeShellArg } from "@computesdk/provider";
 import { RunnerClient } from "./runner-entry";
 
 import {
-  DEFAULT_RUN_TIMEOUT_MS,
   LAZY_CREATE_ENV,
   LazyCreate,
+  RunRefused,
   canRunInCreate,
   isPlaceholderId,
+  isRunRefusal,
   placeholderId,
   readRun,
   withRun,
@@ -1403,10 +1404,17 @@ function newLazySandbox(
   sandbox.lazy = {
     id,
     create: new LazyCreate<CreatedSandbox>(async (run) => {
-      const created = await createSandboxRecord(
-        auth,
-        run ? withRun(body, run) : body,
-      );
+      let created: CreatedSandbox;
+      try {
+        created = await createSandboxRecord(
+          auth,
+          run ? withRun(body, run) : body,
+        );
+      } catch (error) {
+        // The runner refused the command and created nothing.
+        if (run && isRunRefusal(error)) throw new RunRefused(error);
+        throw error;
+      }
       const handleAuth = settleCreated(auth, created);
       // Fill the handle in place: the framework and the caller hold this
       // object, and every later call must see the real sandbox.
@@ -1456,16 +1464,45 @@ async function runFirstCommand(
   const lazy = sandbox.lazy;
   if (!lazy) return undefined;
   const run: RunSpec | undefined = canRunInCreate(options)
-    ? { command, timeoutMs: options?.timeout ?? DEFAULT_RUN_TIMEOUT_MS }
+    ? {
+        command,
+        ...(options?.timeout !== undefined ? { timeoutMs: options.timeout } : {}),
+      }
     : undefined;
   const { starter, result } = lazy.create.begin(run);
-  const created = await result;
+  let created: CreatedSandbox;
+  try {
+    created = await result;
+  } catch (error) {
+    // The runner refused the command and created nothing. Report it as an
+    // exec refusal is reported: a failed command, not a create error. The
+    // handle is untouched and a later call creates the sandbox as usual.
+    if (error instanceof RunRefused) {
+      return {
+        stdout: "",
+        stderr: error.message,
+        exitCode: 127,
+        durationMs: Date.now() - startTime,
+      };
+    }
+    throw error;
+  }
   // Only the call that started the create asked for its command to run in it.
   if (!starter || !created.run) return undefined;
+  if (created.run.error !== undefined) {
+    // The command produced no result (deadline, spawn failure). The sandbox
+    // exists and the command has been tried; do not run it again.
+    return {
+      stdout: created.run.stdout,
+      stderr: created.run.error,
+      exitCode: 127,
+      durationMs: created.run.durationMs ?? Date.now() - startTime,
+    };
+  }
   return {
     stdout: created.run.stdout,
     stderr: created.run.stderr,
-    exitCode: created.run.exitCode,
+    exitCode: created.run.exitCode ?? 0,
     durationMs: created.run.durationMs ?? Date.now() - startTime,
   };
 }
