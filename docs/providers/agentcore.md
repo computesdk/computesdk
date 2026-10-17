@@ -30,8 +30,10 @@ A ComputeSDK sandbox maps onto an AgentCore Code Interpreter session. See [compu
 
 ## Installation & Setup
 
+The AgentCore provider ships in the `@computesdk/aws` package as the `@computesdk/aws/agentcore` subpath. The old `@computesdk/agentcore` package is deprecated and re-exports the same provider.
+
 ```bash
-npm install @computesdk/agentcore
+npm install @computesdk/aws
 ```
 
 There is no API key. The provider uses the standard [AWS credential provider chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html) — the same resolution as the AWS CLI — so environment variables, SSO sessions, named profiles, and instance roles all work, including temporary credentials.
@@ -51,7 +53,7 @@ bedrock-agentcore:ListCodeInterpreterSessions
 ## Usage
 
 ```typescript
-import { agentcore } from '@computesdk/agentcore';
+import { agentcore } from '@computesdk/aws/agentcore';
 
 const compute = agentcore({ region: 'us-west-2' });
 

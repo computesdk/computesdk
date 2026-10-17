@@ -36,6 +36,17 @@ const sandboxes = await compute.instances.list();
 await sandbox.destroy();
 ```
 
+### Passing Namespace API fields through
+
+`create()` accepts raw Namespace API fields, merged as-is (snake_case) into the request. `containerOptions` goes into the container's [`ContainerRequest`](https://buf.build/namespace/cloud/docs/main:namespace.cloud.compute.v1beta#namespace.cloud.compute.v1beta.ContainerRequest), and `instanceOptions` into [`CreateInstanceRequest`](https://buf.build/namespace/cloud/docs/main:namespace.cloud.compute.v1beta#namespace.cloud.compute.v1beta.CreateInstanceRequest). Fields the provider sets itself (shape, deadline, container name/args/env) take precedence, and the image is always chosen by `image` (`image_ref`/`known_image_id` in `containerOptions` are ignored).
+
+```typescript
+// Inject the instance's workload token into the container at /var/run/nsc
+const sandbox = await compute.instances.create({
+  containerOptions: { nsc_state_path: '/var/run/nsc' },
+});
+```
+
 ## Currently Implemented
 
 ### Sandbox Operations

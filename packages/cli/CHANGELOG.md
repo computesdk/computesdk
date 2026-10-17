@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.5.3
+
+### Patch Changes
+
+- 90bbdd1: Add `compute actions repos sync`: re-reads the GitHub App installation so repos granted after install show up.
+
 ## 2.5.2
 
 ### Patch Changes

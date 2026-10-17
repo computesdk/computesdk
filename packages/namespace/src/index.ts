@@ -61,6 +61,23 @@ function isGoneInstance(
 }
 
 /**
+ * Raw Namespace API fields passed through on create (snake_case, as in
+ * CreateInstanceRequest / ContainerRequest). Fields the provider sets itself
+ * take precedence.
+ */
+function plainObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/** The image is chosen by `image`; a passthrough selector would conflict. */
+function withoutImageSelector(fields: Record<string, unknown>): Record<string, unknown> {
+  const { image_ref: _imageRef, known_image_id: _knownImageId, ...rest } = fields;
+  return rest;
+}
+
+/**
  * Namespace provider configuration
  */
 export interface NamespaceConfig {
@@ -147,23 +164,93 @@ const handleApiErrors = (response: any) => {
   }
 };
 
+/** Calls that are safe to repeat: reads, and destroys (a second destroy is a no-op). */
+const IDEMPOTENT_ENDPOINTS = new Set<string>([
+  API_ENDPOINTS.DESCRIBE_INSTANCE,
+  API_ENDPOINTS.LIST_INSTANCES,
+  API_ENDPOINTS.DESTROY_INSTANCE,
+  STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES,
+  STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS,
+  STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUME_SNAPSHOT,
+]);
+
+/** Connection failures that mean the request never reached Namespace. */
+const NOT_SENT_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
+
+const RETRY_DELAYS_MS = [250, 1000];
+
+/**
+ * Whether a failed attempt may be repeated. Any call retries a connection
+ * that never opened; a 5xx (even 503 — a gateway may have forwarded it) or a
+ * mid-request drop retries only idempotent calls, since a command or a create
+ * may already have run.
+ */
+function retryable(endpoint: string, failure: { status: number } | { error: unknown }): boolean {
+  const idempotent = IDEMPOTENT_ENDPOINTS.has(endpoint);
+  if ('status' in failure) return idempotent && failure.status >= 500;
+  const code = (failure.error as { cause?: { code?: string } })?.cause?.code;
+  return idempotent || (code !== undefined && NOT_SENT_CODES.has(code));
+}
+
+/** Namespace's error body (Connect JSON `{code, message}`), for the thrown message. */
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const text = (await response.text()).trim();
+    if (!text) return '';
+    try {
+      const body = JSON.parse(text) as { code?: string; message?: string };
+      const detail = [body.code, body.message].filter(Boolean).join(': ');
+      if (detail) return `: ${detail}`;
+    } catch {
+      // not JSON — fall through to the raw text
+    }
+    return `: ${text.slice(0, 300)}`;
+  } catch {
+    return '';
+  }
+}
+
+/** Whether a `fetchNamespace` error is Namespace's 404, not a 404 in some other error's text. */
+export const isNamespaceNotFound = (error: unknown): boolean =>
+  (error as { status?: unknown } | null)?.status === 404 ||
+  (error instanceof Error && error.message.startsWith('Namespace API error: 404'));
+
 export const fetchNamespace = async (
   token: string,
   endpoint: string,
   options: RequestInit = {},
   baseUrl: string = 'https://us.compute.namespaceapis.com'
 ) => {
-  const response = await fetch(`${baseUrl}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      ...options.headers
+  let response: Response;
+  for (let attempt = 0; ; attempt++) {
+    const delay = RETRY_DELAYS_MS[attempt];
+    try {
+      response = await fetch(`${baseUrl}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+    } catch (error) {
+      if (delay !== undefined && retryable(endpoint, { error })) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
     }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Namespace API error: ${response.status} ${response.statusText}`);
+    if (response.ok) break;
+    if (delay !== undefined && retryable(endpoint, { status: response.status })) {
+      // An unread body keeps its connection out of the pool.
+      await response.body?.cancel().catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      continue;
+    }
+    throw Object.assign(
+      new Error(`Namespace API error: ${response.status} ${response.statusText}${await errorDetail(response)}`),
+      { status: response.status }
+    );
   }
 
   const data = await response.json();
@@ -188,6 +275,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
         try {
           const requestBody = {
+            ...plainObject(options?.instanceOptions),
             shape: {
               virtual_cpu: config.virtualCpu || 2,
               memory_megabytes: config.memoryMegabytes || 4096,
@@ -206,6 +294,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               }],
             }),
             containers: [{
+              ...withoutImageSelector(plainObject(options?.containerOptions)),
               name: containerName,
               ...(image === undefined
                 ? { known_image_id: 'builtin:base' }
@@ -295,7 +384,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
           return { instance: sandbox, instanceId: instanceId };
         } catch (error) {
-          if (error instanceof Error && error.message.includes('404')) return null;
+          if (isNamespaceNotFound(error)) return null;
           throw new Error(
             `Failed to get Namespace instance: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -430,7 +519,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           });
           sandbox.status = instanceStatus(responseData.metadata);
         } catch (error) {
-          if (error instanceof Error && error.message.includes('404')) {
+          if (isNamespaceNotFound(error)) {
             // DescribeInstance only reaches NotFound once the terminal
             // statuses have passed — the instance is gone either way.
             sandbox.status = 'destroyed';

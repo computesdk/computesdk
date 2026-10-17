@@ -85,7 +85,7 @@ try {
 | `launchTemplateVersion` | no | Default `$Default` |
 
 Advanced: `readyTimeoutMs` (default `120000`), `pollIntervalMs` (default `2000`),
-`outputS3Bucket` / `outputS3KeyPrefix` (full command output, see below).
+`maxOutputBytes` (default 4 MiB), `outputS3Bucket` / `outputS3KeyPrefix` (see large output below).
 
 The launch template owns the AMI, IMDS settings, root volume, security group, networking, and an instance profile
 that allows SSM. The provider never sets those.
@@ -117,8 +117,11 @@ ec2({ launchTemplate: 'my-template', credentials: awsCredentialsProvider({ roleA
   error the instance is terminated before throwing. `create({ timeout })` overrides `readyTimeoutMs`.
 - **Commands run as root** via `AWS-RunShellScript`. `env` is exported and `cwd` is entered in the same script;
   `timeout` maps to SSM `executionTimeout` (seconds, rounded up). Timed-out commands return exit code `124`.
-- **Output limit**: SSM returns at most 24,000 characters each of stdout and stderr inline. Set
-  `outputS3Bucket` (the instance profile needs `s3:PutObject` and the caller `s3:GetObject`) to get full output.
+- **Large output**: SSM returns at most 24,000 characters of stdout and 8,000 of stderr inline. Larger output is written to
+  `/tmp/computesdk-ssm/` on the instance and read back in ~17 KB chunks (a few SSM calls in parallel, then deleted),
+  so it arrives complete but slower: roughly 15–30 s per MB. Each stream keeps its last `maxOutputBytes` (default
+  4 MiB) and stderr notes any cut. For big output, set `outputS3Bucket` (the instance profile needs `s3:PutObject`
+  and the caller `s3:GetObject`): SSM writes full output there and it is fetched in one request.
 - `getById` returns `null` for unknown, terminated/shutting-down, or untagged instances. `list` returns managed
   `pending`/`running` instances. `destroy` is idempotent and refuses to terminate untagged instances.
 - `getInstance()` / `getInfo().metadata` expose instance type, AZ, subnet, lifecycle (`spot`/`on-demand`), and launch time.

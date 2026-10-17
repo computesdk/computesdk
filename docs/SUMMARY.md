@@ -36,6 +36,7 @@
   * [Leap0](providers/leap0.md)
   * [Lelantos](providers/lelantos.md)
   * [Lightning](providers/lightning.md)
+  * [Lizard](providers/lizard.md)
   * [Modal](providers/modal.md)
   * [Microsandbox](providers/microsandbox.md)
   * [MIOSA](providers/miosa.md)
@@ -78,3 +79,4 @@
 ***
 
 * [LLM Documentation Files](<README (1).md>)
+

@@ -577,6 +577,33 @@ const apiKey = config.apiKey ?? process.env.MY_PROVIDER_API_KEY;
 | Config type | `{PascalCase}Config` | `MyProviderConfig` |
 | Directory | `packages/{kebab-case}` | `packages/my-provider` |
 
+### Cloud vendors with several products
+
+Most providers are one product, so they get one flat package (`@computesdk/e2b`,
+`@computesdk/modal`). A cloud vendor that offers several compute products gets **one package
+per vendor, with a subpath per product**:
+
+```typescript
+import { ec2 } from '@computesdk/aws/ec2';
+import { agentcore } from '@computesdk/aws/agentcore';
+import { cloudRun } from '@computesdk/gcp/cloud-run';
+```
+
+| Item | Convention | Example |
+|---|---|---|
+| Package | `@computesdk/{vendor}` in `packages/{vendor}` | `packages/aws` |
+| Product source | `src/{product}/index.ts` (tests in `src/{product}/__tests__/`) | `src/ec2/index.ts` |
+| Subpath | `./{product}` in `exports`, plus a `typesVersions` entry so `moduleResolution: "node"` consumers resolve types | `@computesdk/aws/ec2` |
+| tsup entry | `'{product}/index': 'src/{product}/index.ts'` | `'ec2/index'` |
+| Export name | camelCase product name | `ec2`, `cloudRun` |
+| Provider `name` | Unique across all providers; `{vendor}-{product}` for new ones | `aws-ec2` |
+
+Adding a product to an existing vendor package means adding a new `src/{product}/` directory
+and its `exports`/`typesVersions`/tsup entries. Don't put more than one product behind a single
+subpath. A product that already shipped as its own package keeps its old package as a deprecated
+`export * from '@computesdk/{vendor}/{product}'`, and keeps its provider `name` so benchmark
+and market IDs don't change (e.g. `@computesdk/agentcore` keeps `agentcore`).
+
 ## Reference Implementations
 
 | Provider | Path |

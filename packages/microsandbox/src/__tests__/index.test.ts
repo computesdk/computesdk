@@ -16,6 +16,9 @@ const mock = vi.hoisted(() => ({
   stopAttempts: 0,
   removeFailures: 0,
   removeAttempts: 0,
+  createError: null as Error | null,
+  createdStatus: 'running',
+  skipHandleOnError: false,
 }));
 
 vi.mock('microsandbox', () => {
@@ -149,7 +152,10 @@ vi.mock('microsandbox', () => {
         network: { ports: this.config.ports },
       });
       handle.native = sandbox;
+      handle.status = mock.createdStatus;
+      if (mock.createError && mock.skipHandleOnError) throw mock.createError;
       mock.handles.set(this.name, handle);
+      if (mock.createError) throw mock.createError;
       return sandbox;
     }
   }
@@ -206,6 +212,9 @@ beforeEach(async () => {
   mock.stopAttempts = 0;
   mock.removeFailures = 0;
   mock.removeAttempts = 0;
+  mock.createError = null;
+  mock.createdStatus = 'running';
+  mock.skipHandleOnError = false;
 });
 
 describe('microsandbox provider', () => {
@@ -434,6 +443,43 @@ describe('microsandbox provider', () => {
     expect(mock.removeAttempts).toBe(2);
     expect(mock.handles.has('retry-cleanup')).toBe(false);
     expect(mock.backendKind).toBe('cloud');
+  });
+
+  it('removes the named sandbox when native creation fails after it exists', async () => {
+    mock.createError = new Error('cloud sandbox "readiness" did not reach running before the readiness wait expired');
+    mock.createdStatus = 'starting';
+    await expect(microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'readiness' })).rejects.toThrow(/readiness wait expired/);
+    expect(mock.stopAttempts).toBe(1);
+    expect(mock.removeAttempts).toBe(1);
+    expect(mock.handles.has('readiness')).toBe(false);
+  });
+
+  it('does not remove an existing same-name sandbox when create fails', async () => {
+    const provider = microsandbox({ apiKey: 'key' });
+    await provider.sandbox.create({ name: 'worker-1' });
+    const existing = mock.handles.get('worker-1');
+    mock.createError = new Error('sandbox already exists');
+    // Simulate a rejected duplicate: create throws without replacing the existing sandbox.
+    mock.skipHandleOnError = true;
+    await expect(provider.sandbox.create({ name: 'worker-1' })).rejects.toThrow('already exists');
+    expect(mock.stopAttempts).toBe(0);
+    expect(mock.removeAttempts).toBe(0);
+    expect(mock.handles.get('worker-1')).toBe(existing);
+  });
+
+  it('keeps the create error when failed-create cleanup also fails', async () => {
+    mock.createError = new Error('readiness wait expired');
+    mock.removeError = new Error('permission denied: sensitive SDK details');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(microsandbox({ apiKey: 'key' }).sandbox.create({ name: 'leaky' })).rejects.toThrow('readiness wait expired');
+      expect(mock.removeAttempts).toBe(3);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('leaky');
+      expect(warn.mock.calls[0][0]).not.toContain('sensitive SDK details');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('reports failed aborted-create cleanup without exposing SDK error details', async () => {

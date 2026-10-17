@@ -1,5 +1,27 @@
 # @computesdk/example-basic
 
+## 0.4.116
+
+### Patch Changes
+
+- Updated dependencies [c9d5610]
+  - @computesdk/vercel@1.7.46
+
+## 0.4.115
+
+### Patch Changes
+
+- Updated dependencies [32a3700]
+- Updated dependencies [039216f]
+- Updated dependencies [8faaa66]
+- Updated dependencies [f08bfc4]
+- Updated dependencies [0c30a8f]
+  - @computesdk/blaxel@1.6.33
+  - @computesdk/codesandbox@1.5.62
+  - @computesdk/daytona@1.7.43
+  - @computesdk/modal@1.9.19
+  - @computesdk/vercel@1.7.45
+
 ## 0.4.114
 
 ### Patch Changes

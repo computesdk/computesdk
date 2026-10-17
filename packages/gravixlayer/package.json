@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/gravixlayer",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "GravixLayer provider for ComputeSDK — cloud runtimes with a native filesystem, live command streaming, and snapshots",
   "author": "Gravix Layer",
   "license": "MIT",
@@ -49,7 +49,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "gravixlayer": "^0.1.34"
+    "gravixlayer": "^0.1.36"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",

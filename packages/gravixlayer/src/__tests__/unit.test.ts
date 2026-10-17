@@ -431,8 +431,8 @@ describe('create', () => {
     expect(calls('runtime.create')[0].args[0]).toEqual({
       template: 'base-small',
       envVars: { FOO: 'bar' },
-      timeoutSeconds: 91,
-      timeout: 180_000,
+      timeout: 91,
+      requestTimeoutMs: 180_000,
       metadata: { job: 'build' },
       signal: controller.signal,
     })
@@ -465,22 +465,33 @@ describe('create', () => {
     expect(calls('runtime.create')).toHaveLength(0)
   })
 
-  it('allows a zero timeout and passes timeoutSeconds 0', async () => {
+  it('allows a zero timeout and passes lifetime 0', async () => {
     await provider().sandbox.create({ timeout: 0 })
     expect(calls('runtime.create')[0].args[0]).toMatchObject({
-      timeoutSeconds: 0,
-      timeout: 180_000,
+      timeout: 0,
+      requestTimeoutMs: 180_000,
     })
   })
 
-  it('does not disable the HTTP timeout when the provider sets one', async () => {
+  it('sends the boot budget as requestTimeoutMs, keeping the lifetime field free', async () => {
+    // `timeout` on create options is the sandbox lifetime in seconds — the
+    // 180s HTTP budget would otherwise be stored as a multi-day lifetime.
+    await provider().sandbox.create({ templateId: 'base-small' })
+    const body = calls('runtime.create')[0].args[0]
+    expect(body).toMatchObject({ requestTimeoutMs: 180_000 })
+    expect(body).not.toHaveProperty('timeout') // no lifetime was requested
+  })
+
+  it('does not set a request deadline when the provider sets a client timeout', async () => {
     await provider({ timeout: 5_000 }).sandbox.create({ templateId: 'base-small' })
-    expect(calls('runtime.create')[0].args[0]).not.toHaveProperty('timeout')
+    const body = calls('runtime.create')[0].args[0]
+    expect(body).not.toHaveProperty("requestTimeoutMs")
   })
 
   it('leaves snapshot restore on the SDK timeout budget', async () => {
     await provider().sandbox.create({ snapshotId: 'snap_1' })
-    expect(calls('runtime.create')[0].args[0]).not.toHaveProperty('timeout')
+    const body = calls('runtime.create')[0].args[0]
+    expect(body).not.toHaveProperty("requestTimeoutMs")
   })
 
   it('passes string cloud and region overrides on create', async () => {
@@ -518,7 +529,7 @@ describe('runCommand', () => {
 
     expect(calls('runCmd')[0].args).toEqual([
       'echo hi',
-      { workingDir: '/workspace', environment: { A: '1' }, timeoutSeconds: 5 },
+      { workingDir: '/workspace', environment: { A: '1' }, timeout: 5 },
     ])
     expect(result).toEqual({ stdout: 'ok\n', stderr: '', exitCode: 0, durationMs: 7 })
   })
@@ -692,7 +703,7 @@ describe('lifecycle', () => {
 
   it('reports the lease it applied for a subsecond timeout', async () => {
     const sandbox = await provider().sandbox.create({ timeout: 90_500 })
-    expect(calls('runtime.create')[0].args[0]).toMatchObject({ timeoutSeconds: 91 })
+    expect(calls('runtime.create')[0].args[0]).toMatchObject({ timeout: 91 })
     expect((await sandbox.getInfo()).timeout).toBe(91_000)
   })
 

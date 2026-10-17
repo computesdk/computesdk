@@ -481,8 +481,15 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 					return toSnapshotInfo(snapshot);
 					} catch (error) {
+						// @blaxel/core calls use throwOnError: the rejection value can be a
+						// plain API error object, where String(error) is '[object Object]'.
+						const errorDetail = error instanceof Error
+							? error.message
+							: typeof error === 'object' && error !== null
+								? JSON.stringify(error)
+								: String(error);
 						throw new Error(
-							`Failed to create Blaxel snapshot: ${error instanceof Error ? error.message : String(error)}`
+							`Failed to create Blaxel snapshot: ${errorDetail}`
 						);
 					}
 				}),

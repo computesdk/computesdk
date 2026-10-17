@@ -218,7 +218,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
 
           return {
             stdout: run.result || '',
-            stderr: '',
+            stderr: run.stderr || '',
             exitCode: run.exitCode ?? 0,
             durationMs: Date.now() - startTime,
           };

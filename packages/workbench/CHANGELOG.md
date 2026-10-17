@@ -1,5 +1,49 @@
 # @computesdk/workbench
 
+## 33.0.12
+
+### Patch Changes
+
+- Updated dependencies [e94c06a]
+  - @computesdk/namespace@1.6.30
+
+## 33.0.11
+
+### Patch Changes
+
+- Updated dependencies [c9d5610]
+  - @computesdk/vercel@1.7.46
+
+## 33.0.10
+
+### Patch Changes
+
+- Updated dependencies [3315930]
+  - @computesdk/namespace@1.6.29
+
+## 33.0.9
+
+### Patch Changes
+
+- Updated dependencies [32a3700]
+- Updated dependencies [039216f]
+- Updated dependencies [8faaa66]
+- Updated dependencies [436964b]
+- Updated dependencies [41cea92]
+- Updated dependencies [f08bfc4]
+- Updated dependencies [0c30a8f]
+  - @computesdk/blaxel@1.6.33
+  - @computesdk/codesandbox@1.5.62
+  - @computesdk/daytona@1.7.43
+  - @computesdk/isorun@0.1.12
+  - @computesdk/microsandbox@0.1.13
+  - @computesdk/beam@0.3.17
+  - @computesdk/modal@1.9.19
+  - @computesdk/vercel@1.7.45
+  - @computesdk/declaw@0.2.19
+  - @computesdk/upstash@0.3.20
+  - @computesdk/sprites@0.1.25
+
 ## 33.0.8
 
 ### Patch Changes
