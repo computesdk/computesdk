@@ -22,6 +22,8 @@
   ],
   "scripts": {
     "build": "tsup",
+    "bench:client": "node scripts/client-latency.mjs",
+    "test:transport": "node scripts/transport.integration.mjs",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
@@ -32,7 +34,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@tangle-network/sandbox": "0.60.14",
+    "@tangle-network/sandbox": "0.60.78",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

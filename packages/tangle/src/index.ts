@@ -1,8 +1,9 @@
 import { defineProvider } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
-import type { Sandbox, SandboxInstance } from '@tangle-network/sandbox';
+import { SandboxError, type SandboxInstance } from '@tangle-network/sandbox';
+import { TangleClient, defaultBaseUrl, openConnections } from './client';
 import { createIdentity } from './identity';
-import { assertAllocationId, createdAllocationId } from './create-failure';
+import { createdAllocationId } from './create-failure';
 
 export interface TangleConfig {
   /** API key, or TANGLE_API_KEY. */
@@ -23,41 +24,22 @@ export interface TangleConfig {
   createTimeout?: number;
 }
 
-type ResolvedConfig = TangleConfig & { apiKey: string; baseUrl: string };
+type ResolvedConfig = TangleConfig & { apiKey: string; baseUrl: string; client: TangleClient };
 
-async function createClient(config: ResolvedConfig): Promise<Sandbox> {
-  // The native SDK is ESM-only. Keep its import lazy for ComputeSDK's CJS entry as well.
-  const { Sandbox } = await import('@tangle-network/sandbox');
-  return new Sandbox({
-    apiKey: config.apiKey,
-    baseUrl: config.baseUrl,
-    trustLocalCliAuth: false,
+async function removeInstance(client: TangleClient, instanceId: string): Promise<void> {
+  const response = await client.fetch('/v1/sandboxes/' + encodeURIComponent(instanceId), {
+    method: 'DELETE',
   });
-}
-
-async function removeInstance(client: Sandbox, instanceId: string): Promise<void> {
-  const instance = await client.get(instanceId);
-  if (instance === null) return;
-  assertAllocationId(instanceId, instance.id);
-  try {
-    await instance.delete({ until: 'removed' });
-  } catch (deletionError) {
-    let remaining: SandboxInstance | null;
-    try {
-      remaining = await client.get(instanceId);
-    } catch (confirmationError) {
-      throw new AggregateError(
-        [deletionError, confirmationError],
-        'Tangle removal and its absence check failed for ' + instanceId + '.',
-        { cause: deletionError },
-      );
-    }
-    if (remaining !== null) throw deletionError;
+  // DELETE acknowledges retirement. Physical teardown belongs to the service.
+  if (response.ok || response.status === 404) {
+    await response.body?.cancel();
     return;
   }
-  if (await client.get(instanceId) !== null) {
-    throw new Error('Tangle did not confirm removal of instance ' + instanceId + '.');
-  }
+  throw new SandboxError(
+    'Tangle deletion failed: ' + await response.text(),
+    'SANDBOX_DELETE_FAILED',
+    response.status,
+  );
 }
 
 const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
@@ -74,7 +56,7 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
         if (options.runtime !== undefined) {
           throw new Error('Tangle does not map runtime names; select an environment with image or templateId.');
         }
-        const client = await createClient(config);
+        const client = config.client;
         const identity = createIdentity(options);
         const image = options.image ?? options.templateId ?? config.image;
         const timeout = options.timeout ?? config.timeout;
@@ -107,7 +89,7 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
             } catch (cleanupError) {
               throw new AggregateError(
                 [creationError, cleanupError],
-                'Tangle creation failed and cleanup could not be confirmed for ' + allocationId + '.',
+                'Tangle creation failed and retirement was not acknowledged for ' + allocationId + '.',
                 { cause: creationError },
               );
             }
@@ -118,12 +100,12 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
       },
 
       getById: async (config, instanceId) => {
-        const instance = await (await createClient(config)).get(instanceId);
+        const instance = await config.client.get(instanceId);
         return instance === null ? null : { instance, instanceId: instance.id };
       },
 
       list: async (config) => {
-        const client = await createClient(config);
+        const client = config.client;
         const instances: Array<{ instance: SandboxInstance; instanceId: string }> = [];
         const limit = 100;
         for (let offset = 0; ; offset += limit) {
@@ -134,7 +116,7 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
       },
 
       destroy: async (config, instanceId) => {
-        await removeInstance(await createClient(config), instanceId);
+        await removeInstance(config.client, instanceId);
       },
 
       runCommand: async (
@@ -191,6 +173,8 @@ export function tangle(config: TangleConfig = {}) {
   }
   const baseUrl = config.baseUrl ??
     (typeof process !== 'undefined' ? process.env.TANGLE_SANDBOX_BASE_URL : undefined) ??
-    'https://sandbox.tangle.tools';
-  return createProvider({ ...config, apiKey, baseUrl });
+    defaultBaseUrl;
+  openConnections(baseUrl);
+  const client = new TangleClient({ apiKey, baseUrl, trustLocalCliAuth: false });
+  return createProvider({ ...config, apiKey, baseUrl, client });
 }

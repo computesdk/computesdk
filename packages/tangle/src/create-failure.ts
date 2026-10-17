@@ -20,10 +20,3 @@ export function createdAllocationId(error: unknown, idempotencyKey: string): str
   }
   return failure.allocationId;
 }
-
-/** Never retire a different allocation returned by a malformed lookup response. */
-export function assertAllocationId(expected: string, actual: string): void {
-  if (actual !== expected) {
-    throw new Error('Tangle lookup returned a different allocation than requested.');
-  }
-}

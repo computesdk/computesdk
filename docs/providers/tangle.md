@@ -70,14 +70,21 @@ Create options support `image` or `templateId`, resources, `name`, `metadata`,
 
 Instances use isolated owner context, disable agent/model provisioning and request
 open egress explicitly. No VM/container or concurrency guarantee is inferred.
-Destroy requests removal and verifies absence; cleanup errors remain errors.
+Destroy sends one DELETE and accepts retirement acknowledgement or an already
+absent allocation; physical teardown can finish later. Cleanup errors remain errors.
 Failed-create cleanup requires an exact allocation/key and a native receipt
 confirming a newly created allocation with its idempotency key applied.
 Replayed, unknown or incomplete receipts do not authorize deletion. Cleanup
 failure retains both the creation and cleanup errors.
-This remains unqualified with SDK0.60.14, whose readiness errors can lose the
-allocation context; the native fix must be normally published and the dependency
-updated before qualification. See the package README for recovery limits.
+The pinned SDK retains allocation context on readiness failure. Real lifecycle
+and cleanup qualification still require production capacity authorization. See
+the package README for recovery limits.
+
+The SDK loads at module scope. Four HTTP/2 sessions per API origin carry mapped
+operations. Import opens connections without sending requests or credentials;
+idle connections do not keep Node alive. Configured endpoints must support HTTP/2.
+Create retains the native handle's validated connection details. Direct runtime
+routing and its server-side audit/activity validation are separate work.
 
 Filesystem helpers, preview URLs, template management, snapshot restore and
 persistent instances are not exposed. `runtime` names are not translated; use an

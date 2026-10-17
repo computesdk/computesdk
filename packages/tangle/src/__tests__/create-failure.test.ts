@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertAllocationId, createdAllocationId } from '../create-failure';
+import { createdAllocationId } from '../create-failure';
 
 function failure(fields: Record<string, unknown> = {}) {
   return Object.assign(new Error('readiness failed'), {
@@ -50,15 +50,5 @@ describe('failed-create allocation ownership', () => {
     for (const value of [null, undefined, 'failed', {}, { ...failure() }]) {
       expect(createdAllocationId(value, 'this-create')).toBeUndefined();
     }
-  });
-});
-
-describe('allocation lookup identity', () => {
-  it('accepts the exact requested allocation', () => {
-    expect(() => assertAllocationId('allocated-by-post', 'allocated-by-post')).not.toThrow();
-  });
-  it('rejects a different lookup ID before deletion', () => {
-    expect(() => assertAllocationId('allocated-by-post', 'unrelated-allocation'))
-      .toThrow('different allocation');
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { tangle } from '../index';
 
 const runLive =
@@ -22,6 +22,13 @@ describe.skipIf(!runLive)('Tangle native lifecycle integration', () => {
       // Cleanup failure fails this test; it must never be converted to a passing result.
       await instance.destroy();
     }
-    expect(await provider.instances.getById(instance.instanceId)).toBeNull();
+    // Retirement is acknowledged before physical teardown. Verify eventual
+    // absence separately from the provider's one-request destroy operation.
+    await vi.waitFor(async () => {
+      expect(await provider.instances.getById(instance.instanceId)).toBeNull();
+    }, {
+      timeout: 30_000,
+      interval: 250,
+    });
   }, 180_000);
 });
