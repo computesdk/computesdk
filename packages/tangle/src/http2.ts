@@ -12,11 +12,16 @@ class BufferedResponse extends Response {
   private consumed = false;
   private streamed?: Response;
   private readonly buffer: Buffer;
+  private readonly initialHeaders?: HeadersInit;
+  private responseHeaders?: Headers;
 
   constructor(buffer: Buffer, init: ResponseInit) {
-    super(null, init);
+    super(null, { status: init.status, statusText: init.statusText });
     this.buffer = buffer;
+    this.initialHeaders = init.headers;
   }
+
+  override get headers(): Headers { return this.responseHeaders ??= new Headers(this.initialHeaders); }
 
   private asStream(): Response {
     if (!this.streamed) {
@@ -89,7 +94,11 @@ export function openConnections(baseUrl: string): Pool {
 }
 
 /** SDK transport: one stream per request, with no request replay or redirects. */
-export async function http2Fetch(url: URL, options: RequestInit = {}, apiKey?: string): Promise<Response> {
+export async function http2Fetch(
+  url: URL,
+  options: RequestInit = {},
+  context?: { apiKey: string; path: string },
+): Promise<Response> {
   options.signal?.throwIfAborted();
   const pool = pools.get(url.origin) ?? openConnections(url.origin);
   const index = pool.next++ % pool.slots.length;
@@ -108,8 +117,8 @@ export async function http2Fetch(url: URL, options: RequestInit = {}, apiKey?: s
   }
   // SDK defaults are already normalized; caller-supplied headers still use the
   // Fetch validation above. Credentials belong to this request, never the pool.
-  if (apiKey !== undefined) {
-    headers.authorization = ('Bearer ' + apiKey).trim();
+  if (context) {
+    headers.authorization = ('Bearer ' + context.apiKey).trim();
     if (headers['content-type'] === undefined && !(options.body instanceof FormData)) {
       headers['content-type'] = 'application/json';
     }
@@ -151,9 +160,14 @@ export async function http2Fetch(url: URL, options: RequestInit = {}, apiKey?: s
       const status = Number(incoming[':status']);
       const responseHeaders: [string, string][] = [];
       for (const [key, value] of Object.entries(incoming)) {
-        if (!key.startsWith(':') && value !== undefined) {
+        if (!key.startsWith(':') && value !== undefined &&
+            !(context && (key === 'x-tangle-request-path' || (options.method && key === 'x-tangle-request-method')))) {
           for (const item of Array.isArray(value) ? value : [value]) responseHeaders.push([key, String(item)]);
         }
+      }
+      if (context) {
+        responseHeaders.push(['x-tangle-request-path', context.path]);
+        if (options.method) responseHeaders.push(['x-tangle-request-method', options.method]);
       }
       if (options.method === 'HEAD' || status === 204 || status === 205 || status === 304) {
         stream.resume();

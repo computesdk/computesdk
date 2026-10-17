@@ -13,10 +13,9 @@ export class TangleClient extends Sandbox {
     const deadline = controller.signal;
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
     try {
-      const response = await http2Fetch(new URL(this.getBaseUrl() + path), { ...options, signal }, this.getApiKey());
-      response.headers.set('x-tangle-request-path', path);
-      if (options.method) response.headers.set('x-tangle-request-method', options.method);
-      return response;
+      return await http2Fetch(new URL(this.getBaseUrl() + path), { ...options, signal }, {
+        apiKey: this.getApiKey(), path,
+      });
     } catch (error) {
       if (options.signal?.aborted) throw options.signal.reason;
       if (deadline.aborted) throw new TimeoutError(timeoutMs);
