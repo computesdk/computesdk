@@ -1671,8 +1671,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@miosa/sdk':
-        specifier: ^3.4.1
-        version: 3.7.8(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^3.7.10
+        version: 3.7.10(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4404,8 +4404,8 @@ packages:
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
 
-  '@miosa/sdk@3.7.8':
-    resolution: {integrity: sha512-IWKEISM1xqX8cnsrQMR7q/oDEWBNpnAnvOVPfRIOVGhibETXi/u8pVn9Dw+kGPksno9X5Vi3x61sOxEzu5u0Yw==}
+  '@miosa/sdk@3.7.10':
+    resolution: {integrity: sha512-nOJjMK5SjqU0yCuu8N+1a/XS7mr7IpN4/moMii4pDMbeZNnPXZsWVBtN7Zy5CXbjhcaR0jbT2eypVedv1h+svg==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.133.0'
@@ -11341,7 +11341,7 @@ snapshots:
       globby: 11.1.0
       read-yaml-file: 1.1.0
 
-  '@miosa/sdk@3.7.8(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@miosa/sdk@3.7.10(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     optionalDependencies:
       undici: 7.29.1
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
