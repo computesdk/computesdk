@@ -884,6 +884,22 @@ describe("regional sandbox endpoint", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it("should fall back to the account API when every runner is feed-stale", async () => {
+      useRunners((call) =>
+        call.method === "POST" && call.path === "/api/v1/sandboxes"
+          ? runnerRefused(503, "feed_stale")
+          : runnerExecOk(),
+      );
+      useAccountApi();
+      const provider = miosa({ apiKey: API_KEY });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(runnerCreates()).toHaveLength(2);
+      expect(accountApiCalls()[0]).toEqual({ method: "POST", path: "/sandboxes" });
+      await expectWholeLifeOnAccountApi(provider, sandbox);
+    });
+
     it("should fall back to the account API when the regional hostname does not resolve", async () => {
       useRunners(() => runnerExecOk(), {
         addressCount: async () => {
@@ -933,6 +949,68 @@ describe("regional sandbox endpoint", () => {
         `DELETE /api/v1/sandboxes/${sandbox.sandboxId}`,
       ]);
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("destroying an id this process did not create, with the regional endpoint off", () => {
+    const FOREIGN_ID = "f0f0f0f0-0000-0000-0000-000000000009";
+
+    function accountApiAnswers(status: number): void {
+      fetchMock.mockResolvedValue(
+        jsonResponse({ error: { code: "NOT_FOUND" } }, status),
+      );
+    }
+
+    it("should delete a regional sandbox the account API does not know", async () => {
+      runnerSpies.destroySandbox.mockResolvedValue({});
+      accountApiAnswers(404);
+      const provider = miosa({ apiKey: API_KEY, runnerMode: false });
+
+      await provider.sandbox.destroy(FOREIGN_ID);
+
+      expect(runnerSpies.destroySandbox).toHaveBeenCalledWith(FOREIGN_ID);
+    });
+
+    it("should stop at the account API when it deletes the sandbox", async () => {
+      accountApiAnswers(200);
+      const provider = miosa({ apiKey: API_KEY, runnerMode: false });
+
+      await provider.sandbox.destroy(FOREIGN_ID);
+
+      expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
+    });
+
+    it("should treat an id both endpoints do not know as already destroyed", async () => {
+      runnerSpies.destroySandbox.mockRejectedValue(
+        Object.assign(new Error("not found"), { status: 404 }),
+      );
+      accountApiAnswers(404);
+      const provider = miosa({ apiKey: API_KEY, runnerMode: false });
+
+      await expect(provider.sandbox.destroy(FOREIGN_ID)).resolves.toBeUndefined();
+    });
+
+    it("should raise a regional failure instead of reporting the sandbox destroyed", async () => {
+      runnerSpies.destroySandbox.mockRejectedValue(
+        Object.assign(new Error("boom"), { status: 500 }),
+      );
+      accountApiAnswers(404);
+      const provider = miosa({ apiKey: API_KEY, runnerMode: false });
+
+      await expect(provider.sandbox.destroy(FOREIGN_ID)).rejects.toThrow(/boom/);
+    });
+
+    it("should not send a custom control plane's key to the regional endpoint", async () => {
+      accountApiAnswers(404);
+      const provider = miosa({
+        apiKey: API_KEY,
+        runnerMode: false,
+        baseUrl: "https://api.example.test/api/v1",
+      });
+
+      await provider.sandbox.destroy(FOREIGN_ID);
+
+      expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
     });
   });
 
