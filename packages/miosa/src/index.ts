@@ -64,8 +64,9 @@ export interface MiosaConfig {
    * endpoint is in use. Off by default; `MIOSA_LAZY_CREATE=1` turns it on
    * for every provider that does not set this explicitly.
    *
-   * While a handle is unused, `sandboxId` is a client-side placeholder; the
-   * real id is available from `getInfo()` once the sandbox exists.
+   * `sandboxId` is a client-side placeholder for the whole life of the handle,
+   * before and after the sandbox exists; it is only meaningful inside this
+   * process and for this API key. Read the real id from `getInfo().id`.
    */
   lazyCreate?: boolean;
 }
@@ -1354,12 +1355,20 @@ function settleCreated(auth: MiosaAuth, created: CreatedSandbox): MiosaAuth {
 // handle to look at.
 
 /**
- * Lazy handles by placeholder id, kept for as long as the framework may still
- * call back with that id, which is until the sandbox is destroyed. A handle
- * that is created, used and never destroyed stays here, as its sandbox stays
- * on the server.
+ * Lazy handles by credential and placeholder id, kept for as long as the
+ * framework may still call back with that id, which is until the sandbox is
+ * destroyed. A handle that is created, used and never destroyed stays here,
+ * as its sandbox stays on the server.
+ *
+ * The credential is part of the key, as it is for the snapshot index: a
+ * process serving several tenants must never let one tenant's id reach
+ * another tenant's handle, to create it, cancel it or snapshot it.
  */
 const lazyHandles = new Map<string, MiosaSandbox>();
+
+function lazyHandleKey(apiKey: string, placeholder: string): string {
+  return `${apiKey}:${placeholder}`;
+}
 
 function readLazyCreateEnv(): boolean {
   const raw =
@@ -1426,7 +1435,7 @@ function newLazySandbox(
       return created;
     }),
   };
-  lazyHandles.set(id, sandbox);
+  lazyHandles.set(lazyHandleKey(auth.apiKey, id), sandbox);
   return sandbox;
 }
 
@@ -1440,9 +1449,12 @@ async function ensureCreated(sandbox: MiosaSandbox): Promise<void> {
 }
 
 /** The real id behind an id the caller may have got from a lazy handle. */
-async function resolveSandboxId(sandboxId: string): Promise<string> {
+async function resolveSandboxId(
+  apiKey: string,
+  sandboxId: string,
+): Promise<string> {
   if (!isPlaceholderId(sandboxId)) return sandboxId;
-  const sandbox = lazyHandles.get(sandboxId);
+  const sandbox = lazyHandles.get(lazyHandleKey(apiKey, sandboxId));
   if (!sandbox) return sandboxId;
   await ensureCreated(sandbox);
   return sandbox.record.id;
@@ -1584,7 +1596,7 @@ const createMiosaProvider = defineProvider<
         const auth = resolveAuth(config);
         // A lazy handle's placeholder id names no sandbox yet. Looking it up
         // creates the sandbox first, so the caller gets a real one.
-        const sandboxId = await resolveSandboxId(requestedId);
+        const sandboxId = await resolveSandboxId(auth.apiKey, requestedId);
         try {
           const payload = await miosaRequest<unknown>(
             auth,
@@ -1623,19 +1635,22 @@ const createMiosaProvider = defineProvider<
         // nothing to destroy and no request to send. One whose create ran,
         // or is running, is destroyed by its real id.
         let sandboxId = requestedId;
-        const lazy = lazyHandles.get(requestedId)?.lazy;
+        const lazyKey = lazyHandleKey(auth.apiKey, requestedId);
+        const lazy = lazyHandles.get(lazyKey)?.lazy;
         if (lazy) {
-          // Checked and cancelled in one synchronous step, so no call can
-          // start the create between the check and the cancel.
+          // Cancelled first, in the same synchronous step as the check below:
+          // from here no call can start a create, including a call that was
+          // waiting on a create the runner refused and would now start its
+          // own. Whatever create is already running is the last one.
+          lazy.create.cancel();
           if (!lazy.create.started) {
-            lazy.create.cancel();
-            lazyHandles.delete(requestedId);
+            lazyHandles.delete(lazyKey);
             return;
           }
           const created = await lazy.create.settled();
-          // The create failed: nothing exists to destroy.
+          // The create failed or was refused: nothing exists to destroy.
           if (!created) {
-            lazyHandles.delete(requestedId);
+            lazyHandles.delete(lazyKey);
             return;
           }
           sandboxId = created.record.id;
@@ -1689,7 +1704,7 @@ const createMiosaProvider = defineProvider<
         // clearing it then would send the retry to the other endpoint, where
         // a 404 reads as "already destroyed" while the sandbox still runs.
         sandboxTransport.delete(sandboxId);
-        lazyHandles.delete(requestedId);
+        lazyHandles.delete(lazyKey);
       },
 
       runCommand: execInSandbox,
@@ -1872,7 +1887,7 @@ const createMiosaProvider = defineProvider<
         options?: CreateSnapshotOptions,
       ): Promise<MiosaSnapshotRecord> => {
         const auth = resolveAuth(config);
-        sandboxId = await resolveSandboxId(sandboxId);
+        sandboxId = await resolveSandboxId(auth.apiKey, sandboxId);
         const body: Record<string, unknown> = {};
         if (options?.name !== undefined) body.comment = options.name;
         const response = await miosaRequest<
@@ -1894,7 +1909,7 @@ const createMiosaProvider = defineProvider<
             "MIOSA snapshots are scoped per sandbox: pass { sandboxId } to list().",
           );
         }
-        const ownerId = await resolveSandboxId(options.sandboxId);
+        const ownerId = await resolveSandboxId(auth.apiKey, options.sandboxId);
         const response = await miosaRequest<{ data: MiosaSnapshotRecord[] }>(
           auth,
           "GET",
