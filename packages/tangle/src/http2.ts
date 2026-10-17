@@ -11,9 +11,11 @@ const decoder = new TextDecoder();
 class BufferedResponse extends Response {
   private consumed = false;
   private streamed?: Response;
+  private readonly buffer: Buffer;
 
-  constructor(private readonly buffer: Buffer, init: ResponseInit) {
+  constructor(buffer: Buffer, init: ResponseInit) {
     super(null, init);
+    this.buffer = buffer;
   }
 
   private asStream(): Response {
