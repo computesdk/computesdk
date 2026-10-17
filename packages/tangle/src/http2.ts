@@ -4,6 +4,11 @@ import { Readable } from 'node:stream';
 // Node initializes its fetch classes lazily. Resolve them while the adapter
 // loads, alongside the SDK, rather than on the first create request.
 const { Headers, Response, Request } = globalThis;
+// Reading the constructors alone leaves body consumption and header iteration
+// lazy. Exercise those paths once without sending any request.
+const warmResponse = new Response('{}', { headers: { 'content-type': 'application/json' } });
+warmResponse.headers.forEach(() => {});
+void warmResponse.json();
 
 type Slot = { session: ClientHttp2Session; active: number };
 type Pool = { slots: Slot[]; next: number };
