@@ -90,6 +90,16 @@ try {
   readerBeforeRead.releaseLock();
   const streamedClone = locked.clone();
   assert.deepEqual(await locked.json(), await streamedClone.json());
+  const typed = await http2Fetch(url('/echo'));
+  void typed.body;
+  typed.headers.set('content-type', 'application/octet-stream');
+  assert.equal((await typed.blob()).type, 'application/octet-stream');
+  const form = await http2Fetch(url('/echo'));
+  void form.body;
+  form.headers.set('content-type', 'application/x-www-form-urlencoded');
+  const formClone = form.clone();
+  assert.deepEqual([...await form.formData()], [...await formClone.formData()]);
+  assert.equal(form.bodyUsed, true);
   const discarded = await http2Fetch(url('/echo'));
   await discardResponseBody(discarded);
   assert.equal(discarded.bodyUsed, true);

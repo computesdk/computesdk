@@ -46,8 +46,8 @@ class BufferedResponse extends Response {
 
   override arrayBuffer(): Promise<ArrayBuffer> { return this.asStream().arrayBuffer(); }
   async bytes() { return new Uint8Array(await this.arrayBuffer()); }
-  override blob(): Promise<Blob> { return this.asStream().blob(); }
-  override formData(): Promise<FormData> { return this.asStream().formData(); }
+  override async blob(): Promise<Blob> { return new Response(this.body, { headers: this.headers }).blob(); }
+  override async formData(): Promise<FormData> { return new Response(this.body, { headers: this.headers }).formData(); }
 
   override clone(): Response {
     if (this.bodyUsed || this.streamed?.body?.locked) throw new TypeError('Body cannot be cloned.');
