@@ -1,5 +1,12 @@
 # @computesdk/aws
 
+## 1.0.3
+
+### Patch Changes
+
+- 68f3e19: EC2: remove spilled output files when SSM reports a command `Cancelled`, or when partial output after a timeout can't be read back.
+- 51ffdd3: aws-ec2: default `HOME` for SSM commands (the agent leaves it unset, which breaks tools like act), and add an optional `getUrl` config hook so an ingress layer can provide preview URLs.
+
 ## 1.0.2
 
 ### Patch Changes
