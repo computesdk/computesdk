@@ -20,9 +20,9 @@ class BufferedResponse extends Response {
 
   private asStream(): Response {
     if (!this.streamed) {
-      this.streamed = new Response(new Uint8Array(this.buffer), { headers: this.headers });
+      this.streamed = new Response(this.consumed ? '' : new Uint8Array(this.buffer), { headers: this.headers });
       // Preserve a disturbed body even when it is first accessed after json/text.
-      if (this.consumed) void this.streamed.arrayBuffer();
+      if (this.consumed) void this.streamed.body!.cancel();
     }
     return this.streamed;
   }

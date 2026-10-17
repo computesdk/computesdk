@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer, constants } from 'node:http2';
-import { http2Fetch, openConnections } from '../src/http2.ts';
+import { discardResponseBody, http2Fetch, openConnections } from '../src/http2.ts';
 
 const sessions = new Set();
 const server = createServer();
@@ -67,6 +67,34 @@ try {
   });
   assert.equal(connections, 4);
   assert.equal(requests, 100);
+  // Buffered replies preserve one-shot consumption and native stream behavior.
+  for (const method of ['text', 'json', 'arrayBuffer', 'bytes', 'blob']) {
+    const response = await http2Fetch(url('/echo'));
+    const clone = response.clone();
+    response.headers.set('x-caller', 'original');
+    assert.equal(clone.headers.has('x-caller'), false);
+    assert.equal(response.bodyUsed, false);
+    await response[method]();
+    assert.equal(response.bodyUsed, true);
+    await assert.rejects(response.text(), TypeError);
+    assert.throws(() => response.clone(), TypeError);
+    assert.equal(response.body.locked, false);
+    assert.equal((await response.body.getReader().read()).done, true);
+    assert.equal((await clone.json()).path, '/echo');
+  }
+  const locked = await http2Fetch(url('/echo'));
+  const readerBeforeRead = locked.body.getReader();
+  assert.equal(locked.bodyUsed, false);
+  await assert.rejects(locked.json(), TypeError);
+  assert.throws(() => locked.clone(), TypeError);
+  readerBeforeRead.releaseLock();
+  const streamedClone = locked.clone();
+  assert.deepEqual(await locked.json(), await streamedClone.json());
+  const discarded = await http2Fetch(url('/echo'));
+  await discardResponseBody(discarded);
+  assert.equal(discarded.bodyUsed, true);
+  await assert.rejects(discarded.json(), TypeError);
+  assert.equal((await discarded.body.getReader().read()).done, true);
   assert.equal((await http2Fetch(url('/absent'))).status, 404);
   assert.equal(await (await http2Fetch(url('/empty'), { method: 'DELETE' })).text(), '');
   const sentBeforeAbort = requests;
@@ -98,7 +126,7 @@ try {
   const [code, signal] = await once(child, 'exit');
   assert.equal(code, 0, stderr);
   assert.equal(signal, null);
-  console.log('PASS: 100 concurrent streams / 4 sessions; per-request credentials; no import requests; 404/204; pre-abort; header/body deadlines; reset; streaming abort; GOAWAY replacement; idle process exit.');
+  console.log('PASS: 100 concurrent streams / 4 sessions; buffered body consumption, cloning, locking and discard; per-request credentials; no import requests; 404/204; pre-abort; header/body deadlines; reset; streaming abort; GOAWAY replacement; idle process exit.');
 } finally {
   for (const session of sessions) session.destroy();
   server.close();
