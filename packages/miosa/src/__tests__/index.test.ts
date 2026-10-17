@@ -149,8 +149,10 @@ describe("miosa provider", () => {
       const provider = miosa({ apiKey: API_KEY });
 
       const sandbox = await provider.sandbox.getById(record.id);
-      const { url, init } = lastRequest(fetchMock);
-      expect(url).toBe(`${DEFAULT_BASE_URL}/sandboxes/${record.id}`);
+      // getById also reads the egress pointer afterwards, so the lookup is
+      // the first request rather than the last.
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(String(url)).toBe(`${DEFAULT_BASE_URL}/sandboxes/${record.id}`);
       expect(init.method).toBe("GET");
       expect(sandbox?.sandboxId).toBe(record.id);
     });
