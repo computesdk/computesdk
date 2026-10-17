@@ -49,12 +49,17 @@ describe("miosa provider", () => {
   let fetchMock: FetchMock;
 
   beforeEach(() => {
+    // This file exercises the account API. Sandbox operations default to the
+    // regional endpoint, so opt the whole file out of it; that transport has
+    // its own suite in runner-transport.test.ts.
+    process.env.MIOSA_RUNNER_MODE = "0";
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete process.env.MIOSA_RUNNER_MODE;
   });
 
   describe("configuration", () => {
@@ -144,8 +149,10 @@ describe("miosa provider", () => {
       const provider = miosa({ apiKey: API_KEY });
 
       const sandbox = await provider.sandbox.getById(record.id);
-      const { url, init } = lastRequest(fetchMock);
-      expect(url).toBe(`${DEFAULT_BASE_URL}/sandboxes/${record.id}`);
+      // getById also reads the egress pointer afterwards, so the lookup is
+      // the first request rather than the last.
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(String(url)).toBe(`${DEFAULT_BASE_URL}/sandboxes/${record.id}`);
       expect(init.method).toBe("GET");
       expect(sandbox?.sandboxId).toBe(record.id);
     });
@@ -188,12 +195,20 @@ describe("miosa provider", () => {
       expect(init.method).toBe("DELETE");
     });
 
-    it("should treat 404 as already destroyed", async () => {
-      fetchMock.mockResolvedValueOnce(
-        jsonResponse({ error: { code: "NOT_FOUND" } }, 404),
-      );
+    it("should treat 404 as already destroyed for a sandbox this provider created", async () => {
+      // An id this process never created is also looked for on the regional
+      // endpoint (see runner-transport.test.ts); one it created on the account
+      // API is known to live only there.
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201))
+        .mockResolvedValueOnce(
+          jsonResponse({ error: { code: "NOT_FOUND" } }, 404),
+        );
       const provider = miosa({ apiKey: API_KEY });
-      await expect(provider.sandbox.destroy("gone")).resolves.toBeUndefined();
+      const sandbox = await provider.sandbox.create();
+      await expect(
+        provider.sandbox.destroy(sandbox.sandboxId),
+      ).resolves.toBeUndefined();
     });
   });
 
