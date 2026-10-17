@@ -94,7 +94,9 @@ describe("lazy create", () => {
   let runnerCalls: RunnerCall[];
 
   /** Two runner addresses; `reply` scripts every request except /healthz. */
-  function useRunners(reply: (call: RunnerCall) => RunnerReply): void {
+  function useRunners(
+    reply: (call: RunnerCall) => RunnerReply | Promise<RunnerReply>,
+  ): void {
     runnerCalls = [];
     wire.transport = {
       protocol: "h2",
@@ -121,7 +123,7 @@ describe("lazy create", () => {
               : (JSON.parse(String(init.body)) as Record<string, unknown>),
         };
         runnerCalls.push(call);
-        const scripted = reply(call);
+        const scripted = await reply(call);
         return {
           status: scripted.status,
           headers: scripted.headers ?? {},
@@ -790,6 +792,121 @@ describe("lazy create", () => {
       await expect(sandbox.runCommand("node -v")).rejects.toThrow(/timed out/);
 
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("destroy while a refused create-and-run is in flight", () => {
+    it("should not let a waiting call create a sandbox after destroy", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      useRunners(async (call) => {
+        if (isCreate(call) && call.body?.run !== undefined) {
+          await gate;
+          return { status: 400, body: { error: { code: "INVALID_PARAM" } } };
+        }
+        return isCreate(call) ? createdPlain() : execOk();
+      });
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const command = sandbox.runCommand("bad");
+      const write = sandbox.filesystem
+        .writeFile("/work/a.txt", "hi")
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      await new Promise((resolve) => setImmediate(resolve));
+      const destroying = sandbox.destroy();
+      release();
+      await command;
+      await destroying;
+      const writeError = await write;
+
+      // Only the refused create reached the runner: nothing was provisioned,
+      // so there is nothing left running.
+      expect(creates()).toHaveLength(1);
+      expect(writeError).toBeInstanceOf(Error);
+      expect((writeError as Error).message).toMatch(/destroyed/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should destroy the sandbox a waiting call created before destroy began", async () => {
+      useRunners((call) => {
+        if (isCreate(call)) return createdPlain();
+        if (call.method === "DELETE") return { status: 200, body: {} };
+        return execOk();
+      });
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      const write = sandbox.filesystem.writeFile("/work/a.txt", "hi");
+      await new Promise((resolve) => setImmediate(resolve));
+
+      await sandbox.destroy();
+      await write.catch(() => undefined);
+
+      expect(runnerPaths()).toContain(`DELETE /api/v1/sandboxes/${REAL_ID}`);
+    });
+  });
+
+  describe("another tenant's placeholder id", () => {
+    const OTHER_KEY = "msk_other_0123456789abcdef";
+
+    it("should not cancel an unused handle when another key destroys its id", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const owner = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const intruder = miosa({ apiKey: OTHER_KEY, lazyCreate: true });
+      const sandbox = await owner.sandbox.create();
+
+      await intruder.sandbox.destroy(sandbox.sandboxId);
+      const result = await sandbox.runCommand("node -v");
+
+      expect(result.stdout).toBe("v22.1.0\n");
+      expect(creates()).toHaveLength(1);
+    });
+
+    it("should not create the owner's sandbox when another key looks the id up", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      fetchMock.mockResolvedValue(
+        jsonResponse({ error: { code: "NOT_FOUND" } }, 404),
+      );
+      const owner = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const intruder = miosa({ apiKey: OTHER_KEY, lazyCreate: true });
+      const sandbox = await owner.sandbox.create();
+
+      const found = await intruder.sandbox.getById(sandbox.sandboxId);
+
+      expect(found).toBeNull();
+      expect(creates()).toEqual([]);
+    });
+
+    it("should not create the owner's sandbox when another key snapshots the id", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const owner = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const intruder = miosa({ apiKey: OTHER_KEY, lazyCreate: true });
+      const sandbox = await owner.sandbox.create();
+
+      await intruder.snapshot?.create(sandbox.sandboxId, { name: "s" });
+
+      expect(creates()).toEqual([]);
+    });
+  });
+
+  describe("the public id", () => {
+    it("should stay the placeholder after the sandbox exists, with the real id from getInfo", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      const placeholder = sandbox.sandboxId;
+
+      const info = await sandbox.getInfo();
+
+      expect(info.id).toBe(REAL_ID);
+      expect(sandbox.sandboxId).toBe(placeholder);
+      expect(placeholder).toMatch(/^lazy-/);
+      expect((await provider.sandbox.getById(REAL_ID))?.sandboxId).toBe(REAL_ID);
     });
   });
 

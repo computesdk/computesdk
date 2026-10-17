@@ -349,6 +349,23 @@ describe("LazyCreate", () => {
       expect(calls).toBe(0);
     });
 
+    it("should stop a waiter from starting its own create after a refused run", async () => {
+      let calls = 0;
+      const lazy = new LazyCreate(async (r) => {
+        calls += 1;
+        if (r) throw new RunRefused(new Error("refused"));
+        return "created";
+      });
+      const first = lazy.begin(run);
+      const waiter = lazy.begin();
+      lazy.cancel();
+
+      await expect(first.result).rejects.toBeInstanceOf(RunRefused);
+      await expect(waiter.result).rejects.toThrow(/destroyed/);
+      expect(calls).toBe(1);
+      expect(await lazy.settled()).toBeUndefined();
+    });
+
     it("should leave a create that already started alone", async () => {
       const lazy = new LazyCreate(async () => "created");
       const started = lazy.begin();

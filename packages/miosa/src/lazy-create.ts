@@ -219,9 +219,11 @@ export class LazyCreate<T> {
   private cancelled = false;
 
   /**
-   * Stops a create that has not started from ever starting. Later calls
-   * fail instead of creating a sandbox the caller already destroyed. Has no
-   * effect once a create has started.
+   * Stops any further create from starting. Later calls fail instead of
+   * creating a sandbox the caller already destroyed, and that includes a call
+   * that was waiting on a refused create and would otherwise start its own.
+   * A create already running is not interrupted and still settles, so the
+   * caller can destroy what it made.
    */
   cancel(): void {
     this.cancelled = true;
