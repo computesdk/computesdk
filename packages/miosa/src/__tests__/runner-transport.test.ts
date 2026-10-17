@@ -56,12 +56,14 @@ vi.mock("@miosa/sdk", async (importOriginal) => {
           };
         },
       ),
-    // The SDK's own classifier: a transport-level failure means the request
-    // never landed.
-    isConnectFailure: actual.isConnectFailure,
+    // Real error classes, so a test can raise exactly what the SDK raises.
+    RunnerConnectError: actual.RunnerConnectError,
+    RunnerTimeoutError: actual.RunnerTimeoutError,
+    RunnerError: actual.RunnerError,
   };
 });
 
+import { RunnerConnectError, RunnerTimeoutError } from "@miosa/sdk";
 import { closeMiosaRunnerConnections, miosa, DEFAULT_BASE_URL } from "../index";
 import type { MiosaSandboxRecord } from "../index";
 
@@ -320,9 +322,13 @@ describe("regional sandbox endpoint", () => {
       const record = sandboxRecord();
       fetchMock.mockResolvedValueOnce(jsonResponse(record, 201));
       runnerSpies.createSandbox.mockRejectedValueOnce(
-        Object.assign(new Error("connect ECONNREFUSED"), {
-          code: "ECONNREFUSED",
-        }),
+        new RunnerConnectError(
+          "run-us.miosa.ai",
+          "10.0.0.1",
+          Object.assign(new Error("connect ECONNREFUSED"), {
+            code: "ECONNREFUSED",
+          }),
+        ),
       );
       const provider = miosa({ apiKey: API_KEY });
 
@@ -820,9 +826,13 @@ describe("regional sandbox endpoint", () => {
 
     it("should fall back to the account API when no runner can be connected to", async () => {
       useRunners(() => {
-        throw Object.assign(new Error("read ECONNRESET"), {
-          code: "ECONNRESET",
-        });
+        throw new RunnerConnectError(
+          "run-us.miosa.ai",
+          "10.0.0.1",
+          Object.assign(new Error("connect ECONNREFUSED"), {
+            code: "ECONNREFUSED",
+          }),
+        );
       });
       useAccountApi();
       const provider = miosa({ apiKey: API_KEY });
@@ -831,6 +841,47 @@ describe("regional sandbox endpoint", () => {
 
       expect(runnerCreates()).toHaveLength(2);
       await expectWholeLifeOnAccountApi(provider, sandbox);
+    });
+
+    it("should fall back to the account API when the runners do not know the key yet", async () => {
+      useRunners((call) =>
+        call.method === "POST" && call.path === "/api/v1/sandboxes"
+          ? runnerRefused(401, "unauthorized")
+          : runnerExecOk(),
+      );
+      useAccountApi();
+      const provider = miosa({ apiKey: API_KEY });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(accountApiCalls()[0]).toEqual({ method: "POST", path: "/sandboxes" });
+      await expectWholeLifeOnAccountApi(provider, sandbox);
+    });
+
+    it("should not send the create to the account API after a connection reset that may have followed delivery", async () => {
+      useRunners(() => {
+        throw Object.assign(new Error("read ECONNRESET"), {
+          code: "ECONNRESET",
+        });
+      });
+      useAccountApi();
+      const provider = miosa({ apiKey: API_KEY });
+
+      await expect(provider.sandbox.create()).rejects.toThrow(/ECONNRESET/);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should not send the create to the account API after a timeout that may have followed delivery", async () => {
+      useRunners(() => {
+        throw new RunnerTimeoutError("run-us.miosa.ai", "/api/v1/sandboxes", 30_000);
+      });
+      useAccountApi();
+      const provider = miosa({ apiKey: API_KEY });
+
+      await expect(provider.sandbox.create()).rejects.toThrow(/timed out/);
+
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should fall back to the account API when the regional hostname does not resolve", async () => {
