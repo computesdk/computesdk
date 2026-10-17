@@ -1,5 +1,6 @@
 import { connect, type ClientHttp2Session, type OutgoingHttpHeaders } from 'node:http2';
 import { Readable } from 'node:stream';
+import { TimeoutError } from '@tangle-network/sandbox';
 
 // Node initializes its fetch classes lazily. Resolve them while the adapter
 // loads, alongside the SDK, rather than on the first create request.
@@ -105,7 +106,13 @@ export function openConnections(baseUrl: string): Pool {
 }
 
 /** SDK transport: one stream per request, with no request replay or redirects. */
-export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<Response> {
+export async function http2Fetch(
+  url: URL,
+  options: RequestInit = {},
+  transport: { authorization?: string; timeoutMs?: number } = {},
+): Promise<Response> {
+  const startedAt = performance.now();
+  const { authorization, timeoutMs } = transport;
   options.signal?.throwIfAborted();
   const pool = pools.get(url.origin) ?? openConnections(url.origin);
   const index = pool.next++ % pool.slots.length;
@@ -114,12 +121,20 @@ export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<R
     slot = openSession(url.origin);
     pool.slots[index] = slot;
   }
-  const headers: OutgoingHttpHeaders = {
-    ':method': options.method ?? 'GET',
-    ':path': url.pathname + url.search,
-  };
-  const requestHeaders = options.headers instanceof Headers ? options.headers : new Headers(options.headers);
-  requestHeaders.forEach((value, key) => { headers[key] = value; });
+  const headers: OutgoingHttpHeaders = Object.create(null);
+  headers[':method'] = options.method ?? 'GET';
+  headers[':path'] = url.pathname + url.search;
+  const supplied = options.headers;
+  if (supplied) {
+    const requestHeaders = supplied instanceof Headers ? supplied : new Headers(supplied);
+    requestHeaders.forEach((value, key) => { headers[key] = value; });
+  }
+  if (authorization !== undefined) {
+    headers.authorization = authorization;
+    if (headers['content-type'] === undefined && !(options.body instanceof FormData)) {
+      headers['content-type'] = 'application/json';
+    }
+  }
   // HTTP/2 forbids hop-by-hop headers. The URL owns the authority.
   for (const key of ['connection', 'host', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'upgrade']) {
     delete headers[key];
@@ -127,10 +142,11 @@ export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<R
   let body = options.body;
   if (body != null && typeof body !== 'string' && !(body instanceof Uint8Array)) {
     const request = new Request(url, { ...options, duplex: 'half' } as RequestInit);
-    if (!requestHeaders.has('content-type')) headers['content-type'] = request.headers.get('content-type') ?? undefined;
+    if (headers['content-type'] === undefined) headers['content-type'] = request.headers.get('content-type') ?? undefined;
     body = new Uint8Array(await request.arrayBuffer());
   }
   options.signal?.throwIfAborted();
+  if (timeoutMs !== undefined && performance.now() - startedAt >= timeoutMs) throw new TimeoutError(timeoutMs);
   slot.active++;
   slot.session.ref();
   return new Promise<Response>((resolve, reject) => {
@@ -144,10 +160,19 @@ export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<R
       return;
     }
     const abort = () => { stream.destroy(options.signal?.reason ?? new DOMException('Aborted', 'AbortError')); };
+    // A request timer can destroy the stream directly; no second abort signal
+    // is needed alongside the caller's signal.
+    const timer = timeoutMs === undefined ? undefined : setTimeout(
+      () => stream.destroy(new TimeoutError(timeoutMs)),
+      Math.max(1, timeoutMs - (performance.now() - startedAt)),
+    );
+    timer?.unref();
+    const finish = (response: Response) => { clearTimeout(timer); resolve(response); };
     options.signal?.addEventListener('abort', abort, { once: true });
     stream.on('error', reject);
     stream.on('aborted', () => { stream.destroy(new Error('Tangle HTTP/2 response was interrupted.')); });
     stream.on('close', () => {
+      clearTimeout(timer);
       options.signal?.removeEventListener('abort', abort);
       slot.active--;
       if (slot.active === 0) slot.session.unref();
@@ -163,17 +188,17 @@ export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<R
       }
       if (options.method === 'HEAD' || status === 204 || status === 205 || status === 304) {
         stream.resume();
-        stream.on('end', () => resolve(new Response(null, { status, headers: responseHeaders })));
+        stream.on('end', () => finish(new Response(null, { status, headers: responseHeaders })));
       } else if (status >= 400 || incoming['content-type']?.includes('json')) {
         // Finish small JSON/error bodies before constructing Response. This also
         // keeps the request deadline active through the final body byte.
         const chunks: Buffer[] = [];
         stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-        stream.on('end', () => resolve(new BufferedResponse(
+        stream.on('end', () => finish(new BufferedResponse(
           chunks.length === 1 ? chunks[0] : Buffer.concat(chunks), { status, headers: responseHeaders },
         )));
       } else {
-        resolve(new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { status, headers: responseHeaders }));
+        finish(new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { status, headers: responseHeaders }));
       }
     });
     if (body != null) stream.end(body);

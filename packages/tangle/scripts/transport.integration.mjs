@@ -109,11 +109,16 @@ try {
   assert.equal((await discarded.body.getReader().read()).done, true);
   assert.equal((await http2Fetch(url('/absent'))).status, 404);
   assert.equal(await (await http2Fetch(url('/empty'), { method: 'DELETE' })).text(), '');
+  const authenticated = await http2Fetch(url('/echo'), {
+    method: 'POST', headers: new Headers({ authorization: 'caller-value' }), body: '{}',
+  }, { authorization: 'Bearer provider-value', timeoutMs: 1_000 });
+  assert.equal((await authenticated.json()).authorization, 'Bearer provider-value');
   const sentBeforeAbort = requests;
   await assert.rejects(http2Fetch(url('/echo'), { signal: AbortSignal.abort() }), { name: 'AbortError' });
   assert.equal(requests, sentBeforeAbort);
   for (const path of ['/stall-headers', '/stall-body']) {
     await assert.rejects(http2Fetch(url(path), { signal: AbortSignal.timeout(30) }), { name: 'TimeoutError' });
+    await assert.rejects(http2Fetch(url(path), {}, { timeoutMs: 30 }), { name: 'TimeoutError' });
   }
   await assert.rejects(http2Fetch(url('/reset')));
   const controller = new AbortController();
