@@ -12,10 +12,16 @@ export class TangleClient extends Sandbox {
     timer.unref();
     const deadline = controller.signal;
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+    const headers = new Headers(options.headers);
+    headers.set('authorization', 'Bearer ' + this.getApiKey());
+    if (!headers.has('content-type') && !(options.body instanceof FormData)) {
+      headers.set('content-type', 'application/json');
+    }
     try {
-      return await http2Fetch(new URL(this.getBaseUrl() + path), { ...options, signal }, {
-        apiKey: this.getApiKey(), path,
-      });
+      const response = await http2Fetch(new URL(this.getBaseUrl() + path), { ...options, headers, signal });
+      response.headers.set('x-tangle-request-path', path);
+      if (options.method) response.headers.set('x-tangle-request-method', options.method);
+      return response;
     } catch (error) {
       if (options.signal?.aborted) throw options.signal.reason;
       if (deadline.aborted) throw new TimeoutError(timeoutMs);

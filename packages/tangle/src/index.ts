@@ -4,6 +4,7 @@ import { SandboxError, type SandboxInstance } from '@tangle-network/sandbox';
 import { TangleClient, defaultBaseUrl, openConnections } from './client';
 import { createIdentity } from './identity';
 import { createdAllocationId } from './create-failure';
+import { discardResponseBody } from './http2';
 
 export interface TangleConfig {
   /** API key, or TANGLE_API_KEY. */
@@ -32,7 +33,7 @@ async function removeInstance(client: TangleClient, instanceId: string): Promise
   });
   // DELETE acknowledges retirement. Physical teardown belongs to the service.
   if (response.ok || response.status === 404) {
-    await response.body?.cancel();
+    await discardResponseBody(response);
     return;
   }
   throw new SandboxError(
