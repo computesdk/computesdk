@@ -56,6 +56,7 @@
   * [Secure Exec](providers/secure-exec.md)
   * [Sprites](providers/sprites.md)
   * [Superserve](providers/superserve.md)
+  * [Tangle Sandbox](providers/tangle.md)
   * [Tenki](providers/tenki.md)
   * [Tensorlake](providers/tensorlake.md)
   * [Upstash](providers/upstash.md)

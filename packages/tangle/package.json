@@ -1,0 +1,65 @@
+{
+  "name": "@computesdk/tangle",
+  "version": "1.0.0",
+  "description": "Tangle Sandbox provider for ComputeSDK",
+  "author": "Tangle",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "bench:client": "node scripts/client-latency.mjs",
+    "test:transport": "node scripts/transport.integration.mjs",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "@tangle-network/sandbox": "0.60.78",
+    "computesdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "keywords": [
+    "computesdk",
+    "tangle",
+    "sandbox",
+    "code-execution",
+    "provider"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/tangle"
+  },
+  "homepage": "https://sandbox.tangle.tools",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  }
+}

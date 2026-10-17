@@ -110,6 +110,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
 | **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
+| **Tangle Sandbox** | `TANGLE_API_KEY`, `TANGLE_SANDBOX_BASE_URL` (optional) | Isolated ephemeral sandboxes with native command execution |
 | **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
 | **Upstash** | `UPSTASH_BOX_API_KEY` | Ephemeral and persistent sandboxes |
 | **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions |
@@ -328,6 +329,7 @@ npm install @computesdk/runtime          # Runtime provider
 npm install @computesdk/sail             # Sail provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/superserve       # Superserve provider
+npm install @computesdk/tangle           # Tangle Sandbox provider
 npm install @computesdk/tensorlake       # Tensorlake provider
 npm install @computesdk/upstash          # Upstash provider
 npm install @computesdk/vercel           # Vercel provider
@@ -373,6 +375,7 @@ See individual provider READMEs for details:
 - **[@computesdk/runtime](./packages/runtime)** - Firecracker microVM sandboxes for AI agents, with native command streaming, private preview URLs and snapshots
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
 - **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes
+- **[@computesdk/tangle](./packages/tangle)** - Isolated ephemeral sandboxes with native command execution
 - **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
 - **[@computesdk/upstash](./packages/upstash)** - Ephemeral and persistent sandboxes
 - **[@computesdk/vercel](./packages/vercel)** - Serverless functions
