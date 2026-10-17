@@ -78,8 +78,10 @@ try {
     assert.equal(response.bodyUsed, true);
     await assert.rejects(response.text(), TypeError);
     assert.throws(() => response.clone(), TypeError);
-    assert.equal(response.body.locked, false);
-    assert.equal((await response.body.getReader().read()).done, true);
+    const native = new Response('{}');
+    await native[method]();
+    assert.equal(response.body.locked, native.body.locked);
+    assert.throws(() => response.body.getReader(), TypeError);
     assert.equal((await clone.json()).path, '/echo');
   }
   const locked = await http2Fetch(url('/echo'));

@@ -10,6 +10,7 @@ const decoder = new TextDecoder();
 /** Already-buffered bodies need no stream unless a caller asks for one. */
 class BufferedResponse extends Response {
   private consumed = false;
+  private discarded = false;
   private streamed?: Response;
   private readonly buffer: Buffer;
 
@@ -21,8 +22,10 @@ class BufferedResponse extends Response {
   private asStream(): Response {
     if (!this.streamed) {
       this.streamed = new Response(this.consumed ? '' : new Uint8Array(this.buffer), { headers: this.headers });
-      // Preserve a disturbed body even when it is first accessed after json/text.
-      if (this.consumed) void this.streamed.body!.cancel();
+      // Native consumption leaves a locked, disturbed body; cancellation leaves
+      // it unlocked. Preserve both states when the stream is first requested.
+      if (this.discarded) void this.streamed.body!.cancel();
+      else if (this.consumed) void this.streamed.text();
     }
     return this.streamed;
   }
@@ -40,8 +43,11 @@ class BufferedResponse extends Response {
   override async json(): Promise<any> { return JSON.parse(await this.text()); }
 
   async discard(): Promise<void> {
-    if (this.streamed) await this.streamed.body?.cancel();
-    else this.consumed = true;
+    if (this.streamed || this.consumed) await this.asStream().body?.cancel();
+    else {
+      this.consumed = true;
+      this.discarded = true;
+    }
   }
 
   override arrayBuffer(): Promise<ArrayBuffer> { return this.asStream().arrayBuffer(); }
