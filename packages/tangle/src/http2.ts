@@ -4,11 +4,52 @@ import { Readable } from 'node:stream';
 // Node initializes its fetch classes lazily. Resolve them while the adapter
 // loads, alongside the SDK, rather than on the first create request.
 const { Headers, Response, Request } = globalThis;
-// Reading the constructors alone leaves body consumption and header iteration
-// lazy. Exercise those paths once without sending any request.
-const warmResponse = new Response('{}', { headers: { 'content-type': 'application/json' } });
-warmResponse.headers.forEach(() => {});
-void warmResponse.json();
+
+const decoder = new TextDecoder();
+
+/** Already-buffered bodies need no stream unless a caller asks for one. */
+class BufferedResponse extends Response {
+  private consumed = false;
+  private streamed?: Response;
+
+  constructor(private readonly buffer: Buffer, init: ResponseInit) {
+    super(null, init);
+  }
+
+  private asStream(): Response {
+    if (!this.streamed) {
+      this.streamed = new Response(this.buffer, { headers: this.headers });
+      // Preserve a disturbed body even when it is first accessed after json/text.
+      if (this.consumed) void this.streamed.arrayBuffer();
+    }
+    return this.streamed;
+  }
+
+  override get body(): ReadableStream<Uint8Array> { return this.asStream().body!; }
+  override get bodyUsed(): boolean { return this.consumed || (this.streamed?.bodyUsed ?? false); }
+
+  override async text(): Promise<string> {
+    if (this.streamed) return this.streamed.text();
+    if (this.consumed) throw new TypeError('Body has already been consumed.');
+    this.consumed = true;
+    return decoder.decode(this.buffer);
+  }
+
+  override async json(): Promise<any> { return JSON.parse(await this.text()); }
+
+  override arrayBuffer(): Promise<ArrayBuffer> { return this.asStream().arrayBuffer(); }
+  async bytes(): Promise<Uint8Array> { return new Uint8Array(await this.arrayBuffer()); }
+  override blob(): Promise<Blob> { return this.asStream().blob(); }
+  override formData(): Promise<FormData> { return this.asStream().formData(); }
+
+  override clone(): Response {
+    if (this.bodyUsed || this.streamed?.body?.locked) throw new TypeError('Body cannot be cloned.');
+    if (this.streamed) {
+      return new Response(this.streamed.clone().body, { status: this.status, headers: this.headers });
+    }
+    return new BufferedResponse(this.buffer, { status: this.status, headers: this.headers });
+  }
+}
 
 type Slot = { session: ClientHttp2Session; active: number };
 type Pool = { slots: Slot[]; next: number };
@@ -110,7 +151,9 @@ export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<R
         // keeps the request deadline active through the final body byte.
         const chunks: Buffer[] = [];
         stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-        stream.on('end', () => resolve(new Response(Buffer.concat(chunks), { status, headers: responseHeaders })));
+        stream.on('end', () => resolve(new BufferedResponse(
+          chunks.length === 1 ? chunks[0] : Buffer.concat(chunks), { status, headers: responseHeaders },
+        )));
       } else {
         resolve(new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { status, headers: responseHeaders }));
       }
