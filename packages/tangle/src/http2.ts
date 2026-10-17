@@ -89,7 +89,7 @@ export function openConnections(baseUrl: string): Pool {
 }
 
 /** SDK transport: one stream per request, with no request replay or redirects. */
-export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<Response> {
+export async function http2Fetch(url: URL, options: RequestInit = {}, apiKey?: string): Promise<Response> {
   options.signal?.throwIfAborted();
   const pool = pools.get(url.origin) ?? openConnections(url.origin);
   const index = pool.next++ % pool.slots.length;
@@ -102,8 +102,18 @@ export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<R
     ':method': options.method ?? 'GET',
     ':path': url.pathname + url.search,
   };
-  const requestHeaders = options.headers instanceof Headers ? options.headers : new Headers(options.headers);
-  requestHeaders.forEach((value, key) => { headers[key] = value; });
+  if (options.headers) {
+    const requestHeaders = options.headers instanceof Headers ? options.headers : new Headers(options.headers);
+    requestHeaders.forEach((value, key) => { headers[key] = value; });
+  }
+  // SDK defaults are already normalized; caller-supplied headers still use the
+  // Fetch validation above. Credentials belong to this request, never the pool.
+  if (apiKey !== undefined) {
+    headers.authorization = ('Bearer ' + apiKey).trim();
+    if (headers['content-type'] === undefined && !(options.body instanceof FormData)) {
+      headers['content-type'] = 'application/json';
+    }
+  }
   // HTTP/2 forbids hop-by-hop headers. The URL owns the authority.
   for (const key of ['connection', 'host', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'upgrade']) {
     delete headers[key];
@@ -111,7 +121,7 @@ export async function http2Fetch(url: URL, options: RequestInit = {}): Promise<R
   let body = options.body;
   if (body != null && typeof body !== 'string' && !(body instanceof Uint8Array)) {
     const request = new Request(url, { ...options, duplex: 'half' } as RequestInit);
-    if (!requestHeaders.has('content-type')) headers['content-type'] = request.headers.get('content-type') ?? undefined;
+    if (headers['content-type'] === undefined) headers['content-type'] = request.headers.get('content-type') ?? undefined;
     body = new Uint8Array(await request.arrayBuffer());
   }
   options.signal?.throwIfAborted();
