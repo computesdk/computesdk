@@ -10,7 +10,7 @@
  */
 
 import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
-import { RunnerClient } from "@miosa/sdk";
+import { RunnerClient } from "./runner-entry";
 
 import {
   DEFAULT_RUN_TIMEOUT_MS,
@@ -650,14 +650,17 @@ function preconnectMiosa(
   // never use. resolveAuth still raises the descriptive error on first call.
   if (!hasUsableCredentials(config)) return;
 
-  // list/getById/getUrl/filesystem/snapshots stay on the control-plane pool
-  // even when runnerMode is on (runner-sdk.d.ts), so both warm here when
-  // eligible - this is additive, never a replacement for the block below.
+  // With the regional endpoint in use, create/exec/destroy never touch the
+  // account API, so only the runner client is warmed. The account API pool
+  // (list, getById, getUrl, filesystem, snapshots, fallback creates) opens
+  // when a call first goes there: warming it here would put its TLS
+  // handshakes on the thread ahead of the runner connections.
   const runner = resolveRunnerRouting(config);
   if (runner) {
     // resolveAuth cannot throw here: the credentials were checked above. It
     // also keys the warmed client exactly as the first create will look it up.
     void getRunnerClient(resolveAuth(config)).catch(() => undefined);
+    return;
   }
 
   const baseUrl = (config.baseUrl ?? baseUrlFromEnv()).replace(/\/+$/, "");
