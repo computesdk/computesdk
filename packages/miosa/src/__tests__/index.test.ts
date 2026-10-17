@@ -49,12 +49,17 @@ describe("miosa provider", () => {
   let fetchMock: FetchMock;
 
   beforeEach(() => {
+    // This file exercises the account API. Sandbox operations default to the
+    // regional endpoint, so opt the whole file out of it; that transport has
+    // its own suite in runner-transport.test.ts.
+    process.env.MIOSA_RUNNER_MODE = "0";
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete process.env.MIOSA_RUNNER_MODE;
   });
 
   describe("configuration", () => {
