@@ -10,7 +10,20 @@
  */
 
 import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
-import { RunnerClient, isConnectFailure } from "@miosa/sdk";
+import { RunnerClient } from "@miosa/sdk";
+
+import {
+  DEFAULT_RUN_TIMEOUT_MS,
+  LAZY_CREATE_ENV,
+  LazyCreate,
+  canRunInCreate,
+  isPlaceholderId,
+  placeholderId,
+  readRun,
+  withRun,
+  withoutRun,
+} from "./lazy-create";
+import type { RunOutcome, RunSpec } from "./lazy-create";
 
 import type {
   CommandResult,
@@ -41,6 +54,19 @@ export interface MiosaConfig {
   runnerMode?: boolean;
   /** Overrides `miosa.ai` for the regional endpoint - self-hosted / test deployments only. */
   runnerBaseDomain?: string;
+  /**
+   * Defers `create()` until the sandbox is first used. `create()` returns a
+   * handle without any network call; the first `runCommand()` sends one
+   * request that creates the sandbox and runs the command, and any other
+   * first call creates the sandbox before doing its own work. Errors from
+   * the create surface on that first call. Only applies while the regional
+   * endpoint is in use. Off by default; `MIOSA_LAZY_CREATE=1` turns it on
+   * for every provider that does not set this explicitly.
+   *
+   * While a handle is unused, `sandboxId` is a client-side placeholder; the
+   * real id is available from `getInfo()` once the sandbox exists.
+   */
+  lazyCreate?: boolean;
 }
 
 // ── MIOSA API response shapes (subset the adapter consumes) ────────────────
@@ -129,6 +155,28 @@ export interface MiosaSandbox {
    * with it.
    */
   runner?: RunnerRouting;
+  /**
+   * Set while the sandbox is created lazily (see `MiosaConfig.lazyCreate`).
+   * Until the create has run, `record` is a placeholder; the create fills in
+   * `record`, `runner` and the credentials' routing in place, so every
+   * holder of this handle sees the real sandbox.
+   */
+  lazy?: LazyHandle;
+}
+
+/** A sandbox whose create has not happened yet, or is happening now. */
+export interface LazyHandle {
+  readonly id: string;
+  readonly create: LazyCreate<CreatedSandbox>;
+}
+
+/** What a create produced, and where the sandbox now lives. */
+export interface CreatedSandbox {
+  readonly record: MiosaSandboxRecord;
+  /** True when the account API, not the regional endpoint, holds the sandbox. */
+  readonly servedByAccountApi: boolean;
+  /** The first command's outcome, when the create ran it. */
+  readonly run?: RunOutcome;
 }
 
 // ── HTTP client ─────────────────────────────────────────────────────────────
@@ -839,42 +887,46 @@ function markAccountApiCreateFailure(error: unknown): unknown {
 const UNRESOLVED_HOST_CODES = new Set(["ENOTFOUND", "EAI_AGAIN"]);
 
 /**
- * True when the regional endpoint declined a create before provisioning
- * anything, so the account API can serve it without risking a second
- * sandbox:
- * - it could not be reached (connect, reset, timeout or DNS failure);
- * - every runner tried refused it with 429 (`rate_limited` or
- *   `runtime_busy`) or `feed_stale`. The SDK already retries the next runner
- *   address on these and throws once it runs out, so by the time the error
- *   arrives here no runner has capacity for it.
- * Anything else is rethrown by the caller, because it may follow a sandbox
- * that already exists.
+ * True only when the regional endpoint provably refused a create before it
+ * provisioned anything, so the account API can serve it without risking a
+ * second sandbox:
+ * - the request was never sent: the connection could not be opened
+ *   (`RunnerConnectError`), the hostname did not resolve, or it resolved to
+ *   no runner;
+ * - every runner tried answered that it would not admit the create: 429
+ *   (`rate_limited`, `runtime_busy`), `feed_stale`, or 401 for a key the
+ *   runners have not learned yet. The SDK already moves on to the next
+ *   runner address for these and throws once it runs out.
+ *
+ * Everything else is rethrown by the caller, including a timeout, a reset
+ * connection and any 5xx. Those can follow a request the runner received and
+ * acted on, and sending the create again could provision a second sandbox.
  */
-async function regionalCreateDeclined(error: unknown): Promise<boolean> {
-  if (typeof error === "object" && error !== null) {
-    if (accountApiCreateFailures.has(error)) return false;
-    const shaped = error as {
-      name?: unknown;
-      code?: unknown;
-      status?: unknown;
-      isRateLimited?: unknown;
-      isBusy?: unknown;
-      message?: unknown;
-    };
+function refusedBeforeProvisioning(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  // A failed account-API create made for the regional endpoint's sake may
+  // have provisioned a sandbox; it is never a regional refusal.
+  if (accountApiCreateFailures.has(error)) return false;
+  const shaped = error as {
+    name?: unknown;
+    code?: unknown;
+    status?: unknown;
+    isRateLimited?: unknown;
+    isBusy?: unknown;
+    message?: unknown;
+  };
+  if (shaped.name === "RunnerConnectError") return true;
+  if (shaped.name === "RunnerError") {
     if (shaped.isRateLimited === true || shaped.isBusy === true) return true;
-    // A runner answers 429 only before it admits a create.
-    if (shaped.name === "RunnerError" && shaped.status === 429) return true;
-    if (typeof shaped.code === "string" && UNRESOLVED_HOST_CODES.has(shaped.code)) {
-      return true;
-    }
-    if (
-      typeof shaped.message === "string" &&
-      shaped.message.startsWith("RunnerClient: no runner addresses")
-    ) {
-      return true;
-    }
+    return shaped.status === 429 || shaped.status === 401;
   }
-  return isConnectFailure(error);
+  if (typeof shaped.code === "string" && UNRESOLVED_HOST_CODES.has(shaped.code)) {
+    return true;
+  }
+  return (
+    typeof shaped.message === "string" &&
+    shaped.message.startsWith("RunnerClient: no runner addresses")
+  );
 }
 
 type MiosaRunnerClient = InstanceType<typeof RunnerClient>;
@@ -895,8 +947,9 @@ async function createSandboxOnAccountApi(
   auth: MiosaAuth,
   params: Record<string, unknown>,
 ): Promise<MiosaSandboxRecord> {
+  // The account API does not know the create-and-run fields.
   return unwrapSandbox(
-    await miosaRequest<unknown>(auth, "POST", "/sandboxes", params),
+    await miosaRequest<unknown>(auth, "POST", "/sandboxes", withoutRun(params)),
   );
 }
 
@@ -1133,6 +1186,13 @@ async function execInSandbox(
 ): Promise<CommandResult> {
   const startTime = Date.now();
 
+  // Errors from creating the sandbox are create errors, not command results:
+  // they are thrown, as an eager create() would have thrown them.
+  if (sandbox.lazy) {
+    const first = await runFirstCommand(sandbox, command, options, startTime);
+    if (first) return first;
+  }
+
   let fullCommand = command;
   if (options?.background) {
     fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
@@ -1224,6 +1284,189 @@ async function execInSandbox(
   }
 }
 
+// ── Creating a sandbox ──────────────────────────────────────────────────────
+
+/**
+ * Creates the sandbox on the regional endpoint, or on the account API when
+ * the regional endpoint is off or provably refused it (see
+ * refusedBeforeProvisioning). The one place a create is sent, so the eager
+ * and lazy paths cannot diverge.
+ */
+async function createSandboxRecord(
+  auth: MiosaAuth,
+  body: Record<string, unknown>,
+): Promise<CreatedSandbox> {
+  if (auth.runner) {
+    try {
+      const created = await (await getRunnerClient(auth)).createSandbox(body);
+      const run = readRun(created.data);
+      return {
+        record: withoutRun(unwrapSandbox(created.data)) as MiosaSandboxRecord,
+        // The SDK reports an empty runnerUrl for a create it handed to the
+        // account API.
+        servedByAccountApi: !created.runnerUrl,
+        ...(run ? { run } : {}),
+      };
+    } catch (error) {
+      // An unreachable regional endpoint, or one with no capacity for this
+      // create, is not a create failure: nothing was provisioned, so the
+      // account API can still serve it. Deliberately narrow - anything that
+      // may follow an existing sandbox is rethrown, because retrying there
+      // would provision a second one.
+      if (!refusedBeforeProvisioning(error)) throw error;
+    }
+  }
+  return {
+    record: await createSandboxOnAccountApi(auth, body),
+    servedByAccountApi: true,
+  };
+}
+
+/**
+ * Records where a created sandbox lives and returns the credentials its
+ * handle must carry: a sandbox on the account API keeps using it, so its
+ * exec and destroy never address the regional endpoint for a sandbox that
+ * endpoint does not own.
+ */
+function settleCreated(auth: MiosaAuth, created: CreatedSandbox): MiosaAuth {
+  if (!created.record.id) {
+    throw new Error("MIOSA create sandbox returned a record without an id");
+  }
+  sandboxTransport.set(
+    created.record.id,
+    created.servedByAccountApi ? "account" : "regional",
+  );
+  return created.servedByAccountApi
+    ? { apiKey: auth.apiKey, baseUrl: auth.baseUrl }
+    : auth;
+}
+
+// ── Lazy creation ───────────────────────────────────────────────────────────
+//
+// With `lazyCreate` on, create() hands back a handle and sends nothing. The
+// handle's create happens on first use (see lazy-create.ts for the wire
+// contract). Handles are found again by their placeholder id, because the
+// operations that only receive an id - getById, destroy, snapshots - have no
+// handle to look at.
+
+/**
+ * Lazy handles by placeholder id, kept for as long as the framework may still
+ * call back with that id, which is until the sandbox is destroyed. A handle
+ * that is created, used and never destroyed stays here, as its sandbox stays
+ * on the server.
+ */
+const lazyHandles = new Map<string, MiosaSandbox>();
+
+function readLazyCreateEnv(): boolean {
+  const raw =
+    typeof process !== "undefined" ? process.env?.[LAZY_CREATE_ENV] : undefined;
+  if (raw === undefined) return false;
+  const normalised = raw.trim().toLowerCase();
+  return normalised === "1" || normalised === "true";
+}
+
+function lazyCreateEnabled(config: MiosaConfig, auth: MiosaAuth): boolean {
+  // Create-and-run is a regional endpoint feature; without it a deferred
+  // create would only move the same request later, so keep it eager.
+  return auth.runner !== undefined && (config.lazyCreate ?? readLazyCreateEnv());
+}
+
+function placeholderRecord(id: string): MiosaSandboxRecord {
+  return {
+    id,
+    slug: id,
+    name: null,
+    state: "pending",
+    template_id: null,
+    cpu_count: null,
+    memory_mb: null,
+    timeout_sec: null,
+    metadata: null,
+    preview_url: null,
+    preview_domain: null,
+    created_at: new Date().toISOString(),
+  };
+}
+
+function newLazySandbox(
+  auth: MiosaAuth,
+  body: Record<string, unknown>,
+): MiosaSandbox {
+  const id = placeholderId();
+  const sandbox: MiosaSandbox = {
+    record: placeholderRecord(id),
+    ...auth,
+  };
+  sandbox.lazy = {
+    id,
+    create: new LazyCreate<CreatedSandbox>(async (run) => {
+      const created = await createSandboxRecord(
+        auth,
+        run ? withRun(body, run) : body,
+      );
+      const handleAuth = settleCreated(auth, created);
+      // Fill the handle in place: the framework and the caller hold this
+      // object, and every later call must see the real sandbox.
+      sandbox.record = created.record;
+      sandbox.apiKey = handleAuth.apiKey;
+      sandbox.baseUrl = handleAuth.baseUrl;
+      if (handleAuth.runner) sandbox.runner = handleAuth.runner;
+      else delete sandbox.runner;
+      return created;
+    }),
+  };
+  lazyHandles.set(id, sandbox);
+  return sandbox;
+}
+
+/**
+ * Makes sure the sandbox behind `sandbox` exists, creating it if this is
+ * the first use. Rejects with the create's own error. A no-op for a handle
+ * that was never lazy.
+ */
+async function ensureCreated(sandbox: MiosaSandbox): Promise<void> {
+  if (sandbox.lazy) await sandbox.lazy.create.begin().result;
+}
+
+/** The real id behind an id the caller may have got from a lazy handle. */
+async function resolveSandboxId(sandboxId: string): Promise<string> {
+  if (!isPlaceholderId(sandboxId)) return sandboxId;
+  const sandbox = lazyHandles.get(sandboxId);
+  if (!sandbox) return sandboxId;
+  await ensureCreated(sandbox);
+  return sandbox.record.id;
+}
+
+/**
+ * The first command of a lazy sandbox. Returns its result when the create
+ * request ran it, and undefined when the sandbox now exists but the command
+ * still has to be sent the ordinary way: another call created it first, the
+ * command needs options the create request cannot carry, or the endpoint
+ * answered a plain create. Rejects with the create's own error.
+ */
+async function runFirstCommand(
+  sandbox: MiosaSandbox,
+  command: string,
+  options: RunCommandOptions | undefined,
+  startTime: number,
+): Promise<CommandResult | undefined> {
+  const lazy = sandbox.lazy;
+  if (!lazy) return undefined;
+  const run: RunSpec | undefined = canRunInCreate(options)
+    ? { command, timeoutMs: options?.timeout ?? DEFAULT_RUN_TIMEOUT_MS }
+    : undefined;
+  const { starter, result } = lazy.create.begin(run);
+  const created = await result;
+  // Only the call that started the create asked for its command to run in it.
+  if (!starter || !created.run) return undefined;
+  return {
+    stdout: created.run.stdout,
+    stderr: created.run.stderr,
+    exitCode: created.run.exitCode,
+    durationMs: created.run.durationMs ?? Date.now() - startTime,
+  };
+}
+
 // ── Provider ────────────────────────────────────────────────────────────────
 
 const createMiosaProvider = defineProvider<
@@ -1284,56 +1527,24 @@ const createMiosaProvider = defineProvider<
         if (options?.envs !== undefined) body.env = options.envs;
         if (options?.metadata !== undefined) body.metadata = options.metadata;
 
-        let record: MiosaSandboxRecord;
-        // Where the sandbox actually landed. The account API serves the
-        // creates the regional endpoint declines, and exec/destroy have to
-        // follow the same path or they address a host that never saw it.
-        let servedByAccountApi = false;
-        if (auth.runner) {
-          try {
-            const created = await (
-              await getRunnerClient(auth)
-            ).createSandbox(body);
-            record = unwrapSandbox(created.data);
-            // The SDK reports an empty runnerUrl for a create it handed to
-            // the account API.
-            servedByAccountApi = !created.runnerUrl;
-          } catch (error) {
-            // An unreachable regional endpoint, or one with no capacity for
-            // this create, is not a create failure: nothing was provisioned,
-            // so the account API can still serve it. Deliberately narrow -
-            // anything that may follow an existing sandbox is rethrown,
-            // because retrying there would provision a second one.
-            if (!(await regionalCreateDeclined(error))) throw error;
-            record = await createSandboxOnAccountApi(auth, body);
-            servedByAccountApi = true;
-          }
-        } else {
-          record = await createSandboxOnAccountApi(auth, body);
-          servedByAccountApi = true;
-        }
-        if (!record.id) {
-          throw new Error(
-            "MIOSA create sandbox returned a record without an id",
-          );
+        if (lazyCreateEnabled(config, auth)) {
+          const sandbox = newLazySandbox(auth, body);
+          return { instance: sandbox, instanceId: sandbox.record.id };
         }
 
-        // A handle created through the account API keeps using it, so its
-        // exec and destroy never address the regional endpoint for a sandbox
-        // that endpoint does not own.
-        const handleAuth: MiosaAuth = servedByAccountApi
-          ? { apiKey: auth.apiKey, baseUrl: auth.baseUrl }
-          : auth;
-        sandboxTransport.set(
-          record.id,
-          servedByAccountApi ? "account" : "regional",
-        );
-
-        return { instance: { record, ...handleAuth }, instanceId: record.id };
+        const created = await createSandboxRecord(auth, body);
+        const handleAuth = settleCreated(auth, created);
+        return {
+          instance: { record: created.record, ...handleAuth },
+          instanceId: created.record.id,
+        };
       },
 
-      getById: async (config: MiosaConfig, sandboxId: string) => {
+      getById: async (config: MiosaConfig, requestedId: string) => {
         const auth = resolveAuth(config);
+        // A lazy handle's placeholder id names no sandbox yet. Looking it up
+        // creates the sandbox first, so the caller gets a real one.
+        const sandboxId = await resolveSandboxId(requestedId);
         try {
           const payload = await miosaRequest<unknown>(
             auth,
@@ -1365,8 +1576,30 @@ const createMiosaProvider = defineProvider<
         }));
       },
 
-      destroy: async (config: MiosaConfig, sandboxId: string) => {
+      destroy: async (config: MiosaConfig, requestedId: string) => {
         const auth = resolveAuth(config);
+
+        // A lazy sandbox that was never used does not exist, so there is
+        // nothing to destroy and no request to send. One whose create ran,
+        // or is running, is destroyed by its real id.
+        let sandboxId = requestedId;
+        const lazy = lazyHandles.get(requestedId)?.lazy;
+        if (lazy) {
+          // Checked and cancelled in one synchronous step, so no call can
+          // start the create between the check and the cancel.
+          if (!lazy.create.started) {
+            lazy.create.cancel();
+            lazyHandles.delete(requestedId);
+            return;
+          }
+          const created = await lazy.create.settled();
+          // The create failed: nothing exists to destroy.
+          if (!created) {
+            lazyHandles.delete(requestedId);
+            return;
+          }
+          sandboxId = created.record.id;
+        }
         const known = sandboxTransport.get(sandboxId);
 
         const destroyOnAccountApi = () =>
@@ -1409,11 +1642,13 @@ const createMiosaProvider = defineProvider<
         // clearing it then would send the retry to the other endpoint, where
         // a 404 reads as "already destroyed" while the sandbox still runs.
         sandboxTransport.delete(sandboxId);
+        lazyHandles.delete(requestedId);
       },
 
       runCommand: execInSandbox,
 
       getInfo: async (sandbox: MiosaSandbox): Promise<InstanceInfo> => {
+        await ensureCreated(sandbox);
         // The handle's record is a snapshot from create/getById and goes stale
         // as soon as the sandbox stops or fails. Refetch so callers polling
         // status see live state, and refresh the handle for later reads. This
@@ -1455,6 +1690,7 @@ const createMiosaProvider = defineProvider<
         sandbox: MiosaSandbox,
         options: { port: number; protocol?: string },
       ): Promise<string> => {
+        await ensureCreated(sandbox);
         // POST /sandboxes/:id/expose provisions a per-port preview URL on the
         // tenant's (white-label aware) preview domain. Never build the domain
         // client-side because the server resolves it per tenant.
@@ -1516,6 +1752,7 @@ const createMiosaProvider = defineProvider<
           sandbox: MiosaSandbox,
           path: string,
         ): Promise<string> => {
+          await ensureCreated(sandbox);
           const response = await miosaRequest<{ content: string }>(
             sandbox,
             "GET",
@@ -1530,6 +1767,7 @@ const createMiosaProvider = defineProvider<
           path: string,
           content: string,
         ): Promise<void> => {
+          await ensureCreated(sandbox);
           await miosaRequest<unknown>(
             sandbox,
             "POST",
@@ -1543,6 +1781,7 @@ const createMiosaProvider = defineProvider<
 
         // Native: POST /sandboxes/:id/fs/mkdir  { path, recursive }
         mkdir: async (sandbox: MiosaSandbox, path: string): Promise<void> => {
+          await ensureCreated(sandbox);
           await miosaRequest<unknown>(
             sandbox,
             "POST",
@@ -1559,6 +1798,7 @@ const createMiosaProvider = defineProvider<
           sandbox: MiosaSandbox,
           path: string,
         ): Promise<FileEntry[]> => {
+          await ensureCreated(sandbox);
           const response = await miosaRequest<{ files: MiosaFileListEntry[] }>(
             sandbox,
             "GET",
@@ -1597,6 +1837,7 @@ const createMiosaProvider = defineProvider<
 
         // Native: DELETE /sandboxes/:id/fs?path=…  (recursive on the server side)
         remove: async (sandbox: MiosaSandbox, path: string): Promise<void> => {
+          await ensureCreated(sandbox);
           await miosaRequest<unknown>(
             sandbox,
             "DELETE",
@@ -1614,6 +1855,7 @@ const createMiosaProvider = defineProvider<
         options?: CreateSnapshotOptions,
       ): Promise<MiosaSnapshotRecord> => {
         const auth = resolveAuth(config);
+        sandboxId = await resolveSandboxId(sandboxId);
         const body: Record<string, unknown> = {};
         if (options?.name !== undefined) body.comment = options.name;
         const response = await miosaRequest<
@@ -1635,17 +1877,18 @@ const createMiosaProvider = defineProvider<
             "MIOSA snapshots are scoped per sandbox: pass { sandboxId } to list().",
           );
         }
+        const ownerId = await resolveSandboxId(options.sandboxId);
         const response = await miosaRequest<{ data: MiosaSnapshotRecord[] }>(
           auth,
           "GET",
-          `/sandboxes/${options.sandboxId}/snapshots`,
+          `/sandboxes/${ownerId}/snapshots`,
         );
         const records = response.data ?? [];
         for (const record of records) {
-          // The listing is already scoped to options.sandboxId, so that is the
+          // The listing is already scoped to this sandbox, so that is the
           // owner even when the record itself omits sandbox_id. Recording it
           // unconditionally is what lets a later delete() skip the scan.
-          const owner = record?.sandbox_id ?? options.sandboxId;
+          const owner = record?.sandbox_id ?? ownerId;
           if (record?.id && owner)
             snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), owner);
         }
