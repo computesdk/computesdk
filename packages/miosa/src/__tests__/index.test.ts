@@ -195,12 +195,20 @@ describe("miosa provider", () => {
       expect(init.method).toBe("DELETE");
     });
 
-    it("should treat 404 as already destroyed", async () => {
-      fetchMock.mockResolvedValueOnce(
-        jsonResponse({ error: { code: "NOT_FOUND" } }, 404),
-      );
+    it("should treat 404 as already destroyed for a sandbox this provider created", async () => {
+      // An id this process never created is also looked for on the regional
+      // endpoint (see runner-transport.test.ts); one it created on the account
+      // API is known to live only there.
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201))
+        .mockResolvedValueOnce(
+          jsonResponse({ error: { code: "NOT_FOUND" } }, 404),
+        );
       const provider = miosa({ apiKey: API_KEY });
-      await expect(provider.sandbox.destroy("gone")).resolves.toBeUndefined();
+      const sandbox = await provider.sandbox.create();
+      await expect(
+        provider.sandbox.destroy(sandbox.sandboxId),
+      ).resolves.toBeUndefined();
     });
   });
 

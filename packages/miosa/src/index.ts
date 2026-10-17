@@ -1667,14 +1667,21 @@ const createMiosaProvider = defineProvider<
         // this process never created - one made in another process, or before
         // a restart - has no entry, so a 404 from either endpoint is not
         // conclusive on its own and both are tried; the account API goes
-        // first because it is the registry, and is the only transport
-        // available when runnerMode is off.
+        // first because it is the registry.
+        //
+        // That holds with runnerMode off too: opting out stops new sandboxes
+        // being created regionally, it does not make an older regional
+        // sandbox disappear from the account API's 404. The one exception is a
+        // custom control plane, whose key the public regional endpoint has no
+        // business seeing.
         if (known === "regional") {
           await missing(destroyOnRegionalEndpoint);
-        } else if (known === "account" || auth.runner === undefined) {
+        } else if (known === "account") {
           await missing(destroyOnAccountApi);
         } else if (await missing(destroyOnAccountApi)) {
-          await missing(destroyOnRegionalEndpoint);
+          if (auth.runner !== undefined || auth.baseUrl === DEFAULT_BASE_URL) {
+            await missing(destroyOnRegionalEndpoint);
+          }
         }
 
         // Reaching here means the sandbox was deleted or is confirmed absent,
