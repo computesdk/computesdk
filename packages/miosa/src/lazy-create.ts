@@ -4,11 +4,25 @@
  *
  * Request: the usual create body plus
  *
- *   "run": { "command": "<string>", "timeout_ms": <int> }
+ *   "run": { "command": "<string>", "timeout_ms": <int, optional> }
+ *
+ * `timeout_ms` may be left out; the runner then applies the exec default.
+ * Any create the runner serves accepts the field.
  *
  * Response: 201 with the usual create body plus
  *
- *   "run": { "exit_code": <int>, "stdout": "<string>", "stderr": "<string>", "duration_ms": <int> }
+ *   "run": { "exit_code": <int|null>, "stdout": "", "stderr": "", "duration_ms": <int>, "error": <null|object> }
+ *
+ * `error` is null when the command ended. When it produced no result
+ * (deadline, output allowance, spawn failure) `exit_code` is null and `error`
+ * is the exec endpoint's own error object. The sandbox exists either way.
+ *
+ * A command the exec contract refuses refuses the whole create, and no
+ * sandbox exists: 400 MISSING_PARAM, INVALID_PARAM, INVALID_TIMEOUT or
+ * EXEC_TIMEOUT_UNSUPPORTED, or 413 RUNNER_COMMAND_TOO_LARGE. That is not
+ * RUNNER_UNSUPPORTED_REQUEST, which still means the create itself is not
+ * served here (environment, image, template, size) and goes to the account
+ * API without the `run` field.
  *
  * A runner that does not know the field answers a plain create, with no
  * `run` in the response. Callers treat that as "the sandbox exists, the
@@ -24,21 +38,22 @@ import { randomUUID } from "node:crypto";
 /** The environment switch that turns lazy creation on. Off unless set to "1" or "true". */
 export const LAZY_CREATE_ENV = "MIOSA_LAZY_CREATE";
 
-/** The runner's own default for a single command (RUNNER-CONTRACTS C2: 30 seconds). */
-export const DEFAULT_RUN_TIMEOUT_MS = 30_000;
-
 /** Body fields owned by this contract. Nothing but the runner understands them. */
 const CONTRACT_FIELDS = ["run"] as const;
 
 /** The first command, as the runner is asked to run it inside the create request. */
 export interface RunSpec {
   readonly command: string;
-  readonly timeoutMs: number;
+  /** Left out of the request when absent, so the runner's own default applies. */
+  readonly timeoutMs?: number;
 }
 
 /** What the runner reports back for that command. */
 export interface RunOutcome {
-  readonly exitCode: number;
+  /** Null when the command produced no result; see `error`. */
+  readonly exitCode: number | null;
+  /** Why the command produced no result. Undefined when it ended. */
+  readonly error: string | undefined;
   readonly stdout: string;
   readonly stderr: string;
   /** Absent when the runner did not report it. */
@@ -52,7 +67,10 @@ export function withRun(
 ): Record<string, unknown> {
   return {
     ...body,
-    run: { command: run.command, timeout_ms: run.timeoutMs },
+    run: {
+      command: run.command,
+      ...(run.timeoutMs !== undefined ? { timeout_ms: run.timeoutMs } : {}),
+    },
   };
 }
 
@@ -87,15 +105,66 @@ export function readRun(
   if (typeof raw !== "object" || raw === null) return undefined;
   const run = raw as Record<string, unknown>;
   const exitCode = run["exit_code"];
-  // Without an exit code there is no outcome to report; do not invent one.
-  if (typeof exitCode !== "number") return undefined;
+  const error = describeError(run["error"]);
+  // Neither an exit code nor an error is no outcome at all: a runner that
+  // ignored the field. Do not invent one.
+  if (typeof exitCode !== "number" && error === undefined) return undefined;
   const durationMs = run["duration_ms"];
   return {
-    exitCode,
+    exitCode: typeof exitCode === "number" ? exitCode : null,
+    error,
     stdout: typeof run["stdout"] === "string" ? run["stdout"] : "",
     stderr: typeof run["stderr"] === "string" ? run["stderr"] : "",
     durationMs: typeof durationMs === "number" ? durationMs : undefined,
   };
+}
+
+/** A readable message from an error object or string; undefined for null. */
+function describeError(error: unknown): string | undefined {
+  if (error === null || error === undefined) return undefined;
+  if (typeof error === "string") return error;
+  if (typeof error === "object") {
+    const shaped = error as { message?: unknown; code?: unknown };
+    if (typeof shaped.message === "string") return shaped.message;
+    if (typeof shaped.code === "string") return shaped.code;
+  }
+  return JSON.stringify(error);
+}
+
+/** Refusals of the `run` block by the exec contract. No sandbox is created. */
+const RUN_REFUSAL_CODES = new Set([
+  "MISSING_PARAM",
+  "INVALID_PARAM",
+  "INVALID_TIMEOUT",
+  "EXEC_TIMEOUT_UNSUPPORTED",
+  "RUNNER_COMMAND_TOO_LARGE",
+]);
+
+/**
+ * True when a create failed because the runner refused the `run` block.
+ * Such a create provisioned nothing, so the handle is left as it was and the
+ * refusal is reported as the exec refusal it is.
+ */
+export function isRunRefusal(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const shaped = error as { name?: unknown; status?: unknown; code?: unknown };
+  return (
+    shaped.name === "RunnerError" &&
+    (shaped.status === 400 || shaped.status === 413) &&
+    typeof shaped.code === "string" &&
+    RUN_REFUSAL_CODES.has(shaped.code)
+  );
+}
+
+/** Thrown inside a lazy create whose `run` block the runner refused. */
+export class RunRefused extends Error {
+  readonly refusal: unknown;
+
+  constructor(refusal: unknown) {
+    super(refusal instanceof Error ? refusal.message : String(refusal));
+    this.name = "RunRefused";
+    this.refusal = refusal;
+  }
 }
 
 /**
@@ -134,6 +203,11 @@ export function isPlaceholderId(id: string): boolean {
  * because the request may have reached the server and a second one could
  * provision a second sandbox. Later calls see the same error the first one
  * did.
+ *
+ * One failure is not remembered: a `RunRefused`. The runner refused the
+ * command before creating anything, so the handle stays as it was, unused. The
+ * call that sent the command gets the refusal; calls that were waiting on that
+ * create start a plain one of their own.
  */
 export class LazyCreate<T> {
   private pending: Promise<T> | undefined;
@@ -165,7 +239,13 @@ export class LazyCreate<T> {
    */
   begin(run?: RunSpec): { starter: boolean; result: Promise<T> } {
     if (this.pending !== undefined) {
-      return { starter: false, result: this.pending };
+      return {
+        starter: false,
+        result: this.pending.catch((error: unknown) => {
+          if (error instanceof RunRefused) return this.begin().result;
+          throw error;
+        }),
+      };
     }
     if (this.cancelled) {
       return {
@@ -175,8 +255,16 @@ export class LazyCreate<T> {
         ),
       };
     }
-    this.pending = this.create(run);
-    return { starter: true, result: this.pending };
+    const attempt = this.create(run);
+    this.pending = attempt;
+    // Registered before any other call can wait on `attempt`, so the reset
+    // happens before their retries look at `pending`.
+    attempt.catch((error: unknown) => {
+      if (error instanceof RunRefused && this.pending === attempt) {
+        this.pending = undefined;
+      }
+    });
+    return { starter: true, result: attempt };
   }
 
   /**
