@@ -63,6 +63,10 @@ describe("preconnect on import", () => {
     // these cases are about what the module does to that transport.
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("MIOSA_BASE_URL", server.url);
+    // Sandbox operations default to the regional endpoint, which leaves the
+    // account API pool unopened. These cases are about that pool, so they run
+    // with the regional endpoint off; the next describe covers it on.
+    vi.stubEnv("MIOSA_RUNNER_MODE", "0");
   });
 
   afterEach(async () => {
@@ -176,7 +180,7 @@ describe("preconnect on import", () => {
     expect(server.open()).toBe(0);
   });
 
-  it("should not hold the process open", () => {
+  function expectProcessExitsAfterImport(extraEnv: Record<string, string>): void {
     // Whether a script still exits can only be seen from outside the process.
     // getActiveResourcesInfo is not the instrument: an unref'd pool socket is
     // still listed there, so it over-reports. A child that imports the built
@@ -214,7 +218,11 @@ describe("preconnect on import", () => {
         // handshake is the worst case for an idle pool, so give the connect
         // phase a short bound and check the script still leaves on its own
         // rather than waiting the bound out.
-        env: { ...process.env, MIOSA_HTTP2_CONNECT_TIMEOUT_MS: "1500" },
+        env: {
+          ...process.env,
+          MIOSA_HTTP2_CONNECT_TIMEOUT_MS: "1500",
+          ...extraEnv,
+        },
       },
     );
 
@@ -223,5 +231,75 @@ describe("preconnect on import", () => {
     expect(result.signal).toBeNull();
     expect(result.status).toBe(0);
     expect(Date.now() - started).toBeLessThan(5_000);
+  }
+
+  it("should not hold the process open", () => {
+    expectProcessExitsAfterImport({ MIOSA_RUNNER_MODE: "0" });
+  });
+
+  it("should not hold the process open in regional endpoint mode", () => {
+    expectProcessExitsAfterImport({ MIOSA_RUNNER_MODE: "1" });
+  });
+
+});
+
+describe("preconnect in regional endpoint mode", () => {
+  let server: CountingServer;
+  let loaded: typeof import("../index") | undefined;
+
+  beforeEach(async () => {
+    server = await countingServer();
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("MIOSA_BASE_URL", server.url);
+    vi.stubEnv("MIOSA_API_KEY", "msk_0123456789abcdefghijklmnop");
+    vi.stubEnv("MIOSA_RUNNER_MODE", "1");
+    // Keep the runner client off the network: this is about the account pool.
+    vi.stubEnv("MIOSA_HTTP2_CONNECT_TIMEOUT_MS", "10000");
+  });
+
+  afterEach(async () => {
+    loaded?.closeMiosaConnections();
+    loaded = undefined;
+    vi.unstubAllEnvs();
+    await server.close();
+  });
+
+  it("should not open the account API pool when the module is imported", async () => {
+    loaded = await importFresh();
+    await settle(300);
+
+    expect(server.connections()).toBe(0);
+  });
+
+  it("should not open the account API pool when a provider is constructed", async () => {
+    loaded = await importFresh();
+    loaded.miosa({ apiKey: "msk_0123456789abcdefghijklmnop" });
+    await settle(300);
+
+    expect(server.connections()).toBe(0);
+  });
+
+  it("should open the account API pool when a call first goes there", async () => {
+    loaded = await importFresh();
+    const provider = loaded.miosa({ apiKey: "msk_0123456789abcdefghijklmnop" });
+    expect(server.connections()).toBe(0);
+
+    // The stand-in server never completes the TLS handshake, so the call is
+    // left pending; only the attempt to connect is observed.
+    void provider.sandbox.list().catch(() => undefined);
+    await settle(300);
+
+    expect(server.connections()).toBeGreaterThan(0);
+  });
+
+  it("should open the account API pool for a provider that opts out of the regional endpoint", async () => {
+    loaded = await importFresh();
+    loaded.miosa({
+      apiKey: "msk_0123456789abcdefghijklmnop",
+      runnerMode: false,
+    });
+    await settle(300);
+
+    expect(server.connections()).toBeGreaterThan(0);
   });
 });
