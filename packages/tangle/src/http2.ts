@@ -20,14 +20,14 @@ class BufferedResponse extends Response {
 
   private asStream(): Response {
     if (!this.streamed) {
-      this.streamed = new Response(this.buffer, { headers: this.headers });
+      this.streamed = new Response(new Uint8Array(this.buffer), { headers: this.headers });
       // Preserve a disturbed body even when it is first accessed after json/text.
       if (this.consumed) void this.streamed.arrayBuffer();
     }
     return this.streamed;
   }
 
-  override get body(): ReadableStream<Uint8Array> { return this.asStream().body!; }
+  override get body() { return this.asStream().body!; }
   override get bodyUsed(): boolean { return this.consumed || (this.streamed?.bodyUsed ?? false); }
 
   override async text(): Promise<string> {
@@ -40,7 +40,7 @@ class BufferedResponse extends Response {
   override async json(): Promise<any> { return JSON.parse(await this.text()); }
 
   override arrayBuffer(): Promise<ArrayBuffer> { return this.asStream().arrayBuffer(); }
-  async bytes(): Promise<Uint8Array> { return new Uint8Array(await this.arrayBuffer()); }
+  async bytes() { return new Uint8Array(await this.arrayBuffer()); }
   override blob(): Promise<Blob> { return this.asStream().blob(); }
   override formData(): Promise<FormData> { return this.asStream().formData(); }
 
