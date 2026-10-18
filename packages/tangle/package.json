@@ -23,7 +23,7 @@
   "scripts": {
     "build": "tsup",
     "bench:client": "node scripts/client-latency.mjs",
-    "test:transport": "node scripts/transport.integration.mjs",
+    "test:transport": "node scripts/transport.integration.mjs && node scripts/api.integration.mjs",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",

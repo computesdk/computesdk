@@ -7,6 +7,12 @@ import { cpus } from 'node:os';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
+if (process.argv[2] === '--compare') {
+  if (!process.argv[3]) throw new Error('Usage: bench:client --compare <alternating ruler result directory>');
+  await (await import('./client-comparison.mjs')).compare(process.argv[3]);
+  process.exit(0);
+}
+
 const artifactSha256 = createHash('sha256').update(readFileSync(new URL('../dist/index.mjs', import.meta.url))).digest('hex');
 const sdkVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).dependencies['@tangle-network/sandbox'];
 

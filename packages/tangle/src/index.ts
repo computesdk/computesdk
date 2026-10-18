@@ -1,10 +1,10 @@
 import { defineProvider } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
-import { SandboxError, type SandboxInstance } from '@tangle-network/sandbox';
-import { TangleClient, defaultBaseUrl, openConnections } from './client';
+import { type SandboxInstance } from '@tangle-network/sandbox';
+import { defaultBaseUrl } from './client';
+import { createApi, createIsolated, removeInstance, runCommand, nativeInstance, trackInstance, type Api } from './api';
 import { createIdentity } from './identity';
 import { createdAllocationId } from './create-failure';
-import { discardResponseBody } from './http2';
 
 export interface TangleConfig {
   /** API key, or TANGLE_API_KEY. */
@@ -25,23 +25,7 @@ export interface TangleConfig {
   createTimeout?: number;
 }
 
-type ResolvedConfig = TangleConfig & { apiKey: string; baseUrl: string; client: TangleClient };
-
-async function removeInstance(client: TangleClient, instanceId: string): Promise<void> {
-  const response = await client.fetch('/v1/sandboxes/' + encodeURIComponent(instanceId), {
-    method: 'DELETE',
-  });
-  // DELETE acknowledges retirement. Physical teardown belongs to the service.
-  if (response.ok || response.status === 404) {
-    await discardResponseBody(response);
-    return;
-  }
-  throw new SandboxError(
-    'Tangle deletion failed: ' + await response.text(),
-    'SANDBOX_DELETE_FAILED',
-    response.status,
-  );
-}
+type ResolvedConfig = TangleConfig & { apiKey: string; baseUrl: string; api: Api };
 
 const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
   name: 'tangle',
@@ -57,7 +41,7 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
         if (options.runtime !== undefined) {
           throw new Error('Tangle does not map runtime names; select an environment with image or templateId.');
         }
-        const client = config.client;
+        const api = config.api;
         const identity = createIdentity(options);
         const image = options.image ?? options.templateId ?? config.image;
         const timeout = options.timeout ?? config.timeout;
@@ -66,7 +50,7 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
         const diskGB = options.disk ?? config.disk;
         let instance: SandboxInstance;
         try {
-          instance = await client.createIsolated({
+          instance = await createIsolated(api, {
             name: identity.name,
             idempotencyKey: identity.idempotencyKey,
             ...(image !== undefined ? { environment: image } : {}),
@@ -78,15 +62,12 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
             metadata: options.metadata,
             egressPolicy: { mode: 'open' },
             ...(timeout !== undefined ? { maxLifetimeSeconds: Math.ceil(timeout / 1000) } : {}),
-          }, {
-            timeoutMs: config.createTimeout,
-            signal: options.signal,
-          });
+          }, config.createTimeout, options.signal);
         } catch (creationError) {
           const allocationId = createdAllocationId(creationError, identity.idempotencyKey);
           if (allocationId !== undefined) {
             try {
-              await removeInstance(client, allocationId);
+              await removeInstance(api, allocationId);
             } catch (cleanupError) {
               throw new AggregateError(
                 [creationError, cleanupError],
@@ -101,23 +82,23 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
       },
 
       getById: async (config, instanceId) => {
-        const instance = await config.client.get(instanceId);
-        return instance === null ? null : { instance, instanceId: instance.id };
+        const instance = await config.api.sdk().get(instanceId);
+        return instance === null ? null : { instance: trackInstance(config.api, instance), instanceId: instance.id };
       },
 
       list: async (config) => {
-        const client = config.client;
+        const api = config.api;
         const instances: Array<{ instance: SandboxInstance; instanceId: string }> = [];
         const limit = 100;
         for (let offset = 0; ; offset += limit) {
-          const page = await client.list({ limit, offset });
-          instances.push(...page.map((instance) => ({ instance, instanceId: instance.id })));
+          const page = await api.sdk().list({ limit, offset });
+          instances.push(...page.map((instance) => ({ instance: trackInstance(api, instance), instanceId: instance.id })));
           if (page.length < limit) return instances;
         }
       },
 
       destroy: async (config, instanceId) => {
-        await removeInstance(config.client, instanceId);
+        await removeInstance(config.api, instanceId);
       },
 
       runCommand: async (
@@ -126,24 +107,14 @@ const createProvider = defineProvider<SandboxInstance, ResolvedConfig>({
         options?: RunCommandOptions,
       ): Promise<CommandResult> => {
         const start = performance.now();
-        const nativeOptions = {
-          cwd: options?.cwd,
-          env: options?.env,
-          ...(options?.timeout !== undefined ? { timeoutMs: options.timeout } : {}),
-        };
-        if (options?.background) {
-          const process = await instance.process.spawn(command, nativeOptions);
-          if (!Number.isSafeInteger(process.pid) || process.pid <= 0) {
-            throw new Error('Tangle did not acknowledge a background process.');
-          }
-          // Background success acknowledges launch, not command completion.
-          return { stdout: '', stderr: '', exitCode: 0, durationMs: performance.now() - start };
-        }
-        const result = await instance.exec(command, nativeOptions);
+        const result = await runCommand(instance, command, options);
         return { ...result, durationMs: performance.now() - start };
       },
 
-      getInfo: async (instance): Promise<InstanceInfo> => {
+      getInstance: nativeInstance,
+
+      getInfo: async (handle): Promise<InstanceInfo> => {
+        const instance = nativeInstance(handle);
         await instance.refresh();
         const status = instance.status === 'running' ? 'running'
           : instance.status === 'stopped' ? 'stopped' : 'error';
@@ -175,7 +146,6 @@ export function tangle(config: TangleConfig = {}) {
   const baseUrl = config.baseUrl ??
     (typeof process !== 'undefined' ? process.env.TANGLE_SANDBOX_BASE_URL : undefined) ??
     defaultBaseUrl;
-  openConnections(baseUrl);
-  const client = new TangleClient({ apiKey, baseUrl, trustLocalCliAuth: false });
-  return createProvider({ ...config, apiKey, baseUrl, client });
+  const api = createApi(apiKey, baseUrl);
+  return createProvider({ ...config, apiKey, baseUrl, api });
 }

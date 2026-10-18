@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer, constants } from 'node:http2';
-import { discardResponseBody, http2Fetch, openConnections } from '../src/http2.ts';
+import { discardResponseBody, http2Fetch, http2Request, openConnections } from '../src/http2.ts';
 
 const sessions = new Set();
 const server = createServer();
@@ -121,6 +121,26 @@ try {
     await assert.rejects(http2Fetch(url(path), {}, { timeoutMs: 30 }), { name: 'TimeoutError' });
   }
   await assert.rejects(http2Fetch(url('/reset')));
+  const direct = (path, signal, timeoutMs = 1000) => http2Request(url(path), {
+    ':method': 'POST', authorization: 'Bearer direct-caller', 'content-type': 'application/json',
+  }, '{}', signal, timeoutMs);
+  const buffered = await Promise.all(Array.from({ length: 100 }, (_, index) => direct('/echo?direct=' + index)));
+  buffered.forEach((response, index) => {
+    assert.equal(response.status, 200);
+    assert.deepEqual(JSON.parse(response.body.toString()), {
+      method: 'POST', path: '/echo?direct=' + index, authorization: 'Bearer direct-caller', body: '{}',
+    });
+  });
+  assert.equal(connections, 4, 'direct and SDK requests share the same pool');
+  for (const path of ['/stall-headers', '/stall-body']) {
+    await assert.rejects(direct(path, undefined, 30), { name: 'TimeoutError' });
+    await assert.rejects(direct(path, AbortSignal.timeout(30)), { name: 'TimeoutError' });
+  }
+  const beforeDirectAbort = requests;
+  await assert.rejects(direct('/echo', AbortSignal.abort()), { name: 'AbortError' });
+  assert.equal(requests, beforeDirectAbort);
+  await assert.rejects(direct('/reset'));
+
   const controller = new AbortController();
   const response = await http2Fetch(url('/stream'), { signal: controller.signal });
   const reader = response.body.getReader();
@@ -143,7 +163,7 @@ try {
   const [code, signal] = await once(child, 'exit');
   assert.equal(code, 0, stderr);
   assert.equal(signal, null);
-  console.log('PASS: 100 concurrent streams / 4 sessions; buffered body consumption, cloning, locking and discard; per-request credentials; no import requests; 404/204; pre-abort; header/body deadlines; reset; streaming abort; GOAWAY replacement; idle process exit.');
+  console.log('PASS: SDK and direct buffered requests share 4 sessions / 100 concurrent streams each; buffered body consumption, cloning, locking and discard; per-request credentials; no import requests; 404/204; pre-abort; header/body deadlines; reset; streaming abort; GOAWAY replacement; idle process exit.');
 } finally {
   for (const session of sessions) session.destroy();
   server.close();

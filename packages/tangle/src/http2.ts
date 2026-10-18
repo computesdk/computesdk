@@ -1,9 +1,17 @@
-import { connect, type ClientHttp2Session, type OutgoingHttpHeaders } from 'node:http2';
+import { connect, type ClientHttp2Session, type ClientHttp2Stream, type IncomingHttpHeaders, type OutgoingHttpHeaders } from 'node:http2';
 import { Readable } from 'node:stream';
-import { TimeoutError } from '@tangle-network/sandbox';
+import { createRequire } from 'node:module';
 
-// Node initializes its fetch classes lazily. Resolve them while the adapter
-// loads, alongside the SDK, rather than on the first create request.
+// Preserve synchronous native-handle access while keeping the SDK module graph
+// out of direct requests. Both supported Node module formats can require ESM.
+const requireSdk = createRequire(typeof __filename === 'string' ? __filename : import.meta.url);
+let nativeSdk: typeof import('@tangle-network/sandbox') | undefined;
+export function sdk(): typeof import('@tangle-network/sandbox') {
+  return nativeSdk ??= requireSdk('@tangle-network/sandbox');
+}
+
+// Resolve Fetch classes on module load for the SDK-compatible transport.
+// Direct API requests do not construct Fetch request or response objects.
 const { Headers, Response, Request } = globalThis;
 
 const decoder = new TextDecoder();
@@ -76,7 +84,7 @@ const pools = new Map<string, Pool>();
 
 function openSession(origin: string): Slot {
   const session = connect(origin);
-  const slot = { session, active: 0 };
+  const slot: Slot = { session, active: 0 };
   // An import must neither keep the process alive nor issue an HTTP request.
   session.unref();
   session.on('connect', () => { if (slot.active === 0) session.unref(); });
@@ -92,8 +100,8 @@ function openSession(origin: string): Slot {
   return slot;
 }
 
-export function openConnections(baseUrl: string): Pool {
-  const url = new URL(baseUrl);
+export function openConnections(baseUrl: string | URL): Pool {
+  const url = typeof baseUrl === 'string' ? new URL(baseUrl) : baseUrl;
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
     throw new TypeError('Tangle baseUrl must be an HTTP(S) URL without credentials.');
   }
@@ -114,13 +122,7 @@ export async function http2Fetch(
   const startedAt = performance.now();
   const { authorization, timeoutMs } = transport;
   options.signal?.throwIfAborted();
-  const pool = pools.get(url.origin) ?? openConnections(url.origin);
-  const index = pool.next++ % pool.slots.length;
-  let slot = pool.slots[index];
-  if (slot.session.closed || slot.session.destroyed) {
-    slot = openSession(url.origin);
-    pool.slots[index] = slot;
-  }
+  const slot = requestSlot(url);
   const headers: OutgoingHttpHeaders = Object.create(null);
   headers[':method'] = options.method ?? 'GET';
   headers[':path'] = url.pathname + url.search;
@@ -146,38 +148,8 @@ export async function http2Fetch(
     body = new Uint8Array(await request.arrayBuffer());
   }
   options.signal?.throwIfAborted();
-  if (timeoutMs !== undefined && performance.now() - startedAt >= timeoutMs) throw new TimeoutError(timeoutMs);
-  slot.active++;
-  slot.session.ref();
-  return new Promise<Response>((resolve, reject) => {
-    let stream;
-    try {
-      stream = slot.session.request(headers, { endStream: body == null });
-    } catch (error) {
-      slot.active--;
-      if (slot.active === 0) slot.session.unref();
-      reject(error);
-      return;
-    }
-    const abort = () => { stream.destroy(options.signal?.reason ?? new DOMException('Aborted', 'AbortError')); };
-    // A request timer can destroy the stream directly; no second abort signal
-    // is needed alongside the caller's signal.
-    const timer = timeoutMs === undefined ? undefined : setTimeout(
-      () => stream.destroy(new TimeoutError(timeoutMs)),
-      Math.max(1, timeoutMs - (performance.now() - startedAt)),
-    );
-    timer?.unref();
-    const finish = (response: Response) => { clearTimeout(timer); resolve(response); };
-    options.signal?.addEventListener('abort', abort, { once: true });
-    stream.on('error', reject);
-    stream.on('aborted', () => { stream.destroy(new Error('Tangle HTTP/2 response was interrupted.')); });
-    stream.on('close', () => {
-      clearTimeout(timer);
-      options.signal?.removeEventListener('abort', abort);
-      slot.active--;
-      if (slot.active === 0) slot.session.unref();
-      if (!stream.readableEnded) reject(new Error('Tangle HTTP/2 stream closed before completing.'));
-    });
+  if (timeoutMs !== undefined && performance.now() - startedAt >= timeoutMs) throw new (sdk().TimeoutError)(timeoutMs);
+  return sendRequest<Response>(slot, headers, body, options.signal, timeoutMs, startedAt, (stream, finish) => {
     stream.on('response', (incoming) => {
       const status = Number(incoming[':status']);
       const responseHeaders: [string, string][] = [];
@@ -201,7 +173,111 @@ export async function http2Fetch(
         finish(new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { status, headers: responseHeaders }));
       }
     });
+  });
+}
+
+export interface BufferedReply {
+  status: number;
+  headers: IncomingHttpHeaders;
+  body: Buffer;
+}
+
+/** Plain API requests share the SDK transport's sessions without Fetch wrappers. */
+export function http2Request(
+  url: Pick<URL, 'origin' | 'pathname' | 'search'>,
+  headers: OutgoingHttpHeaders,
+  body: string | undefined,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+  path?: string,
+): Promise<BufferedReply> {
+  const startedAt = performance.now();
+  if (signal?.aborted) return Promise.reject(signal.reason);
+  const slot = requestSlot(url);
+  return sendRequest(slot, {
+    ...headers, ':path': path ?? url.pathname + url.search,
+  }, body, signal, timeoutMs, startedAt, (stream, finish) => {
+    stream.on('response', (incoming) => {
+      const chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('end', () => finish({
+        status: Number(incoming[':status']), headers: incoming,
+        body: chunks.length === 1 ? chunks[0] : Buffer.concat(chunks),
+      }));
+    });
+  }, true);
+}
+
+function requestSlot(url: Pick<URL, 'origin'>): Slot {
+  const pool = pools.get(url.origin) ?? openConnections(url.origin);
+  const index = pool.next++ % pool.slots.length;
+  let slot = pool.slots[index];
+  if (slot.session.closed || slot.session.destroyed) {
+    slot = openSession(url.origin);
+    pool.slots[index] = slot;
+  }
+  return slot;
+}
+
+function sendRequest<T>(
+  slot: Slot, headers: OutgoingHttpHeaders, body: BodyInit | null | undefined,
+  signal: AbortSignal | null | undefined, timeoutMs: number | undefined, startedAt: number,
+  receive: (stream: ClientHttp2Stream, finish: (response: T) => void) => void,
+  batchCompletion = false,
+): Promise<T> {
+  if (slot.active++ === 0) {
+    slot.session.ref();
+  }
+  return new Promise<T>((resolve, reject) => {
+    let stream;
+    try {
+      stream = slot.session.request(headers, { endStream: body == null });
+    } catch (error) {
+      slot.active--;
+      if (slot.active === 0) slot.session.unref();
+      reject(error);
+      return;
+    }
+    const abort = () => { stream.destroy(signal?.reason ?? new DOMException('Aborted', 'AbortError')); };
+    // A request timer can destroy the stream directly; no second abort signal
+    // is needed alongside the caller's signal.
+    const timer = timeoutMs === undefined ? undefined : setTimeout(
+      () => stream.destroy(new (sdk().TimeoutError)(timeoutMs)),
+      Math.max(1, timeoutMs - (performance.now() - startedAt)),
+    );
+    timer?.unref();
+    const finish = (response: T) => {
+      clearTimeout(timer);
+      if (batchCompletion) completeBuffered(() => resolve(response));
+      else resolve(response);
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    stream.on('error', reject);
+    stream.on('aborted', () => { stream.destroy(new Error('Tangle HTTP/2 response was interrupted.')); });
+    stream.on('close', () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      slot.active--;
+      if (slot.active === 0) slot.session.unref();
+      if (!stream.readableEnded) reject(new Error('Tangle HTTP/2 stream closed before completing.'));
+    });
+    receive(stream, finish);
     if (body != null) stream.end(body);
-    if (options.signal?.aborted) abort();
+    if (signal?.aborted) abort();
+  });
+}
+
+let bufferedCompletions: Array<() => void> = [];
+
+// Drain ready HTTP/2 responses before waking their callers. Otherwise each
+// stream's microtasks enqueue more requests between other readable streams,
+// fragmenting multiplexed I/O into one response per turn under concurrency.
+function completeBuffered(complete: () => void): void {
+  bufferedCompletions.push(complete);
+  if (bufferedCompletions.length !== 1) return;
+  setImmediate(() => {
+    const ready = bufferedCompletions;
+    bufferedCompletions = [];
+    for (const finish of ready) finish();
   });
 }

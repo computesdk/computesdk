@@ -49,7 +49,7 @@ Per-create `cpu`, `memory`, `disk`, `image` (or `templateId`), `timeout`,
 `name`, `metadata` and `envs` override the corresponding defaults. An explicit
 `idempotencyKey` is forwarded unchanged and derives a stable default sandbox name;
 repeat requests must also keep their other options unchanged. Independent creates
-receive fresh keys. `signal` is forwarded to the SDK's create request.
+receive fresh keys. `signal` cancels the create HTTP/2 stream.
 
 Failed-create cleanup requires a native `PartialFailureError` that carries the
 original allocation ID and this call's idempotency key, plus a create receipt
@@ -59,7 +59,7 @@ creation error. Replayed, unknown and incomplete receipts never authorize deleti
 If retirement is not acknowledged, an `AggregateError` retains the creation and
 cleanup errors, with the original creation error as its cause.
 
-The pinned SDK preserves allocation context on readiness failure. Recovery still
+The adapter preserves allocation context when the create reply fails its safety checks. Recovery still
 requires a real lifecycle qualification under production capacity authorization.
 Pre-response ambiguity remains unresolved; a bounded list with no matches
 cannot rule out a late allocation. This package does not promise automatic recovery
@@ -71,14 +71,17 @@ promise a particular isolation technology. The native SDK/API owns those propert
 ## Operations and limitations
 
 - `create` requests isolated owner context, disables agent/model provisioning,
-  uses ephemeral storage, and explicitly requests open egress. It returns after
-  the native SDK resolves creation. The native handle retains validated
+  uses ephemeral storage, and explicitly requests open egress. One POST must return
+  a running allocation, an isolated receipt with an empty `injectedSecrets` array,
+  and a complete, ready filesystem incarnation. Otherwise creation fails closed.
+  It does not poll readiness or retry the POST. The native handle retains normalized
   `connection` information for runtime consumers.
 - `getById` returns `null` only for native not-found responses. `list` follows
   offset pagination.
 - `runCommand` supports `cwd`, command-scoped `env`, and millisecond `timeout`
-  through native SDK options, without interpolating them into a shell string.
-  Background mode acknowledges a native process ID; success means launch acceptance.
+  in one blocking `/runtime/process/spawn` POST, without interpolating them into
+  a shell string. Background mode uses one nonblocking spawn and acknowledges
+  a native process ID; success means launch acceptance.
 - `destroy` sends one DELETE. Success acknowledges retirement or an already absent
   allocation; physical teardown can finish later. Authentication and network
   errors remain errors. It does not issue lookup requests or retry deletion.
@@ -93,19 +96,28 @@ promise a particular isolation technology. The native SDK/API owns those propert
 
 ## Transport
 
-The SDK loads at module scope. Four HTTP/2 sessions open to the default API origin
-on import, and to a configured origin when `tangle()` is called. Connection setup
-sends no HTTP request or credentials. Sessions share no authentication state;
-each request carries its caller's key. Idle sessions do not keep Node alive and
-close after inactivity. A later request replaces closed or drained sessions.
-Endpoints must support HTTP/2. Transport errors and redirects are not replayed.
-The native SDK still owns its create retry and readiness rules.
+Create, command and delete requests are built by the adapter and sent directly over
+four shared HTTP/2 sessions. Their buffered replies do not construct Fetch response
+objects. The SDK module loads only for native access or typed failures. Native clients
+and instance handles are constructed only for lookup, list, info or
+`getInstance()` access. Completed buffered responses settle together on the next
+event-loop turn so caller microtasks do not fragment multiplexed I/O. SDK error classes remain the public errors;
+the adapter maintains the wire-error mapping and native-response normalization
+against the SDK pin in `package.json`, whose private helpers are not exported.
 
-Mapped operations use this pool through the Sandbox API. Native `connection`
-details remain available through `getInstance()` for direct runtime consumers.
-Direct exec routing and its server-side audit/activity proof are separate work.
+Connections open when `tangle()` is called. Connection setup sends no HTTP request
+or credentials. Sessions share no authentication state; each request carries its
+caller's key. Idle sessions do not keep Node alive and close after inactivity.
+A later request replaces closed or drained sessions. Request deadlines cover the
+response body, and cancellation closes the stream. There are no redirects, HTTP/1.1
+fallbacks, request replays, or workload-specific paths.
 
 ## Verification
+
+`pnpm --filter @computesdk/tangle test:transport` exercises both transport forms
+and the built provider over real
+HTTP/2 sockets: request normalization, native access, receipt and readiness refusal,
+owned-only cleanup, typed errors, malformed command replies, deadlines and aborts.
 
 `pnpm --filter @computesdk/tangle test` exercises the public configuration boundary
 without fake SDK responses. The native lifecycle test remains skipped unless the
@@ -131,3 +143,9 @@ local HTTP/2 sockets, aborts, interrupted responses and connection replacement.
 Production benchmark execution
 and publication use the maintained [ComputeSDK benchmarks](https://github.com/computesdk/benchmarks)
 provider-onboarding route after package publication and maintainer credential setup.
+
+To recompute a retained nine-pair ruler comparison, run
+`pnpm --filter @computesdk/tangle bench:client --compare /absolute/result/directory`.
+It validates arm order and installed artifact hashes from `manifest.json`, all raw
+100/100 outcomes and mock counters, then writes `comparison.json` with all W values,
+medians and R-7 quartiles. Client-only latency is not a production readiness claim.
