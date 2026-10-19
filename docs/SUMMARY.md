@@ -58,6 +58,7 @@
   * [Superserve](providers/superserve.md)
   * [Tenki](providers/tenki.md)
   * [Tensorlake](providers/tensorlake.md)
+  * [Uno](providers/uno.md)
   * [Upstash](providers/upstash.md)
   * [Vercel](providers/vercel.md)
 
