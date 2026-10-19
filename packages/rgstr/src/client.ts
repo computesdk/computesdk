@@ -5,6 +5,7 @@
 
 import { refreshAccessToken, AuthError } from './auth.js';
 import { loadConfig, loadCredentials, saveCredentials, type Credentials } from './config.js';
+import { isSecureTransport, isTrustedHost } from './hosts.js';
 
 export const DEFAULT_BASE_URL = 'https://rgstr.org';
 
@@ -38,31 +39,7 @@ export class RgstrApiError extends Error {
   }
 }
 
-function isLoopbackHost(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
-  return h === 'localhost' || h.endsWith('.localhost') || h === '127.0.0.1' || h === '::1';
-}
-
-export function isSecureTransport(baseUrl: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(baseUrl);
-  } catch {
-    return false;
-  }
-  if (url.protocol === 'https:') return true;
-  return url.protocol === 'http:' && isLoopbackHost(url.hostname);
-}
-
-export function isTrustedHost(baseUrl: string): boolean {
-  let host: string;
-  try {
-    host = new URL(baseUrl).hostname;
-  } catch {
-    return false;
-  }
-  return host === 'rgstr.org' || host.endsWith('.rgstr.org') || host === 'computesdk.com' || host.endsWith('.computesdk.com') || isLoopbackHost(host);
-}
+export { isSecureTransport, isTrustedHost } from './hosts.js';
 
 export function normalizeBaseUrl(raw: string): string {
   return raw.replace(/\/+$/, '');

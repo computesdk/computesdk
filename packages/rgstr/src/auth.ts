@@ -4,10 +4,12 @@
 // platform issuer without the CLI hard-coding a second host.
 
 import { saveCredentials, type Credentials } from './config.js';
+import { isSecureTransport } from './hosts.js';
 
 /** First-party client shared with `compute` / `bench`; the platform seeds it. */
 export const RGSTR_OAUTH_CLIENT_ID = 'benchsdk-cli';
-export const RGSTR_OAUTH_SCOPE = 'packages:read packages:write org:read offline_access';
+// org:admin: claims and routes are owner/admin writes (resolveActionsApiOrg requireAdmin).
+export const RGSTR_OAUTH_SCOPE = 'packages:read packages:write org:read org:admin offline_access';
 
 export interface DeviceCodeResponse {
   device_code: string;
@@ -63,6 +65,10 @@ export async function discoverAuthServer(
   const authBaseUrl = meta.authorization_servers?.[0];
   if (!authBaseUrl || !meta.resource) {
     throw new AuthError(`Unexpected protected-resource metadata from ${baseUrl}`);
+  }
+  // Tokens go to the discovered issuer, so it gets the same transport rule as the origin.
+  if (!isSecureTransport(authBaseUrl)) {
+    throw new AuthError(`Refusing to log in: ${baseUrl} advertises a plaintext authorization server (${authBaseUrl}).`);
   }
   return { authBaseUrl: authBaseUrl.replace(/\/+$/, ''), resource: meta.resource };
 }

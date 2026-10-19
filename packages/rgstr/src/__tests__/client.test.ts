@@ -107,7 +107,7 @@ describe('device flow discovery', () => {
       return new Response(JSON.stringify({ device_code: 'd', user_code: 'ABCD-EFGH', verification_uri: 'https://platform.computesdk.com/device', expires_in: 900, interval: 5 }));
     }) as unknown as typeof fetch;
     const server = await discoverAuthServer('https://rgstr.org', fetchImpl);
-    const code = await requestDeviceCode(server, 'benchsdk-cli', 'packages:read packages:write org:read offline_access', fetchImpl);
+    const code = await requestDeviceCode(server, 'benchsdk-cli', 'packages:read packages:write org:read org:admin offline_access', fetchImpl);
     expect(code.user_code).toBe('ABCD-EFGH');
   });
 });

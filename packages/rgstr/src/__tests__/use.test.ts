@@ -72,10 +72,11 @@ describe('rgstr use on a project', () => {
   it('writes, is idempotent, and --off restores the original bytes (and removes files it created)', async () => {
     const original = 'save-exact=true';
     const dir = await tmp({ 'package.json': '{"name":"x"}', '.npmrc': original, 'pyproject.toml': '[project]\nname = "x"\n' });
+    await fs.mkdir(path.join(dir, '.venv'));
     const first = await runUse({ dir, origin: ORIGIN });
     expect(first.map((c) => [c.file, c.action])).toEqual([
       ['.npmrc', 'written'],
-      ['pip.conf', 'written'],
+      ['.venv/pip.conf', 'written'],
     ]);
     expect(await fs.readFile(path.join(dir, '.npmrc'), 'utf8')).toContain('registry=https://rgstr.org/api/registry');
 
@@ -85,9 +86,47 @@ describe('rgstr use on a project', () => {
     const off = await runUse({ dir, origin: ORIGIN, off: true });
     expect(off.map((c) => c.action)).toEqual(['removed', 'removed']);
     expect(await fs.readFile(path.join(dir, '.npmrc'), 'utf8')).toBe(original);
-    await expect(fs.access(path.join(dir, 'pip.conf'))).rejects.toThrow();
+    await expect(fs.access(path.join(dir, '.venv/pip.conf'))).rejects.toThrow();
 
     const again = await runUse({ dir, origin: ORIGIN, off: true });
     expect(again.map((c) => c.action)).toEqual(['absent', 'absent']);
+  });
+});
+
+describe('rgstr use edge cases', () => {
+  async function tmp(files: Record<string, string>) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rgstr-use-'));
+    for (const [f, c] of Object.entries(files)) await fs.writeFile(path.join(dir, f), c);
+    return dir;
+  }
+
+  it('pip without a virtualenv is a manual step (pip reads no project file)', async () => {
+    const dir = await tmp({ 'requirements.txt': 'requests\n' });
+    const [ch] = await runUse({ dir, origin: ORIGIN });
+    expect(ch).toMatchObject({ action: 'manual', command: 'pip config set global.index-url https://rgstr.org/api/pypi' });
+    expect(await runUse({ dir, origin: ORIGIN, off: true })).toEqual([]);
+  });
+
+  it('extends an existing [install] table in bunfig.toml instead of duplicating it', async () => {
+    const original = '[install]\nexact = true\n\n[test]\ncoverage = true\n';
+    const dir = await tmp({ 'package.json': '{}', 'bun.lock': '', 'bunfig.toml': original });
+    await runUse({ dir, origin: ORIGIN, npm: true });
+    const written = await fs.readFile(path.join(dir, 'bunfig.toml'), 'utf8');
+    expect(written.match(/\[install\]/g)).toHaveLength(1);
+    expect(written).toBe(
+      `[install]\n# >>> rgstr (managed by \`rgstr use\`; remove with \`rgstr use --off\`)\nregistry = "https://rgstr.org/api/registry"\n# <<< rgstr\nexact = true\n\n[test]\ncoverage = true\n`,
+    );
+    expect((await runUse({ dir, origin: ORIGIN, npm: true })).every((c) => c.action === 'unchanged')).toBe(true);
+    await runUse({ dir, origin: ORIGIN, off: true });
+    expect(await fs.readFile(path.join(dir, 'bunfig.toml'), 'utf8')).toBe(original);
+  });
+
+  it('--off still cleans a file whose manifest is gone', async () => {
+    const dir = await tmp({ 'package.json': '{}', '.npmrc': 'a=1\n' });
+    await runUse({ dir, origin: ORIGIN });
+    await fs.rm(path.join(dir, 'package.json'));
+    const off = await runUse({ dir, origin: ORIGIN, off: true });
+    expect(off.map((c) => [c.file, c.action])).toEqual([['.npmrc', 'removed']]);
+    expect(await fs.readFile(path.join(dir, '.npmrc'), 'utf8')).toBe('a=1\n');
   });
 });

@@ -74,6 +74,27 @@ export function withNpmProof(source: string, token: string): { next: string; cha
 /** pyproject.toml: `rgstr = "<url>"` under [project.urls], creating the table if needed. */
 export function withPypiProof(source: string, line: string): { next: string; changed: boolean } {
   const lines = source.split('\n');
+  // `[project]` may define urls inline: `urls = { Homepage = "…" }`. A second
+  // `[project.urls]` table would make the TOML invalid, so extend the inline one.
+  let inProject = false;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (/^\[.*\]$/.test(t)) {
+      inProject = t === '[project]';
+      continue;
+    }
+    if (!inProject) continue;
+    const inline = lines[i].match(/^(\s*urls\s*=\s*\{)(.*)\}\s*$/);
+    if (!inline) continue;
+    const entries = inline[2].trim();
+    if (new RegExp(`(^|,)\\s*${line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(,|$)`).test(entries)) return { next: source, changed: false };
+    const withoutOld = entries
+      .split(/,(?![^"]*"(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map((e) => e.trim())
+      .filter((e) => e && !/^rgstr\s*=/.test(e));
+    lines[i] = `${inline[1]} ${[...withoutOld, line].join(', ')} }`;
+    return { next: lines.join('\n'), changed: true };
+  }
   const tableIdx = lines.findIndex((l) => l.trim() === '[project.urls]');
   if (tableIdx !== -1) {
     let end = tableIdx + 1;

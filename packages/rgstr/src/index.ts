@@ -65,10 +65,11 @@ program
       const creds = await deviceLogin({
         baseUrl,
         onPrompt: (code) => {
-          if (opts.json) return;
-          console.log('To sign in, visit:');
-          console.log(code.verification_uri_complete ?? code.verification_uri);
-          console.log(`User code: ${code.user_code}`);
+          // --json keeps stdout a single document; the prompt still has to reach the user.
+          const out = opts.json ? console.error : console.log;
+          out('To sign in, visit:');
+          out(code.verification_uri_complete ?? code.verification_uri);
+          out(`User code: ${code.user_code}`);
         },
       });
       const me = await new RgstrClient({ baseUrl, token: creds.token, kind: 'device', org: null }).get<MeResponse>('/api/v1/me');
@@ -179,6 +180,7 @@ program
         const who = ch.clients.join(', ');
         if (ch.action === 'unchanged') console.log(`${ch.file}: already set (${who})`);
         else if (ch.action === 'absent') console.log(`${ch.file}: nothing to remove`);
+        else if (ch.action === 'manual') console.log(`pip: no virtualenv here (pip reads no project file) — run: ${ch.command}`);
         else {
           console.log(`${ch.file}: ${ch.action}${opts.dryRun ? ' (dry run)' : ''} (${who})`);
           if (ch.diff) console.log(ch.diff);
@@ -201,7 +203,7 @@ interface ClaimResponse {
   url: string;
 }
 interface ClaimsList {
-  pending: Array<{ id: string; name: string; status: string; verification: string; createdAt: string }>;
+  pending: Array<{ id: string; name: string; status: string; verification: string; createdAt: string; proof: ClaimResponse['proof'] }>;
   held: Array<{ id: string; name: string; kind: string; status: string }>;
 }
 type ProofOutcome =
@@ -259,17 +261,18 @@ program
       }
 
       let claim: ClaimResponse;
+      let alreadyPending = false;
       try {
         claim = await c.post<ClaimResponse>('/api/v1/registry/claims', { name, statement: opts.statement });
       } catch (err) {
         if (!(err instanceof RgstrApiError && err.status === 409)) throw err;
-        // Already applied: keep going so the token still gets written.
+        // Already applied: carry on with that application's proof so a retry
+        // still writes the token (the first run may have failed before the write).
         const list = await c.get<ClaimsList>('/api/v1/registry/claims');
         const pending = list.pending.find((p) => p.name === name);
         if (!pending) throw err;
-        if (g.json) printJson({ name, request: pending, alreadyPending: true });
-        else console.log(`${name}: your org already has an application under review (${pending.id.slice(0, 8)}). Run \`rgstr claim --check\` after publishing.`);
-        return;
+        alreadyPending = true;
+        claim = { request: pending, dispute: null, proof: pending.proof, url: `${c.baseUrl}/registry/${name}` };
       }
 
       let wrote: string | null = null;
@@ -290,10 +293,11 @@ program
       }
 
       if (g.json) {
-        printJson({ name, ecosystem, ...claim, wrote });
+        printJson({ name, ecosystem, ...claim, alreadyPending, wrote });
         return;
       }
-      console.log(`Filed: ${name} for ${c.auth.org ?? 'your org'} (${claim.url})`);
+      if (alreadyPending) console.log(`${name}: your org already has an application under review (${claim.request.id.slice(0, 8)}).`);
+      else console.log(`Filed: ${name} for ${c.auth.org ?? 'your org'} (${claim.url})`);
       if (claim.dispute) console.log(`Held by ${claim.dispute.holder} via ${claim.dispute.via} — this is a dispute; a reviewer decides.`);
       if (claim.proof) {
         if (wrote) console.log(`Wrote the publish-proof token to ${wrote}.`);

@@ -27,6 +27,15 @@ describe('publish-proof placements', () => {
     expect(withPypiProof(stale, PY_LINE).next).toBe(`[project.urls]\n${PY_LINE}\n`);
   });
 
+  it('pyproject: extends an inline urls table rather than adding a second [project.urls]', () => {
+    const src = '[project]\nname = "tsc-rs"\nurls = { Homepage = "https://x", rgstr = "old" }\n';
+    const { next, changed } = withPypiProof(src, PY_LINE);
+    expect(changed).toBe(true);
+    expect(next).toBe(`[project]\nname = "tsc-rs"\nurls = { Homepage = "https://x", ${PY_LINE} }\n`);
+    expect(next.match(/\[project\.urls\]/g)).toBeNull();
+    expect(withPypiProof(next, PY_LINE).changed).toBe(false);
+  });
+
   it('README: badge goes under the first heading, once', () => {
     const badge = '[![rgstr](https://rgstr.org/registry/tsc-rs/badge.svg?proof=t)](https://rgstr.org/registry/tsc-rs)';
     const { next } = withBadge('# tsc-rs\n\nA compiler.\n', badge);
