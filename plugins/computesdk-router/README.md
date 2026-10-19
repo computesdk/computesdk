@@ -1,11 +1,12 @@
-# ComputeSDK Router — ChatGPT plugin
+# ComputeSDK Router — ChatGPT + Claude Code plugin
 
 A developer tool for running code in any sandbox provider, with a live
-bidding option for the best price. This directory is the **plugin package**
-(ChatGPT Agent Plugins format): manifest, MCP server mapping, skills, and
-assets. The MCP server itself lives in the platform and serves
-`https://platform.computesdk.com/mcp`; ChatGPT authenticates to it via
-OAuth discovery — nothing to configure client-side.
+bidding option for the best price. This directory is the **plugin package**,
+in both the ChatGPT Agent Plugins layout and the Claude Code plugin layout:
+manifests, MCP server mappings, skills, and assets. The MCP server itself
+lives in the platform and serves `https://platform.computesdk.com/mcp`;
+clients authenticate to it via OAuth discovery — nothing to configure
+client-side.
 
 ## Contents
 
@@ -14,7 +15,14 @@ OAuth discovery — nothing to configure client-side.
   and `com.openai.apps` → `./.app.json`, which maps the registered
   connector ID (`plugin_asdk_app…`).
 - `mcp.json` — maps the plugin to the platform MCP server
-  (`streamable-http`). No `headers` — auth comes from OAuth.
+  (`streamable-http`, Agent Plugins schema). No `headers` — auth comes
+  from OAuth.
+- `.claude-plugin/plugin.json` — Claude Code manifest (name, description,
+  version, author). Only the manifest lives under `.claude-plugin/`; the
+  root `plugin.json` stays the ChatGPT/Agent Plugins manifest.
+- `.mcp.json` — the same MCP server mapping in Claude's schema
+  (`type: "http"`). Both `mcp.json` and `.mcp.json` exist on purpose:
+  each client reads only its own file.
 - `skills/sandboxes/` — workflow skill teaching the model the tool surface.
 - `skills/actions/` — workflow skill for the Actions (CI) tools: list
   repos/workflows/runs, tail job logs, dispatch, cancel, re-run.
@@ -62,6 +70,30 @@ marketplace, and install.
    marketplace entry for testing. Don't hand-edit the app mapping.
 5. In a chat with the connector enabled, exercise the flow: create →
    write_file → run_command → sandbox_url → destroy.
+
+## Claude Code
+
+The same directory also loads as a Claude Code plugin. Validate and run it
+locally:
+
+```sh
+claude plugin validate ./plugins/computesdk-router
+claude --plugin-dir ./plugins/computesdk-router
+```
+
+Claude reads `.claude-plugin/plugin.json` for the manifest and `.mcp.json`
+for the server (`type: "http"`, Claude's name for streamable HTTP). The
+`skills/*/SKILL.md` files load unchanged as plugin skills, prefixed with
+the plugin name: `/computesdk-router:sandboxes`,
+`/computesdk-router:actions`, `/computesdk-router:computesdk-sdk`.
+
+Auth is the same platform OAuth flow ChatGPT uses: on first MCP use
+Claude follows the RFC 9728 challenge, registers itself via DCR, and opens
+the browser to authorize — pick the ComputeSDK org to bill. Claude Code's
+OAuth callback is a loopback (`localhost`) redirect, which the platform
+already allows for public clients; hosted Claude surfaces (claude.ai,
+Cowork) register `https://claude.ai/api/mcp/auth_callback`, which is in
+the platform's default DCR redirect allowlist.
 
 ## Publishing
 
