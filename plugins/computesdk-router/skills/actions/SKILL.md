@@ -25,9 +25,11 @@ returns data.
    `refs`, `statuses` (`passed|failed|running|cancelled|none`), `query`.
    `actions_get_run` returns one run with jobs, steps, and the output tail.
 3. `actions_get_job_logs` — a job's log. Defaults to the last 64 KB; logs
-   can be huge — read the tail first, page forward with `fromOffset` when
-   the user wants an earlier section. `stepOrdinal` narrows to one step
-   (0-based). Output is already secret-redacted.
+   can be huge — read the tail first. For earlier lines, read forward from
+   `fromOffset: 0` and keep going from each `nextOffset` (offsets increase
+   toward newer output — you cannot page backward from the tail).
+   `stepOrdinal` narrows to one step (0-based). Output is already
+   secret-redacted.
 4. `actions_list_job_artifacts` — a job's artifacts with sizes and expiry.
 
 ## Dispatching and managing runs (org owners/admins only)
@@ -40,8 +42,10 @@ returns data.
 - `actions_rerun_run` and `actions_cancel_run` take a `runId`.
 
 **Confirm before dispatching or re-running** — a run consumes real compute.
-A 403 on a write means the user isn't an org owner/admin; tell them, don't
-retry.
+A 403 is one of two things: `insufficient_scope` means the connection was
+authorized before `actions:write` existed — the user must reconnect the
+connector and re-consent; a permission message means the user isn't an org
+owner/admin — tell them, don't retry.
 
 ## Workflow details
 
