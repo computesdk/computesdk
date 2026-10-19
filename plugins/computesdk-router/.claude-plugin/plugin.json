@@ -1,0 +1,9 @@
+{
+  "name": "computesdk-router",
+  "description": "Run code in cloud sandboxes across providers through the ComputeSDK gateway, and drive the org's Actions CI — list connected repos and workflows, dispatch and inspect runs, and read job logs.",
+  "version": "0.1.0",
+  "author": {
+    "name": "ComputeSDK",
+    "url": "https://www.computesdk.com"
+  }
+}
