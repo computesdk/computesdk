@@ -1,22 +1,21 @@
 import { runCommand as runBoatCommand } from '@boatdev/sdk';
+import { escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, RunCommandOptions } from 'computesdk';
 import type { BoatSandbox } from './index';
 
-export function quote(value: string): string {
-  return "'" + value.replace(/'/g, "'\\''") + "'";
-}
 
 function commandText(command: string, options?: RunCommandOptions): string {
   let text = command;
   if (options?.env && Object.keys(options.env).length > 0) {
     const env = Object.entries(options.env).map(([key, value]) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
-      return quote(`${key}=${value}`);
+      return `"${escapeShellArg(`${key}=${value}`)}"`;
     }).join(' ');
-    text = `env ${env} sh -c ${quote(command)}`;
+    // Absolute path: env resolves its command with the caller's PATH, which may have no shell.
+    text = `env ${env} /bin/sh -c "${escapeShellArg(command)}"`;
   }
   // Exit on a failed cd so no statement of a multi-statement command runs elsewhere.
-  return options?.cwd ? `cd -- ${quote(options.cwd)} || exit\n${text}` : text;
+  return options?.cwd ? `cd -- "${escapeShellArg(options.cwd)}" || exit\n${text}` : text;
 }
 
 /** Stream every foreground command to avoid synchronous output limits. */
@@ -59,6 +58,8 @@ export async function run(sandbox: BoatSandbox, command: string, options?: RunCo
     }
     throw new Error('Boat command stream ended without an exit frame.');
   } catch (error) {
+    // A deadline passing during cleanup must not turn this failure into a timeout result.
+    clearTimeout(timer);
     // Detached commands survive a lost stream; do not orphan a failed or timed-out foreground job.
     if (processId !== undefined) {
       try { await sandbox.api.stopCommand({ sandboxId: sandbox.id, processId }); }

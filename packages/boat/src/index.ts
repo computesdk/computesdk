@@ -1,8 +1,8 @@
 import { BoatApi, Configuration, ResponseError } from '@boatdev/sdk';
 import type { CreateSandboxRequest, InitOverrideFunction, RequestOpts, Sandbox } from '@boatdev/sdk';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { Provider, ProviderSnapshotManager, ProviderTemplateManager, CreateTemplateOptions } from '@computesdk/provider';
-import { checked, quote, run } from './commands';
+import { checked, run } from './commands';
 import { readBoatFile, writeBoatFile } from './files';
 import { saveSnapshot, listSnapshots, templateInfo } from './snapshots';
 import type { BoatSnapshot, BoatTemplate } from './snapshots';
@@ -205,18 +205,18 @@ const createBoatProvider = defineProvider<BoatSandbox, BoatConfig, BoatTemplate,
       filesystem: {
         readFile: async (sandbox, path) => Buffer.from(await readBoatFile(sandbox, path)).toString('utf8'),
         writeFile: writeBoatFile,
-        mkdir: async (sandbox, path) => { await checked(sandbox, `mkdir -p -- ${quote(path)}`); },
+        mkdir: async (sandbox, path) => { await checked(sandbox, `mkdir -p -- "${escapeShellArg(path)}"`); },
         readdir: async (sandbox, path): Promise<FileEntry[]> => {
           const script = 'import os,json,sys; p=sys.argv[1]; print(json.dumps([dict(name=e.name,type="directory" if e.is_dir() else "file",size=e.stat(follow_symlinks=False).st_size,modified=e.stat(follow_symlinks=False).st_mtime) for e in os.scandir(p)]))';
-          const entries: Array<Omit<FileEntry, 'modified'> & { modified: number }> = JSON.parse(await checked(sandbox, `python3 -c ${quote(script)} ${quote(path)}`));
+          const entries: Array<Omit<FileEntry, 'modified'> & { modified: number }> = JSON.parse(await checked(sandbox, `python3 -c "${escapeShellArg(script)}" "${escapeShellArg(path)}"`));
           return entries.map(entry => ({ ...entry, modified: new Date(entry.modified * 1000) }));
         },
         exists: async (sandbox, path) => {
-          const result = await run(sandbox, `test -e ${quote(path)}`);
+          const result = await run(sandbox, `test -e "${escapeShellArg(path)}"`);
           if (result.exitCode > 1) throw new Error(`Boat filesystem exists failed: ${result.stderr}`);
           return result.exitCode === 0;
         },
-        remove: async (sandbox, path) => { await checked(sandbox, `rm -rf -- ${quote(path)}`); },
+        remove: async (sandbox, path) => { await checked(sandbox, `rm -rf -- "${escapeShellArg(path)}"`); },
       },
       getInstance: sandbox => sandbox,
     },

@@ -1,6 +1,7 @@
 import { posix } from 'node:path';
 import type { BoatSandbox } from './index';
-import { checked, quote } from './commands';
+import { escapeShellArg } from '@computesdk/provider';
+import { checked } from './commands';
 
 function signedPath(path: string): boolean {
   const absolute = posix.resolve('/home/user', path);
@@ -10,7 +11,7 @@ function signedPath(path: string): boolean {
 /** Binary download. Signed URLs support files under /home/user and /tmp. */
 export async function readBoatFile(sandbox: BoatSandbox, path: string): Promise<Uint8Array> {
   if (!signedPath(path)) {
-    return new Uint8Array(Buffer.from(await checked(sandbox, `base64 < ${quote(path)}`), 'base64'));
+    return new Uint8Array(Buffer.from(await checked(sandbox, `base64 < "${escapeShellArg(path)}"`), 'base64'));
   }
   const signed = await sandbox.api.createDownloadUrl({ sandboxId: sandbox.id, fileUrlRequest: { path } });
   const response = await fetch(signed.url);
@@ -24,9 +25,9 @@ export async function writeBoatFile(sandbox: BoatSandbox, path: string, content:
   if (!signedPath(path)) {
     // The signed API confines paths. Preserve shell access elsewhere with bounded command payloads.
     const encoded = Buffer.from(content).toString('base64');
-    await checked(sandbox, `: > ${quote(path)}`);
+    await checked(sandbox, `: > "${escapeShellArg(path)}"`);
     for (let offset = 0; offset < encoded.length; offset += 48 * 1024) {
-      await checked(sandbox, `printf %s ${quote(encoded.slice(offset, offset + 48 * 1024))} | base64 -d >> ${quote(path)}`);
+      await checked(sandbox, `printf %s "${encoded.slice(offset, offset + 48 * 1024)}" | base64 -d >> "${escapeShellArg(path)}"`);
     }
     return;
   }

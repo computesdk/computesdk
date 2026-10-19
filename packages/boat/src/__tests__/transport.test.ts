@@ -131,6 +131,8 @@ it('uses the real Boat SDK over HTTP for lifecycle, commands, streaming, files, 
     const value = "quote ' dollar $(exit 9) backtick `exit 8`\n世界";
     expect(await sandbox.runCommand('printf %s "$VALUE" | cat', { cwd: directory, env: { VALUE: value } })).toMatchObject({ stdout: value, exitCode: 0 });
     expect((await sandbox.runCommand('printf failure >&2; exit 7')).exitCode).toBe(7);
+    // The wrapper shell must start even when the caller's PATH has no shell in it.
+    expect(await sandbox.runCommand('printf ok', { env: { PATH: '/nonexistent' } })).toMatchObject({ stdout: 'ok', exitCode: 0 });
     let output = '';
     expect(await sandbox.runCommand('printf streamed', { onStdout: chunk => { output += chunk; } })).toMatchObject({ stdout: 'streamed', exitCode: 0 });
     expect(output).toBe('streamed');

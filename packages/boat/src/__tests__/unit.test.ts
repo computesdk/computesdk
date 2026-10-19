@@ -177,7 +177,7 @@ describe('Boat commands and filesystem', () => {
     const instance = await provider().instances.create();
     vi.mocked(runCommand).mockImplementation(() => frames('partial', 'failed', 7));
     expect(await instance.runCommand('echo "$VALUE" | cat', { cwd: '/tmp', timeout: 1001, env: { VALUE: "$(touch /tmp/bad)' hi" } })).toMatchObject({ stdout: 'partial', stderr: 'failed', exitCode: 7 });
-    expect(runCommand).toHaveBeenCalledWith(api, info.id, expect.stringContaining("cd -- '/tmp' || exit\nenv "), { signal: expect.any(AbortSignal) });
+    expect(runCommand).toHaveBeenCalledWith(api, info.id, expect.stringContaining('cd -- "/tmp" || exit\nenv "VALUE=\\$(touch /tmp/bad)\' hi" /bin/sh -c '), { signal: expect.any(AbortSignal) });
     await expect(instance.runCommand('true', { env: { 'bad=name': 'value' } })).rejects.toThrow('Invalid environment');
   });
 
@@ -225,6 +225,17 @@ describe('Boat commands and filesystem', () => {
     await assertion;
   });
 
+  it('keeps a stream failure when cleanup finishes after the deadline', async () => {
+    vi.useFakeTimers();
+    const instance = await provider().instances.create();
+    api.stopCommand.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 2000)));
+    const running = instance.runCommand('test', { timeout: 1000, onStdout: () => { throw new Error('callback'); } });
+    const assertion = expect(running).rejects.toThrow('callback');
+    await vi.advanceTimersByTimeAsync(2000);
+    await assertion;
+    expect(api.stopCommand).toHaveBeenCalledWith({ sandboxId: info.id, processId: 123 });
+  });
+
   it('maps a server-side timeout exit to 124', async () => {
     const instance = await provider().instances.create();
     vi.mocked(runCommand).mockImplementation(() => frames('', '', null, true));
@@ -234,7 +245,7 @@ describe('Boat commands and filesystem', () => {
   it('starts background commands without attaching', async () => {
     const instance = await provider().instances.create();
     expect(await instance.runCommand('sleep 1000', { background: true, cwd: '/tmp' })).toMatchObject({ exitCode: 0 });
-    expect(api.command).toHaveBeenCalledWith({ sandboxId: info.id, commandRequest: { command: "cd -- '/tmp' || exit\nsleep 1000", detached: true } });
+    expect(api.command).toHaveBeenCalledWith({ sandboxId: info.id, commandRequest: { command: 'cd -- "/tmp" || exit\nsleep 1000', detached: true } });
     expect(runCommand).not.toHaveBeenCalled();
   });
 
@@ -288,7 +299,7 @@ describe('Boat commands and filesystem', () => {
     const content = 'x'.repeat(48 * 1024);
     await instance.filesystem.writeFile('/var/file', content);
     const commands = vi.mocked(runCommand).mock.calls.map(call => call[2]);
-    expect(commands[0]).toBe(": > '/var/file'");
+    expect(commands[0]).toBe(': > "/var/file"');
     expect(commands.slice(1).join('')).toContain(Buffer.from(content).toString('base64').slice(0, 48 * 1024));
     expect(commands).toHaveLength(3);
     expect(api.createUploadUrl).not.toHaveBeenCalled();
