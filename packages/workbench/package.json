@@ -85,7 +85,8 @@
     "@computesdk/collimate": "workspace:*",
     "@computesdk/lelantos": "workspace:*",
     "@computesdk/tenki": "workspace:*",
-    "@computesdk/novita": "workspace:*"
+    "@computesdk/novita": "workspace:*",
+    "@computesdk/boat": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@computesdk/e2b": {
@@ -170,6 +171,9 @@
       "optional": true
     },
     "@computesdk/novita": {
+      "optional": true
+    },
+    "@computesdk/boat": {
       "optional": true
     }
   },
