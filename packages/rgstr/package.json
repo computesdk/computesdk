@@ -1,0 +1,51 @@
+{
+  "name": "rgstr",
+  "version": "0.0.0",
+  "description": "rgstr CLI — the terminal front door for rgstr, the package naming registry (https://rgstr.org)",
+  "author": "ComputeSDK",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "rgstr": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "rgstr",
+    "registry",
+    "npm",
+    "pypi",
+    "package",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/rgstr"
+  },
+  "homepage": "https://rgstr.org",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
