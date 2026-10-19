@@ -38,6 +38,9 @@
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
+  "dependencies": {
+    "commander": "^11.1.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
