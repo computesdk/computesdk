@@ -158,7 +158,7 @@ describe('create when the response is lost', () => {
   it('adopts the machine the API created and does not leave it running unseen', async () => {
     const calls = mockFetch([
       () => [504, { error: 'GATEWAY_TIMEOUT' }],
-      c => [200, { boxes: [box({ id: 7, name: 'other', created_at: new Date().toISOString() }), box({ id: 9, name: calls[0].body.name, created_at: new Date().toISOString(), status: 'provisioning', provision_state: 'pending' })] }],
+      () => [200, { boxes: [box({ id: 7, name: calls[0].body.name, comment: 'computesdk someone-else', created_at: new Date().toISOString() }), box({ id: 9, name: calls[0].body.name, comment: calls[0].body.comment, created_at: new Date().toISOString(), status: 'provisioning', provision_state: 'pending' })] }],
       () => [200, box({ id: 9 })],
     ])
     const sb = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create({ vcpus: 2 } as any)
@@ -175,8 +175,100 @@ describe('create when the response is lost', () => {
     expect(calls).toHaveLength(1)
   })
 
-  it('ignores an older machine with the same name', async () => {
-    mockFetch([() => [504, {}], () => [200, { boxes: [box({ id: 3, name: 'job', created_at: '2020-01-01T00:00:00Z' })] }]])
+  it('never adopts another request\'s machine with the same name', async () => {
+    const calls = mockFetch([
+      () => [504, {}],
+      () => [200, { boxes: [box({ id: 3, name: 'job', comment: 'computesdk 0000', created_at: new Date().toISOString() })] }],
+    ])
     await expect(uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create({ name: 'job' } as any)).rejects.toThrow(/504/)
+    expect(calls[0].body).toMatchObject({ name: 'job' })
+    expect(calls[0].body.comment).toMatch(/^computesdk [0-9a-f-]{36}$/)
+    expect(calls.map(c => c.method)).toEqual(['POST', 'GET'])
+  })
+
+  it('deletes the machine when the caller aborts after the API accepted it', async () => {
+    const ac = new AbortController()
+    let comment = ''
+    const calls = mockFetch([
+      c => {
+        comment = c.body.comment
+        ac.abort()
+        throw new DOMException('aborted', 'AbortError')
+      },
+      () => [200, { boxes: [box({ id: 11, comment, created_at: new Date().toISOString() })] }],
+      () => [200, { status: 'deleted' }],
+    ])
+    await expect(uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create({ signal: ac.signal } as any)).rejects.toThrow(/abort/i)
+    // ComputeSDK rejects on abort right away; the cleanup finishes in the background.
+    await vi.waitFor(() => expect(calls).toHaveLength(3))
+    expect(calls.map(c => `${c.method} ${c.url}`)).toEqual([
+      'POST https://api.test/api/v1/boxes',
+      'GET https://api.test/api/v1/boxes',
+      'DELETE https://api.test/api/v1/boxes/11?purge=now',
+    ])
+  })
+})
+
+describe('safety and status', () => {
+  it('does not follow a redirect with the API key', async () => {
+    const fn = vi.fn(async () => new Response('', { status: 302, headers: { Location: 'https://evil.test/' } }))
+    vi.stubGlobal('fetch', fn)
+    await expect(new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).listBoxes()).rejects.toThrow(/redirect/)
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect((fn.mock.calls[0] as any)[1].redirect).toBe('manual')
+  })
+
+  it('reports a machine deleted elsewhere as stopped and gives no URL for it', async () => {
+    mockFetch([() => [201, box({ url: 'https://b.uno4.dev' })], () => [200, box({ url: 'https://b.uno4.dev' })], () => [404, { error: 'NOT_FOUND' }], () => [404, { error: 'NOT_FOUND' }]])
+    const sandbox = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
+    expect((await sandbox.getInfo()).status).toBe('stopped')
+    await expect(sandbox.getUrl({ port: 80 })).rejects.toThrow(/not found/)
+  })
+
+  it('says when command output was cut at the API cap', async () => {
+    mockFetch([() => [201, box()], () => [200, box()], () => [200, { status: 'finished', exit_code: 0, stdout: 'x', stderr: '', stdout_truncated: true }]])
+    const sandbox = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
+    expect((await sandbox.runCommand('yes | head -c 1000000')).stderr).toMatch(/stdout truncated/)
+  })
+})
+
+/** A machine that answers the filesystem's shell commands from an in-memory file. */
+function fsMachine(file: Buffer) {
+  const written: Buffer[] = []
+  const cmds: string[] = []
+  const fn = vi.fn(async (url: string, init: RequestInit) => {
+    if ((init.method ?? 'GET') !== 'POST' || !url.endsWith('/run')) {
+      return new Response(JSON.stringify(box()), { status: url.endsWith('/boxes') ? 201 : 200 })
+    }
+    const cmd: string = JSON.parse(String(init.body)).cmd
+    cmds.push(cmd)
+    let stdout = ''
+    let m: RegExpMatchArray | null
+    if (/stat -c %s/.test(cmd)) stdout = `${file.length}\n`
+    else if ((m = cmd.match(/skip=(\d+) count=(\d+)/))) stdout = file.subarray(+m[1], +m[1] + +m[2]).toString('base64')
+    else if ((m = cmd.match(/printf %s '([^']*)' \| base64 -d >>/))) written.push(Buffer.from(m[1], 'base64'))
+    return new Response(JSON.stringify({ status: 'finished', exit_code: 0, stdout, stderr: '' }), { status: 200 })
+  })
+  vi.stubGlobal('fetch', fn)
+  return { written, cmds }
+}
+
+describe('filesystem with large files', () => {
+  it('reads a file bigger than the 256 KiB output cap in chunks', async () => {
+    const file = Buffer.from('é'.repeat(200_000)) // 400 000 bytes, multi-byte characters across chunk edges
+    const m = fsMachine(file)
+    const sandbox = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
+    expect(await sandbox.filesystem.readFile('/data/big.txt')).toBe(file.toString('utf8'))
+    expect(m.cmds.filter(c => c.startsWith('dd ')).length).toBe(Math.ceil(file.length / (128 * 1024)))
+  })
+
+  it('writes a file bigger than the 64 KiB command limit in chunks, then renames it into place', async () => {
+    const content = 'line of text\n'.repeat(20_000) // ~260 KB
+    const m = fsMachine(Buffer.alloc(0))
+    const sandbox = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
+    await sandbox.filesystem.writeFile('/data/big.txt', content)
+    expect(Buffer.concat(m.written).toString('utf8')).toBe(content)
+    expect(m.cmds.every(c => Buffer.byteLength(c) < 64 * 1024)).toBe(true)
+    expect(m.cmds.at(-1)).toMatch(/^mv -f ".*\.tmp" "\/data\/big\.txt"$/)
   })
 })

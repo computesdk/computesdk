@@ -28,6 +28,7 @@ export interface UnoBox {
   ssh_command?: string
   network_region?: string
   max_lifetime_s?: number
+  comment?: string
   [key: string]: unknown
 }
 
@@ -127,7 +128,16 @@ export class UnoClient {
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal,
+      // Never follow a redirect: fetch would resend the bearer token to wherever it points.
+      redirect: 'manual',
     })
+    if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+      throw new UnoError(
+        `Uno API ${method} ${path} → ${res.status} redirect; not following it with your API key (check the base URL)`,
+        res.status,
+        'REDIRECT',
+      )
+    }
     const text = await res.text()
     let parsed: Record<string, unknown> = {}
     if (text) {
@@ -156,13 +166,17 @@ export class UnoClient {
     ).body
   }
 
-  /** The newest box with exactly this name created at or after `since` (ms epoch), if any. */
-  async findBoxByName(name: string, since: number): Promise<UnoBox | null> {
-    const boxes = await this.listBoxes()
-    const mine = boxes
-      .filter(b => b.name === name && Date.parse(b.created_at) >= since)
-      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
-    return mine[0] ?? null
+  /**
+   * The box whose `comment` is exactly `marker` (a per-request UUID), created
+   * at or after `since` (ms epoch). Looks up to `attempts` times, 2 s apart: a
+   * create the connection lost may show up in the list a moment later.
+   */
+  async findBoxByMarker(marker: string, since: number, attempts = 1): Promise<UnoBox | null> {
+    for (let i = 0; ; i++) {
+      const found = (await this.listBoxes()).find(b => b.comment === marker && Date.parse(b.created_at) >= since)
+      if (found || i + 1 >= attempts) return found ?? null
+      await sleep(2_000)
+    }
   }
 
   async getBox(id: string | number): Promise<UnoBox | null> {

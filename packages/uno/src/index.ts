@@ -112,6 +112,39 @@ async function runOrThrow(run: FsRunCommand, sandbox: UnoSandbox, command: strin
   return r
 }
 
+/** Raw bytes per read: 128 KiB is ~171 KiB of base64, under the API's 256 KiB stdout cap. */
+const READ_CHUNK_BYTES = 128 * 1024
+/** Raw bytes per write: 36 KiB is 48 KiB of base64, leaving room for the path under the 64 KiB command limit. */
+const WRITE_CHUNK_BYTES = 36 * 1024
+
+/**
+ * Read `size` bytes of a file (path already shell-escaped) in chunks that each
+ * fit in one command's output; a short chunk means the file changed or the
+ * read failed, so it throws instead of returning a partial file.
+ */
+async function readInChunks(run: FsRunCommand, sandbox: UnoSandbox, quotedPath: string, size: number, what: string): Promise<Buffer> {
+  const parts: Buffer[] = []
+  for (let off = 0; off < size; off += READ_CHUNK_BYTES) {
+    const want = Math.min(READ_CHUNK_BYTES, size - off)
+    const r = await runOrThrow(
+      run,
+      sandbox,
+      `dd if="${quotedPath}" iflag=skip_bytes,count_bytes skip=${off} count=${want} status=none | base64 -w0`,
+      what,
+    )
+    const chunk = Buffer.from(r.stdout.trim(), 'base64')
+    if (chunk.length !== want) throw new Error(`${what}: got ${chunk.length} of ${want} bytes at offset ${off} (file changed while reading?)`)
+    parts.push(chunk)
+  }
+  return Buffer.concat(parts)
+}
+
+function parseSize(stdout: string, what: string): number {
+  const size = Number.parseInt(stdout.trim(), 10)
+  if (!Number.isSafeInteger(size) || size < 0) throw new Error(`${what}: unexpected size ${JSON.stringify(stdout.trim())}`)
+  return size
+}
+
 export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
   name: 'uno',
   methods: {
@@ -121,9 +154,12 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
           throw new Error('Uno does not restore from snapshots through ComputeSDK yet; omit snapshotId.')
         }
         const client = getClient(config)
-        // A unique name lets us find the machine if the create response is lost.
-        const name = safeName(options?.name) ?? `computesdk-${crypto.randomUUID().slice(0, 12)}`
-        // created_at is server time: allow for clock skew when matching by name.
+        // A per-request marker in the machine's comment lets us find exactly this
+        // machine if the create response is lost, even when names repeat.
+        const requestId = crypto.randomUUID()
+        const marker = `computesdk ${requestId}`
+        const name = safeName(options?.name) ?? `computesdk-${requestId.slice(0, 12)}`
+        // created_at is server time: allow for clock skew when matching.
         const since = Date.now() - 60_000
         let box: UnoBox
         try {
@@ -135,18 +171,20 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
               disk_gb: pickDiskGb(options, config.diskGb ?? 10),
               name,
               region: config.region ?? process.env.UNO_REGION ?? undefined,
-              comment: 'computesdk',
+              comment: marker,
             },
             options?.signal,
           )
         } catch (err) {
-          // The API may have accepted the machine before the connection died.
-          // Never leave it running unseen on the caller's bill: adopt it, or
-          // delete it if the caller gave up.
-          if (!isTransient(err)) throw err
-          const found = await client.findBoxByName(name, since).catch(() => null)
+          // The API may have accepted the machine before the connection died
+          // or the caller aborted. Never leave it running unseen on the
+          // caller's bill: adopt it, or delete it if the caller gave up.
+          const aborted = options?.signal?.aborted === true
+          if (!aborted && !isTransient(err)) throw err
+          // After an abort the machine may appear a moment later: look a few times.
+          const found = await client.findBoxByMarker(marker, since, aborted ? 3 : 1).catch(() => null)
           if (!found) throw err
-          if (options?.signal?.aborted) {
+          if (aborted) {
             await client.deleteBox(found.id).catch(() => {})
             throw err
           }
@@ -192,7 +230,10 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
           timeout_s: Math.min(3600, Math.max(1, Math.ceil(timeoutMs / 1000))),
         })
         const stdout = run.stdout ?? ''
-        const stderr = run.stderr ?? ''
+        let stderr = run.stderr ?? ''
+        // The API keeps up to 256 KiB of stdout and 64 KiB of stderr; say so instead of passing a prefix off as the whole output.
+        if (run.stdout_truncated) stderr += `${stderr && !stderr.endsWith('\n') ? '\n' : ''}[uno] stdout truncated at 256 KiB\n`
+        if (run.stderr_truncated) stderr += `${stderr && !stderr.endsWith('\n') ? '\n' : ''}[uno] stderr truncated at 64 KiB\n`
         options?.onStdout?.(stdout)
         options?.onStderr?.(stderr)
         return {
@@ -204,11 +245,13 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
       },
 
       getInfo: async (sandbox: UnoSandbox): Promise<InstanceInfo> => {
-        const box = (await sandbox.client.getBox(sandbox.id)) ?? sandbox.box
+        const current = await sandbox.client.getBox(sandbox.id)
+        // null = the machine is gone (deleted elsewhere): report it stopped, not the stale cached state.
+        const box = current ?? sandbox.box
         return {
           id: sandbox.id,
           provider: 'uno',
-          status: box.status === 'running' ? 'running' : box.status === 'error' ? 'error' : 'stopped',
+          status: !current ? 'stopped' : box.status === 'running' ? 'running' : box.status === 'error' ? 'error' : 'stopped',
           createdAt: new Date(box.created_at),
           timeout: (box.max_lifetime_s ?? 0) * 1000,
           metadata: {
@@ -218,12 +261,14 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
             diskGb: box.disk_gb,
             region: box.network_region,
             hostname: box.hostname,
+            ...(current ? {} : { deleted: true }),
           },
         }
       },
 
       getUrl: async (sandbox: UnoSandbox, options: { port: number; protocol?: string }) => {
-        const box = (await sandbox.client.getBox(sandbox.id)) ?? sandbox.box
+        const box = await sandbox.client.getBox(sandbox.id)
+        if (!box) throw new Error(`Uno machine ${sandbox.id} not found (it was deleted)`)
         if (options.port === 80 && typeof box.url === 'string') return box.url
         throw new Error(
           `Uno publishes a machine's web port 80 at https://<name>.uno4.dev; port ${options.port} is not exposed. ` +
@@ -235,19 +280,30 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
 
       filesystem: {
         readFile: async (sandbox: UnoSandbox, path: string, run: FsRunCommand): Promise<string> => {
-          const r = await runOrThrow(run, sandbox, `cat "${escapeShellArg(path)}"`, `Cannot read ${path}`)
-          return r.stdout
+          const what = `Cannot read ${path}`
+          const q = escapeShellArg(path)
+          const size = parseSize((await runOrThrow(run, sandbox, `test -f "${q}" && stat -c %s "${q}"`, what)).stdout, what)
+          return (await readInChunks(run, sandbox, q, size, what)).toString('utf8')
         },
 
         writeFile: async (sandbox: UnoSandbox, path: string, content: string, run: FsRunCommand): Promise<void> => {
           // base64 survives any content (quotes, NUL-free binary-ish text, a line that looks like a heredoc end).
-          const b64 = Buffer.from(content, 'utf8').toString('base64')
-          await runOrThrow(
-            run,
-            sandbox,
-            `mkdir -p "$(dirname "${escapeShellArg(path)}")" && printf %s '${b64}' | base64 -d > "${escapeShellArg(path)}"`,
-            `Cannot write ${path}`,
-          )
+          // Chunks go to a temp file next to the target, renamed into place only when all of them landed.
+          const what = `Cannot write ${path}`
+          const data = Buffer.from(content, 'utf8')
+          const q = escapeShellArg(path)
+          const tmp = escapeShellArg(`${path}.computesdk-${crypto.randomUUID().slice(0, 8)}.tmp`)
+          await runOrThrow(run, sandbox, `mkdir -p "$(dirname "${q}")" && : > "${tmp}"`, what)
+          try {
+            for (let off = 0; off < data.length; off += WRITE_CHUNK_BYTES) {
+              const b64 = data.subarray(off, off + WRITE_CHUNK_BYTES).toString('base64')
+              await runOrThrow(run, sandbox, `printf %s '${b64}' | base64 -d >> "${tmp}"`, what)
+            }
+            await runOrThrow(run, sandbox, `mv -f "${tmp}" "${q}"`, what)
+          } catch (err) {
+            await run(sandbox, `rm -f "${tmp}"`).catch(() => {})
+            throw err
+          }
         },
 
         mkdir: async (sandbox: UnoSandbox, path: string, run: FsRunCommand): Promise<void> => {
@@ -255,13 +311,23 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
         },
 
         readdir: async (sandbox: UnoSandbox, path: string, run: FsRunCommand): Promise<FileEntry[]> => {
-          const r = await runOrThrow(
-            run,
-            sandbox,
-            `find "${escapeShellArg(path)}" -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
-            `Cannot read directory ${path}`,
-          )
-          return r.stdout
+          // The listing goes to a temp file and is read back in chunks, so a huge
+          // directory is never cut off at the 256 KiB output cap.
+          const what = `Cannot read directory ${path}`
+          const list = `/tmp/.computesdk-ls-${crypto.randomUUID()}`
+          let listing: string
+          try {
+            const r = await runOrThrow(
+              run,
+              sandbox,
+              `find "${escapeShellArg(path)}" -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n' > ${list} && stat -c %s ${list}`,
+              what,
+            )
+            listing = (await readInChunks(run, sandbox, list, parseSize(r.stdout, what), what)).toString('utf8')
+          } finally {
+            await run(sandbox, `rm -f ${list}`).catch(() => {})
+          }
+          return listing
             .split('\n')
             .filter(Boolean)
             .map(line => {

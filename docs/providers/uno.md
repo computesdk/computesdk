@@ -90,7 +90,8 @@ interface UnoConfig {
 
 - Commands run as user `uno` in a login `bash` shell, in the home directory. Use `sudo` for root.
 - A command can run for up to 1 hour (`timeout`, default 5 minutes). Long commands are long-polled, so no single HTTP response hangs on proxy time limits. Retries use an idempotency key, so a dropped connection never starts a command twice.
-- Up to 256 KiB of stdout and 64 KiB of stderr are returned per command. Command text is limited to 64 KiB: write bigger inputs with `filesystem.writeFile` first.
+- Up to 256 KiB of stdout and 64 KiB of stderr are returned per command; if either was cut, `stderr` ends with an `[uno] … truncated` line. Command text is limited to 64 KiB: write bigger inputs with `filesystem.writeFile` first.
+- `filesystem.readFile`, `writeFile` and `readdir` have no size limit: they move data in chunks, and `writeFile` renames a temp file into place only after every chunk landed.
 - One command runs on a machine at a time. A concurrent `runCommand` on the same machine is retried for a few seconds, then fails with `BOX_BUSY`: use one machine per parallel job, or `background: true`.
 
 ## Supported
