@@ -543,6 +543,17 @@ describe('runCommand', () => {
     expect(cleanups()).toHaveLength(1);
   });
 
+  it('removes spill files when read-back cannot start', async () => {
+    const sandbox = await launch(makeConfig({ maxOutputBytes: -17_000 }));
+    mockSpill({ out: Buffer.from('partial\n'), err: Buffer.alloc(0) }, { Status: 'TimedOut', ResponseCode: -1, StandardOutputContent: '' });
+
+    const result = await sandbox.runCommand('sleep 999', { timeout: 1_000 });
+
+    expect(result).toMatchObject({ stdout: '', exitCode: 124 });
+    expect(readBacks()).toHaveLength(0);
+    expect(cleanups()).toHaveLength(1);
+  });
+
   it('removes spill files when the size of timed-out output cannot be read', async () => {
     const sandbox = await launch();
     mockSpill({ out: Buffer.from('partial\n'), err: Buffer.alloc(0) }, { Status: 'TimedOut', ResponseCode: -1, StandardOutputContent: '' });
