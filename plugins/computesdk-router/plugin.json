@@ -17,7 +17,7 @@
       "interface": {
         "displayName": "ComputeSDK Router",
         "shortDescription": "Run code in cloud sandboxes",
-        "longDescription": "ComputeSDK Router gives ChatGPT a real execution environment: create sandboxes, run commands, manage files, run long-lived processes, and preview exposed ports. It also drives the org's Actions CI — list connected repos and workflows, dispatch workflow runs, watch progress, and read job logs. Sandboxes and CI jobs are placed across providers through the ComputeSDK gateway, with a live compute market that bids for the best price.",
+        "longDescription": "ComputeSDK Router gives ChatGPT a real execution environment: create sandboxes, run commands, manage files, run long-lived processes, and preview exposed ports. It also drives the org's Actions CI — list connected repos and workflows, dispatch workflow runs, watch progress, and read job logs (requires an org admin to connect repos via the ComputeSDK GitHub App first). Sandboxes and CI jobs are placed across providers through the ComputeSDK gateway, with a live compute market that bids for the best price.",
         "developerName": "ComputeSDK",
         "category": "Developer Tools",
         "capabilities": ["Run code", "Manage files", "Manage processes", "Dispatch and inspect CI runs"],

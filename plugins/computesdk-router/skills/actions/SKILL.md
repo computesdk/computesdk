@@ -9,6 +9,12 @@ Actions runs GitHub-Actions-style workflows on ComputeSDK sandboxes. The org's
 repos are connected through the ComputeSDK GitHub App — only repos already
 synced there are visible; there is no GitHub auth in chat.
 
+If the org has never connected anything, list/get tools return a `setup`
+block (`reason: "no_git_connection"`) with a message and an
+`actionsSettingsUrl`. Surface it to the user as-is — an org owner or admin
+must install the GitHub App and enable repos there before any actions tool
+returns data.
+
 ## Core workflow
 
 1. `actions_list_repos` — the org's connected repos (enabled or not, with
