@@ -46,6 +46,7 @@
   * [Northflank](providers/northflank.md)
   * [Novita](providers/novita.md)
   * [OpenComputer](providers/opencomputer.md)
+  * [Promigence](providers/promigence.md)
   * [Quilt](providers/quilt.md)
   * [Railway](providers/railway.md)
   * [Run Cloud](providers/run-cloud.md)
