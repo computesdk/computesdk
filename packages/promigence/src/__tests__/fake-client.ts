@@ -277,10 +277,13 @@ export class FakeClient {
       signal: async (sandboxId: string, execId: string, signal: string) => {
         this.record('execs.signal', sandboxId, execId, signal);
         const e = this.mustExec(execId);
-        const wasRunning = Date.now() < e.endsAt && !e.killed;
+        // Like the API: a command that has already ended is left as it ended.
+        if (this.recordOf(sandboxId, e).state !== 'running') {
+          return { ok: true, exec_id: execId, signal: 9, delivered: false, already_ended: true };
+        }
         e.killed = true;
         e.endsAt = Date.now();
-        return { ok: true, exec_id: execId, signal: 9, delivered: wasRunning };
+        return { ok: true, exec_id: execId, signal: 9, delivered: true };
       },
       list: async (sandboxId: string) => [...this.execs.values()].map((e) => this.recordOf(sandboxId, e)),
     },
@@ -354,9 +357,14 @@ export class FakeClient {
   };
 
   readonly snapshots = {
-    list: async () => {
-      this.record('snapshots.list');
-      return this.snapshotsStore;
+    // Like the SDK: one page.
+    list: async (opts: { limit?: number; cursor?: string } = {}) => {
+      this.record('snapshots.list', opts);
+      return this.snapshotPage(opts).items;
+    },
+    listPage: async (opts: { limit?: number; cursor?: string } = {}) => {
+      this.record('snapshots.listPage', opts);
+      return this.snapshotPage(opts);
     },
     delete: async (id: string) => {
       this.record('snapshots.delete', id);
@@ -375,6 +383,14 @@ export class FakeClient {
   async me() {
     this.record('me');
     return { org_id: 'org_1', default_spend_cap: 2 };
+  }
+
+  /** One page of snapshots: `limit` of them, and an opaque cursor to the next page. */
+  private snapshotPage(opts: { limit?: number; cursor?: string }) {
+    const at = opts.cursor ? Number(opts.cursor) : 0;
+    const limit = Math.min(Math.max(1, Math.trunc(opts.limit ?? 50)), 500);
+    const next = at + limit < this.snapshotsStore.length ? String(at + limit) : null;
+    return { items: this.snapshotsStore.slice(at, at + limit), nextCursor: next, limit };
   }
 
   private mustExec(execId: string): Exec {

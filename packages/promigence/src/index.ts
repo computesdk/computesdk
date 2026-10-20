@@ -11,6 +11,7 @@ import type {
   CreateInstanceOptions,
   FileEntry,
   InstanceInfo,
+  ListSnapshotsOptions,
   RunCommandOptions,
 } from '@computesdk/provider';
 import {
@@ -141,6 +142,16 @@ function checkSpendCap(value: unknown, from: string): number {
   throw invalidArgument(
     `Promigence: ${from} must be a number of US dollars, 0 or more, got ${show(value)}`,
     "Pass the most one sandbox may spend, or leave it unset to use your organization's default cap."
+  );
+}
+
+/** `snapshot.list()`'s `limit`: unset, or a whole number, 0 or more. */
+function snapshotLimit(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) return value;
+  throw invalidArgument(
+    `Promigence: snapshot.list() 'limit' must be a whole number, 0 or more, got ${show(value)}`,
+    'Pass the most snapshots to return, or leave it unset to list them all.'
   );
 }
 
@@ -419,8 +430,9 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
       },
 
       /**
-       * `onStdout` / `onStderr` receive the output while the command runs. A command that outruns
-       * its `timeout` is stopped and reported with exit code 124.
+       * `onStdout` / `onStderr` receive the output while the command runs. A command still running
+       * when its `timeout` is reached is stopped and reported with exit code 124; one that had
+       * already ended keeps its own exit code, however late its result arrives.
        */
       streamCommand: async (inst: PromigenceInstance, command: string, options: RunCommandOptions): Promise<CommandResult> => {
         const startedAt = Date.now();
@@ -436,13 +448,22 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
           rethrow(e, 'command');
         }
         let timedOut = false;
+        let settled = false;
+        // At the deadline, the command's own state is asked first: one that has already ended is
+        // neither killed nor reported as timed out, even when its result has not arrived yet.
+        const atDeadline = async (): Promise<void> => {
+          try {
+            const status = await inst.client.sandboxes.execs.get(handle.sandboxId, handle.pid);
+            if (status.state !== 'running') return;
+          } catch {
+            // Its state could not be read: it is treated as still running.
+          }
+          if (settled) return;
+          timedOut = true;
+          await handle.kill().catch(() => undefined);
+        };
         const timer =
-          options.timeout === undefined
-            ? undefined
-            : setTimeout(() => {
-                timedOut = true;
-                void handle.kill().catch(() => undefined);
-              }, options.timeout);
+          options.timeout === undefined ? undefined : setTimeout(() => void atDeadline(), options.timeout);
         try {
           return toComputeResult(await handle.wait(), startedAt);
         } catch (e) {
@@ -457,6 +478,7 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
           }
           rethrow(e, 'command');
         } finally {
+          settled = true;
           if (timer !== undefined) clearTimeout(timer);
         }
       },
@@ -473,7 +495,9 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
           provider: PROVIDER,
           status: rec.state === 'ended' ? 'stopped' : 'running',
           createdAt: createdAtOf(rec),
-          timeout: typeof rec.timeout_ms === 'number' ? rec.timeout_ms : (inst.config.timeout ?? 0),
+          // The sandbox's own lifetime, else the config's. When neither names one, your account's
+          // default applies and is not known here, so it is NaN: 0 would read as a real lifetime.
+          timeout: typeof rec.timeout_ms === 'number' ? rec.timeout_ms : (inst.config.timeout ?? Number.NaN),
           metadata: {
             state: rec.state,
             runId: inst.sandbox.runId,
@@ -537,15 +561,26 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
             'alias to create() as templateId or snapshotId, or pass an image to create().'
         );
       },
-      list: async (config: PromigenceConfig) => {
+      list: async (config: PromigenceConfig, options?: ListSnapshotsOptions) => {
+        const limit = snapshotLimit(options?.limit);
         const client = clientFor(config);
-        let records: SnapshotRecord[];
+        if (limit === 0) return [];
+        // Page by page until the limit is reached; with no limit, every page.
+        const records: SnapshotRecord[] = [];
         try {
-          records = await client.snapshots.list();
+          let cursor: string | null = null;
+          do {
+            const page = await client.snapshots.listPage({
+              ...(limit === undefined ? {} : { limit: limit - records.length }),
+              ...(cursor ? { cursor } : {}),
+            });
+            records.push(...page.items);
+            cursor = page.nextCursor;
+          } while (cursor && (limit === undefined || records.length < limit));
         } catch (e) {
           rethrow(e, 'snapshot list');
         }
-        return records.map(toSnapshotInfo);
+        return (limit === undefined ? records : records.slice(0, limit)).map(toSnapshotInfo);
       },
       delete: async (config: PromigenceConfig, snapshotId: string) => {
         const client = clientFor(config);

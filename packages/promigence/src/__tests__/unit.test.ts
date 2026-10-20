@@ -167,6 +167,25 @@ describe('promigence provider (unit, fake client)', () => {
     expect(after.metadata?.outcome).toBe('completed');
   });
 
+  it('getInfo: a lifetime neither the sandbox nor the config names is reported as not known (NaN), never 0', async () => {
+    const { c } = setup();
+    const sandbox = await c.instances.create();
+    const info = await sandbox.getInfo();
+    expect(info.timeout).toBeNaN();
+    expect(info.status).toBe('running');
+
+    // When the sandbox does not say, the config's lifetime answers.
+    const withConfig = setup({}, { timeout: 120_000 });
+    const other = await withConfig.c.instances.create();
+    const get = withConfig.client.sandboxes.get;
+    withConfig.client.sandboxes.get = async (id: string) => {
+      const rec = await get(id);
+      delete rec.timeout_ms;
+      return rec;
+    };
+    expect((await other.getInfo()).timeout).toBe(120_000);
+  });
+
   it('create options: templateId / snapshotId pick the snapshot; timeout, envs, metadata and network are passed on', async () => {
     const { client, c } = setup();
     await c.instances.create({
@@ -335,6 +354,44 @@ describe('promigence provider (unit, fake client)', () => {
     expect(client.names()).not.toContain('execs.signal');
   });
 
+  it('streaming: a command that ended before its timeout keeps its exit code when its result arrives late', async () => {
+    const { client, c } = setup();
+    const sandbox = await c.instances.create();
+    // Every read of the command's output answers 400 ms after this point, past its 100 ms timeout.
+    const read = client.sandboxes.execs.read;
+    const answerAt = Date.now() + 400;
+    client.sandboxes.execs.read = async (...args: Parameters<typeof read>) => {
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, answerAt - Date.now())));
+      return read(...args);
+    };
+    const r = await sandbox.runCommand(`sh -c 'echo out; echo err 1>&2; exit 3'`, { timeout: 100, onStdout: () => {} });
+    expect(r.exitCode).toBe(3);
+    expect(r.stdout).toBe('out\n');
+    expect(r.stderr).toBe('err\n');
+    expect(r.durationMs).toBeGreaterThanOrEqual(100);
+    // At the deadline its state was read (no long-poll); it had ended, so nothing was killed.
+    expect(client.calls.some((x) => x.name === 'execs.get' && x.args[2] === 0)).toBe(true);
+    expect(client.names()).not.toContain('execs.signal');
+  });
+
+  it('streaming: a command still running at its deadline is asked about first, then stopped and reported as 124', async () => {
+    const { client, c } = setup();
+    const sandbox = await c.instances.create();
+    // Here the command has no bound of its own in the sandbox, so only the deadline stops it.
+    const start = client.sandboxes.execBackground;
+    client.sandboxes.execBackground = async (...[id, req]: Parameters<typeof start>) => start(id, { ...req, timeoutMs: undefined });
+    const r = await sandbox.runCommand(`sh -c 'echo starting; sleep 60'`, { timeout: 200, onStdout: () => {} });
+    expect(r.exitCode).toBe(124);
+    expect(r.stdout).toBe('starting\n');
+    expect(r.durationMs).toBeLessThan(5000);
+    // A status read (no long-poll) came before the kill.
+    const asked = client.calls.findIndex((x) => x.name === 'execs.get' && x.args[2] === 0);
+    const killed = client.names().indexOf('execs.signal');
+    expect(asked).toBeGreaterThanOrEqual(0);
+    expect(killed).toBeGreaterThan(asked);
+    expect(client.last('execs.signal')[2]).toBe('SIGKILL');
+  });
+
   it('errors: a Promigence error keeps its name, code and fix; the original is its cause', async () => {
     const failure = new EnvFailedError('env_failed', 'the sandbox stopped answering', 'Run the command again.');
     const { client, c } = setup({ fail: { exec: failure } });
@@ -423,6 +480,35 @@ describe('promigence provider (unit, fake client)', () => {
     await c.snapshot.delete('snap_1');
     expect(client.last('snapshots.delete')[0]).toBe('snap_1');
     await expect(provider.snapshot!.delete('snap_unknown')).resolves.toBeUndefined();
+  });
+
+  it('snapshots: list honours limit, across pages too; with no limit it lists every snapshot', async () => {
+    const snapshots = Array.from({ length: 620 }, (_, i) => ({ snapshot_id: `snap_${i}`, created_at: '2030-02-03T00:00:00Z' }));
+    const { client, provider, c } = setup({ snapshots });
+
+    const five = await provider.snapshot!.list({ limit: 5 });
+    expect(five.map((s) => s.id)).toEqual(['snap_0', 'snap_1', 'snap_2', 'snap_3', 'snap_4']);
+    // The limit is asked of the API, not only applied here.
+    expect(arg(client.last('snapshots.listPage'), 0)).toEqual({ limit: 5 });
+
+    const many = await provider.snapshot!.list({ limit: 550 });
+    expect(many.length).toBe(550);
+    expect(many[549].id).toBe('snap_549');
+
+    // No limit: every page.
+    expect((await provider.snapshot!.list()).length).toBe(620);
+    expect((await c.snapshot.list()).length).toBe(620);
+
+    // 0 is an empty list; a limit that is not a whole number of 0 or more is refused. Neither sends a request.
+    const calls = client.calls.length;
+    expect(await provider.snapshot!.list({ limit: 0 })).toEqual([]);
+    for (const limit of [-1, 2.5, Number.NaN]) {
+      await expect(provider.snapshot!.list({ limit })).rejects.toMatchObject({
+        name: 'InvalidArgumentError',
+        message: expect.stringContaining("'limit' must be a whole number, 0 or more"),
+      });
+    }
+    expect(client.calls.length).toBe(calls);
   });
 
   it('templates: every template method throws, naming snapshots as the alternative', async () => {
