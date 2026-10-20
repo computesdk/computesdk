@@ -1,3 +1,5 @@
+[![rgstr](https://rgstr.org/registry/@computesdk/cli/badge.svg?proof=rgstr_un7pznm3kwv3xsaokzu4)](https://rgstr.org/registry/@computesdk/cli)
+
 <div align="center">
   <img src="https://www.computesdk.com/_astro/hv_main_logo_light.CpYMD9-V.svg" alt="ComputeSDK" width="300" />
 </div>
