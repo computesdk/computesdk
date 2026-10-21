@@ -1,5 +1,11 @@
 # @computesdk/example-cloudflare-direct
 
+## 0.0.15
+
+### Patch Changes
+
+- @computesdk/cloudflare@2.1.5
+
 ## 0.0.14
 
 ### Patch Changes
