@@ -61,6 +61,7 @@
   * [Tensorlake](providers/tensorlake.md)
   * [Upstash](providers/upstash.md)
   * [Vercel](providers/vercel.md)
+  * [Workpaper](providers/workpaper.md)
 
 ## Platform
 
