@@ -3,7 +3,7 @@
  */
 
 import { Sandbox as E2BSandbox, Volume as E2BVolume } from 'e2b';
-import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -252,7 +252,7 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
       },
       delete: async (config: E2BConfig, id: string) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
-        await E2BVolume.destroy(id, { apiKey });
+        await withVolumeSettle(() => E2BVolume.destroy(id, { apiKey }));
       },
     }
   }

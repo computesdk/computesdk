@@ -5,7 +5,7 @@
  */
 
 import { Sandbox as DeclawSandbox, ConnectionConfig, Volumes as DeclawVolumes } from '@declaw/sdk';
-import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 
 import type {
   CommandResult,
@@ -216,7 +216,7 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
       delete: async (config: DeclawConfig, id: string) => {
         const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
         const domain = config.domain || process.env.DECLAW_DOMAIN;
-        await DeclawVolumes.delete(id, { apiKey, domain });
+        await withVolumeSettle(() => DeclawVolumes.delete(id, { apiKey, domain }));
       },
     }
   },

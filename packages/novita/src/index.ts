@@ -1,6 +1,6 @@
 import { CommandExitError, FileType, NotFoundError, Novita, TimeoutError, Volume as NovitaVolume } from 'novita-sandbox';
 import type { BuildOptions, SandboxOpts, SnapshotInfo, TemplateClass, TemplateInfo } from 'novita-sandbox';
-import { defineProvider, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult, CreateTemplateOptions, Provider, ProviderTemplateManager,
   RunCommandOptions, InstanceInfo,
@@ -290,7 +290,7 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
       },
       delete: async (config: NovitaConfig, id: string) => {
         const apiKey = config.apiKey || process.env.NOVITA_API_KEY!;
-        await NovitaVolume.destroy(id, { apiKey });
+        await withVolumeSettle(() => NovitaVolume.destroy(id, { apiKey }));
       },
     }
   },

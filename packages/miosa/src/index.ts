@@ -9,7 +9,7 @@
  * Auth: MIOSA API keys (`msk_*`) via `Authorization: Bearer <key>`.
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef } from "@computesdk/provider";
+import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
 
 import type {
   CommandResult,
@@ -1504,7 +1504,9 @@ const createMiosaProvider = defineProvider<
         const created = await miosaRequest<any>(auth, "POST", "/volumes", {
           name: options.name,
           backend: "local",
-          ...(options.sizeBytes ? { size_bytes: options.sizeBytes } : {}),
+          // MIOSA 422s on a missing size_bytes — floor at 1 GiB when the
+          // caller doesn't specify one.
+          size_bytes: options.sizeBytes ?? 1_073_741_824,
         });
         const v = created?.volume ?? created;
         return { id: v?.id, name: v?.name ?? options.name, native: v };
@@ -1525,7 +1527,7 @@ const createMiosaProvider = defineProvider<
       },
       delete: async (config: MiosaConfig, id: string) => {
         const auth = resolveAuth(config);
-        await miosaRequest(auth, "DELETE", `/volumes/${id}`);
+        await withVolumeSettle(() => miosaRequest(auth, "DELETE", `/volumes/${id}`));
       },
     }
   },

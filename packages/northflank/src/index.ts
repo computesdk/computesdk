@@ -7,7 +7,7 @@ import {
   ApiClientInMemoryContextProvider,
   ApiClient,
 } from '@northflank/js-client';
-import { defineProvider, resolveVolumeRef, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, escapeShellArg, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   InstanceInfo,
@@ -552,7 +552,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
       },
       delete: async (config: NorthflankConfig, name: string) => {
         const client = buildClient(config);
-        await (client as any).delete.volume({ parameters: { ...projectParams(config), volumeId: name } });
+        await withVolumeSettle(() => (client as any).delete.volume({ parameters: { ...projectParams(config), volumeId: name } }));
       },
     }
   },

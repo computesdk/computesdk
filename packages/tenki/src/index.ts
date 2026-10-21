@@ -14,7 +14,7 @@
  *   await sandbox.destroy();
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef } from "@computesdk/provider";
+import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
 import type { RunCommandOptions, CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry } from "computesdk";
 import {
   TenkiSandbox,
@@ -383,7 +383,7 @@ export const tenki = defineProvider<Session, TenkiConfig>({
       },
       delete: async (config, volumeIdOrName: string) => {
         const client = getClient(config);
-        await client.deleteVolume(volumeIdOrName);
+        await withVolumeSettle(() => client.deleteVolume(volumeIdOrName));
       },
     }
   },

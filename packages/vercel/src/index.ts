@@ -3,7 +3,7 @@
  */
 
 import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive } from '@vercel/sandbox';
-import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
@@ -325,7 +325,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           ? { name }
           : { name, token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
         const drive = await VercelDrive.get(params as any);
-        await drive.delete();
+        await withVolumeSettle(() => drive.delete());
       },
     }
   }
