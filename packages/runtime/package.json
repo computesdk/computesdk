@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/runtime",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Runtime provider for ComputeSDK — Firecracker microVM sandboxes for AI agents",
   "author": "Runtime <support@withruntime.com>",
   "license": "MIT",

@@ -1,5 +1,15 @@
 # @computesdk/blaxel
 
+## 1.6.34
+
+### Patch Changes
+
+- 1b639da: Add a unified persistent-volume surface: `CreateInstanceOptions.volumes` (create-time mounts), `compute.volume.create/get/list/delete` with multi-provider routing, and `instance.attachVolume`/`detachVolume` where the provider exposes runtime attach. Provider plumbing maps the unified `VolumeMount[]` onto each native wire shape (daytona `volumes[]`, e2b `volumeMounts`, modal `volumes` map, vercel `mounts`, namespace `volumes[]` with `persistency_kind`, northflank `volumesToAttach`, sandbox0 claim `mounts`, tenki `CreateOptions.volumes`, novita `volumeMounts`, createos `disks` attachments, plus volume managers for blaxel, declaw, beam, microsandbox, miosa).
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
 ## 1.6.33
 
 ### Patch Changes

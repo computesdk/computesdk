@@ -1,5 +1,16 @@
 # @computesdk/novita
 
+## 0.0.9
+
+### Patch Changes
+
+- d7d8efc: Volume surface review fixes: list() no longer swallows real provider failures (only the not-supported stub), delete() only targets the known owning provider, novita create-mounts resolve the volume name (not the native object), namespace delete resolves id→tag, and createos snapshot forks attach requested volumes post-fork.
+- 1b639da: Add a unified persistent-volume surface: `CreateInstanceOptions.volumes` (create-time mounts), `compute.volume.create/get/list/delete` with multi-provider routing, and `instance.attachVolume`/`detachVolume` where the provider exposes runtime attach. Provider plumbing maps the unified `VolumeMount[]` onto each native wire shape (daytona `volumes[]`, e2b `volumeMounts`, modal `volumes` map, vercel `mounts`, namespace `volumes[]` with `persistency_kind`, northflank `volumesToAttach`, sandbox0 claim `mounts`, tenki `CreateOptions.volumes`, novita `volumeMounts`, createos `disks` attachments, plus volume managers for blaxel, declaw, beam, microsandbox, miosa).
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
 ## 0.0.8
 
 ### Patch Changes
