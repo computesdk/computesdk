@@ -28,7 +28,12 @@ export interface DaytonaConfig {
 async function resolveDaytonaVolume(d: Daytona, idOrName: string) {
   try {
     return await d.volume.get(idOrName);
-  } catch { /* not a name — try id */ }
+  } catch (err) {
+    // Only a real "not found" means the arg wasn't a name — anything else
+    // (auth, 5xx) must propagate, else delete silently no-ops.
+    const text = err instanceof Error ? err.message : String(err);
+    if (!/not found|404/i.test(text)) throw err;
+  }
   const volumes = await d.volume.list();
   return (volumes ?? []).find((v: any) => v.id === idOrName) ?? null;
 }
