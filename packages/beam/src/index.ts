@@ -6,8 +6,8 @@
  * and port exposure capabilities.
  */
 
-import beamClient, { Sandbox, SandboxInstance, beamOpts, Image } from '@beamcloud/beam-js';
-import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp } from '@computesdk/provider';
+import beamClient, { Sandbox, SandboxInstance, beamOpts, Image, Volume as BeamVolume } from '@beamcloud/beam-js';
+import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef } from '@computesdk/provider';
 import type {
   CommandResult,
   InstanceInfo,
@@ -211,6 +211,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
+            volumes,
             ...providerOptions
           } = options || {};
 
@@ -235,6 +236,20 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             sandboxConfig.image = sandboxConfig.dockerEnabled
               ? Image.fromRegistry('node:24').withDocker()
               : Image.fromRegistry('node:24');
+          } else if (typeof sandboxConfig.image === 'string') {
+            // Plain registry strings (e.g. from `image:` create options) must
+            // be normalized to an Image — beam-js requires the object, a bare
+            // string fails scheduling.
+            sandboxConfig.image = Image.fromRegistry(sandboxConfig.image);
+          }
+
+          // Unified mounts → beam's native Volume objects (mountPath is baked
+          // into the Volume, so the wire shape is Volume[] with no paths).
+          if (Array.isArray(volumes) && volumes.length > 0) {
+            sandboxConfig.volumes = volumes.map((m: any) => {
+              const ref = resolveVolumeRef(m.volume);
+              return ref.native ?? new BeamVolume(ref.name ?? ref.id!, m.mountPath);
+            });
           }
 
           if (envs) {
@@ -405,6 +420,25 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       },
 
       getInstance: (sandbox: SandboxInstance): SandboxInstance => sandbox,
+    },
+
+    volume: {
+      create: async (config: BeamConfig, options) =>
+        withBeamConfig(config, async () => {
+          const volume = new BeamVolume(options.name, options.mountPath ?? '/volume');
+          await volume.getOrCreate();
+          return { id: volume.volumeId, name: volume.name, native: volume };
+        }),
+      get: async (config: BeamConfig, name: string) =>
+        withBeamConfig(config, async () => {
+          // beam-js has no get-by-name RPC; return a handle bound to the
+          // caller's mountPath (defaults for read paths).
+          const volume = new BeamVolume(name, '/volume');
+          return { name, native: volume };
+        }),
+      delete: async () => {
+        throw new Error('Beam volume deletion is not exposed by @beamcloud/beam-js');
+      },
     },
   },
 });

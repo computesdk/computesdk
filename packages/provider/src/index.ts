@@ -12,7 +12,8 @@ export type {
   InstanceMethods,
   InstanceLifecycleResult,
   TemplateMethods,
-  SnapshotMethods
+  SnapshotMethods,
+  VolumeMethods
 } from './factory';
 /** @deprecated Use {@link InstanceMethods}. */
 export type { SandboxMethods } from './factory';
@@ -58,7 +59,8 @@ export type {
 } from './browser-factory';
 
 // Export utilities
-export { calculateBackoff, escapeShellArg } from './utils';
+export { calculateBackoff, escapeShellArg, resolveVolumeRef } from './utils';
+export type { VolumeRef } from './utils';
 
 // Export the process-API streaming helper for providers that stream natively
 export {

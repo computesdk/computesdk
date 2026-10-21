@@ -2,8 +2,8 @@
  * Vercel Provider - Factory-based Implementation
  */
 
-import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot } from '@vercel/sandbox';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive } from '@vercel/sandbox';
+import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
 import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
@@ -82,6 +82,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
             timeout: _timeout, envs: _envs, name: _name, metadata: _metadata,
             templateId, snapshotId: optSnapshotId, sandboxId: _sandboxId,
             namespace: _namespace, directory: _directory,
+            volumes,
             ...providerOptions
           } = options || {};
           const optRuntime = (options as any)?.runtime;
@@ -111,6 +112,14 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
             params.source = { type: 'snapshot', snapshotId };
           } else if (optSource) {
             params.source = optSource;
+          }
+
+          // Unified mounts → vercel's {path: {drive, mode}} wire shape.
+          if (Array.isArray(volumes) && volumes.length > 0) {
+            params.mounts = Object.fromEntries((volumes as any[]).map((m) => {
+              const ref = resolveVolumeRef(m.volume);
+              return [m.mountPath, { drive: ref.id ?? ref.name, mode: m.readOnly ? 'snapshot' : 'read-write' }];
+            }));
           }
 
           if (!creds.useOidc) {
@@ -273,6 +282,51 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           : await VercelSnapshot.get({ snapshotId: templateId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
         await snapshot.delete();
       }
+    },
+
+    volume: {
+      create: async (config: VercelConfig, options) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const params = creds.useOidc
+          ? { name: options.name }
+          : { name: options.name, token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+        const drive = await VercelDrive.getOrCreate(params as any);
+        return { id: drive.driveId, name: drive.name, native: drive };
+      },
+      get: async (config: VercelConfig, name: string) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        try {
+          const params = creds.useOidc
+            ? { name }
+            : { name, token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+          const drive = await VercelDrive.get(params as any);
+          return { id: drive.driveId, name: drive.name, native: drive };
+        } catch { return null; }
+      },
+      list: async (config: VercelConfig) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const params = creds.useOidc
+          ? {}
+          : { token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+        const page = await VercelDrive.list(params as any);
+        const out: any[] = [];
+        for await (const drive of page as any) {
+          out.push({ id: drive.driveId, name: drive.name, native: drive });
+        }
+        return out;
+      },
+      delete: async (config: VercelConfig, name: string) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const params = creds.useOidc
+          ? { name }
+          : { name, token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+        const drive = await VercelDrive.get(params as any);
+        await drive.delete();
+      },
     }
   }
 });

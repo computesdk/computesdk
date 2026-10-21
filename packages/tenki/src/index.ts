@@ -14,7 +14,7 @@
  *   await sandbox.destroy();
  */
 
-import { defineProvider, escapeShellArg } from "@computesdk/provider";
+import { defineProvider, escapeShellArg, resolveVolumeRef } from "@computesdk/provider";
 import type { RunCommandOptions, CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry } from "computesdk";
 import {
   TenkiSandbox,
@@ -143,6 +143,13 @@ function toCreateOptions(config: TenkiConfig, options?: CreateInstanceOptions): 
   if (typeof cpuCores === "number") opts.cpuCores = cpuCores;
   if (typeof memoryMb === "number") opts.memoryMb = memoryMb;
   if (typeof diskSizeGb === "number") opts.diskSizeGb = diskSizeGb;
+
+  if (Array.isArray(options?.volumes) && options.volumes.length > 0) {
+    opts.volumes = options.volumes.map((m) => {
+      const ref = resolveVolumeRef(m.volume);
+      return { volumeId: ref.id ?? ref.name!, mountPath: m.mountPath, readOnly: m.readOnly };
+    });
+  }
 
   return opts;
 }
@@ -302,6 +309,15 @@ export const tenki = defineProvider<Session, TenkiConfig>({
 
       getInstance: (sandbox) => sandbox,
 
+      attachVolume: async (sandbox, volume, mountPath) => {
+        const ref = resolveVolumeRef(volume);
+        await (sandbox as Session).attachVolume(ref.id ?? ref.name!, mountPath);
+      },
+      detachVolume: async (sandbox, volume) => {
+        const ref = resolveVolumeRef(volume);
+        await (sandbox as Session).detachVolume(ref.id ?? ref.name!);
+      },
+
       // Native filesystem: Tenki exposes real file primitives over its data
       // plane, so we bypass the shell-based fallback (and its escaping
       // hazards). The runCommand parameter is intentionally unused.
@@ -337,6 +353,39 @@ export const tenki = defineProvider<Session, TenkiConfig>({
         },
       },
     },
+
+    volume: {
+      create: async (config, options) => {
+        const client = getClient(config);
+        const v = await client.createVolume({
+          name: options.name,
+          sizeBytes: options.sizeBytes ?? 10 * 1024 * 1024 * 1024,
+          ...(config.workspaceId ?? process.env.TENKI_WORKSPACE_ID
+            ? { workspaceId: config.workspaceId ?? process.env.TENKI_WORKSPACE_ID }
+            : {}),
+        });
+        // SYNC_PENDING on a fresh volume is the create-time equivalent of the
+        // attach race the API already reports; wait before handing it back.
+        const ready = await client.waitVolumeReady(v.id);
+        return { id: ready.id, name: ready.name, native: ready };
+      },
+      get: async (config, volumeIdOrName: string) => {
+        const client = getClient(config);
+        try {
+          const v = await client.getVolume(volumeIdOrName);
+          return v ? { id: v.id, name: v.name, native: v } : null;
+        } catch { return null; }
+      },
+      list: async (config) => {
+        const client = getClient(config);
+        const volumes = await client.listVolumes();
+        return (volumes ?? []).map((v) => ({ id: v.id, name: v.name, native: v }));
+      },
+      delete: async (config, volumeIdOrName: string) => {
+        const client = getClient(config);
+        await client.deleteVolume(volumeIdOrName);
+      },
+    }
   },
 });
 

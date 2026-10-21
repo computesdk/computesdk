@@ -4,7 +4,13 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { CreateInstanceOptions, InstanceInterface } from 'computesdk';
+import type {
+  CreateInstanceOptions,
+  CreateVolumeOptions,
+  InstanceInterface,
+  ListVolumesOptions,
+  Volume,
+} from 'computesdk';
 
 /**
  * Provider Instance - what provider implementations return
@@ -83,6 +89,25 @@ export interface ListTemplatesOptions {
 }
 
 /**
+ * Provider volume manager interface - handles persistent volume lifecycle.
+ *
+ * Optional on Provider: only providers with an independent, mountable volume
+ * primitive implement it. Volumes are created/listed/deleted here and mounted
+ * either at instance creation (`CreateInstanceOptions.volumes`) or at runtime
+ * (`instance.attachVolume`).
+ */
+export interface ProviderVolumeManager<TVolume extends Volume = Volume> {
+  /** Create a new volume */
+  create(options: CreateVolumeOptions): Promise<TVolume>;
+  /** Get an existing volume by id or name */
+  get(volumeIdOrName: string): Promise<TVolume | null>;
+  /** List all volumes */
+  list(options?: ListVolumesOptions): Promise<TVolume[]>;
+  /** Delete a volume by id or name */
+  delete(volumeIdOrName: string): Promise<void>;
+}
+
+/**
  * Provider instance manager interface - handles instance lifecycle
  */
 export interface ProviderInstanceManager<TInstance = any> {
@@ -126,7 +151,7 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
 /**
  * Provider interface - creates and manages resources
  */
-export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any> {
+export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume> {
   /** Provider name/type */
   readonly name: string;
 
@@ -144,6 +169,9 @@ export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any> {
 
   /** Optional snapshot management operations */
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
+
+  /** Optional persistent volume management operations */
+  readonly volume?: ProviderVolumeManager<TVolume>;
 
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;

@@ -7,7 +7,7 @@ import {
   ApiClientInMemoryContextProvider,
   ApiClient,
 } from '@northflank/js-client';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, escapeShellArg } from '@computesdk/provider';
 import type {
   CommandResult,
   InstanceInfo,
@@ -212,6 +212,17 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
             public: port.public ?? true,
             protocol: port.protocol ?? 'HTTP',
           }));
+        }
+
+        // Unified mounts → northflank's volumesToAttach (the volume carries
+        // its own containerMountPath from volume creation).
+        if (Array.isArray(opts.volumes) && opts.volumes.length > 0) {
+          data.createOptions = {
+            volumesToAttach: opts.volumes.map((m: any) => {
+              const ref = resolveVolumeRef(m.volume);
+              return ref.name ?? ref.id!;
+            }),
+          };
         }
 
         const created = await client.create.service.deployment({
@@ -512,6 +523,38 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
         },
       },
     },
+
+    // Northflank volumes carry their own containerMountPath at create time;
+    // sandbox mounts attach by name via createOptions.volumesToAttach.
+    volume: {
+      create: async (config: NorthflankConfig, options) => {
+        const client = buildClient(config);
+        await client.create.volume({
+          parameters: projectParams(config),
+          data: {
+            name: options.name,
+            mounts: [{ containerMountPath: options.mountPath ?? '/volume' }],
+            spec: {
+              accessMode: 'ReadWriteMany',
+              storageClassName: 'nf-multi-rw',
+              storageSize: options.sizeBytes ? Math.ceil(options.sizeBytes / (1024 * 1024)) : 10240,
+            },
+          },
+        } as never);
+        return { name: options.name };
+      },
+      get: async (config: NorthflankConfig, name: string) => {
+        const client = buildClient(config);
+        try {
+          const res = await (client as any).get.volume({ parameters: { ...projectParams(config), volumeId: name } });
+          return res?.data ? { name, native: res.data } : null;
+        } catch { return null; }
+      },
+      delete: async (config: NorthflankConfig, name: string) => {
+        const client = buildClient(config);
+        await (client as any).delete.volume({ parameters: { ...projectParams(config), volumeId: name } });
+      },
+    }
   },
 });
 

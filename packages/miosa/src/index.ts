@@ -9,7 +9,7 @@
  * Auth: MIOSA API keys (`msk_*`) via `Authorization: Bearer <key>`.
  */
 
-import { defineProvider, escapeShellArg } from "@computesdk/provider";
+import { defineProvider, escapeShellArg, resolveVolumeRef } from "@computesdk/provider";
 
 import type {
   CommandResult,
@@ -1259,6 +1259,20 @@ const createMiosaProvider = defineProvider<
 
       getInstance: (sandbox: MiosaSandbox): MiosaSandbox => sandbox,
 
+      attachVolume: async (sandbox, volume, mountPath) => {
+        const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
+        const ref = resolveVolumeRef(volume);
+        await miosaRequest(auth, "POST", `/computers/${sandbox.record.id}/volumes`, {
+          volume_id: ref.id ?? ref.name,
+          mount_path: mountPath,
+        });
+      },
+      detachVolume: async (sandbox, volume, mountPath) => {
+        const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
+        const ref = resolveVolumeRef(volume);
+        await miosaRequest(auth, "DELETE", `/computers/${sandbox.record.id}/volumes/${ref.id ?? ref.name}`);
+      },
+
       filesystem: {
         // Native: GET /sandboxes/:id/fs/read?path=…  → { path, content }
         readFile: async (
@@ -1474,6 +1488,37 @@ const createMiosaProvider = defineProvider<
         }
       },
     },
+
+    volume: {
+      create: async (config: MiosaConfig, options) => {
+        const auth = resolveAuth(config);
+        const created = await miosaRequest<any>(auth, "POST", "/volumes", {
+          name: options.name,
+          backend: "local",
+          ...(options.sizeBytes ? { size_bytes: options.sizeBytes } : {}),
+        });
+        const v = created?.volume ?? created;
+        return { id: v?.id, name: v?.name ?? options.name, native: v };
+      },
+      get: async (config: MiosaConfig, id: string) => {
+        const auth = resolveAuth(config);
+        try {
+          const res = await miosaRequest<any>(auth, "GET", `/volumes/${id}`);
+          const v = res?.volume ?? res;
+          return v ? { id: v.id ?? id, name: v.name, native: v } : null;
+        } catch { return null; }
+      },
+      list: async (config: MiosaConfig) => {
+        const auth = resolveAuth(config);
+        const res = await miosaRequest<any>(auth, "GET", "/volumes");
+        const items = res?.volumes ?? res ?? [];
+        return (items as any[]).map((v) => ({ id: v.id, name: v.name, native: v }));
+      },
+      delete: async (config: MiosaConfig, id: string) => {
+        const auth = resolveAuth(config);
+        await miosaRequest(auth, "DELETE", `/volumes/${id}`);
+      },
+    }
   },
 });
 

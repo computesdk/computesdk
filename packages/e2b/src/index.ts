@@ -2,8 +2,8 @@
  * E2B Provider - Factory-based Implementation
  */
 
-import { Sandbox as E2BSandbox } from 'e2b';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { Sandbox as E2BSandbox, Volume as E2BVolume } from 'e2b';
+import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -54,10 +54,20 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
           const {
             timeout: _timeout, envs, name: _name, metadata, templateId, snapshotId,
-            sandboxId: _sandboxId, namespace: _namespace, directory: _directory, ...providerOptions
+            sandboxId: _sandboxId, namespace: _namespace, directory: _directory,
+            volumes, ...providerOptions
           } = options || {};
 
-          const createOpts: Record<string, any> = { apiKey, timeoutMs: timeout, envs, metadata, ...providerOptions };
+          const createOpts: Record<string, any> = {
+            apiKey, timeoutMs: timeout, envs, metadata, ...providerOptions,
+            // Unified mounts → e2b's [{name, path}] wire shape.
+            ...(Array.isArray(volumes) && volumes.length > 0 && {
+              volumeMounts: volumes.map((m: any) => ({
+                name: resolveVolumeRef(m.volume).name ?? resolveVolumeRef(m.volume).id,
+                path: m.mountPath,
+              })),
+            }),
+          };
 
           const templateOrSnapshot = templateId || snapshotId;
           if (templateOrSnapshot) {
@@ -220,6 +230,30 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           if (typeof e2bStatic.deleteTemplate === 'function') await e2bStatic.deleteTemplate(templateId, { apiKey });
         } catch { /* ignore */ }
       }
+    },
+
+    volume: {
+      create: async (config: E2BConfig, options) => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        const v = await E2BVolume.create(options.name, { apiKey });
+        return { id: v.volumeId, name: v.name, native: v };
+      },
+      get: async (config: E2BConfig, id: string) => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        try {
+          const info = await E2BVolume.getInfo(id, { apiKey });
+          return info ? { id, name: (info as any).name, native: info } : null;
+        } catch { return null; }
+      },
+      list: async (config: E2BConfig) => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        const volumes = await E2BVolume.list({ apiKey });
+        return (volumes ?? []).map((v: any) => ({ id: v.volumeId ?? v.id, name: v.name, native: v }));
+      },
+      delete: async (config: E2BConfig, id: string) => {
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        await E2BVolume.destroy(id, { apiKey });
+      },
     }
   }
 });

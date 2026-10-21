@@ -15,6 +15,7 @@ import type {
   ProviderInstanceManager,
   ProviderTemplateManager,
   ProviderSnapshotManager,
+  ProviderVolumeManager,
   ProviderInstance,
   InstanceInfo,
   CommandResult,
@@ -26,6 +27,9 @@ import type {
   ProcessStatus,
   ProcessHandle,
   InstanceEgressInfo,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
 } from './types/index.js';
 import {
   daemonSeedScriptCommand,
@@ -306,6 +310,16 @@ export interface InstanceMethods<TInstance = any, TConfig = any> {
   getInfo: (instance: TInstance) => Promise<InstanceInfo>;
   getUrl: (instance: TInstance, options: { port: number; protocol?: string }) => Promise<string>;
 
+  /**
+   * Optional runtime volume attach. Providers that support attaching a volume
+   * to a live instance (novita, miosa, tenki, createos) implement these; the
+   * instance then exposes `attachVolume`/`detachVolume`. Create-time mounts
+   * don't need them — they map `CreateInstanceOptions.volumes` inside
+   * `create` instead.
+   */
+  attachVolume?: (instance: TInstance, volume: string | Volume, mountPath: string) => Promise<void>;
+  detachVolume?: (instance: TInstance, volume: string | Volume, mountPath?: string) => Promise<void>;
+
   // Optional provider-specific typed getInstance method
   getInstance?: (instance: TInstance) => TInstance;
 
@@ -342,9 +356,21 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
 }
 
 /**
+ * Volume method implementations — providers with an independent, mountable
+ * persistent-volume primitive. Mounting itself happens in `create`
+ * (`CreateInstanceOptions.volumes`) or via `InstanceMethods.attachVolume`.
+ */
+export interface VolumeMethods<TVolume extends Volume = Volume, TConfig = any> {
+  create: (config: TConfig, options: CreateVolumeOptions) => Promise<TVolume>;
+  get: (config: TConfig, volumeIdOrName: string) => Promise<TVolume | null>;
+  list?: (config: TConfig, options?: ListVolumesOptions) => Promise<TVolume[]>;
+  delete: (config: TConfig, volumeIdOrName: string) => Promise<void>;
+}
+
+/**
  * Provider configuration for defineProvider()
  */
-export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any, TSnapshot = any> {
+export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume> {
   name: string;
   methods: {
     /** Instance lifecycle methods (canonical key). */
@@ -353,6 +379,7 @@ export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any,
     sandbox?: InstanceMethods<TInstance, TConfig>;
     template?: TemplateMethods<TTemplate, TConfig>;
     snapshot?: SnapshotMethods<TSnapshot, TConfig>;
+    volume?: VolumeMethods<TVolume, TConfig>;
   };
 }
 
@@ -443,6 +470,10 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   readonly filesystem: InstanceFileSystem;
   /** Set at create when `CreateInstanceOptions.egress` was passed. */
   egress?: InstanceEgressInfo;
+  /** Present only when the provider implements runtime attach. */
+  readonly attachVolume?: (volume: string | Volume, mountPath: string) => Promise<void>;
+  /** Present only when the provider implements runtime detach. */
+  readonly detachVolume?: (volume: string | Volume, mountPath?: string) => Promise<void>;
   private daemonStreamState?: DaemonStreamState;
   constructor(
     private instance: TInstance,
@@ -462,6 +493,18 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
       this.filesystem = new SupportedFileSystem(instance, methods.filesystem, methods);
     } else {
       this.filesystem = new UnsupportedFileSystem(providerName);
+    }
+
+    // Runtime attach/detach are only exposed when the provider implements
+    // them — `typeof instance.attachVolume === 'function'` is the
+    // capability signal callers check.
+    if (methods.attachVolume) {
+      const attach = methods.attachVolume.bind(methods);
+      this.attachVolume = (volume, mountPath) => attach(this.instance, volume, mountPath);
+    }
+    if (methods.detachVolume) {
+      const detach = methods.detachVolume.bind(methods);
+      this.detachVolume = (volume, mountPath) => detach(this.instance, volume, mountPath);
     }
   }
 
@@ -1144,17 +1187,47 @@ class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotMa
 }
 
 /**
+ * Auto-generated Volume Manager implementation
+ */
+class GeneratedVolumeManager<TVolume extends Volume, TConfig> implements ProviderVolumeManager<TVolume> {
+  constructor(
+    private config: TConfig,
+    private methods: VolumeMethods<TVolume, TConfig>
+  ) {}
+
+  async create(options: CreateVolumeOptions): Promise<TVolume> {
+    return await this.methods.create(this.config, options);
+  }
+
+  async get(volumeIdOrName: string): Promise<TVolume | null> {
+    return await this.methods.get(this.config, volumeIdOrName);
+  }
+
+  async list(options?: ListVolumesOptions): Promise<TVolume[]> {
+    if (!this.methods.list) {
+      throw new Error('Provider does not support listing volumes');
+    }
+    return await this.methods.list(this.config, options);
+  }
+
+  async delete(volumeIdOrName: string): Promise<void> {
+    return await this.methods.delete(this.config, volumeIdOrName);
+  }
+}
+
+/**
  * Auto-generated Provider implementation
  */
-class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot> implements Provider<TInstance, TTemplate, TSnapshot> {
+class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extends Volume = Volume> implements Provider<TInstance, TTemplate, TSnapshot, TVolume> {
   readonly name: string;
   readonly instances: ProviderInstanceManager<TInstance>;
   /** @deprecated Use `instances`. Always the same manager object. */
   readonly sandbox: ProviderInstanceManager<TInstance>;
   readonly template?: ProviderTemplateManager<TTemplate>;
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
+  readonly volume?: ProviderVolumeManager<TVolume>;
 
-  constructor(config: TConfig, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot>) {
+  constructor(config: TConfig, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>) {
     this.name = providerConfig.name;
 
     const instanceMethods = providerConfig.methods.instances ?? providerConfig.methods.sandbox;
@@ -1181,6 +1254,10 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot> implements Pro
     if (providerConfig.methods.snapshot) {
       this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
     }
+
+    if (providerConfig.methods.volume) {
+      this.volume = new GeneratedVolumeManager(config, providerConfig.methods.volume);
+    }
   }
 }
 
@@ -1190,9 +1267,9 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot> implements Pro
  * Auto-generates all boilerplate classes and provides feature detection
  * based on which methods are implemented.
  */
-export function defineProvider<TInstance, TConfig = any, TTemplate = any, TSnapshot = any>(
-  providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot>
-): (config: TConfig) => Provider<TInstance, TTemplate, TSnapshot> {
+export function defineProvider<TInstance, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume>(
+  providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>
+): (config: TConfig) => Provider<TInstance, TTemplate, TSnapshot, TVolume> {
   return (config: TConfig) => {
     return new GeneratedProvider(config, providerConfig);
   };

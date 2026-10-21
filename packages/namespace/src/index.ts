@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { randomUUID } from 'node:crypto';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
@@ -114,6 +114,7 @@ const COMMAND_SERVICE = {
 
 const STORAGE_SERVICE = {
   LIST_PERSISTENT_VOLUMES: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumes',
+  DESTROY_PERSISTENT_VOLUMES: '/namespace.cloud.compute.v1beta.StorageService/DestroyPersistentVolumes',
   LIST_PERSISTENT_VOLUME_SNAPSHOTS: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumeSnapshots',
   DESTROY_PERSISTENT_VOLUME_SNAPSHOT: '/namespace.cloud.compute.v1beta.StorageService/DestroyPersistentVolumeSnapshot',
 };
@@ -292,6 +293,23 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
                 persistency_kind: 'PERSISTENT',
                 from_snapshot_id: options.snapshotId,
               }],
+            }),
+            // Unified mounts → instanceOptions.volumes entries (tag-keyed
+            // PERSISTENT volumes; they materialize on attach).
+            ...(Array.isArray(options?.volumes) && options.volumes.length > 0 && {
+              volumes: [
+                ...(options?.snapshotId ? [{
+                  mount_point: SNAPSHOT_VOLUME_MOUNTPOINT,
+                  tag: `computesdk-${randomUUID().slice(0, 8)}`,
+                  persistency_kind: 'PERSISTENT',
+                  from_snapshot_id: options.snapshotId,
+                }] : []),
+                ...options.volumes.map((m: any) => ({
+                  mount_point: m.mountPath,
+                  tag: resolveVolumeRef(m.volume).name ?? resolveVolumeRef(m.volume).id,
+                  persistency_kind: 'PERSISTENT',
+                })),
+              ],
             }),
             containers: [{
               ...withoutImageSelector(plainObject(options?.containerOptions)),
@@ -636,6 +654,44 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             `Failed to delete Namespace snapshot: ${error instanceof Error ? error.message : String(error)}`
           );
         }
+      },
+    },
+
+    // Namespace volumes are tag-named and materialize when attached at
+    // instance create — create() records the handle; provisioning happens in
+    // CreateInstanceRequest.volumes.
+    volume: {
+      create: async (_config: NamespaceConfig, options) => ({ name: options.name }),
+      get: async (config: NamespaceConfig, tag: string) => {
+        const { token } = await getAndValidateCredentials(config);
+        const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+          method: 'POST',
+          body: JSON.stringify({ tag: { values: [tag], op: 1 } })
+        });
+        const volume = (response.volumes || [])[0];
+        return volume ? { id: volume.id, name: volume.tag ?? tag, native: volume } : null;
+      },
+      list: async (config: NamespaceConfig, options) => {
+        const { token } = await getAndValidateCredentials(config);
+        const out: any[] = [];
+        let cursor: string | undefined;
+        do {
+          const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+            method: 'POST',
+            body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
+          });
+          for (const v of response.volumes || []) out.push({ id: v.id, name: v.tag, native: v });
+          cursor = response.pagination_cursor || undefined;
+        } while (cursor && (!options?.limit || out.length < options.limit));
+        return options?.limit ? out.slice(0, options.limit) : out;
+      },
+      delete: async (config: NamespaceConfig, tagOrId: string) => {
+        const { token } = await getAndValidateCredentials(config);
+        await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUMES, {
+          method: 'POST',
+          // StringMatcher: values + op IS_ANY_OF (1)
+          body: JSON.stringify({ tag: { values: [tagOrId], op: 1 } })
+        });
       },
     },
   }
