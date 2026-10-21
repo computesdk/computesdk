@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { defineProvider, resolveVolumeRef, createConfigGate } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, createConfigGate, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -841,7 +841,7 @@ const _microsandbox = defineProvider<
         return (handles ?? []).map((h: any) => ({ name: h.name, native: h }));
       }),
       delete: async (config, name: string) => withBackend(selectBackend(config), async (sdk) => {
-        await sdk.Volume.remove(name);
+        await withVolumeSettle(() => sdk.Volume.remove(name));
       }),
     }
   },

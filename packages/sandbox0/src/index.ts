@@ -7,7 +7,7 @@
 
 import { APIError, Client } from 'sandbox0';
 import type { Sandbox as Sandbox0Sandbox } from 'sandbox0';
-import { defineProvider, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -575,7 +575,7 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
     volume: {
       create: async (config: Sandbox0Config, options) => {
         const client = createClient(config);
-        const volume = await client.volumes.create({});
+        const volume = await client.volumes.create({ backend: 's0fs' as any, accessMode: 'RWO' as any });
         return { id: volume.id, native: volume };
       },
       get: async (config: Sandbox0Config, id: string) => {
@@ -592,7 +592,7 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
       },
       delete: async (config: Sandbox0Config, id: string) => {
         const client = createClient(config);
-        await client.volumes.delete(id, { force: true });
+        await withVolumeSettle(() => client.volumes.delete(id, { force: true }));
       },
     }
   },

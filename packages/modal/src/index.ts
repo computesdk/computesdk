@@ -2,7 +2,7 @@
  * Modal Provider - Factory-based Implementation
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -365,7 +365,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         } catch { return null; }
       },
       delete: async (config: ModalInternalConfig, name: string) => {
-        await config._client.volumes.delete(name);
+        await withVolumeSettle(() => config._client.volumes.delete(name));
       },
     }
   }

@@ -84,3 +84,29 @@ export function resolveVolumeRef(volume: string | VolumeRef): VolumeRef {
     native: volume?.native,
   };
 }
+
+const VOLUME_ATTACHED_RE = /attached|mounted|in.?use|busy|in_use|still in use/i;
+
+/**
+ * Retry a volume operation while the provider reports the volume still
+ * attached. `sandbox.destroy()` returns before the control plane finishes
+ * unmounting, so a volume delete issued right after can 400/409 on a volume
+ * that detaches moments later — callers get a settled answer instead of
+ * racing the provider's async detach.
+ */
+export async function withVolumeSettle<T>(
+  fn: () => Promise<T>,
+  options?: { deadlineMs?: number; intervalMs?: number },
+): Promise<T> {
+  const deadline = Date.now() + (options?.deadlineMs ?? 120_000);
+  const intervalMs = options?.intervalMs ?? 3_000;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      if (!VOLUME_ATTACHED_RE.test(text) || Date.now() >= deadline) throw err;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+}
