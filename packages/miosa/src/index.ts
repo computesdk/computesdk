@@ -9,7 +9,7 @@
  * Auth: MIOSA API keys (`msk_*`) via `Authorization: Bearer <key>`.
  */
 
-import { defineProvider, escapeShellArg } from "@computesdk/provider";
+import { defineProvider, escapeShellArg, resolveVolumeRef } from "@computesdk/provider";
 
 import type {
   CommandResult,
@@ -1259,6 +1259,29 @@ const createMiosaProvider = defineProvider<
 
       getInstance: (sandbox: MiosaSandbox): MiosaSandbox => sandbox,
 
+      attachVolume: async (sandbox, volume, mountPath) => {
+        const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
+        const ref = resolveVolumeRef(volume);
+        // Volumes attach to "computers" — the sandbox record carries a
+        // computer_id (untyped in @miosa/sdk's SandboxData); the sandbox id
+        // itself is not a computer id and 404s this endpoint.
+        const computerId =
+          (sandbox.record as { computer_id?: string }).computer_id ??
+          sandbox.record.id;
+        await miosaRequest(auth, "POST", `/computers/${computerId}/volumes`, {
+          volume_id: ref.id ?? ref.name,
+          mount_path: mountPath,
+        });
+      },
+      detachVolume: async (sandbox, volume, mountPath) => {
+        const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
+        const ref = resolveVolumeRef(volume);
+        const computerId =
+          (sandbox.record as { computer_id?: string }).computer_id ??
+          sandbox.record.id;
+        await miosaRequest(auth, "DELETE", `/computers/${computerId}/volumes/${ref.id ?? ref.name}`);
+      },
+
       filesystem: {
         // Native: GET /sandboxes/:id/fs/read?path=…  → { path, content }
         readFile: async (
@@ -1474,6 +1497,37 @@ const createMiosaProvider = defineProvider<
         }
       },
     },
+
+    volume: {
+      create: async (config: MiosaConfig, options) => {
+        const auth = resolveAuth(config);
+        const created = await miosaRequest<any>(auth, "POST", "/volumes", {
+          name: options.name,
+          backend: "local",
+          ...(options.sizeBytes ? { size_bytes: options.sizeBytes } : {}),
+        });
+        const v = created?.volume ?? created;
+        return { id: v?.id, name: v?.name ?? options.name, native: v };
+      },
+      get: async (config: MiosaConfig, id: string) => {
+        const auth = resolveAuth(config);
+        try {
+          const res = await miosaRequest<any>(auth, "GET", `/volumes/${id}`);
+          const v = res?.volume ?? res;
+          return v ? { id: v.id ?? id, name: v.name, native: v } : null;
+        } catch { return null; }
+      },
+      list: async (config: MiosaConfig) => {
+        const auth = resolveAuth(config);
+        const res = await miosaRequest<any>(auth, "GET", "/volumes");
+        const items = res?.volumes ?? res ?? [];
+        return (items as any[]).map((v) => ({ id: v.id, name: v.name, native: v }));
+      },
+      delete: async (config: MiosaConfig, id: string) => {
+        const auth = resolveAuth(config);
+        await miosaRequest(auth, "DELETE", `/volumes/${id}`);
+      },
+    }
   },
 });
 

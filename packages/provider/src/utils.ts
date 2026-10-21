@@ -60,3 +60,27 @@ export function escapeShellArg(arg: string): string {
     .replace(/\$/g, '\\$')   // Escape dollar signs (variable expansion)
     .replace(/`/g, '\\`');   // Escape backticks (command substitution)
 }
+
+/**
+ * Resolved identity of a `string | Volume` reference — providers pick the
+ * field their API addresses volumes by.
+ */
+export interface VolumeRef {
+  id?: string;
+  name?: string;
+  native?: unknown;
+}
+
+/**
+ * Normalize a volume reference from `VolumeMount.volume`, `attachVolume`, or
+ * `detachVolume`: a plain string (id or name, per provider) or a `Volume`
+ * handle from `provider.volume`/`compute.volume` (which may carry `native`).
+ */
+export function resolveVolumeRef(volume: string | VolumeRef): VolumeRef {
+  if (typeof volume === 'string') return { id: volume, name: volume };
+  return {
+    id: typeof volume?.id === 'string' ? volume.id : undefined,
+    name: typeof volume?.name === 'string' ? volume.name : undefined,
+    native: volume?.native,
+  };
+}

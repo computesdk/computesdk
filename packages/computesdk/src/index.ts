@@ -34,6 +34,10 @@ export type {
   ProcessHandle,
   InstanceFileSystem,
   CreateInstanceOptions,
+  Volume,
+  VolumeMount,
+  CreateVolumeOptions,
+  ListVolumesOptions,
   InstanceResourceOptions,
   RunloopLaunchParameters,
   VercelSandboxResources,
@@ -87,4 +91,4 @@ export type {
 // Works as both callable `compute({...}).sandbox.create()` and singleton
 // `compute.setConfig({...}); compute.sandbox.create()`.
 export { compute } from './compute';
-export type { CallableCompute, ExplicitComputeConfig } from './compute';
+export type { CallableCompute, ExplicitComputeConfig, ComputeCreateVolumeOptions } from './compute';

@@ -3,6 +3,7 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
+import { resolveVolumeRef } from '@computesdk/provider';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -51,12 +52,20 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
+            volumes,
             ...providerOptions
           } = options || {};
 
           const createParams: Record<string, any> = {
             language: runtime === 'python' ? 'python' : 'javascript',
             ...providerOptions,
+            // Unified mounts → daytona's [{volumeId, mountPath}] wire shape.
+            ...(Array.isArray(volumes) && volumes.length > 0 && {
+              volumes: volumes.map((m: any) => ({
+                volumeId: resolveVolumeRef(m.volume).id ?? resolveVolumeRef(m.volume).name,
+                mountPath: m.mountPath,
+              })),
+            }),
           };
 
           if (envs && Object.keys(envs).length > 0) {
@@ -320,6 +329,33 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const daytona = new Daytona({ apiKey: apiKey });
         try { await (daytona as any).snapshot.delete(templateId); } catch { /* ignore */ }
       }
+    },
+
+    volume: {
+      create: async (config: DaytonaConfig, options) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const d = new Daytona({ apiKey });
+        const volume = await d.volume.create(options.name);
+        return { id: volume.id, name: volume.name, native: volume };
+      },
+      get: async (config: DaytonaConfig, id: string) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const d = new Daytona({ apiKey });
+        const volume = await d.volume.get(id);
+        return volume ? { id: volume.id, name: volume.name, native: volume } : null;
+      },
+      list: async (config: DaytonaConfig) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const d = new Daytona({ apiKey });
+        const volumes = await d.volume.list();
+        return (volumes ?? []).map((v: any) => ({ id: v.id, name: v.name, native: v }));
+      },
+      delete: async (config: DaytonaConfig, id: string) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const d = new Daytona({ apiKey });
+        const volume = await d.volume.get(id);
+        if (volume) await d.volume.delete(volume);
+      },
     }
   }
 });

@@ -36,7 +36,7 @@ import type {
   SandboxStatus,
   Shape,
 } from "@nodeops-createos/sandbox";
-import { defineProvider } from "@computesdk/provider";
+import { defineProvider, resolveVolumeRef } from "@computesdk/provider";
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -322,6 +322,15 @@ export function toCreateRequest(
   if (ssh) req.ssh_pubkeys = ssh;
   const egress = strArray(opts.egress);
   if (egress) req.egress = egress;
+
+  // Unified mounts → createos disk attachments {disk_id, mount_path, sub_path}.
+  if (Array.isArray(opts.volumes) && opts.volumes.length > 0) {
+    req.disks = opts.volumes.map((m) => {
+      const ref = resolveVolumeRef(m.volume);
+      const subPath = (m as { subPath?: string }).subPath;
+      return { disk_id: ref.id ?? ref.name!, mount_path: m.mountPath, ...(subPath ? { sub_path: subPath } : {}) };
+    });
+  }
   return req;
 }
 
@@ -483,6 +492,16 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       // (pause/resume/fork/disks/...).
       getInstance: (sandbox: Sandbox): Sandbox => sandbox,
 
+      attachVolume: async (sandbox: Sandbox, volume, mountPath) => {
+        const ref = resolveVolumeRef(volume);
+        const subPath = (volume as { subPath?: string }).subPath;
+        await sandbox.attachDisk({ diskId: ref.id ?? ref.name!, mountPath, ...(subPath ? { subPath } : {}) });
+      },
+      detachVolume: async (sandbox: Sandbox, volume, mountPath) => {
+        const ref = resolveVolumeRef(volume);
+        await sandbox.detachDisk({ diskId: ref.id ?? ref.name!, mountPath: mountPath! });
+      },
+
       filesystem: {
         readFile: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<string> => {
           const buf = await sandbox.files.download(
@@ -569,6 +588,68 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         }
       },
     },
+
+    volume: {
+      // Createos disks are registered S3 buckets: "creating" a volume means
+      // registering bucket config + credentials server-side. The S3 details
+      // don't fit the universal CreateVolumeOptions shape, so they come from
+      // options.s3 ({bucket, endpoint, region?, accessKey, secretKey,
+      // pathStyle?}) or the CREATEOS_S3_* env vars.
+      create: async (config: CreateosConfig, options) => {
+        const client = resolveClient(config);
+        const s3 = (options as { s3?: Record<string, unknown> }).s3 ?? {};
+        const pick = (k: string, ...envs: string[]) =>
+          (s3 as Record<string, unknown>)[k] ?? envs.map((e) => env(e)).find((v) => v);
+        const bucket = pick("bucket", "CREATEOS_S3_BUCKET");
+        const endpoint = pick("endpoint", "CREATEOS_S3_ENDPOINT");
+        const accessKey = pick("accessKey", "CREATEOS_S3_ACCESS_KEY", "CREATEOS_S3_ACCESS_KEY_ID");
+        const secretKey = pick("secretKey", "CREATEOS_S3_SECRET_KEY", "CREATEOS_S3_SECRET_ACCESS_KEY");
+        if (!bucket || !endpoint || !accessKey || !secretKey) {
+          throw new Error(
+            "Createos volumes are registered S3 buckets: pass options.s3 = " +
+            "{bucket, endpoint, accessKey, secretKey} or set CREATEOS_S3_BUCKET/" +
+            "ENDPOINT/ACCESS_KEY/SECRET_KEY.",
+          );
+        }
+        const disk = await client.disks.create({
+          name: options.name,
+          kind: "s3",
+          config: {
+            bucket: String(bucket),
+            endpoint: String(endpoint),
+            ...(pick("region", "CREATEOS_S3_REGION") ? { region: String(pick("region", "CREATEOS_S3_REGION")) } : {}),
+            ...(pick("pathStyle", "CREATEOS_S3_PATH_STYLE") ? { use_path_style: true } : {}),
+          },
+          credentials: { access_key: String(accessKey), secret_key: String(secretKey) },
+        });
+        return { id: disk.id, name: disk.name, native: disk };
+      },
+      get: async (config: CreateosConfig, volumeIdOrName: string) => {
+        const client = resolveClient(config);
+        try {
+          const disk = await client.disks.get(volumeIdOrName);
+          return disk ? { id: disk.id, name: disk.name, native: disk } : null;
+        } catch (e) {
+          if (isNotFound(e)) return null;
+          throw e;
+        }
+      },
+      list: async (config: CreateosConfig) => {
+        const client = resolveClient(config);
+        const disks: Array<{ id: string; name: string; native: unknown }> = [];
+        for await (const d of client.disks.iterate()) disks.push({ id: d.id, name: d.name, native: d });
+        return disks;
+      },
+      delete: async (config: CreateosConfig, volumeIdOrName: string) => {
+        const client = resolveClient(config);
+        try {
+          await client.disks.delete(volumeIdOrName);
+        } catch (e) {
+          if (isNotFound(e)) return;
+          throw e;
+        }
+      },
+    }
   },
 });
 

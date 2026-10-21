@@ -1,6 +1,6 @@
-import { CommandExitError, FileType, NotFoundError, Novita, TimeoutError } from 'novita-sandbox';
+import { CommandExitError, FileType, NotFoundError, Novita, TimeoutError, Volume as NovitaVolume } from 'novita-sandbox';
 import type { BuildOptions, SandboxOpts, SnapshotInfo, TemplateClass, TemplateInfo } from 'novita-sandbox';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef } from '@computesdk/provider';
 import type {
   CommandResult, CreateTemplateOptions, Provider, ProviderTemplateManager,
   RunCommandOptions, InstanceInfo,
@@ -126,6 +126,13 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
           allowInternetAccess: options?.allowInternetAccess,
           network: options?.network,
           lifecycle: options?.lifecycle,
+          // Unified mounts → novita's {path: volumeName} wire shape.
+          ...(Array.isArray(options?.volumes) && options.volumes.length > 0 && {
+            volumeMounts: Object.fromEntries(options.volumes.map((m: any) => {
+              const ref = resolveVolumeRef(m.volume);
+              return [m.mountPath, ref.native ?? ref.name ?? ref.id];
+            })),
+          }),
         };
         const sandbox = await sdk.sandbox.create(options?.templateId || options?.snapshotId || 'base', createOptions);
         if (!sandbox.sandboxId) throw new Error('Novita create() returned a sandbox without an ID.');
@@ -188,6 +195,14 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
         remove: (sandbox, path) => sandbox.files.remove(path),
       },
       getInstance: sandbox => sandbox,
+
+      attachVolume: async (sandbox, volume, mountPath) => {
+        const ref = resolveVolumeRef(volume);
+        await sandbox.mountVolume(ref.name ?? ref.id!, mountPath);
+      },
+      detachVolume: async (sandbox, _volume, mountPath) => {
+        await sandbox.unmountVolume(mountPath!);
+      },
     },
     template: {
       create: async (config, options: NovitaCreateTemplateOptions): Promise<NovitaTemplate> => {
@@ -249,6 +264,33 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
       },
       delete: async (config, snapshotId) => { await client(config).sandbox.deleteSnapshot(snapshotId); },
     },
+
+    volume: {
+      create: async (config: NovitaConfig, options) => {
+        const apiKey = config.apiKey || process.env.NOVITA_API_KEY!;
+        const v = await NovitaVolume.create(options.name, {
+          apiKey,
+          ...(options.sizeBytes ? { quotaSizeGiB: Math.ceil(options.sizeBytes / (1024 ** 3)) } : {}),
+        });
+        return { id: v.volumeId, name: v.name, native: v };
+      },
+      get: async (config: NovitaConfig, id: string) => {
+        const apiKey = config.apiKey || process.env.NOVITA_API_KEY!;
+        try {
+          const info = await NovitaVolume.getInfo(id, { apiKey });
+          return info ? { id, name: (info as any).name, native: info } : null;
+        } catch { return null; }
+      },
+      list: async (config: NovitaConfig) => {
+        const apiKey = config.apiKey || process.env.NOVITA_API_KEY!;
+        const volumes = await NovitaVolume.list({ apiKey });
+        return (volumes ?? []).map((v: any) => ({ id: v.volumeId ?? v.id, name: v.name, native: v }));
+      },
+      delete: async (config: NovitaConfig, id: string) => {
+        const apiKey = config.apiKey || process.env.NOVITA_API_KEY!;
+        await NovitaVolume.destroy(id, { apiKey });
+      },
+    }
   },
 });
 

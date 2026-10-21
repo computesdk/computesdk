@@ -2,7 +2,7 @@
  * Modal Provider - Factory-based Implementation
  */
 
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -141,6 +141,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             directory: _directory,
             ports: optPorts,
             daemonSsePort: optDaemonSsePort,
+            volumes,
             ...providerOptions
           } = modalOptions;
 
@@ -168,6 +169,20 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           if (envs && Object.keys(envs).length > 0) sandboxOptions.env = envs;
           if (name) sandboxOptions.name = name;
+
+          // Unified mounts → modal's {mountPath: Volume} wire shape. Volume
+          // handles resolve via volumes.fromName (native Volume objects pass
+          // through directly; strings/ids get createIfMissing semantics).
+          if (Array.isArray(volumes) && volumes.length > 0) {
+            const volumeMap: Record<string, any> = {};
+            for (const m of volumes as any[]) {
+              const ref = resolveVolumeRef(m.volume);
+              volumeMap[m.mountPath] = ref.native ?? await client.volumes.fromName(
+                ref.name ?? ref.id!, { createIfMissing: true }
+              );
+            }
+            sandboxOptions.volumes = volumeMap;
+          }
 
           const sandbox = await client.sandboxes.create(app, image, sandboxOptions);
           const sandboxId = sandbox.sandboxId;
@@ -336,6 +351,22 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
       list: async (_config: ModalConfig) => [],
       delete: async (_config: ModalConfig, _snapshotId: string) => { /* No-op */ }
+    },
+
+    volume: {
+      create: async (config: ModalInternalConfig, options) => {
+        const volume = await config._client.volumes.fromName(options.name, { createIfMissing: true });
+        return { name: options.name, native: volume };
+      },
+      get: async (config: ModalInternalConfig, name: string) => {
+        try {
+          const volume = await config._client.volumes.fromName(name);
+          return { name, native: volume };
+        } catch { return null; }
+      },
+      delete: async (config: ModalInternalConfig, name: string) => {
+        await config._client.volumes.delete(name);
+      },
     }
   }
 });

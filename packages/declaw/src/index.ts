@@ -4,8 +4,8 @@
  * Wraps `@declaw/sdk` to expose the ComputeSDK provider interface.
  */
 
-import { Sandbox as DeclawSandbox, ConnectionConfig } from '@declaw/sdk';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { Sandbox as DeclawSandbox, ConnectionConfig, Volumes as DeclawVolumes } from '@declaw/sdk';
+import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
 
 import type {
   CommandResult,
@@ -53,6 +53,7 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
           templateId,
           namespace: _namespace,
           directory: _directory,
+          volumes,
           ...providerOptions
         } = options || {};
 
@@ -62,7 +63,17 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
 
         try {
           const sandbox = await DeclawSandbox.create({
-            template, timeout: timeoutSec, apiKey, domain, metadata, envs, ...providerOptions,
+            template, timeout: timeoutSec, apiKey, domain, metadata, envs,
+            // Unified mounts → declaw's [{volumeId, mountPath}] wire shape.
+            ...(Array.isArray(volumes) && volumes.length > 0 && {
+              volumes: volumes.map((m: any) => {
+                const ref = resolveVolumeRef(m.volume);
+                const volumeId = ref.id ?? ref.name;
+                if (!volumeId) throw new Error('declaw volume mount requires a volume id or name');
+                return { volumeId, mountPath: m.mountPath };
+              }),
+            }),
+            ...providerOptions,
           });
           const sandboxId = (sandbox as any).sandboxId ?? (sandbox as any).sandbox_id;
           if (!sandboxId) throw new Error('Declaw create() returned sandbox without an ID');
@@ -179,5 +190,34 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         remove: async (sandbox: DeclawSandbox, path: string): Promise<void> => { await (sandbox as any).files.remove(path); },
       },
     },
+
+    volume: {
+      create: async (config: DeclawConfig, options) => {
+        const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+        const domain = config.domain || process.env.DECLAW_DOMAIN;
+        // File-granular empty volume — supports per-file rw inside the sandbox.
+        const info = await DeclawVolumes.empty(options.name, { apiKey, domain });
+        return { id: info.volumeId, name: info.name, native: info };
+      },
+      get: async (config: DeclawConfig, id: string) => {
+        const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+        const domain = config.domain || process.env.DECLAW_DOMAIN;
+        try {
+          const info = await DeclawVolumes.get(id, { apiKey, domain });
+          return { id: info.volumeId, name: info.name, native: info };
+        } catch { return null; }
+      },
+      list: async (config: DeclawConfig) => {
+        const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+        const domain = config.domain || process.env.DECLAW_DOMAIN;
+        const infos = await DeclawVolumes.list({ apiKey, domain });
+        return (infos ?? []).map((i) => ({ id: i.volumeId, name: i.name, native: i }));
+      },
+      delete: async (config: DeclawConfig, id: string) => {
+        const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+        const domain = config.domain || process.env.DECLAW_DOMAIN;
+        await DeclawVolumes.delete(id, { apiKey, domain });
+      },
+    }
   },
 });

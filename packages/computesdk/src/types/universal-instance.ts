@@ -115,6 +115,66 @@ export interface ProcessHandle {
 }
 
 /**
+ * A persistent volume handle, as returned by `provider.volume` /
+ * `compute.volume` and accepted anywhere a volume reference is taken.
+ *
+ * Providers populate whichever fields their API exposes; `native` carries the
+ * provider SDK's own volume object for mounts that need it (Modal `Volume`,
+ * beam `Volume`) — treat it as opaque.
+ */
+export interface Volume {
+  /** Provider-assigned id, when the API returns one. */
+  id?: string;
+  /** Provider-assigned name (some providers address volumes by name). */
+  name?: string;
+  /** Provider-native object needed by some mounts; opaque to callers. */
+  native?: unknown;
+  /** Additional provider-specific fields. */
+  [key: string]: any;
+}
+
+/**
+ * Where to mount a volume on a new instance, for
+ * `CreateInstanceOptions.volumes` and `instance.attachVolume`.
+ *
+ * `volume` accepts a handle from `provider.volume` / `compute.volume`, or a
+ * plain string — a volume id or name, whatever the provider addresses
+ * volumes by.
+ */
+export interface VolumeMount {
+  volume: string | Volume;
+  mountPath: string;
+  readOnly?: boolean;
+}
+
+/**
+ * Options for creating a persistent volume.
+ *
+ * Every field is optional except `name`; providers only read the keys they
+ * understand (e.g. beam needs `mountPath` baked into its Volume object,
+ * MIOSA requires `sizeBytes`, namespace uses `tags`).
+ */
+export interface CreateVolumeOptions {
+  /** Volume name (required by most providers). */
+  name: string;
+  /** Requested size in bytes. Providers with fixed plans may round or reject. */
+  sizeBytes?: number;
+  /** Intended mount path — required by providers that bake it into the volume
+   * object at creation (beam). */
+  mountPath?: string;
+  /** Extra provider-specific fields, passed through to the volume create call. */
+  [key: string]: any;
+}
+
+/**
+ * Options for listing volumes.
+ */
+export interface ListVolumesOptions {
+  /** Limit the number of results */
+  limit?: number;
+}
+
+/**
  * Snapshot information
  */
 export interface Snapshot {
@@ -354,6 +414,18 @@ export interface CreateInstanceOptions extends InstanceResourceOptions {
    * createos-sandbox's network allow-list); they do not activate the router.
    */
   egress?: InstanceEgressOptions | string | string[];
+  /**
+   * Volumes to mount on the new instance, for providers with a create-time
+   * mount (daytona, e2b, modal, beam, blaxel, namespace, vercel, sandbox0,
+   * microsandbox, northflank, archil). Each provider maps
+   * `{volume, mountPath, readOnly?}` onto its native wire shape; volumes are
+   * created separately via `provider.volume` / `compute.volume`.
+   *
+   * Providers that only attach at runtime (novita, miosa, tenki, createos)
+   * implement `instance.attachVolume` instead and may ignore this option —
+   * create the instance plain, then attach.
+   */
+  volumes?: VolumeMount[];
   // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
 }
@@ -419,4 +491,18 @@ export interface Instance {
    * `CreateInstanceOptions.egress`. Undefined otherwise.
    */
   readonly egress?: InstanceEgressInfo;
+
+  /**
+   * Attach a volume to this running instance — present only on providers
+   * that support runtime attach (novita, miosa, tenki, createos). Check
+   * `typeof instance.attachVolume === 'function'` to detect support.
+   */
+  attachVolume?(volume: string | Volume, mountPath: string): Promise<void>;
+
+  /**
+   * Detach a previously attached volume — present only on providers that
+   * support runtime detach. `mountPath` identifies the mount for providers
+   * that need it; others resolve the attachment from `volume` alone.
+   */
+  detachVolume?(volume: string | Volume, mountPath?: string): Promise<void>;
 }

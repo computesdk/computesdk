@@ -6,8 +6,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { SandboxInstance, Snapshot, initialize } from '@blaxel/core';
-import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp } from '@computesdk/provider';
+import { SandboxInstance, Snapshot, VolumeInstance, initialize } from '@blaxel/core';
+import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
@@ -121,6 +121,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					sandboxId: optSandboxId,
 					namespace: _namespace,
 					directory: _directory,
+					volumes,
 					...providerOptions
 				} = options || {};
 
@@ -194,6 +195,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						ttl: effectiveTtl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
+						...(Array.isArray(volumes) && volumes.length > 0 && {
+							// Unified mounts → blaxel VolumeAttachment shape.
+							volumes: volumes.map((m: any) => {
+								const ref = resolveVolumeRef(m.volume);
+								return { name: ref.name ?? ref.id, mountPath: m.mountPath, readOnly: m.readOnly, type: 'persistent' };
+							}),
+						}),
 						...restProviderOptions, // Spread provider-specific options
 					});
 				}
@@ -543,6 +551,30 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					`Blaxel templates must be deleted via the Blaxel dashboard or CLI.`
 				);
 			}
+		},
+
+		volume: {
+			create: async (config: BlaxelConfig, options) =>
+				withBlaxelConfig(config, async () => {
+					const volume = await VolumeInstance.create({ name: options.name, size: options.sizeBytes ? Math.ceil(options.sizeBytes / (1024 * 1024)) : undefined, region: config.region });
+					return { name: volume.name, native: volume };
+				}),
+			get: async (config: BlaxelConfig, name: string) =>
+				withBlaxelConfig(config, async () => {
+					try {
+						const volume = await VolumeInstance.get(name);
+						return { name: volume.name, native: volume };
+					} catch { return null; }
+				}),
+			list: async (config: BlaxelConfig, options) =>
+				withBlaxelConfig(config, async () => {
+					const page = await VolumeInstance.list({ limit: options?.limit });
+					return page.data.map((v) => ({ name: v.name, native: v }));
+				}),
+			delete: async (config: BlaxelConfig, name: string) =>
+				withBlaxelConfig(config, async () => {
+					await VolumeInstance.delete(name);
+				}),
 		}
 	}
 });

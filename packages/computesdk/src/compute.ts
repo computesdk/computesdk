@@ -7,6 +7,9 @@
 import type {
   Instance as InstanceInterface,
   CreateInstanceOptions as UniversalCreateInstanceOptions,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
 } from './types/universal-instance';
 
 export interface CreateInstanceOptions extends UniversalCreateInstanceOptions {
@@ -26,6 +29,11 @@ export interface CreateSnapshotOptions {
   provider?: string;
 }
 
+export interface ComputeCreateVolumeOptions extends CreateVolumeOptions {
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+}
+
 interface ProviderInstanceManager {
   create(options?: CreateInstanceOptions): Promise<InstanceInterface>;
   getById(instanceId: string): Promise<InstanceInterface | null>;
@@ -39,6 +47,13 @@ interface ProviderSnapshotManager {
   delete(snapshotId: string): Promise<void>;
 }
 
+interface ProviderVolumeManager {
+  create(options: CreateVolumeOptions): Promise<Volume>;
+  get(volumeIdOrName: string): Promise<Volume | null>;
+  list(options?: ListVolumesOptions): Promise<Volume[]>;
+  delete(volumeIdOrName: string): Promise<void>;
+}
+
 export interface DirectProvider {
   readonly name?: string;
   /** Instance lifecycle manager (canonical). */
@@ -49,6 +64,7 @@ export interface DirectProvider {
    */
   readonly sandbox?: ProviderInstanceManager;
   readonly snapshot?: ProviderSnapshotManager;
+  readonly volume?: ProviderVolumeManager;
 }
 
 /**
@@ -154,6 +170,7 @@ class ComputeManager {
   private roundRobinCursor = 0;
   private instanceProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
+  private volumeProviders = new Map<string, DirectProvider>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
       throw new Error(
@@ -287,6 +304,7 @@ class ComputeManager {
     this.roundRobinCursor = 0;
     this.instanceProviders.clear();
     this.snapshotProviders.clear();
+    this.volumeProviders.clear();
   }
 
   instances = {
@@ -421,6 +439,113 @@ class ComputeManager {
 
       throw new Error(
         `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+  };
+
+  /**
+   * Persistent volumes. Only providers exposing `provider.volume` participate;
+   * `create` targets the named provider or the first configured one that
+   * supports volumes.
+   */
+  volume = {
+    create: async (options: ComputeCreateVolumeOptions): Promise<Volume> => {
+      const preferredProviderName = options?.provider;
+      const { provider: _providerName, ...providerOptions } = options || {};
+      const candidates = preferredProviderName
+        ? [this.getProviderByName(preferredProviderName)]
+        : this.getProviders().filter((p) => !!p.volume);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume) {
+          errors.push(`${getProviderLabel(provider, index)}: volumes not supported`);
+          continue;
+        }
+
+        try {
+          const volume = await provider.volume.create(providerOptions);
+          if (volume.id) this.volumeProviders.set(volume.id, provider);
+          if (volume.name && volume.name !== volume.id) this.volumeProviders.set(volume.name, provider);
+          return volume;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          if (preferredProviderName) throw error;
+        }
+      }
+
+      throw new Error(
+        `Failed to create volume "${providerOptions.name}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+
+    get: async (volumeIdOrName: string, providerName?: string): Promise<Volume | null> => {
+      const known = this.volumeProviders.get(volumeIdOrName);
+      const candidates = providerName
+        ? [this.getProviderByName(providerName)]
+        : known
+          ? [known, ...this.getProviders().filter((p) => p !== known && !!p.volume)]
+          : this.getProviders().filter((p) => !!p.volume);
+
+      for (const provider of candidates) {
+        if (!provider.volume) continue;
+        const volume = await provider.volume.get(volumeIdOrName);
+        if (volume) {
+          this.volumeProviders.set(volumeIdOrName, provider);
+          return volume;
+        }
+      }
+      return null;
+    },
+
+    list: async (options?: ListVolumesOptions & { provider?: string }): Promise<Volume[]> => {
+      const candidates = options?.provider
+        ? [this.getProviderByName(options.provider)]
+        : this.getProviders().filter((p) => !!p.volume);
+      const volumes: Volume[] = [];
+
+      for (const provider of candidates) {
+        if (!provider.volume) continue;
+        let listed: Volume[];
+        try {
+          listed = await provider.volume.list(options);
+        } catch {
+          // Providers without a volume-list API (e.g. modal) are skipped.
+          continue;
+        }
+        for (const volume of listed) {
+          if (volume.id) this.volumeProviders.set(volume.id, provider);
+          if (volume.name) this.volumeProviders.set(volume.name, provider);
+          volumes.push({ provider: provider.name, ...volume });
+        }
+      }
+      return volumes;
+    },
+
+    delete: async (volumeIdOrName: string, providerName?: string): Promise<void> => {
+      const known = this.volumeProviders.get(volumeIdOrName);
+      const candidates = providerName
+        ? [this.getProviderByName(providerName)]
+        : known
+          ? [known, ...this.getProviders().filter((p) => p !== known && !!p.volume)]
+          : this.getProviders().filter((p) => !!p.volume);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume) continue;
+        try {
+          await provider.volume.delete(volumeIdOrName);
+          this.volumeProviders.delete(volumeIdOrName);
+          return;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      throw new Error(
+        `Failed to delete volume "${volumeIdOrName}" across ${candidates.length} provider(s).\n` +
         errors.map((error) => `- ${error}`).join('\n')
       );
     },

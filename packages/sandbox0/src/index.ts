@@ -7,7 +7,7 @@
 
 import { APIError, Client } from 'sandbox0';
 import type { Sandbox as Sandbox0Sandbox } from 'sandbox0';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -56,6 +56,7 @@ interface Sandbox0ClaimOptions {
   };
   snapshotId?: string;
   memory?: string;
+  mounts?: { sandboxvolumeId: string; mountPoint: string }[];
 }
 
 const observations = new WeakMap<Sandbox0Sandbox, SandboxObservation>();
@@ -136,6 +137,19 @@ function buildClaimOptions(
   const claimOptions: Sandbox0ClaimOptions = {
     ...(Object.keys(sandboxConfig).length > 0 ? { config: sandboxConfig } : {}),
     ...(options?.snapshotId ? { snapshotId: options.snapshotId } : {}),
+    // Unified mounts → claim's [{sandboxvolumeId, mountPoint}] wire shape.
+    ...(Array.isArray(options?.volumes) && options.volumes.length > 0
+      ? {
+          mounts: options.volumes.map((m) => {
+            const ref = resolveVolumeRef(m.volume);
+            const sandboxvolumeId = ref.id ?? ref.name;
+            if (!sandboxvolumeId) {
+              throw new Error('sandbox0 volume mount requires a volume id');
+            }
+            return { sandboxvolumeId, mountPoint: m.mountPath };
+          }),
+        }
+      : {}),
     ...(
       providerOptions?.memory !== undefined || config.memory !== undefined
         ? { memory: normalizeMemory(providerOptions?.memory ?? config.memory) }
@@ -557,6 +571,30 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
 
       getInstance: (sandbox): Sandbox0Sandbox => sandbox,
     },
+
+    volume: {
+      create: async (config: Sandbox0Config, options) => {
+        const client = createClient(config);
+        const volume = await client.volumes.create({});
+        return { id: volume.id, native: volume };
+      },
+      get: async (config: Sandbox0Config, id: string) => {
+        const client = createClient(config);
+        try {
+          const volume = await client.volumes.get(id);
+          return { id: volume.id, native: volume };
+        } catch { return null; }
+      },
+      list: async (config: Sandbox0Config) => {
+        const client = createClient(config);
+        const volumes = await client.volumes.list();
+        return (volumes ?? []).map((v) => ({ id: v.id, native: v }));
+      },
+      delete: async (config: Sandbox0Config, id: string) => {
+        const client = createClient(config);
+        await client.volumes.delete(id, { force: true });
+      },
+    }
   },
 });
 

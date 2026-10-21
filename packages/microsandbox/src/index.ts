@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { defineProvider, createConfigGate } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, createConfigGate } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -556,6 +556,14 @@ const _microsandbox = defineProvider<
           }
         }
 
+        // Unified mounts → builder.volume(path, b => b.named(name)).
+        if (Array.isArray(options?.volumes) && options.volumes.length > 0) {
+          for (const m of options.volumes as any[]) {
+            const ref = resolveVolumeRef(m.volume);
+            builder = builder.volume(m.mountPath, (b: any) => b.named(ref.name ?? ref.id));
+          }
+        }
+
         let native: Awaited<ReturnType<typeof builder.create>>;
         try {
           native = await builder.create();
@@ -811,6 +819,28 @@ const _microsandbox = defineProvider<
         await sdk.Snapshot.remove(snapshotId);
       }),
     },
+
+    volume: {
+      create: async (config, options) => withBackend(selectBackend(config), async (sdk) => {
+        let b = sdk.Volume.builder(options.name);
+        if (options.sizeBytes) b = b.size(Math.ceil(options.sizeBytes / (1024 * 1024)));
+        const volume = await b.create();
+        return { name: volume.name, native: volume };
+      }),
+      get: async (config, name: string) => withBackend(selectBackend(config), async (sdk) => {
+        try {
+          const handle = await sdk.Volume.get(name);
+          return { name, native: handle };
+        } catch { return null; }
+      }),
+      list: async (config) => withBackend(selectBackend(config), async (sdk) => {
+        const handles = await sdk.Volume.list();
+        return (handles ?? []).map((h: any) => ({ name: h.name, native: h }));
+      }),
+      delete: async (config, name: string) => withBackend(selectBackend(config), async (sdk) => {
+        await sdk.Volume.remove(name);
+      }),
+    }
   },
 });
 
