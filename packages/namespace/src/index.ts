@@ -659,9 +659,10 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
     // Namespace volumes are tag-named and materialize when attached at
     // instance create — create() records the handle; provisioning happens in
-    // CreateInstanceRequest.volumes.
+    // CreateInstanceRequest.volumes. Every storage API op filters on tag, so
+    // Volume.id IS the tag — delete(tag) destroys directly with no lookup.
     volume: {
-      create: async (_config: NamespaceConfig, options) => ({ name: options.name }),
+      create: async (_config: NamespaceConfig, options) => ({ id: options.name, name: options.name }),
       get: async (config: NamespaceConfig, tag: string) => {
         const { token } = await getAndValidateCredentials(config);
         const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
@@ -669,7 +670,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
           body: JSON.stringify({ tag: { values: [tag], op: 1 } })
         });
         const volume = (response.volumes || [])[0];
-        return volume ? { id: volume.id, name: volume.tag ?? tag, native: volume } : null;
+        return volume ? { id: volume.tag ?? tag, name: volume.tag ?? tag, native: volume } : null;
       },
       list: async (config: NamespaceConfig, options) => {
         const { token } = await getAndValidateCredentials(config);
@@ -680,33 +681,13 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             method: 'POST',
             body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
           });
-          for (const v of response.volumes || []) out.push({ id: v.id, name: v.tag, native: v });
+          for (const v of response.volumes || []) out.push({ id: v.tag, name: v.tag, native: v });
           cursor = response.pagination_cursor || undefined;
         } while (cursor && (!options?.limit || out.length < options.limit));
         return options?.limit ? out.slice(0, options.limit) : out;
       },
-      delete: async (config: NamespaceConfig, tagOrId: string) => {
+      delete: async (config: NamespaceConfig, tag: string) => {
         const { token } = await getAndValidateCredentials(config);
-        // Destroy filters on TAG, but callers may pass the id from
-        // volume.list — resolve id → tag first so delete-by-id works.
-        // Paginate fully (ids on later pages), and tolerate a list outage:
-        // when tagOrId IS a tag the lookup is unnecessary, so fall back to
-        // using it verbatim rather than blocking a valid deletion.
-        let tag = tagOrId;
-        try {
-          let cursor: string | undefined;
-          do {
-            const listed = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
-              method: 'POST',
-              body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
-            });
-            for (const v of listed.volumes || []) {
-              if (v.id === tagOrId || v.tag === tagOrId) { tag = v.tag ?? tagOrId; break; }
-            }
-            if (tag !== tagOrId) break;
-            cursor = listed.pagination_cursor || undefined;
-          } while (cursor);
-        } catch { /* list outage — destroy by tagOrId verbatim */ }
         await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUMES, {
           method: 'POST',
           // StringMatcher: values + op IS_ANY_OF (1)
