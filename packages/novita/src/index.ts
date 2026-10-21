@@ -130,7 +130,9 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
           ...(Array.isArray(options?.volumes) && options.volumes.length > 0 && {
             volumeMounts: Object.fromEntries(options.volumes.map((m: any) => {
               const ref = resolveVolumeRef(m.volume);
-              return [m.mountPath, ref.native ?? ref.name ?? ref.id];
+              // Wire wants the volume NAME — a Volume handle's `native` is the
+              // NovitaVolume object, not a mountable string.
+              return [m.mountPath, ref.name ?? ref.id ?? ref.native];
             })),
           }),
         };

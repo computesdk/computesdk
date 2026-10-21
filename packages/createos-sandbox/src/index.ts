@@ -394,6 +394,15 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           // (or hits a terminal state) must not be reported as success.
           await forked.waitUntilRunning();
           sandboxConfig.set(forked, config);
+          // ForkSandboxRequest carries no `disks` field — attach requested
+          // volumes post-fork through the runtime disk API instead.
+          if (Array.isArray(opts.volumes) && opts.volumes.length > 0) {
+            for (const m of opts.volumes) {
+              const ref = resolveVolumeRef(m.volume);
+              const subPath = (m as { subPath?: string }).subPath;
+              await forked.attachDisk({ diskId: ref.id ?? ref.name!, mountPath: m.mountPath, ...(subPath ? { subPath } : {}) });
+            }
+          }
           return { instance: forked, instanceId: forked.id };
         }
 

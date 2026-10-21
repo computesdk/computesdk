@@ -687,10 +687,20 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
       delete: async (config: NamespaceConfig, tagOrId: string) => {
         const { token } = await getAndValidateCredentials(config);
+        // Destroy filters on TAG, but callers may pass the id from
+        // volume.list — resolve id → tag first so delete-by-id works.
+        let tag = tagOrId;
+        const listed = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        for (const v of listed.volumes || []) {
+          if (v.id === tagOrId || v.tag === tagOrId) { tag = v.tag ?? tagOrId; break; }
+        }
         await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUMES, {
           method: 'POST',
           // StringMatcher: values + op IS_ANY_OF (1)
-          body: JSON.stringify({ tag: { values: [tagOrId], op: 1 } })
+          body: JSON.stringify({ tag: { values: [tag], op: 1 } })
         });
       },
     },
