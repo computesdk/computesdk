@@ -1262,7 +1262,13 @@ const createMiosaProvider = defineProvider<
       attachVolume: async (sandbox, volume, mountPath) => {
         const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
         const ref = resolveVolumeRef(volume);
-        await miosaRequest(auth, "POST", `/computers/${sandbox.record.id}/volumes`, {
+        // Volumes attach to "computers" — the sandbox record carries a
+        // computer_id (untyped in @miosa/sdk's SandboxData); the sandbox id
+        // itself is not a computer id and 404s this endpoint.
+        const computerId =
+          (sandbox.record as { computer_id?: string }).computer_id ??
+          sandbox.record.id;
+        await miosaRequest(auth, "POST", `/computers/${computerId}/volumes`, {
           volume_id: ref.id ?? ref.name,
           mount_path: mountPath,
         });
@@ -1270,7 +1276,10 @@ const createMiosaProvider = defineProvider<
       detachVolume: async (sandbox, volume, mountPath) => {
         const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
         const ref = resolveVolumeRef(volume);
-        await miosaRequest(auth, "DELETE", `/computers/${sandbox.record.id}/volumes/${ref.id ?? ref.name}`);
+        const computerId =
+          (sandbox.record as { computer_id?: string }).computer_id ??
+          sandbox.record.id;
+        await miosaRequest(auth, "DELETE", `/computers/${computerId}/volumes/${ref.id ?? ref.name}`);
       },
 
       filesystem: {
