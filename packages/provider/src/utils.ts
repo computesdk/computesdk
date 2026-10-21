@@ -92,7 +92,7 @@ const VOLUME_ATTACHED_RE = /attached|mounted|in.?use|busy|in_use|still in use/i;
  * objects (`{error: "Volume is attached"}`) as often as real Errors —
  * String(err) on those is the useless "[object Object]".
  */
-function errorText(err: unknown): string {
+export function errorText(err: unknown): string {
   const parts: string[] = [];
   if (err instanceof Error && err.message) parts.push(err.message);
   if (typeof err === 'string') parts.push(err);

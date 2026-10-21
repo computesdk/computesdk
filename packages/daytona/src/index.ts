@@ -3,7 +3,7 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { resolveVolumeRef, withVolumeSettle, errorText } from '@computesdk/provider';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -31,8 +31,7 @@ async function resolveDaytonaVolume(d: Daytona, idOrName: string) {
   } catch (err) {
     // Only a real "not found" means the arg wasn't a name — anything else
     // (auth, 5xx) must propagate, else delete silently no-ops.
-    const text = err instanceof Error ? err.message : String(err);
-    if (!/not found|404/i.test(text)) throw err;
+    if (!/not found|404/i.test(errorText(err))) throw err;
   }
   const volumes = await d.volume.list();
   return (volumes ?? []).find((v: any) => v.id === idOrName) ?? null;
