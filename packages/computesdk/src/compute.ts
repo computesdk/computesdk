@@ -511,9 +511,13 @@ class ComputeManager {
         let listed: Volume[];
         try {
           listed = await provider.volume.list(options);
-        } catch {
-          // Providers without a volume-list API (e.g. modal) are skipped.
-          continue;
+        } catch (error) {
+          // Providers without a volume-list API (e.g. modal) throw the
+          // factory's 'does not support listing' stub — skip only those.
+          // Real failures (network, RBAC, 5xx) must surface: returning a
+          // partial inventory as success hides provider outages.
+          if (/does not support listing/i.test(getProviderErrorDetail(error))) continue;
+          throw error;
         }
         for (const volume of listed) {
           if (volume.id) this.volumeProviders.set(volume.id, provider);
@@ -526,10 +530,13 @@ class ComputeManager {
 
     delete: async (volumeIdOrName: string, providerName?: string): Promise<void> => {
       const known = this.volumeProviders.get(volumeIdOrName);
+      // When the owning provider is known, delete only there — retrying the
+      // same id/name on other providers could delete a *different* volume
+      // (or report an idempotent success while the real volume remains).
       const candidates = providerName
         ? [this.getProviderByName(providerName)]
         : known
-          ? [known, ...this.getProviders().filter((p) => p !== known && !!p.volume)]
+          ? [known]
           : this.getProviders().filter((p) => !!p.volume);
       const errors: string[] = [];
 
