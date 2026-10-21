@@ -118,7 +118,10 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           if (Array.isArray(volumes) && volumes.length > 0) {
             params.mounts = Object.fromEntries((volumes as any[]).map((m) => {
               const ref = resolveVolumeRef(m.volume);
-              return [m.mountPath, { drive: ref.id ?? ref.name, mode: m.readOnly ? 'snapshot' : 'read-write' }];
+              // The `drive` field serializes verbatim and the API resolves it
+              // by NAME (a Drive object mounts as mount.name) — sending
+              // driveId yields "Drive not found".
+              return [m.mountPath, { drive: ref.name ?? ref.id, mode: m.readOnly ? 'snapshot' : 'read-write' }];
             }));
           }
 

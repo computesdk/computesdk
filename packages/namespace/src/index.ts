@@ -689,14 +689,24 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const { token } = await getAndValidateCredentials(config);
         // Destroy filters on TAG, but callers may pass the id from
         // volume.list — resolve id → tag first so delete-by-id works.
+        // Paginate fully (ids on later pages), and tolerate a list outage:
+        // when tagOrId IS a tag the lookup is unnecessary, so fall back to
+        // using it verbatim rather than blocking a valid deletion.
         let tag = tagOrId;
-        const listed = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
-          method: 'POST',
-          body: JSON.stringify({})
-        });
-        for (const v of listed.volumes || []) {
-          if (v.id === tagOrId || v.tag === tagOrId) { tag = v.tag ?? tagOrId; break; }
-        }
+        try {
+          let cursor: string | undefined;
+          do {
+            const listed = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+              method: 'POST',
+              body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
+            });
+            for (const v of listed.volumes || []) {
+              if (v.id === tagOrId || v.tag === tagOrId) { tag = v.tag ?? tagOrId; break; }
+            }
+            if (tag !== tagOrId) break;
+            cursor = listed.pagination_cursor || undefined;
+          } while (cursor);
+        } catch { /* list outage — destroy by tagOrId verbatim */ }
         await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUMES, {
           method: 'POST',
           // StringMatcher: values + op IS_ANY_OF (1)

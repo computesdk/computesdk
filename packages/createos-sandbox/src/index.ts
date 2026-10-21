@@ -395,12 +395,19 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           await forked.waitUntilRunning();
           sandboxConfig.set(forked, config);
           // ForkSandboxRequest carries no `disks` field — attach requested
-          // volumes post-fork through the runtime disk API instead.
+          // volumes post-fork through the runtime disk API instead. Destroy
+          // the fork on failure — it is already running, and the caller gets
+          // no instance handle to clean up with.
           if (Array.isArray(opts.volumes) && opts.volumes.length > 0) {
-            for (const m of opts.volumes) {
-              const ref = resolveVolumeRef(m.volume);
-              const subPath = (m as { subPath?: string }).subPath;
-              await forked.attachDisk({ diskId: ref.id ?? ref.name!, mountPath: m.mountPath, ...(subPath ? { subPath } : {}) });
+            try {
+              for (const m of opts.volumes) {
+                const ref = resolveVolumeRef(m.volume);
+                const subPath = (m as { subPath?: string }).subPath;
+                await forked.attachDisk({ diskId: ref.id ?? ref.name!, mountPath: m.mountPath, ...(subPath ? { subPath } : {}) });
+              }
+            } catch (err) {
+              await forked.destroy().catch(() => {});
+              throw err;
             }
           }
           return { instance: forked, instanceId: forked.id };
