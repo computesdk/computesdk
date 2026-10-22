@@ -1,5 +1,12 @@
 # @computesdk/isorun
 
+## 0.1.15
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
 ## 0.1.14
 
 ### Patch Changes

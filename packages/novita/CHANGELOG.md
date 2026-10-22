@@ -1,5 +1,12 @@
 # @computesdk/novita
 
+## 0.0.11
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
 ## 0.0.10
 
 ### Patch Changes
