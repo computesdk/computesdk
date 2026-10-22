@@ -59,7 +59,7 @@ export type {
 } from './browser-factory';
 
 // Export utilities
-export { calculateBackoff, escapeShellArg, resolveVolumeRef, withVolumeSettle } from './utils';
+export { calculateBackoff, escapeShellArg, resolveVolumeRef, withVolumeSettle, errorText } from './utils';
 export type { VolumeRef } from './utils';
 
 // Export the process-API streaming helper for providers that stream natively
