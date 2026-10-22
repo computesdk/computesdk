@@ -1,5 +1,11 @@
 # @computesdk/daytona
 
+## 1.7.47
+
+### Patch Changes
+
+- b3697ec: fix(daytona): 'creating' is a second transitional volume state — wait until ready|error, not just past pending_create (soak-3 regression)
+
 ## 1.7.46
 
 ### Patch Changes
