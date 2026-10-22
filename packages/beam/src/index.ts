@@ -7,7 +7,7 @@
  */
 
 import beamClient, { Sandbox, SandboxInstance, beamOpts, Image, Volume as BeamVolume } from '@beamcloud/beam-js';
-import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   InstanceInfo,
@@ -423,22 +423,37 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
     },
 
     volume: {
+      // Volume identity is the NAME: every Beam storage operation
+      // (getOrCreate, mount, delete) is name-keyed, so `Volume.id` carries
+      // the name — the same normalization namespace applies to its tag.
       create: async (config: BeamConfig, options) =>
         withBeamConfig(config, async () => {
           const volume = new BeamVolume(options.name, options.mountPath ?? '/volume');
           await volume.getOrCreate();
-          return { id: volume.volumeId, name: volume.name, native: volume };
+          return { id: volume.name, name: volume.name, native: volume };
         }),
       get: async (config: BeamConfig, name: string) =>
         withBeamConfig(config, async () => {
           // beam-js has no get-by-name RPC; return a handle bound to the
           // caller's mountPath (defaults for read paths).
           const volume = new BeamVolume(name, '/volume');
-          return { name, native: volume };
+          return { id: name, name, native: volume };
         }),
-      delete: async () => {
-        throw new Error('Beam volume deletion is not exposed by @beamcloud/beam-js');
-      },
+      delete: async (config: BeamConfig, idOrName: string) =>
+        withBeamConfig(config, () =>
+          withVolumeSettle(async () => {
+            // beam-js wraps no volume delete RPC, but the hosted gateway
+            // serves the transcoded DeleteVolume route — POST
+            // /api/v1/gateway/volumes/{name}/delete (verified live: 401
+            // auth-gated where unknown paths 404 and wrong methods 501).
+            const response = await beamClient.request({
+              method: 'POST',
+              url: `/api/v1/gateway/volumes/${encodeURIComponent(idOrName)}/delete`,
+            });
+            if (response.data?.ok === false) {
+              throw new Error(response.data.errMsg ?? response.data.errorMsg ?? response.data.error ?? 'Beam volume delete failed');
+            }
+          })),
     },
   },
 });

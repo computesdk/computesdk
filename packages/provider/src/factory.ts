@@ -503,8 +503,10 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
       const attach = methods.attachVolume.bind(methods);
       // Settle-wrap: a re-attach raced against the previous sandbox's async
       // unmount gets "still attached" until the control plane catches up.
+      // Providers' attach-consistency windows run ~120s in the wild, so the
+      // deadline runs longer than the 120s delete settle.
       this.attachVolume = (volume, mountPath) =>
-        withVolumeSettle(() => attach(this.instance, volume, mountPath));
+        withVolumeSettle(() => attach(this.instance, volume, mountPath), { deadlineMs: 180_000 });
     }
     if (methods.detachVolume) {
       const detach = methods.detachVolume.bind(methods);
@@ -1078,7 +1080,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     // attachVolume: mounting a just-detached volume 400s "already attached"
     // until the control plane finishes unmounting the destroyed sandbox.
     const createPromise = Array.isArray(options?.volumes) && options.volumes.length > 0
-      ? withVolumeSettle(runCreate)
+      ? withVolumeSettle(runCreate, { deadlineMs: 180_000 })
       : runCreate();
 
     // If the provider promise resolves after abort, clean up the orphaned instance
