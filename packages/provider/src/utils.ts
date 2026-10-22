@@ -85,7 +85,7 @@ export function resolveVolumeRef(volume: string | VolumeRef): VolumeRef {
   };
 }
 
-const VOLUME_ATTACHED_RE = /attached|mounted|in.?use|busy|in_use|still in use/i;
+const VOLUME_ATTACHED_RE = /attached|mounted|in.?use|busy|in_use|still in use|sync.?pending|pending_create/i;
 
 /**
  * Best-effort text of a thrown value. Providers throw plain API error

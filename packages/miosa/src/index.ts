@@ -1263,11 +1263,15 @@ const createMiosaProvider = defineProvider<
         const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
         const ref = resolveVolumeRef(volume);
         // Volumes attach to "computers" — the sandbox record carries a
-        // computer_id (untyped in @miosa/sdk's SandboxData); the sandbox id
-        // itself is not a computer id and 404s this endpoint.
-        const computerId =
-          (sandbox.record as { computer_id?: string }).computer_id ??
-          sandbox.record.id;
+        // computer_id (untyped in @miosa/sdk's SandboxData). The sandbox id
+        // itself is not a computer id: POSTing it 404s "computer not found",
+        // so fail clearly instead of making an impossible request.
+        const computerId = (sandbox.record as { computer_id?: string }).computer_id;
+        if (!computerId) {
+          throw new Error(
+            `Miosa volumes attach to computers, not sandboxes — sandbox ${sandbox.record.id} has no computer_id`
+          );
+        }
         await miosaRequest(auth, "POST", `/computers/${computerId}/volumes`, {
           volume_id: ref.id ?? ref.name,
           mount_path: mountPath,
@@ -1276,9 +1280,12 @@ const createMiosaProvider = defineProvider<
       detachVolume: async (sandbox, volume, mountPath) => {
         const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
         const ref = resolveVolumeRef(volume);
-        const computerId =
-          (sandbox.record as { computer_id?: string }).computer_id ??
-          sandbox.record.id;
+        const computerId = (sandbox.record as { computer_id?: string }).computer_id;
+        if (!computerId) {
+          throw new Error(
+            `Miosa volumes attach to computers, not sandboxes — sandbox ${sandbox.record.id} has no computer_id`
+          );
+        }
         await miosaRequest(auth, "DELETE", `/computers/${computerId}/volumes/${ref.id ?? ref.name}`);
       },
 

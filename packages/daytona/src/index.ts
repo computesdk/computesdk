@@ -2,7 +2,7 @@
  * Daytona Provider - Factory-based Implementation
  */
 
-import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
+import { Daytona, DaytonaNotFoundError, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
 import { resolveVolumeRef, withVolumeSettle, errorText } from '@computesdk/provider';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
@@ -31,10 +31,28 @@ async function resolveDaytonaVolume(d: Daytona, idOrName: string) {
   } catch (err) {
     // Only a real "not found" means the arg wasn't a name — anything else
     // (auth, 5xx) must propagate, else delete silently no-ops.
-    if (!/not found|404/i.test(errorText(err))) throw err;
+    const notFound = err instanceof DaytonaNotFoundError
+      || (err as { statusCode?: number }).statusCode === 404
+      || /not found/i.test(errorText(err));
+    if (!notFound) throw err;
   }
   const volumes = await d.volume.list();
   return (volumes ?? []).find((v: any) => v.id === idOrName) ?? null;
+}
+
+/** Poll until the volume leaves pending_create — mounts and deletes both
+ *  reject the transitional state, so callers get a usable handle. */
+async function waitDaytonaVolumeReady(d: Daytona, idOrName: string, deadlineMs = 60_000) {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const volume = await resolveDaytonaVolume(d, idOrName);
+    if (!volume) return null;
+    if (volume.state === 'ready' || volume.state === 'error') return volume;
+    if (Date.now() >= deadline) {
+      throw new Error(`Daytona volume ${idOrName} stuck in state ${volume.state}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
 }
 
 /**
@@ -352,7 +370,10 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       create: async (config: DaytonaConfig, options) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const d = new Daytona({ apiKey });
-        const volume = await d.volume.create(options.name);
+        const created = await d.volume.create(options.name);
+        // A fresh volume sits in pending_create — mounting it immediately
+        // 400s "not in a ready state", so hand callers a ready handle.
+        const volume = (await waitDaytonaVolumeReady(d, created.id)) ?? created;
         return { id: volume.id, name: volume.name, native: volume };
       },
       get: async (config: DaytonaConfig, idOrName: string) => {
@@ -370,7 +391,8 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       delete: async (config: DaytonaConfig, idOrName: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const d = new Daytona({ apiKey });
-        const volume = await resolveDaytonaVolume(d, idOrName);
+        // Delete only accepts ready/error — wait out pending_create first.
+        const volume = await waitDaytonaVolumeReady(d, idOrName);
         if (volume) await withVolumeSettle(() => d.volume.delete(volume));
       },
     }

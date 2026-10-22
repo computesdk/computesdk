@@ -556,14 +556,15 @@ const _microsandbox = defineProvider<
           }
         }
 
-        // Unified mounts → builder.volume(path, b => b.namedWith(name, 'ensure-exists')).
-        // `named` binds an existing volume only; ensure-exists creates it if
-        // absent — a mount issued right after Volume.create can otherwise race
-        // the volume landing and crash the sandbox boot (verify-run SIGABRT).
+        // Unified mounts → builder.volume(path, b => b.named(name)). The
+        // 'ensure-exists' flag is rejected by the backend, and the bench
+        // pre-creates the volume anyway.
+        // `named` binds an existing volume — ensure-create lives in
+        // volume.create, which callers run before mounting.
         if (Array.isArray(options?.volumes) && options.volumes.length > 0) {
           for (const m of options.volumes as any[]) {
             const ref = resolveVolumeRef(m.volume);
-            builder = builder.volume(m.mountPath, (b: any) => b.namedWith(ref.name ?? ref.id, 'ensure-exists'));
+            builder = builder.volume(m.mountPath, (b: any) => b.named(ref.name ?? ref.id));
           }
         }
 

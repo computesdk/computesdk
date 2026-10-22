@@ -40,6 +40,7 @@ import {
   type SeedInvocationResult,
 } from 'daemond';
 import { readInstanceEgress, setupInstanceEgress } from './egress.js';
+import { withVolumeSettle } from './utils.js';
 
 type DaemonStreamState = {
   token: string;
@@ -500,7 +501,10 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     // capability signal callers check.
     if (methods.attachVolume) {
       const attach = methods.attachVolume.bind(methods);
-      this.attachVolume = (volume, mountPath) => attach(this.instance, volume, mountPath);
+      // Settle-wrap: a re-attach raced against the previous sandbox's async
+      // unmount gets "still attached" until the control plane catches up.
+      this.attachVolume = (volume, mountPath) =>
+        withVolumeSettle(() => attach(this.instance, volume, mountPath));
     }
     if (methods.detachVolume) {
       const detach = methods.detachVolume.bind(methods);
@@ -1069,7 +1073,13 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     throwIfAborted(options?.signal);
 
     const signal = options?.signal;
-    const createPromise = this.methods.create(this.config, options).then(normalizeInstanceResult);
+    const runCreate = () => this.methods.create(this.config, options).then(normalizeInstanceResult);
+    // Create-time volume mounts hit the same detach-settle race as
+    // attachVolume: mounting a just-detached volume 400s "already attached"
+    // until the control plane finishes unmounting the destroyed sandbox.
+    const createPromise = Array.isArray(options?.volumes) && options.volumes.length > 0
+      ? withVolumeSettle(runCreate)
+      : runCreate();
 
     // If the provider promise resolves after abort, clean up the orphaned instance
     createPromise.then(
