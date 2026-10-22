@@ -451,7 +451,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
               url: `/api/v1/gateway/volumes/${encodeURIComponent(idOrName)}/delete`,
             });
             if (response.data?.ok === false) {
-              throw new Error(response.data.errMsg ?? response.data.errorMsg ?? response.data.error ?? 'Beam volume delete failed');
+              throw new Error(response.data.errMsg ?? response.data.err_msg ?? response.data.errorMsg ?? response.data.error_msg ?? response.data.error ?? 'Beam volume delete failed');
             }
           })),
     },
