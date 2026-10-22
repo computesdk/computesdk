@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/cloud-run",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "Deprecated: use @computesdk/gcp/cloud-run. Thin re-export of the Google Cloud Run Sandboxes provider for ComputeSDK.",
   "author": "Garrison",
   "license": "MIT",

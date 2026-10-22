@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/sprites",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "Sprites provider for ComputeSDK - cloud sandboxes powered by Sprites",
   "author": "Garrison",
   "license": "MIT",

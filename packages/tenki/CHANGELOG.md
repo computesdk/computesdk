@@ -1,5 +1,15 @@
 # @computesdk/tenki
 
+## 0.1.16
+
+### Patch Changes
+
+- a3de4ae: Volume soak fixes: `withVolumeSettle` retries volume delete while the provider reports it still attached (sandbox.destroy() returns before the control plane unmounts); daytona volume get/delete resolve by id or name (`volume.get` is name-keyed); miosa create defaults size_bytes to 1 GiB (missing field 422s); sandbox0 create sends the explicit s0fs/RWO request.
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
 ## 0.1.15
 
 ### Patch Changes
