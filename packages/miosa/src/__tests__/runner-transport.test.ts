@@ -234,6 +234,171 @@ describe("regional sandbox endpoint", () => {
     });
   });
 
+  describe("a custom control plane", () => {
+    const CUSTOM_BASE = "https://api.example.test/api/v1";
+
+    function customControlPlane(): void {
+      fetchMock.mockImplementation(
+        async (url: string, init?: { method?: string }) => {
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/exec")) {
+            return jsonResponse({
+              data: { stdout: "from-custom\n", stderr: "", exit_code: 0 },
+            });
+          }
+          if (method === "DELETE") return jsonResponse({ data: {} });
+          return jsonResponse(sandboxRecord(), method === "POST" ? 201 : 200);
+        },
+      );
+    }
+
+    const urls = (): string[] =>
+      fetchMock.mock.calls.map(([url]) => String(url));
+
+    function expectNothingRegional(): void {
+      expect(runnerSpies.constructed).toEqual([]);
+      expect(runnerSpies.createSandbox).not.toHaveBeenCalled();
+      expect(runnerSpies.exec).not.toHaveBeenCalled();
+      expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
+    }
+
+    it("should create, exec and destroy on the configured control plane and never build a regional client", async () => {
+      customControlPlane();
+      const provider = miosa({ apiKey: API_KEY, baseUrl: CUSTOM_BASE });
+
+      const sandbox = await provider.sandbox.create();
+      const result = await sandbox.runCommand("node -v");
+      await sandbox.destroy();
+
+      expect(result.stdout).toBe("from-custom\n");
+      expect(urls().every((url) => url.startsWith(CUSTOM_BASE))).toBe(true);
+      expect(urls()).toHaveLength(3);
+      expectNothingRegional();
+    });
+
+    it("should look an id up on the configured control plane only", async () => {
+      customControlPlane();
+      const provider = miosa({ apiKey: API_KEY, baseUrl: CUSTOM_BASE });
+
+      await provider.sandbox.getById(sandboxRecord().id);
+
+      // getById also reads the egress pointer afterwards, on the same host.
+      expect(urls()[0]).toBe(`${CUSTOM_BASE}/sandboxes/${sandboxRecord().id}`);
+      expect(urls().every((url) => url.startsWith(CUSTOM_BASE))).toBe(true);
+      expectNothingRegional();
+    });
+
+    it("should follow MIOSA_BASE_URL the same way", async () => {
+      process.env.MIOSA_BASE_URL = CUSTOM_BASE;
+      try {
+        customControlPlane();
+        const provider = miosa({ apiKey: API_KEY });
+
+        const sandbox = await provider.sandbox.create();
+        await sandbox.runCommand("node -v");
+        await sandbox.destroy();
+
+        expect(urls().every((url) => url.startsWith(CUSTOM_BASE))).toBe(true);
+        expectNothingRegional();
+      } finally {
+        delete process.env.MIOSA_BASE_URL;
+      }
+    });
+
+    it("should not warm a regional client when the provider is constructed", () => {
+      miosa({ apiKey: API_KEY, baseUrl: CUSTOM_BASE });
+
+      expect(runnerSpies.constructed).toEqual([]);
+    });
+
+    it("should not warm a regional client when the module is imported", async () => {
+      process.env.MIOSA_API_KEY = API_KEY;
+      process.env.MIOSA_BASE_URL = CUSTOM_BASE;
+      try {
+        vi.resetModules();
+        await import("../index");
+
+        expect(runnerSpies.constructed).toEqual([]);
+      } finally {
+        delete process.env.MIOSA_API_KEY;
+        delete process.env.MIOSA_BASE_URL;
+      }
+    });
+
+    it("should warm the regional client on import when the base URL is the default API", async () => {
+      process.env.MIOSA_API_KEY = API_KEY;
+      try {
+        vi.resetModules();
+        await import("../index");
+
+        expect(runnerSpies.constructed).toHaveLength(1);
+      } finally {
+        delete process.env.MIOSA_API_KEY;
+      }
+    });
+
+    it("should still use the regional endpoint for the default API written with a trailing slash", async () => {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY, baseUrl: `${DEFAULT_BASE_URL}/` });
+
+      await provider.sandbox.create();
+
+      expect(runnerSpies.createSandbox).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["runnerMode: true", { runnerMode: true as const }],
+      [
+        "a runnerBaseDomain",
+        { runnerBaseDomain: "run.staging.internal" },
+      ],
+    ])("should use the regional endpoint with a custom base URL when asked by %s", async (_name, extra) => {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY, baseUrl: CUSTOM_BASE, ...extra });
+
+      await provider.sandbox.create();
+
+      expect(runnerSpies.createSandbox).toHaveBeenCalledTimes(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should use the regional endpoint with a custom base URL when MIOSA_RUNNER_MODE=1", async () => {
+      process.env.MIOSA_RUNNER_MODE = "1";
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY, baseUrl: CUSTOM_BASE });
+
+      await provider.sandbox.create();
+
+      expect(runnerSpies.createSandbox).toHaveBeenCalledTimes(1);
+    });
+
+    it("should let runnerMode: false win over a runnerBaseDomain", async () => {
+      customControlPlane();
+      const provider = miosa({
+        apiKey: API_KEY,
+        baseUrl: CUSTOM_BASE,
+        runnerMode: false,
+        runnerBaseDomain: "run.staging.internal",
+      });
+
+      await provider.sandbox.create();
+
+      expectNothingRegional();
+    });
+  });
+
   describe("create", () => {
     it("should unwrap the runner's create response the same way as the control plane", async () => {
       const record = sandboxRecord();

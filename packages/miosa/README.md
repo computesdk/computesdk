@@ -49,6 +49,7 @@ Auth is a MIOSA API key (`msk_*`) sent as `Authorization: Bearer <key>`.
 
 Create, exec and destroy go to MIOSA's regional sandbox endpoint (`run-<region>.miosa.ai`) instead of the account API, which removes a hop from each call. Everything else (list, getById, getUrl, filesystem, snapshots) stays on the account API.
 
+- With a custom `baseUrl` (or `MIOSA_BASE_URL`) the regional endpoint is off by default, so a white-label or self-hosted control plane's key is never sent to MIOSA's public regional host. Set `runnerMode: true`, `MIOSA_RUNNER_MODE=1` or a `runnerBaseDomain` to opt in.
 - A create the regional endpoint does not serve, such as a template, a snapshot or a shape above the standard size, goes to the account API and the sandbox stays there for its whole life.
 - A create is moved to the account API only when the regional endpoint refused it before provisioning anything: it could not be reached, had no capacity, or did not know the key yet. A timeout or a reset connection is surfaced as an error instead of being sent to the account API, because the request may have been delivered and a second create could provision a second sandbox.
 

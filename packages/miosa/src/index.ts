@@ -47,8 +47,11 @@ export interface MiosaConfig {
   /**
    * Routes create/exec/destroy through MIOSA's regional sandbox endpoint
    * (`run-<region>.miosa.ai`) instead of the account API. Enabled by
-   * default; set `false` here or `MIOSA_RUNNER_MODE=0` to send sandbox
-   * operations to the account API instead. Sandbox shapes the regional
+   * default against MIOSA's own account API; off by default when `baseUrl`
+   * (or `MIOSA_BASE_URL`) names a custom control plane, so that its key is
+   * not sent to the public regional host, unless this is `true`,
+   * `MIOSA_RUNNER_MODE=1` or `runnerBaseDomain` is set. Set `false` here or
+   * `MIOSA_RUNNER_MODE=0` to send sandbox operations to the account API. Sandbox shapes the regional
    * endpoint does not serve (templates, snapshots, non-xs sizes) and an
    * unreachable endpoint both fall back to the account API per request.
    */
@@ -859,9 +862,28 @@ export interface RunnerRouting {
   readonly baseDomain?: string;
 }
 
+/**
+ * Whether the account API in use is MIOSA's own. A custom base URL, from the
+ * config or MIOSA_BASE_URL, names a different control plane (white-label or
+ * self-hosted), whose API key the public regional endpoint must not see.
+ */
+function usesDefaultAccountApi(config: MiosaConfig): boolean {
+  const baseUrl = (config.baseUrl ?? baseUrlFromEnv()).replace(/\/+$/, "");
+  return baseUrl === DEFAULT_BASE_URL;
+}
+
+/**
+ * Regional routing is on by default only against MIOSA's own account API. A
+ * provider pointed at a custom control plane stays on it unless the caller
+ * asks for the regional endpoint, with `runnerMode: true`,
+ * MIOSA_RUNNER_MODE=1, or a `runnerBaseDomain` of their own choosing.
+ * `runnerMode: false` and MIOSA_RUNNER_MODE=0 always win.
+ */
 function resolveRunnerRouting(config: MiosaConfig): RunnerRouting | undefined {
   const explicit = config.runnerMode ?? readRunnerModeEnv();
   if (explicit === false) return undefined;
+  const asked = explicit === true || config.runnerBaseDomain !== undefined;
+  if (!asked && !usesDefaultAccountApi(config)) return undefined;
   return config.runnerBaseDomain ? { baseDomain: config.runnerBaseDomain } : {};
 }
 
