@@ -33,6 +33,7 @@ async function resolveDaytonaVolume(d: Daytona, idOrName: string) {
     // (auth, 5xx) must propagate, else delete silently no-ops.
     const notFound = err instanceof DaytonaNotFoundError
       || (err as { statusCode?: number }).statusCode === 404
+      || (err as { status?: number }).status === 404
       || /not found/i.test(errorText(err));
     if (!notFound) throw err;
   }
