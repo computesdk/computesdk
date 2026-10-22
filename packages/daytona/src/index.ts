@@ -42,15 +42,20 @@ async function resolveDaytonaVolume(d: Daytona, idOrName: string) {
 }
 
 /** Poll until the volume leaves pending_create — mounts and deletes both
- *  reject the transitional state, so callers get a usable handle. */
+ *  reject the transitional state, so callers get a usable handle. Returns
+ *  null only when the volume never resolves at all (treat as gone); throws
+ *  when it stays pending past the deadline. Callers decide whether the
+ *  'error' state is acceptable (it is deletable, not mountable). */
 async function waitDaytonaVolumeReady(d: Daytona, idOrName: string, deadlineMs = 60_000) {
   const deadline = Date.now() + deadlineMs;
+  let lastState: string | null = null;
   for (;;) {
     const volume = await resolveDaytonaVolume(d, idOrName);
-    if (!volume) return null;
-    if (volume.state === 'ready' || volume.state === 'error') return volume;
+    if (volume && volume.state !== 'pending_create') return volume;
+    if (volume) lastState = volume.state;
     if (Date.now() >= deadline) {
-      throw new Error(`Daytona volume ${idOrName} stuck in state ${volume.state}`);
+      if (lastState === null) return null;
+      throw new Error(`Daytona volume ${idOrName} stuck in state ${lastState}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
@@ -374,7 +379,12 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const created = await d.volume.create(options.name);
         // A fresh volume sits in pending_create — mounting it immediately
         // 400s "not in a ready state", so hand callers a ready handle.
-        const volume = (await waitDaytonaVolumeReady(d, created.id)) ?? created;
+        const volume = await waitDaytonaVolumeReady(d, created.id);
+        if (!volume || volume.state !== 'ready') {
+          throw new Error(
+            `Daytona volume ${options.name} is not mountable (state: ${volume?.state ?? 'unresolvable'})`
+          );
+        }
         return { id: volume.id, name: volume.name, native: volume };
       },
       get: async (config: DaytonaConfig, idOrName: string) => {
