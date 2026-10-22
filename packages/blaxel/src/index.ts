@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { SandboxInstance, Snapshot, VolumeInstance, initialize } from '@blaxel/core';
-import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
@@ -573,7 +573,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				}),
 			delete: async (config: BlaxelConfig, name: string) =>
 				withBlaxelConfig(config, async () => {
-					await VolumeInstance.delete(name);
+					await withVolumeSettle(() => VolumeInstance.delete(name));
 				}),
 		}
 	}

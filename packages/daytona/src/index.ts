@@ -3,7 +3,7 @@
  */
 
 import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { resolveVolumeRef } from '@computesdk/provider';
+import { resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -18,6 +18,24 @@ export interface DaytonaConfig {
   runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+}
+
+/**
+ * Resolve a volume by id OR name — `d.volume.get()` looks up by name only,
+ * so an id falls back to a list scan. Returns null when nothing matches
+ * (the SDK throws on a name miss).
+ */
+async function resolveDaytonaVolume(d: Daytona, idOrName: string) {
+  try {
+    return await d.volume.get(idOrName);
+  } catch (err) {
+    // Only a real "not found" means the arg wasn't a name — anything else
+    // (auth, 5xx) must propagate, else delete silently no-ops.
+    const text = err instanceof Error ? err.message : String(err);
+    if (!/not found|404/i.test(text)) throw err;
+  }
+  const volumes = await d.volume.list();
+  return (volumes ?? []).find((v: any) => v.id === idOrName) ?? null;
 }
 
 /**
@@ -338,10 +356,10 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const volume = await d.volume.create(options.name);
         return { id: volume.id, name: volume.name, native: volume };
       },
-      get: async (config: DaytonaConfig, id: string) => {
+      get: async (config: DaytonaConfig, idOrName: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const d = new Daytona({ apiKey });
-        const volume = await d.volume.get(id);
+        const volume = await resolveDaytonaVolume(d, idOrName);
         return volume ? { id: volume.id, name: volume.name, native: volume } : null;
       },
       list: async (config: DaytonaConfig) => {
@@ -350,11 +368,11 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const volumes = await d.volume.list();
         return (volumes ?? []).map((v: any) => ({ id: v.id, name: v.name, native: v }));
       },
-      delete: async (config: DaytonaConfig, id: string) => {
+      delete: async (config: DaytonaConfig, idOrName: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const d = new Daytona({ apiKey });
-        const volume = await d.volume.get(id);
-        if (volume) await d.volume.delete(volume);
+        const volume = await resolveDaytonaVolume(d, idOrName);
+        if (volume) await withVolumeSettle(() => d.volume.delete(volume));
       },
     }
   }

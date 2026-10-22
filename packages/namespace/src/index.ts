@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { randomUUID } from 'node:crypto';
-import { defineProvider, escapeShellArg, resolveVolumeRef } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
@@ -688,11 +688,11 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
       delete: async (config: NamespaceConfig, tag: string) => {
         const { token } = await getAndValidateCredentials(config);
-        await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUMES, {
+        await withVolumeSettle(() => fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUMES, {
           method: 'POST',
           // StringMatcher: values + op IS_ANY_OF (1)
           body: JSON.stringify({ tag: { values: [tag], op: 1 } })
-        });
+        }));
       },
     },
   }

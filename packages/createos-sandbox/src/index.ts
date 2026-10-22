@@ -36,7 +36,7 @@ import type {
   SandboxStatus,
   Shape,
 } from "@nodeops-createos/sandbox";
-import { defineProvider, resolveVolumeRef } from "@computesdk/provider";
+import { defineProvider, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -659,7 +659,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       delete: async (config: CreateosConfig, volumeIdOrName: string) => {
         const client = resolveClient(config);
         try {
-          await client.disks.delete(volumeIdOrName);
+          await withVolumeSettle(() => client.disks.delete(volumeIdOrName));
         } catch (e) {
           if (isNotFound(e)) return;
           throw e;
