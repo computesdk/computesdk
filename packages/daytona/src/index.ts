@@ -51,7 +51,9 @@ async function waitDaytonaVolumeReady(d: Daytona, idOrName: string, deadlineMs =
   let lastState: string | null = null;
   for (;;) {
     const volume = await resolveDaytonaVolume(d, idOrName);
-    if (volume && volume.state !== 'pending_create') return volume;
+    // 'creating' is a second transitional state (soak-3) — only ready/error
+    // are terminal enough to act on.
+    if (volume && (volume.state === 'ready' || volume.state === 'error')) return volume;
     if (volume) lastState = volume.state;
     if (Date.now() >= deadline) {
       if (lastState === null) return null;
