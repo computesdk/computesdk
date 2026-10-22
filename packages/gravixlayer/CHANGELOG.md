@@ -1,5 +1,12 @@
 # @computesdk/gravixlayer
 
+## 1.0.12
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
 ## 1.0.11
 
 ### Patch Changes

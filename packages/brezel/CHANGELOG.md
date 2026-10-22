@@ -1,5 +1,12 @@
 # @computesdk/brezel
 
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
 ## 0.1.10
 
 ### Patch Changes

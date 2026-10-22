@@ -1,5 +1,12 @@
 # @computesdk/gcp
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
 ## 0.1.3
 
 ### Patch Changes

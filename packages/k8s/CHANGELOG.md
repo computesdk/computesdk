@@ -1,5 +1,12 @@
 # @computesdk/k8s
 
+## 0.2.17
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
 ## 0.2.16
 
 ### Patch Changes
