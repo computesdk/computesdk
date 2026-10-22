@@ -1779,6 +1779,9 @@ const createMiosaProvider = defineProvider<
       getInstance: (sandbox: MiosaSandbox): MiosaSandbox => sandbox,
 
       attachVolume: async (sandbox, volume, mountPath) => {
+        // Volume calls always go to the account API, never the regional
+        // endpoint. A lazy handle has to exist before it can name a computer.
+        await ensureCreated(sandbox);
         const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
         const ref = resolveVolumeRef(volume);
         // Volumes attach to "computers" — the sandbox record carries a
@@ -1797,6 +1800,9 @@ const createMiosaProvider = defineProvider<
         });
       },
       detachVolume: async (sandbox, volume, mountPath) => {
+        // Volume calls always go to the account API, never the regional
+        // endpoint. A lazy handle has to exist before it can name a computer.
+        await ensureCreated(sandbox);
         const auth = { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl };
         const ref = resolveVolumeRef(volume);
         const computerId = (sandbox.record as { computer_id?: string }).computer_id;

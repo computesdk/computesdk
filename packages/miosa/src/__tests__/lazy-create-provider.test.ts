@@ -894,6 +894,85 @@ describe("lazy create", () => {
     });
   });
 
+  describe("volumes", () => {
+    const COMPUTER_ID = "c0c0c0c0-0000-0000-0000-000000000001";
+    const withComputer = (): RunnerReply => ({
+      ...createdPlain(),
+      body: { ...sandboxRecord(), computer_id: COMPUTER_ID },
+    });
+
+    it("should keep attach and detach on the account API for a sandbox created on the runner", async () => {
+      useRunners((call) => (isCreate(call) ? withComputer() : execOk()));
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.attachVolume?.("vol-1", "/data");
+      await sandbox.detachVolume?.("vol-1");
+
+      expect(accountApiCalls()).toEqual([
+        `POST /computers/${COMPUTER_ID}/volumes`,
+        `DELETE /computers/${COMPUTER_ID}/volumes/vol-1`,
+      ]);
+      expect(JSON.parse(String((fetchMock.mock.calls[0]?.[1] as { body: string }).body))).toEqual({
+        volume_id: "vol-1",
+        mount_path: "/data",
+      });
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+
+    it("should keep the computers-only error for a sandbox without a computer", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      await expect(sandbox.attachVolume?.("vol-1", "/data")).rejects.toThrow(
+        /attach to computers, not sandboxes/,
+      );
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+
+    it("should create a lazy sandbox before attaching to it, and attach on the account API", async () => {
+      useRunners((call) => (isCreate(call) ? withComputer() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.attachVolume?.("vol-1", "/data");
+
+      expect(creates()).toHaveLength(1);
+      expect(creates()[0]?.body).not.toHaveProperty("run");
+      expect(accountApiCalls()).toEqual([`POST /computers/${COMPUTER_ID}/volumes`]);
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+
+    it("should serve the volume resource from the account API with the regional endpoint on", async () => {
+      useRunners(() => execOk());
+      fetchMock.mockImplementation(async (url: string, init?: { method?: string }) => {
+        const method = init?.method ?? "GET";
+        if (method === "POST") return jsonResponse({ volume: { id: "v1", name: "data" } }, 201);
+        if (method === "DELETE") return jsonResponse({}, 200);
+        if (url.endsWith("/volumes")) return jsonResponse({ volumes: [{ id: "v1", name: "data" }] });
+        return jsonResponse({ volume: { id: "v1", name: "data" } });
+      });
+      const provider = miosa({ apiKey: API_KEY });
+
+      const created = await provider.volume?.create({ name: "data" });
+      await provider.volume?.get("v1");
+      await provider.volume?.list();
+      await provider.volume?.delete("v1");
+
+      expect(created?.id).toBe("v1");
+      expect(accountApiCalls()).toEqual([
+        "POST /volumes",
+        "GET /volumes/v1",
+        "GET /volumes",
+        "DELETE /volumes/v1",
+      ]);
+      expect(runnerCalls).toEqual([]);
+    });
+  });
+
   describe("the public id", () => {
     it("should stay the placeholder after the sandbox exists, with the real id from getInfo", async () => {
       useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
