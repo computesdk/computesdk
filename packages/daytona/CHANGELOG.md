@@ -1,5 +1,17 @@
 # @computesdk/daytona
 
+## 1.7.45
+
+### Patch Changes
+
+- cbabd5a: Export `errorText` from `@computesdk/provider` and use it in daytona's `resolveDaytonaVolume` — object-shaped errors like `{status: 404}` now match the not-found check instead of rethrowing, so id lookups still fall back to the list scan.
+- a3de4ae: Volume soak fixes: `withVolumeSettle` retries volume delete while the provider reports it still attached (sandbox.destroy() returns before the control plane unmounts); daytona volume get/delete resolve by id or name (`volume.get` is name-keyed); miosa create defaults size_bytes to 1 GiB (missing field 422s); sandbox0 create sends the explicit s0fs/RWO request.
+- 2c5eb0c: Volume review fixes: `withVolumeSettle` reads attachment errors off plain API error objects (providers throw `{error: "..."}` as often as Errors, which stringified to `[object Object]` and skipped the settle retry); daytona `resolveDaytonaVolume` only falls back to an id scan on a real not-found — other `volume.get` failures (auth, 5xx) propagate instead of silently making delete a no-op.
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
 ## 1.7.44
 
 ### Patch Changes
