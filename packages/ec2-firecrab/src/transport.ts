@@ -29,10 +29,11 @@ interface ResolvedSsh {
   identityPath?: string;
 }
 
+// Host-facing ssh pins the first-seen host key (accept-new): a pool host's
+// identity is stable, so impersonation after the first connect is detected.
 const sshBase = [
   '-o', 'BatchMode=yes',
-  '-o', 'StrictHostKeyChecking=no',
-  '-o', 'UserKnownHostsFile=/dev/null',
+  '-o', 'StrictHostKeyChecking=accept-new',
   '-o', 'IdentitiesOnly=yes',
   '-o', 'ConnectTimeout=15',
   '-o', 'LogLevel=ERROR',
@@ -46,6 +47,11 @@ function resolveSshTargets(config: Ec2FirecrabConfig): string[] {
   return single ? [single] : [];
 }
 
+// PEM material is written once per unique blob — reusing the path keeps the
+// tunnelCache key (target|identityPath) stable, so repeated operations share
+// one tunnel instead of leaking a tunnel + port per call.
+const pemFileCache = new Map<string, string>();
+
 function resolveSsh(config: Ec2FirecrabConfig, target: string): ResolvedSsh {
   const pem =
     config.sshIdentityPem ??
@@ -54,11 +60,15 @@ function resolveSsh(config: Ec2FirecrabConfig, target: string): ResolvedSsh {
   const path =
     config.sshIdentityPath ?? process.env.EC2_FIRECRAB_SSH_KEY_PATH ?? undefined;
   if (pem && pem.includes('-----BEGIN')) {
-    const dir = mkdtempSync(join(tmpdir(), 'ec2-firecrab-host-'));
-    const identityPath = join(dir, 'id_key');
-    writeFileSync(identityPath, pem.endsWith('\n') ? pem : pem + '\n', {
-      mode: 0o600,
-    });
+    let identityPath = pemFileCache.get(pem);
+    if (!identityPath) {
+      const dir = mkdtempSync(join(tmpdir(), 'ec2-firecrab-host-'));
+      identityPath = join(dir, 'id_key');
+      writeFileSync(identityPath, pem.endsWith('\n') ? pem : pem + '\n', {
+        mode: 0o600,
+      });
+      pemFileCache.set(pem, identityPath);
+    }
     return { target, identityPath };
   }
   return { target, identityPath: path ?? (pem || undefined) };
@@ -138,6 +148,7 @@ async function establish(
           '-N',
           '-L',
           `${port}:127.0.0.1:5523`,
+          '--',
           ssh.target,
         ],
         { stdio: 'ignore' },
@@ -155,7 +166,7 @@ async function establish(
       const proxyCommand =
         config.sshProxyCommand ??
         process.env.EC2_FIRECRAB_SSH_PROXY_COMMAND ??
-        `ssh ${sshBase.join(' ')} ${ssh.identityPath ? `-i ${quote(ssh.identityPath)}` : ''} -W %h:%p ${quote(ssh.target)}`;
+        `ssh ${sshBase.join(' ')} ${ssh.identityPath ? `-i ${quote(ssh.identityPath)}` : ''} -W %h:%p -- ${quote(ssh.target)}`;
       return { apiUrl, proxyCommand };
     })();
     tunnelCache.set(key, access);
@@ -173,10 +184,30 @@ export function ensureAccess(config: Ec2FirecrabConfig): Promise<FirecrabAccess>
  * its own API tunnel and derived ProxyCommand; the caller round-robins
  * creates and routes per-instance ops through the stamped apiUrl/proxyCommand.
  */
-export function ensureAccesses(
+export async function ensureAccesses(
   config: Ec2FirecrabConfig,
 ): Promise<FirecrabAccess[]> {
   const targets = resolveSshTargets(config);
-  if (!targets.length) return establish(config, null).then((a) => [a]);
-  return Promise.all(targets.map((t) => establish(config, t)));
+  if (!targets.length) return [await establish(config, null)];
+  // One unreachable pool member shouldn't take down the rest — establish
+  // every host independently and keep the ones that came up.
+  const settled = await Promise.allSettled(
+    targets.map((t) => establish(config, t)),
+  );
+  const accesses = settled
+    .filter(
+      (r): r is PromiseFulfilledResult<FirecrabAccess> =>
+        r.status === 'fulfilled',
+    )
+    .map((r) => r.value);
+  if (!accesses.length) {
+    const reasons = settled
+      .map((r, i) =>
+        r.status === 'rejected' ? `${targets[i]}: ${r.reason}` : null,
+      )
+      .filter(Boolean)
+      .join('; ');
+    throw new Error(`ec2-firecrab: no configured host is reachable (${reasons})`);
+  }
+  return accesses;
 }

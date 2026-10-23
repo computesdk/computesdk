@@ -22,7 +22,6 @@ import { ensureAccesses } from './transport.js';
 import type { FirecrabAccess } from './transport.js';
 
 const PROVIDER = 'ec2-firecrab' as const;
-const DEFAULT_API_URL = 'http://127.0.0.1:5523';
 const DEFAULT_TEMPLATE = 'alpine';
 const DEFAULT_NAME_PREFIX = 'csdk-fc-';
 const DEFAULT_CPUS = 1;
@@ -199,7 +198,30 @@ function vmId(payload: unknown): string {
   throw new Error(`firecrab create returned an unexpected body: ${JSON.stringify(payload)}`);
 }
 
+// The API hands out private keys at /ssh-key; that material must never cross
+// a plaintext listener off the host. Loopback (incl. our SSH local-forwards)
+// and TLS are fine — anything else means the caller is talking to a raw
+// remote http listener, which firecrab's design never intends.
+function assertKeyTransport(apiUrl: string, path: string): void {
+  if (!path.endsWith('/ssh-key')) return;
+  try {
+    const u = new URL(apiUrl);
+    if (
+      u.protocol === 'https:' ||
+      ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(u.hostname)
+    ) {
+      return;
+    }
+  } catch {
+    // unparsable — fall through to the throw
+  }
+  throw new Error(
+    `ec2-firecrab: refusing to fetch microVM ssh keys over plaintext ${apiUrl} — use an SSH tunnel (sshTarget) or HTTPS`,
+  );
+}
+
 async function firecrabText(apiUrl: string, method: string, path: string): Promise<string> {
+  assertKeyTransport(apiUrl, path);
   const res = await fetch(`${apiUrl}${path}`, { method });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
@@ -264,10 +286,14 @@ function resolveMicroNetworkIdCached(
   config: Ec2FirecrabConfig,
   apiUrl: string,
 ): Promise<string> {
-  let p = microNetworkCache.get(apiUrl);
+  // Keyed on the selector too: two configs sharing an apiUrl can ask for
+  // different MicroNetworks.
+  const key =
+    `${apiUrl}|${config.microNetworkId ?? process.env.EC2_FIRECRAB_MICRO_NETWORK_ID ?? config.microNetwork ?? process.env.EC2_FIRECRAB_MICRO_NETWORK ?? ''}`;
+  let p = microNetworkCache.get(key);
   if (!p) {
     p = resolveMicroNetworkId(config, apiUrl);
-    microNetworkCache.set(apiUrl, p);
+    microNetworkCache.set(key, p);
   }
   return p;
 }
@@ -292,8 +318,18 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
           ...(config.egressPolicy ? { egressPolicy: config.egressPolicy } : {}),
         });
         const id = vmId(created);
-        await firecrab(apiUrl, 'POST', `/api/vms/${id}/start`);
-        const vm = await waitForRunning(apiUrl, id);
+        let vm: FirecrabVm;
+        try {
+          await firecrab(apiUrl, 'POST', `/api/vms/${id}/start`);
+          vm = await waitForRunning(apiUrl, id);
+        } catch (err) {
+          // A failed start/timeout would otherwise orphan the allocated VM
+          // on the host — the caller never learns its id. Best-effort
+          // stop+delete, then rethrow.
+          await firecrab(apiUrl, 'POST', `/api/vms/${id}/stop`).catch(() => {});
+          await firecrab(apiUrl, 'DELETE', `/api/vms/${id}`).catch(() => {});
+          throw err;
+        }
         // TODO: block until the in-guest computesdk-runtime enrolls (the
         // piece that upgrades exec/fs to the standard HTTP v1 surface),
         // then record its runtime URL on the instance.

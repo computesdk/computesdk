@@ -45,9 +45,22 @@ export async function runSshCommand(req: SshExecRequest): Promise<SshExecResult>
   const keyPath = join(dir, 'id_ed25519');
   writeFileSync(keyPath, req.identityPem, { mode: 0o600 });
 
+  // env keys land unquoted in remote shell text — only allow real shell
+  // identifiers so a hostile key can't inject commands.
+  const envPrefix = req.env
+    ? Object.entries(req.env)
+        .map(([k, v]) => {
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
+            throw new Error(`ec2-firecrab: invalid env var name '${k}'`);
+          }
+          return `${k}=${quote(v)} `;
+        })
+        .join('')
+    : '';
+
   const remote =
     (req.cwd ? `cd ${quote(req.cwd)} && ` : '') +
-    (req.env ? Object.entries(req.env).map(([k, v]) => `${k}=${quote(v)} `).join('') : '') +
+    envPrefix +
     `sh -lc ${quote(req.command)}`;
 
   const args = [
