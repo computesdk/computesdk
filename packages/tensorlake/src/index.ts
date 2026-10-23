@@ -7,7 +7,11 @@
  */
 
 import { Sandbox, SandboxClient, SandboxStatus, OutputMode } from "tensorlake";
-import type { SandboxInfo } from "tensorlake";
+import type {
+  CreateAndConnectOptions,
+  SandboxClientOptions,
+  SandboxInfo,
+} from "tensorlake";
 import { defineProvider } from "@computesdk/provider";
 import { streamTensorlakeCommand } from "./streaming";
 import type {
@@ -135,7 +139,7 @@ export const tensorlake = defineProvider<
         // as an alias for existing callers.
         const diskMb = options?.diskMb ?? options?.ephemeralDiskMb;
 
-        const params = {
+        const params: CreateAndConnectOptions & Partial<SandboxClientOptions> = {
           ...(image && { image }),
           ...(timeoutSecs && { timeoutSecs }),
           ...(options?.cpus && { cpus: options.cpus }),
