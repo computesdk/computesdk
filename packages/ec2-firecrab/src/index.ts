@@ -95,6 +95,12 @@ export interface Ec2FirecrabConfig {
   sshProxyCommand?: string;
   /** Default sandbox and command timeout in milliseconds (15 minutes). */
   timeout?: number;
+  /**
+   * How long create waits for a started microVM to reach `running`
+   * (default 120s). Per-guest disk materialization dominates this under
+   * burst concurrency on small hosts — raise it for large fan-outs.
+   */
+  bootTimeoutMs?: number;
 }
 
 // Verified against a live firecrab host (2026-10-23): states seen are
@@ -246,8 +252,8 @@ async function getVm(apiUrl: string, id: string): Promise<FirecrabVm> {
   return firecrab<FirecrabVm>(apiUrl, 'GET', vmPath(id));
 }
 
-async function waitForRunning(apiUrl: string, id: string): Promise<FirecrabVm> {
-  const deadline = Date.now() + BOOT_TIMEOUT_MS;
+async function waitForRunning(apiUrl: string, id: string, bootTimeoutMs: number): Promise<FirecrabVm> {
+  const deadline = Date.now() + bootTimeoutMs;
   for (;;) {
     const vm = await getVm(apiUrl, id);
     if (vm.state === 'running') return vm;
@@ -255,7 +261,7 @@ async function waitForRunning(apiUrl: string, id: string): Promise<FirecrabVm> {
       throw new Error(`microVM ${id} entered the error state`);
     }
     if (Date.now() > deadline) {
-      throw new Error(`microVM ${id} did not reach running within ${BOOT_TIMEOUT_MS}ms`);
+      throw new Error(`microVM ${id} did not reach running within ${bootTimeoutMs}ms`);
     }
     await new Promise((resolve) => setTimeout(resolve, BOOT_POLL_INTERVAL_MS));
   }
@@ -335,7 +341,7 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
         let vm: FirecrabVm;
         try {
           await firecrab(apiUrl, 'POST', vmPath(id, '/start'));
-          vm = await waitForRunning(apiUrl, id);
+          vm = await waitForRunning(apiUrl, id, config.bootTimeoutMs ?? BOOT_TIMEOUT_MS);
         } catch (err) {
           // A failed start/timeout would otherwise orphan the allocated VM
           // on the host — the caller never learns its id. Best-effort
