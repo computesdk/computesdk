@@ -2,7 +2,7 @@
  * Modal Provider - Factory-based Implementation
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -145,6 +145,12 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             ...providerOptions
           } = modalOptions;
 
+          // `volumes` only counts as unified VolumeMount[] when every entry
+          // carries `volume`; a provider-native volumes spec stays in
+          // providerOptions and reaches the wire untouched.
+          const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+          if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
+
           const sourceId = snapshotId || templateId;
           const cacheKey = sourceId ?? DEFAULT_IMAGE;
           let promise = config._imageCache.get(cacheKey);
@@ -173,9 +179,9 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           // Unified mounts → modal's {mountPath: Volume} wire shape. Volume
           // handles resolve via volumes.fromName (native Volume objects pass
           // through directly; strings/ids get createIfMissing semantics).
-          if (Array.isArray(volumes) && volumes.length > 0) {
+          if (unifiedVolumes) {
             const volumeMap: Record<string, any> = {};
-            for (const m of volumes as any[]) {
+            for (const m of unifiedVolumes as any[]) {
               const ref = resolveVolumeRef(m.volume);
               volumeMap[m.mountPath] = ref.native ?? await client.volumes.fromName(
                 ref.name ?? ref.id!, { createIfMissing: true }

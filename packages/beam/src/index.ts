@@ -7,7 +7,7 @@
  */
 
 import beamClient, { Sandbox, SandboxInstance, beamOpts, Image, Volume as BeamVolume } from '@beamcloud/beam-js';
-import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   InstanceInfo,
@@ -215,6 +215,12 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             ...providerOptions
           } = options || {};
 
+          // `volumes` only counts as unified VolumeMount[] when every entry
+          // carries `volume`; a provider-native volumes spec stays in
+          // providerOptions and reaches the wire untouched.
+          const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+          if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
+
           const optRuntime = (options as any)?.runtime as string | undefined;
           const runtime = optRuntime || 'node';
           const sandboxName = name || 'computesdk-sandbox';
@@ -245,8 +251,8 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
           // Unified mounts → beam's native Volume objects (mountPath is baked
           // into the Volume, so the wire shape is Volume[] with no paths).
-          if (Array.isArray(volumes) && volumes.length > 0) {
-            sandboxConfig.volumes = volumes.map((m: any) => {
+          if (unifiedVolumes) {
+            sandboxConfig.volumes = unifiedVolumes.map((m: any) => {
               const ref = resolveVolumeRef(m.volume);
               return ref.native ?? new BeamVolume(ref.name ?? ref.id!, m.mountPath);
             });

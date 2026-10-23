@@ -14,7 +14,7 @@
  *   await sandbox.destroy();
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from "@computesdk/provider";
 import type { RunCommandOptions, CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry } from "computesdk";
 import {
   TenkiSandbox,
@@ -144,8 +144,8 @@ function toCreateOptions(config: TenkiConfig, options?: CreateInstanceOptions): 
   if (typeof memoryMb === "number") opts.memoryMb = memoryMb;
   if (typeof diskSizeGb === "number") opts.diskSizeGb = diskSizeGb;
 
-  if (Array.isArray(options?.volumes) && options.volumes.length > 0) {
-    opts.volumes = options.volumes.map((m) => {
+  if (isUnifiedVolumeMounts(options?.volumes)) {
+    opts.volumes = options!.volumes!.map((m) => {
       const ref = resolveVolumeRef(m.volume);
       return { volumeId: ref.id ?? ref.name!, mountPath: m.mountPath, readOnly: m.readOnly };
     });

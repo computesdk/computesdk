@@ -5,7 +5,7 @@
  */
 
 import { Sandbox as DeclawSandbox, ConnectionConfig, Volumes as DeclawVolumes } from '@declaw/sdk';
-import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type {
   CommandResult,
@@ -57,6 +57,12 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
           ...providerOptions
         } = options || {};
 
+        // `volumes` only counts as unified VolumeMount[] when every entry
+        // carries `volume`; a provider-native volumes spec stays in
+        // providerOptions and reaches the wire untouched.
+        const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+        if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
+
         const ttMs = requestedTimeoutMs ?? config.timeout ?? 300_000;
         const timeoutSec = Math.max(1, Math.ceil(ttMs / 1000));
         const template = templateId || 'node';
@@ -65,8 +71,8 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
           const sandbox = await DeclawSandbox.create({
             template, timeout: timeoutSec, apiKey, domain, metadata, envs,
             // Unified mounts → declaw's [{volumeId, mountPath}] wire shape.
-            ...(Array.isArray(volumes) && volumes.length > 0 && {
-              volumes: volumes.map((m: any) => {
+            ...(unifiedVolumes && {
+              volumes: unifiedVolumes.map((m: any) => {
                 const ref = resolveVolumeRef(m.volume);
                 const volumeId = ref.id ?? ref.name;
                 if (!volumeId) throw new Error('declaw volume mount requires a volume id or name');

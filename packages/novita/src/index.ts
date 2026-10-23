@@ -1,6 +1,6 @@
 import { CommandExitError, FileType, NotFoundError, Novita, TimeoutError, Volume as NovitaVolume } from 'novita-sandbox';
 import type { BuildOptions, SandboxOpts, SnapshotInfo, TemplateClass, TemplateInfo } from 'novita-sandbox';
-import { defineProvider, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult, CreateTemplateOptions, Provider, ProviderTemplateManager,
   RunCommandOptions, InstanceInfo,
@@ -127,8 +127,8 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
           network: options?.network,
           lifecycle: options?.lifecycle,
           // Unified mounts → novita's {path: volumeName} wire shape.
-          ...(Array.isArray(options?.volumes) && options.volumes.length > 0 && {
-            volumeMounts: Object.fromEntries(options.volumes.map((m: any) => {
+          ...(isUnifiedVolumeMounts(options?.volumes) && {
+            volumeMounts: Object.fromEntries(options.volumes!.map((m: any) => {
               const ref = resolveVolumeRef(m.volume);
               // Wire wants the volume NAME — a Volume handle's `native` is the
               // NovitaVolume object, not a mountable string.

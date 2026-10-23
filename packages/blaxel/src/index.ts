@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { SandboxInstance, Snapshot, VolumeInstance, initialize } from '@blaxel/core';
-import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
@@ -125,6 +125,12 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					...providerOptions
 				} = options || {};
 
+				// `volumes` only counts as unified VolumeMount[] when every entry
+				// carries `volume`; a provider-native volumes spec stays in
+				// providerOptions and reaches the wire untouched.
+				const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+				if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
+
 				const optRuntime = (options as any)?.runtime as string | undefined;
 
 				// Determine the image to use
@@ -195,9 +201,9 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						ttl: effectiveTtl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
-						...(Array.isArray(volumes) && volumes.length > 0 && {
+						...(unifiedVolumes && {
 							// Unified mounts → blaxel VolumeAttachment shape.
-							volumes: volumes.map((m: any) => {
+							volumes: unifiedVolumes.map((m: any) => {
 								const ref = resolveVolumeRef(m.volume);
 								return { name: ref.name ?? ref.id, mountPath: m.mountPath, readOnly: m.readOnly, type: 'persistent' };
 							}),

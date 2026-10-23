@@ -3,7 +3,7 @@
  */
 
 import { Sandbox as E2BSandbox, Volume as E2BVolume } from 'e2b';
-import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -58,11 +58,17 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
             volumes, ...providerOptions
           } = options || {};
 
+          // `volumes` only counts as unified VolumeMount[] when every entry
+          // carries `volume`; a provider-native volumes spec stays in
+          // providerOptions and reaches the wire untouched.
+          const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+          if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
+
           const createOpts: Record<string, any> = {
             apiKey, timeoutMs: timeout, envs, metadata, ...providerOptions,
             // Unified mounts → e2b's [{name, path}] wire shape.
-            ...(Array.isArray(volumes) && volumes.length > 0 && {
-              volumeMounts: volumes.map((m: any) => ({
+            ...(unifiedVolumes && {
+              volumeMounts: unifiedVolumes.map((m: any) => ({
                 name: resolveVolumeRef(m.volume).name ?? resolveVolumeRef(m.volume).id,
                 path: m.mountPath,
               })),
