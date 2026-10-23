@@ -1,0 +1,1080 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The SDK's real RunnerClient runs against an in-memory transport, so the
+// create, the address walk and the fallback to the account API are the real
+// code; only the wire is scripted.
+type ScriptedTransport = import("@miosa/sdk").RunnerTransport;
+
+const wire = vi.hoisted(() => ({
+  transport: undefined as ScriptedTransport | undefined,
+}));
+
+vi.mock("@miosa/sdk", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@miosa/sdk")>();
+  return {
+    ...actual,
+    RunnerClient: vi
+      .fn()
+      .mockImplementation(
+        (options: ConstructorParameters<typeof actual.RunnerClient>[0]) =>
+          new actual.RunnerClient({ ...options, transport: wire.transport })
+      ),
+  };
+});
+
+import { DEFAULT_BASE_URL, closeMiosaRunnerConnections, miosa } from "../index";
+import type { MiosaSandboxRecord } from "../index";
+
+const API_KEY = "msk_test_0123456789abcdef";
+const REAL_ID = "a1b2c3d4-0000-0000-0000-000000000001";
+const RUNNER_URL = "https://a.run-us.miosa.ai";
+
+function sandboxRecord(): MiosaSandboxRecord {
+  return {
+    id: REAL_ID,
+    slug: "a1b2c3d4",
+    name: "test-sandbox",
+    state: "running",
+    template_id: "miosa-sandbox",
+    cpu_count: 1,
+    memory_mb: 2048,
+    timeout_sec: 300,
+    metadata: { slug: "a1b2c3d4" },
+    preview_url: "https://a1b2c3d4.miosa.ai",
+    preview_domain: "miosa.ai",
+    created_at: "2026-07-11T00:00:00Z",
+  };
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+interface RunnerCall {
+  addressIndex: number;
+  method: string;
+  path: string;
+  body: Record<string, unknown> | undefined;
+}
+
+type RunnerReply = {
+  status: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+};
+
+const RUN_OUTCOME = {
+  duration_ms: 3,
+  error: null,
+  exit_code: 0,
+  stderr: "",
+  stdout: "v22.1.0\n",
+};
+
+const createdWithRun = (): RunnerReply => ({
+  status: 201,
+  headers: { "soma-runner-url": RUNNER_URL },
+  body: { ...sandboxRecord(), run: RUN_OUTCOME },
+});
+const createdPlain = (): RunnerReply => ({
+  status: 201,
+  headers: { "soma-runner-url": RUNNER_URL },
+  body: sandboxRecord(),
+});
+const execOk = (): RunnerReply => ({
+  status: 200,
+  body: { stdout: "from-exec\n", stderr: "", exit_code: 0 },
+});
+
+describe("lazy create", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let runnerCalls: RunnerCall[];
+
+  /** Two runner addresses; `reply` scripts every request except /healthz. */
+  function useRunners(
+    reply: (call: RunnerCall) => RunnerReply | Promise<RunnerReply>,
+  ): void {
+    runnerCalls = [];
+    wire.transport = {
+      protocol: "h2",
+      prewarm: () => undefined,
+      addressCount: async () => 2,
+      ready: async () => undefined,
+      request: async (
+        _hostname: string,
+        addressIndex: number,
+        _authority: string,
+        path: string,
+        init: { method: string; body?: unknown }
+      ) => {
+        if (path === "/healthz") {
+          return { status: 200, headers: {}, body: "{}" };
+        }
+        const call: RunnerCall = {
+          addressIndex,
+          method: init.method,
+          path,
+          body:
+            init.body === undefined
+              ? undefined
+              : (JSON.parse(String(init.body)) as Record<string, unknown>),
+        };
+        runnerCalls.push(call);
+        const scripted = await reply(call);
+        return {
+          status: scripted.status,
+          headers: scripted.headers ?? {},
+          body:
+            scripted.body === undefined ? "" : JSON.stringify(scripted.body),
+        };
+      },
+      streamRequest: async () => {
+        throw new Error("streamRequest is not scripted");
+      },
+      close: async () => undefined,
+    } as unknown as ScriptedTransport;
+  }
+
+  const isCreate = (call: RunnerCall): boolean =>
+    call.method === "POST" && call.path === "/api/v1/sandboxes";
+  const creates = (): RunnerCall[] => runnerCalls.filter(isCreate);
+  const runnerPaths = (): string[] =>
+    runnerCalls.map((call) => `${call.method} ${call.path}`);
+
+  /** The account API, serving whatever a test sends to it. */
+  function useAccountApi(): void {
+    fetchMock.mockImplementation(
+      async (url: string, init?: { method?: string }) => {
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/exec")) {
+          return jsonResponse({
+            data: { stdout: "from-account-api\n", stderr: "", exit_code: 0 },
+          });
+        }
+        if (url.endsWith("/snapshots")) {
+          return jsonResponse({ id: "snap-1", sandbox_id: REAL_ID }, 201);
+        }
+        if (method === "DELETE" || url.endsWith("/fs/write")) {
+          return jsonResponse({ data: {} });
+        }
+        return jsonResponse(sandboxRecord(), method === "POST" ? 201 : 200);
+      }
+    );
+  }
+
+  const accountApiCalls = (): string[] =>
+    fetchMock.mock.calls.map(([url, init]) => {
+      const method = (init as { method?: string } | undefined)?.method ?? "GET";
+      return `${method} ${String(url).replace(DEFAULT_BASE_URL, "")}`;
+    });
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    delete process.env.MIOSA_RUNNER_MODE;
+    delete process.env.MIOSA_LAZY_CREATE;
+    useAccountApi();
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    delete process.env.MIOSA_RUNNER_MODE;
+    delete process.env.MIOSA_LAZY_CREATE;
+    await closeMiosaRunnerConnections();
+  });
+
+  describe("switching it on", () => {
+    it("should be off by default and create eagerly", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(creates()).toHaveLength(1);
+      expect(sandbox.sandboxId).toBe(REAL_ID);
+    });
+
+    it("should be enabled by the lazyCreate option", async () => {
+      useRunners(() => execOk());
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(runnerCalls).toEqual([]);
+      expect(sandbox.sandboxId).not.toBe(REAL_ID);
+    });
+
+    it.each(["1", "true", "TRUE"])(
+      "should be enabled by MIOSA_LAZY_CREATE=%s",
+      async (value) => {
+        process.env.MIOSA_LAZY_CREATE = value;
+        useRunners(() => execOk());
+        const provider = miosa({ apiKey: API_KEY });
+
+        await provider.sandbox.create();
+
+        expect(runnerCalls).toEqual([]);
+      }
+    );
+
+    it.each(["0", "false", "", "yes"])(
+      "should stay off for MIOSA_LAZY_CREATE=%j",
+      async (value) => {
+        process.env.MIOSA_LAZY_CREATE = value;
+        useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+        const provider = miosa({ apiKey: API_KEY });
+
+        await provider.sandbox.create();
+
+        expect(creates()).toHaveLength(1);
+      }
+    );
+
+    it("should let lazyCreate: false override the environment", async () => {
+      process.env.MIOSA_LAZY_CREATE = "1";
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: false });
+
+      await provider.sandbox.create();
+
+      expect(creates()).toHaveLength(1);
+    });
+
+    it("should create eagerly on the account API when the regional endpoint is off", async () => {
+      useRunners(() => execOk());
+      const provider = miosa({
+        apiKey: API_KEY,
+        lazyCreate: true,
+        runnerMode: false,
+      });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(accountApiCalls()).toEqual(["POST /sandboxes"]);
+      expect(sandbox.sandboxId).toBe(REAL_ID);
+    });
+  });
+
+  describe("create", () => {
+    it("should return a handle without any network call", async () => {
+      useRunners(() => execOk());
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+
+      const sandbox = await provider.sandbox.create();
+
+      expect(runnerCalls).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(sandbox.provider).toBe("miosa");
+    });
+
+    it("should give each handle its own placeholder id", async () => {
+      useRunners(() => execOk());
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+
+      const first = await provider.sandbox.create();
+      const second = await provider.sandbox.create();
+
+      expect(first.sandboxId).not.toBe(second.sandboxId);
+    });
+
+    it("should still reject a missing API key at create time", async () => {
+      delete process.env.MIOSA_API_KEY;
+      const provider = miosa({ lazyCreate: true });
+
+      await expect(provider.sandbox.create()).rejects.toThrow(
+        /Missing MIOSA API key/
+      );
+    });
+  });
+
+  describe("first runCommand", () => {
+    it("should create and run in one request and return the command's result", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const result = await sandbox.runCommand("node -v");
+
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+      // No timeout was asked for, so none is sent and the runner's default
+      // applies.
+      expect(creates()[0]?.body?.run).toEqual({ command: "node -v" });
+      expect(result).toMatchObject({
+        stdout: "v22.1.0\n",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 3,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should keep the create body the eager create would have sent", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create({ timeout: 60_000 });
+
+      await sandbox.runCommand("node -v");
+
+      expect(creates()[0]?.body).toMatchObject({
+        wait: true,
+        response_format: "compact",
+        persistent: false,
+        timeout_sec: 60,
+      });
+    });
+
+    it("should send the caller's timeout as timeout_ms", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.runCommand("node -v", { timeout: 4000 });
+
+      expect(creates()[0]?.body).toMatchObject({
+        run: { command: "node -v", timeout_ms: 4000 },
+      });
+    });
+
+    it("should report a failing command as a result, not an error", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? {
+              ...createdWithRun(),
+              body: {
+                ...sandboxRecord(),
+                run: {
+                  exit_code: 2,
+                  stdout: "",
+                  stderr: "nope",
+                  duration_ms: 1,
+                },
+              },
+            }
+          : execOk()
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const result = await sandbox.runCommand("false");
+
+      expect(result).toMatchObject({ exitCode: 2, stderr: "nope" });
+    });
+
+    it("should run the second command as an ordinary exec on the created sandbox", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.runCommand("node -v");
+      const second = await sandbox.runCommand("echo hi");
+
+      expect(runnerPaths()).toEqual([
+        "POST /api/v1/sandboxes",
+        `POST /api/v1/sandboxes/${REAL_ID}/exec`,
+      ]);
+      expect(second.stdout).toBe("from-exec\n");
+      expect(creates()).toHaveLength(1);
+    });
+
+    it("should create without a run and then exec when the runner ignores the field", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const result = await sandbox.runCommand("node -v");
+
+      expect(runnerPaths()).toEqual([
+        "POST /api/v1/sandboxes",
+        `POST /api/v1/sandboxes/${REAL_ID}/exec`,
+      ]);
+      expect(creates()).toHaveLength(1);
+      expect(result.stdout).toBe("from-exec\n");
+    });
+
+    it.each([
+      ["a working directory", { cwd: "/work" }],
+      ["environment variables", { env: { A: "1" } }],
+    ])(
+      "should create first and exec normally when the command needs %s",
+      async (_name, options) => {
+        useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+        const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+        const sandbox = await provider.sandbox.create();
+
+        const result = await sandbox.runCommand("node -v", options);
+
+        expect(creates()).toHaveLength(1);
+        expect(creates()[0]?.body).not.toHaveProperty("run");
+        expect(runnerPaths()).toContain(
+          `POST /api/v1/sandboxes/${REAL_ID}/exec`
+        );
+        expect(result.stdout).toBe("from-exec\n");
+      }
+    );
+
+    it("should hand a shape the runner does not serve to the account API without the run field", async () => {
+      useRunners(() => execOk());
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create({
+        vcpus: 8,
+        memory: 16384,
+      });
+
+      const result = await sandbox.runCommand("node -v");
+
+      expect(runnerCalls).toEqual([]);
+      const [createCall] = fetchMock.mock.calls;
+      expect(String(createCall?.[0])).toBe(`${DEFAULT_BASE_URL}/sandboxes`);
+      const sent = JSON.parse(
+        String((createCall?.[1] as { body: string }).body)
+      ) as Record<string, unknown>;
+      expect(sent).toMatchObject({ size: "large" });
+      expect(sent).not.toHaveProperty("run");
+      expect(accountApiCalls()).toContain(`POST /sandboxes/${REAL_ID}/exec`);
+      expect(result.stdout).toBe("from-account-api\n");
+    });
+
+    it("should strip the run field when the runner refuses the request and the account API takes it", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? {
+              status: 400,
+              body: { error: { code: "RUNNER_UNSUPPORTED_REQUEST" } },
+            }
+          : execOk()
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const result = await sandbox.runCommand("node -v");
+
+      const sent = JSON.parse(
+        String((fetchMock.mock.calls[0]?.[1] as { body: string }).body)
+      ) as Record<string, unknown>;
+      expect(sent).not.toHaveProperty("run");
+      expect(result.stdout).toBe("from-account-api\n");
+    });
+  });
+
+  describe("a command that produced no result", () => {
+    it("should report it as a failed command and not run it again", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? {
+              ...createdPlain(),
+              body: {
+                ...sandboxRecord(),
+                run: {
+                  duration_ms: 30000,
+                  error: { code: "EXEC_TIMEOUT", message: "deadline exceeded" },
+                  exit_code: null,
+                  stderr: "",
+                  stdout: "partial",
+                },
+              },
+            }
+          : execOk(),
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const result = await sandbox.runCommand("sleep 99");
+
+      expect(result).toMatchObject({
+        exitCode: 127,
+        stderr: "deadline exceeded",
+        stdout: "partial",
+      });
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+
+    it("should leave the sandbox usable afterwards", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? {
+              ...createdPlain(),
+              body: {
+                ...sandboxRecord(),
+                run: {
+                  duration_ms: 1,
+                  error: { code: "EXEC_SPAWN_FAILED" },
+                  exit_code: null,
+                  stderr: "",
+                  stdout: "",
+                },
+              },
+            }
+          : execOk(),
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.runCommand("x");
+
+      const second = await sandbox.runCommand("echo hi");
+
+      expect(second.stdout).toBe("from-exec\n");
+      expect(creates()).toHaveLength(1);
+    });
+  });
+
+  describe("a command the runner refuses", () => {
+    const refusals: Array<[number, string]> = [
+      [400, "MISSING_PARAM"],
+      [400, "INVALID_PARAM"],
+      [400, "INVALID_TIMEOUT"],
+      [400, "EXEC_TIMEOUT_UNSUPPORTED"],
+      [413, "RUNNER_COMMAND_TOO_LARGE"],
+    ];
+    const refuseRun = (status: number, code: string) => (call: RunnerCall) => {
+      if (isCreate(call) && call.body?.run !== undefined) {
+        return { status, body: { error: { code, message: `refused ${code}` } } };
+      }
+      return isCreate(call) ? createdPlain() : execOk();
+    };
+
+    it.each(refusals)(
+      "should report %i %s as a failed command, create nothing and not fall back",
+      async (status, code) => {
+        useRunners(refuseRun(status, code));
+        const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+        const sandbox = await provider.sandbox.create();
+
+        const result = await sandbox.runCommand("bad");
+
+        expect(result.exitCode).toBe(127);
+        expect(result.stderr).toMatch(new RegExp(code));
+        expect(creates()).toHaveLength(1);
+        expect(fetchMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it("should leave no materialised handle: destroying it sends nothing", async () => {
+      useRunners(refuseRun(400, "INVALID_PARAM"));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.runCommand("bad");
+
+      await sandbox.destroy();
+
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should create the sandbox normally on the next command", async () => {
+      useRunners((call) =>
+        isCreate(call) && call.body?.run?.["command" as never] === "bad"
+          ? { status: 400, body: { error: { code: "INVALID_PARAM" } } }
+          : isCreate(call)
+            ? createdWithRun()
+            : execOk(),
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.runCommand("bad");
+
+      const result = await sandbox.runCommand("node -v");
+
+      expect(creates()).toHaveLength(2);
+      expect(result.stdout).toBe("v22.1.0\n");
+    });
+
+    it("should let another call that was waiting on that create make its own plain one", async () => {
+      useRunners(refuseRun(400, "INVALID_PARAM"));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const [command] = await Promise.all([
+        sandbox.runCommand("bad"),
+        sandbox.filesystem.writeFile("/work/a.txt", "hi"),
+      ]);
+
+      expect(command.exitCode).toBe(127);
+      expect(creates()).toHaveLength(2);
+      expect(creates()[1]?.body).not.toHaveProperty("run");
+      expect(accountApiCalls()).toEqual([`POST /sandboxes/${REAL_ID}/fs/write`]);
+    });
+
+    it("should still send a create the runner does not serve to the account API without the run field", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? {
+              status: 400,
+              body: { error: { code: "RUNNER_UNSUPPORTED_REQUEST" } },
+            }
+          : execOk(),
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const result = await sandbox.runCommand("node -v");
+
+      expect(result.stdout).toBe("from-account-api\n");
+      const sent = JSON.parse(
+        String((fetchMock.mock.calls[0]?.[1] as { body: string }).body),
+      ) as Record<string, unknown>;
+      expect(sent).not.toHaveProperty("run");
+    });
+  });
+
+  describe("any other first call", () => {
+    it("should create the sandbox before writing a file", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.filesystem.writeFile("/work/a.txt", "hi");
+
+      expect(creates()).toHaveLength(1);
+      expect(creates()[0]?.body).not.toHaveProperty("run");
+      expect(accountApiCalls()).toEqual([
+        `POST /sandboxes/${REAL_ID}/fs/write`,
+      ]);
+    });
+
+    it("should create the sandbox before reporting its info", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const info = await sandbox.getInfo();
+
+      expect(creates()).toHaveLength(1);
+      expect(info.id).toBe(REAL_ID);
+    });
+
+    it("should create the sandbox when it is looked up by its placeholder id", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const found = await provider.sandbox.getById(sandbox.sandboxId);
+
+      expect(creates()).toHaveLength(1);
+      expect(found?.sandboxId).toBe(REAL_ID);
+    });
+
+    it("should create the sandbox before snapshotting it by its placeholder id", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await provider.snapshot?.create(sandbox.sandboxId, { name: "s" });
+
+      expect(creates()).toHaveLength(1);
+      expect(accountApiCalls()).toContain(
+        `POST /sandboxes/${REAL_ID}/snapshots`
+      );
+    });
+
+    it("should exec normally after a non-command call created the sandbox", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.filesystem.writeFile("/work/a.txt", "hi");
+      const result = await sandbox.runCommand("node -v");
+
+      expect(creates()).toHaveLength(1);
+      expect(result.stdout).toBe("from-exec\n");
+    });
+
+    it("should send one create for a command and a file write started together", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const [command] = await Promise.all([
+        sandbox.runCommand("node -v"),
+        sandbox.filesystem.writeFile("/work/a.txt", "hi"),
+      ]);
+
+      expect(creates()).toHaveLength(1);
+      expect(command.stdout).toBe("v22.1.0\n");
+      expect(accountApiCalls()).toEqual([
+        `POST /sandboxes/${REAL_ID}/fs/write`,
+      ]);
+    });
+
+    it("should give two commands started together one create and one ordinary exec", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const [first, second] = await Promise.all([
+        sandbox.runCommand("node -v"),
+        sandbox.runCommand("echo hi"),
+      ]);
+
+      expect(creates()).toHaveLength(1);
+      expect(first.stdout).toBe("v22.1.0\n");
+      expect(second.stdout).toBe("from-exec\n");
+    });
+  });
+
+  describe("errors", () => {
+    it("should surface a runner create error on the first command as the error an eager create raises", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? { status: 500, body: { error: "internal_error" } }
+          : execOk()
+      );
+      const eager = miosa({ apiKey: API_KEY });
+      const eagerError = await eager.sandbox.create().then(
+        () => undefined,
+        (error: unknown) => error
+      );
+      const lazyProvider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await lazyProvider.sandbox.create();
+
+      const lazyError = await sandbox.runCommand("node -v").then(
+        () => undefined,
+        (error: unknown) => error
+      );
+
+      expect(eagerError).toBeInstanceOf(Error);
+      expect(lazyError).toBeInstanceOf(Error);
+      expect((lazyError as Error).name).toBe((eagerError as Error).name);
+      expect((lazyError as Error).message).toBe((eagerError as Error).message);
+    });
+
+    it("should surface an account API create error with the same type an eager create raises", async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({ error: { code: "TENANT_RESOLUTION_FAILED" } }, 422)
+      );
+      useRunners(() => execOk());
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create({ vcpus: 8 });
+
+      const error = await sandbox.runCommand("node -v").then(
+        () => undefined,
+        (caught: unknown) => caught
+      );
+
+      expect((error as Error).name).toBe("MiosaApiError");
+      expect((error as Error).message).toMatch(/TENANT_RESOLUTION_FAILED/);
+    });
+
+    it("should raise the same error on every later call and send no second create", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? { status: 500, body: { error: "internal_error" } }
+          : execOk()
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const first = await sandbox
+        .runCommand("node -v")
+        .catch((e: unknown) => e);
+      const second = await sandbox.getInfo().catch((e: unknown) => e);
+      const third = await sandbox.filesystem
+        .writeFile("/a", "b")
+        .catch((e: unknown) => e);
+
+      expect(creates()).toHaveLength(1);
+      expect(second).toBe(first);
+      expect(third).toBe(first);
+    });
+
+    it("should not fall back to the account API after a timeout that may have reached the runner", async () => {
+      useRunners((call) => {
+        if (isCreate(call)) {
+          throw new RunnerTimeoutErrorForTest();
+        }
+        return execOk();
+      });
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await expect(sandbox.runCommand("node -v")).rejects.toThrow(/timed out/);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("destroy while a refused create-and-run is in flight", () => {
+    it("should not let a waiting call create a sandbox after destroy", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      useRunners(async (call) => {
+        if (isCreate(call) && call.body?.run !== undefined) {
+          await gate;
+          return { status: 400, body: { error: { code: "INVALID_PARAM" } } };
+        }
+        return isCreate(call) ? createdPlain() : execOk();
+      });
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      const command = sandbox.runCommand("bad");
+      const write = sandbox.filesystem
+        .writeFile("/work/a.txt", "hi")
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      await new Promise((resolve) => setImmediate(resolve));
+      const destroying = sandbox.destroy();
+      release();
+      await command;
+      await destroying;
+      const writeError = await write;
+
+      // Only the refused create reached the runner: nothing was provisioned,
+      // so there is nothing left running.
+      expect(creates()).toHaveLength(1);
+      expect(writeError).toBeInstanceOf(Error);
+      expect((writeError as Error).message).toMatch(/destroyed/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should destroy the sandbox a waiting call created before destroy began", async () => {
+      useRunners((call) => {
+        if (isCreate(call)) return createdPlain();
+        if (call.method === "DELETE") return { status: 200, body: {} };
+        return execOk();
+      });
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      const write = sandbox.filesystem.writeFile("/work/a.txt", "hi");
+      await new Promise((resolve) => setImmediate(resolve));
+
+      await sandbox.destroy();
+      await write.catch(() => undefined);
+
+      expect(runnerPaths()).toContain(`DELETE /api/v1/sandboxes/${REAL_ID}`);
+    });
+  });
+
+  describe("another tenant's placeholder id", () => {
+    const OTHER_KEY = "msk_other_0123456789abcdef";
+
+    it("should not cancel an unused handle when another key destroys its id", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const owner = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const intruder = miosa({ apiKey: OTHER_KEY, lazyCreate: true });
+      const sandbox = await owner.sandbox.create();
+
+      await intruder.sandbox.destroy(sandbox.sandboxId);
+      const result = await sandbox.runCommand("node -v");
+
+      expect(result.stdout).toBe("v22.1.0\n");
+      expect(creates()).toHaveLength(1);
+    });
+
+    it("should not create the owner's sandbox when another key looks the id up", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      fetchMock.mockResolvedValue(
+        jsonResponse({ error: { code: "NOT_FOUND" } }, 404),
+      );
+      const owner = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const intruder = miosa({ apiKey: OTHER_KEY, lazyCreate: true });
+      const sandbox = await owner.sandbox.create();
+
+      const found = await intruder.sandbox.getById(sandbox.sandboxId);
+
+      expect(found).toBeNull();
+      expect(creates()).toEqual([]);
+    });
+
+    it("should not create the owner's sandbox when another key snapshots the id", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const owner = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const intruder = miosa({ apiKey: OTHER_KEY, lazyCreate: true });
+      const sandbox = await owner.sandbox.create();
+
+      await intruder.snapshot?.create(sandbox.sandboxId, { name: "s" });
+
+      expect(creates()).toEqual([]);
+    });
+  });
+
+  describe("volumes", () => {
+    const COMPUTER_ID = "c0c0c0c0-0000-0000-0000-000000000001";
+    const withComputer = (): RunnerReply => ({
+      ...createdPlain(),
+      body: { ...sandboxRecord(), computer_id: COMPUTER_ID },
+    });
+
+    it("should keep attach and detach on the account API for a sandbox created on the runner", async () => {
+      useRunners((call) => (isCreate(call) ? withComputer() : execOk()));
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.attachVolume?.("vol-1", "/data");
+      await sandbox.detachVolume?.("vol-1");
+
+      expect(accountApiCalls()).toEqual([
+        `POST /computers/${COMPUTER_ID}/volumes`,
+        `DELETE /computers/${COMPUTER_ID}/volumes/vol-1`,
+      ]);
+      expect(JSON.parse(String((fetchMock.mock.calls[0]?.[1] as { body: string }).body))).toEqual({
+        volume_id: "vol-1",
+        mount_path: "/data",
+      });
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+
+    it("should keep the computers-only error for a sandbox without a computer", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      await expect(sandbox.attachVolume?.("vol-1", "/data")).rejects.toThrow(
+        /attach to computers, not sandboxes/,
+      );
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+
+    it("should create a lazy sandbox before attaching to it, and attach on the account API", async () => {
+      useRunners((call) => (isCreate(call) ? withComputer() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.attachVolume?.("vol-1", "/data");
+
+      expect(creates()).toHaveLength(1);
+      expect(creates()[0]?.body).not.toHaveProperty("run");
+      expect(accountApiCalls()).toEqual([`POST /computers/${COMPUTER_ID}/volumes`]);
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+
+    it("should serve the volume resource from the account API with the regional endpoint on", async () => {
+      useRunners(() => execOk());
+      fetchMock.mockImplementation(async (url: string, init?: { method?: string }) => {
+        const method = init?.method ?? "GET";
+        if (method === "POST") return jsonResponse({ volume: { id: "v1", name: "data" } }, 201);
+        if (method === "DELETE") return jsonResponse({}, 200);
+        if (url.endsWith("/volumes")) return jsonResponse({ volumes: [{ id: "v1", name: "data" }] });
+        return jsonResponse({ volume: { id: "v1", name: "data" } });
+      });
+      const provider = miosa({ apiKey: API_KEY });
+
+      const created = await provider.volume?.create({ name: "data" });
+      await provider.volume?.get("v1");
+      await provider.volume?.list();
+      await provider.volume?.delete("v1");
+
+      expect(created?.id).toBe("v1");
+      expect(accountApiCalls()).toEqual([
+        "POST /volumes",
+        "GET /volumes/v1",
+        "GET /volumes",
+        "DELETE /volumes/v1",
+      ]);
+      expect(runnerCalls).toEqual([]);
+    });
+  });
+
+  describe("the public id", () => {
+    it("should stay the placeholder after the sandbox exists, with the real id from getInfo", async () => {
+      useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      const placeholder = sandbox.sandboxId;
+
+      const info = await sandbox.getInfo();
+
+      expect(info.id).toBe(REAL_ID);
+      expect(sandbox.sandboxId).toBe(placeholder);
+      expect(placeholder).toMatch(/^lazy-/);
+      expect((await provider.sandbox.getById(REAL_ID))?.sandboxId).toBe(REAL_ID);
+    });
+  });
+
+  describe("destroy", () => {
+    it("should be a no-op for a sandbox that was never created", async () => {
+      useRunners(() => execOk());
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await sandbox.destroy();
+
+      expect(runnerCalls).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should be a no-op when destroyed by placeholder id through the provider", async () => {
+      useRunners(() => execOk());
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+
+      await provider.sandbox.destroy(sandbox.sandboxId);
+
+      expect(runnerCalls).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should not create a sandbox for a handle that was destroyed unused", async () => {
+      useRunners((call) => (isCreate(call) ? createdWithRun() : execOk()));
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.destroy();
+
+      await expect(sandbox.runCommand("node -v")).rejects.toThrow(/destroyed/);
+
+      expect(creates()).toEqual([]);
+    });
+
+    it("should destroy the real sandbox on the runner once it was created", async () => {
+      useRunners((call) => {
+        if (isCreate(call)) return createdWithRun();
+        if (call.method === "DELETE") return { status: 200, body: {} };
+        return execOk();
+      });
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.runCommand("node -v");
+
+      await sandbox.destroy();
+
+      expect(runnerPaths()).toEqual([
+        "POST /api/v1/sandboxes",
+        `DELETE /api/v1/sandboxes/${REAL_ID}`,
+      ]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should destroy a sandbox on the account API when that is where its create landed", async () => {
+      useRunners(() => execOk());
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create({ vcpus: 8 });
+      await sandbox.runCommand("node -v");
+
+      await sandbox.destroy();
+
+      expect(accountApiCalls()).toContain(`DELETE /sandboxes/${REAL_ID}`);
+      expect(runnerCalls).toEqual([]);
+    });
+
+    it("should destroy nothing when the create failed", async () => {
+      useRunners((call) =>
+        isCreate(call)
+          ? { status: 500, body: { error: "internal_error" } }
+          : execOk()
+      );
+      const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
+      const sandbox = await provider.sandbox.create();
+      await sandbox.runCommand("node -v").catch(() => undefined);
+
+      await sandbox.destroy();
+
+      expect(runnerPaths()).toEqual(["POST /api/v1/sandboxes"]);
+    });
+  });
+});
+
+/** The SDK's own timeout error, raised after the request was sent. */
+class RunnerTimeoutErrorForTest extends Error {
+  constructor() {
+    super("runner request to run-us.miosa.ai/api/v1/sandboxes timed out");
+    this.name = "RunnerTimeoutError";
+  }
+}

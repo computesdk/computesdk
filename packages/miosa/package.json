@@ -42,7 +42,7 @@
   ],
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@miosa/sdk": "^3.3.1",
+    "@miosa/sdk": "^3.7.14",
     "computesdk": "workspace:*"
   },
   "devDependencies": {
