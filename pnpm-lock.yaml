@@ -2596,8 +2596,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       tensorlake:
-        specifier: ^0.5.135
-        version: 0.5.135(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^0.5.158
+        version: 0.5.158(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -5433,6 +5433,47 @@ packages:
   '@tenkicloud/sandbox@1.4.0':
     resolution: {integrity: sha512-1fio6b1I+5gK9uw8UkHYkcdNU0EDzswL2I1/6RRQfC5cAqmO6YjIlvnbn2Ia5APhqufHvPrHVbKZfwq0gp8tXA==}
     engines: {node: '>=18'}
+
+  '@tensorlakeai/native-darwin-arm64@0.5.158':
+    resolution: {integrity: sha512-kRbY9oskExWrynR7vCO31vPdf5oOQqhSy5zQwUMJWPDuy9SqKsAdCoXnu31E7gGy6eWUV8J+JVru/4CJ/e23Pw==}
+    engines: {node: '>=22.0.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@tensorlakeai/native-linux-arm64-gnu@0.5.158':
+    resolution: {integrity: sha512-F+1lWP3GgkSQuXMxi3akMrrfd2UmX4SHY1SZToY+cqAGgQRu8ista1uNqdvLPGP3zWRPWf1aV/eXI4DihX6G9Q==}
+    engines: {node: '>=22.0.0'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@tensorlakeai/native-linux-arm64-musl@0.5.158':
+    resolution: {integrity: sha512-cGiPTnrUjr3Z5pA+oH7c7fZvK0UnCU2eUVtsDfxHz1EXXa65KFnjfjKk9CpZP8ykQa0n7jMASOXfFu0PviTKPA==}
+    engines: {node: '>=22.0.0'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@tensorlakeai/native-linux-x64-gnu@0.5.158':
+    resolution: {integrity: sha512-rjVj40sysAd7zto2yYvfSfsev2JuJFNVcpEqdO/0DyISH0dVK+mf6lLmUTkm6+Imd4fXeH+9+XzWTPlOw8iS2g==}
+    engines: {node: '>=22.0.0'}
+    cpu: [x64]
+    os: [linux]
+
+  '@tensorlakeai/native-linux-x64-musl@0.5.158':
+    resolution: {integrity: sha512-QCHC4RhgbaB/63TlV+NGPb0XZDemvDkn+doT8sts36qDmt6Hqgc2VZBub4mVYJjUwdQ5qzuo+VD3GWvxw90Yug==}
+    engines: {node: '>=22.0.0'}
+    cpu: [x64]
+    os: [linux]
+
+  '@tensorlakeai/native-win32-x64@0.5.158':
+    resolution: {integrity: sha512-KR/s+mKjc/WB9tC7FD8solKt9j0aKPPOqo6b252tZ5jekJ80GmEtph24Vgb0zk1hcGdskIIiPpQOnrb6ikYl1g==}
+    engines: {node: '>=22.0.0'}
+    cpu: [x64]
+    os: [win32]
+
+  '@tensorlakeai/tensorlake@0.5.158':
+    resolution: {integrity: sha512-smRXRI+N2Y9toGx6RkhZFGA4bz9deaXiFUM6AkM1SZOvWFn/WZBqCQKCuXVxmBAQP5TpW9p728oDKf5hAtVWNw==}
+    engines: {node: '>=22.0.0'}
+    hasBin: true
 
   '@tigrisdata/storage@3.6.0':
     resolution: {integrity: sha512-l+FHRAA903MOZ/PFBlz6S73YwlJ1Fs+D5/gTPiI2/NtiyIsqj3eNRGDYB+DszT75NIxKWCRoyNornUM+7qXkVw==}
@@ -8827,46 +8868,9 @@ packages:
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
 
-  tensorlake-native-darwin-arm64@0.5.135:
-    resolution: {integrity: sha512-4M8wN62tQwskSNf8umP22N/ZuvkBGMp20QsJT7yUl08GHEIH21e722l6RPzVvmRdl3JwmSwE8gnyVz3sMUMGrw==}
+  tensorlake@0.5.158:
+    resolution: {integrity: sha512-yfuTr5a9jdHy1HXXnADB/+UhxUU1YC7J5S3RmhJq8FUCvxYiRilWrnRdgc7r7tdPACFkgoYuk3LUE+OajK9WcA==}
     engines: {node: '>=22.0.0'}
-    cpu: [arm64]
-    os: [darwin]
-
-  tensorlake-native-linux-arm64-gnu@0.5.135:
-    resolution: {integrity: sha512-EzkRLTfVdi6UWaM6xNDRLTqwqQr4IN0CODc+la1rGGYm4zkiHafou1ksk0/RUQi2+B3IoYGqxdwJbNgZLRTBpg==}
-    engines: {node: '>=22.0.0'}
-    cpu: [arm64]
-    os: [linux]
-
-  tensorlake-native-linux-arm64-musl@0.5.135:
-    resolution: {integrity: sha512-no06meA4yj0NT4iYfHng0MTIlJpuSNisN56LCNLjSYn9bqMLjgqWX/bt9cGwkxuqLeUxmd0RMGpannxzsfx7+g==}
-    engines: {node: '>=22.0.0'}
-    cpu: [arm64]
-    os: [linux]
-
-  tensorlake-native-linux-x64-gnu@0.5.135:
-    resolution: {integrity: sha512-uv0NohBsy9O9Whl2LVI+De+c/stobeBqsmGnVTcLL9chg4oFqjJASVnjZ6hAlOcn/vdMc1/uzbytvf4FkN7QHg==}
-    engines: {node: '>=22.0.0'}
-    cpu: [x64]
-    os: [linux]
-
-  tensorlake-native-linux-x64-musl@0.5.135:
-    resolution: {integrity: sha512-kvyJJ5nOFb20sAjyY3Ef2DtYyoBbXsb9gUY+JAU4J1eY4zenBXA0znJfZmsHmz7ndQdx2K3ffkCezK8fcwJ0sA==}
-    engines: {node: '>=22.0.0'}
-    cpu: [x64]
-    os: [linux]
-
-  tensorlake-native-win32-x64@0.5.135:
-    resolution: {integrity: sha512-0jhjlFaWT89Os2dJR7B08SnF4UG6gJ64ImjuVT9wtOIdRElHCkDxeOH8RqgrvAYJAXKdLCiQun6iIvqh6N90tQ==}
-    engines: {node: '>=22.0.0'}
-    cpu: [x64]
-    os: [win32]
-
-  tensorlake@0.5.135:
-    resolution: {integrity: sha512-dam3hNkvS3BApbLg7A2nr/byYhJBFYsZdLhtsw11rvaA7bfydFjvTtSQx7tmrGLVTiUMe2ZBzjwlvxwOjwQslA==}
-    engines: {node: '>=22.0.0'}
-    hasBin: true
 
   term-canvas@0.0.5:
     resolution: {integrity: sha512-eZ3rIWi5yLnKiUcsW8P79fKyooaLmyLWAGqBhFspqMxRNUiB4GmHHk5AzQ4LxvFbJILaXqQZLwbbATLOhCFwkw==}
@@ -12420,6 +12424,44 @@ snapshots:
       '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
       '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@tensorlakeai/native-darwin-arm64@0.5.158':
+    optional: true
+
+  '@tensorlakeai/native-linux-arm64-gnu@0.5.158':
+    optional: true
+
+  '@tensorlakeai/native-linux-arm64-musl@0.5.158':
+    optional: true
+
+  '@tensorlakeai/native-linux-x64-gnu@0.5.158':
+    optional: true
+
+  '@tensorlakeai/native-linux-x64-musl@0.5.158':
+    optional: true
+
+  '@tensorlakeai/native-win32-x64@0.5.158':
+    optional: true
+
+  '@tensorlakeai/tensorlake@0.5.158(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+    dependencies:
+      '@grpc/grpc-js': 1.14.4
+      '@grpc/proto-loader': 0.8.1
+      ajv: 8.18.0
+      fflate: 0.8.2
+      google-proto-files: 5.0.3
+      nanoid: 3.3.19
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    optionalDependencies:
+      '@tensorlakeai/native-darwin-arm64': 0.5.158
+      '@tensorlakeai/native-linux-arm64-gnu': 0.5.158
+      '@tensorlakeai/native-linux-arm64-musl': 0.5.158
+      '@tensorlakeai/native-linux-x64-gnu': 0.5.158
+      '@tensorlakeai/native-linux-x64-musl': 0.5.158
+      '@tensorlakeai/native-win32-x64': 0.5.158
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -16501,40 +16543,9 @@ snapshots:
       - bare-abort-controller
     optional: true
 
-  tensorlake-native-darwin-arm64@0.5.135:
-    optional: true
-
-  tensorlake-native-linux-arm64-gnu@0.5.135:
-    optional: true
-
-  tensorlake-native-linux-arm64-musl@0.5.135:
-    optional: true
-
-  tensorlake-native-linux-x64-gnu@0.5.135:
-    optional: true
-
-  tensorlake-native-linux-x64-musl@0.5.135:
-    optional: true
-
-  tensorlake-native-win32-x64@0.5.135:
-    optional: true
-
-  tensorlake@0.5.135(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  tensorlake@0.5.158(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      '@grpc/grpc-js': 1.14.4
-      '@grpc/proto-loader': 0.8.1
-      ajv: 8.18.0
-      fflate: 0.8.2
-      google-proto-files: 5.0.3
-      nanoid: 3.3.19
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-    optionalDependencies:
-      tensorlake-native-darwin-arm64: 0.5.135
-      tensorlake-native-linux-arm64-gnu: 0.5.135
-      tensorlake-native-linux-arm64-musl: 0.5.135
-      tensorlake-native-linux-x64-gnu: 0.5.135
-      tensorlake-native-linux-x64-musl: 0.5.135
-      tensorlake-native-win32-x64: 0.5.135
+      '@tensorlakeai/tensorlake': 0.5.158(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
