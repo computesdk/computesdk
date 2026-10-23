@@ -1,5 +1,12 @@
 # @computesdk/tenki
 
+## 0.1.18
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
 ## 0.1.17
 
 ### Patch Changes
