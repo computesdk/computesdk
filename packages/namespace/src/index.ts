@@ -126,6 +126,14 @@ const STORAGE_SERVICE = {
 const SNAPSHOT_VOLUME_MOUNTPOINT = '/computesdk-data';
 
 /**
+ * Size requested for runtime-attached persistent volumes. `VolumeRequest`
+ * carries `size_mb`: snapshot-seeded volumes inherit capacity from
+ * `from_snapshot_id`, but a fresh persistent volume with no size cannot be
+ * provisioned — the instance is destroyed while waiting for readiness.
+ */
+const RUNTIME_VOLUME_SIZE_MB = 1024;
+
+/**
  * Load bearer token from a JSON token file (e.g. from `nsc login`)
  */
 async function loadTokenFromFile(filePath: string): Promise<string> {
@@ -308,6 +316,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
                   mount_point: m.mountPath,
                   tag: resolveVolumeRef(m.volume).name ?? resolveVolumeRef(m.volume).id,
                   persistency_kind: 'PERSISTENT',
+                  size_mb: RUNTIME_VOLUME_SIZE_MB,
                 })),
               ],
             }),

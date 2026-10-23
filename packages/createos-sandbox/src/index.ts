@@ -334,6 +334,30 @@ export function toCreateRequest(
   return req;
 }
 
+/**
+ * Disks mount asynchronously — an in-VM agent transitions each attachment
+ * pending → mounted|error. Returning before "mounted" hands callers a dir
+ * that isn't the disk yet, so every attach path polls `listDisks()` until
+ * the attachment settles (bounded, ~90s). `mount_error` surfaces on failure.
+ */
+async function waitForDiskMounted(sandbox: Sandbox, mountPath: string, deadlineMs = 90_000): Promise<void> {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const disks = await sandbox.listDisks();
+    const att = disks.find((d) => d.mount_path === mountPath);
+    if (att?.mount_status === "mounted") return;
+    if (att?.mount_status === "error") {
+      throw new Error(`createos disk mount failed at ${mountPath}: ${att.mount_error ?? "unknown"}`);
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `createos disk mount at ${mountPath} still ${att?.mount_status ?? "absent"} after ${deadlineMs}ms`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
+
 /** Wrap a command so per-call cwd/env/background work despite the server dropping
  *  exec env. Env *keys* are validated before being spliced into `export` —
  *  values are shell-quoted, but a malformed key would otherwise be raw shell. */
@@ -404,6 +428,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
                 const ref = resolveVolumeRef(m.volume);
                 const subPath = (m as { subPath?: string }).subPath;
                 await forked.attachDisk({ diskId: ref.id ?? ref.name!, mountPath: m.mountPath, ...(subPath ? { subPath } : {}) });
+                await waitForDiskMounted(forked, m.mountPath);
               }
             } catch (err) {
               await forked.destroy().catch(() => {});
@@ -417,6 +442,11 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const rootfs = opts.image ?? opts.runtime ?? config.rootfs ?? "devbox:1";
         const sandbox = await client.createSandbox(toCreateRequest(opts, shape, rootfs));
         sandboxConfig.set(sandbox, config);
+        // Disks attach at create but mount asynchronously in the guest —
+        // wait for every requested mount before handing back the instance.
+        if (Array.isArray(opts.volumes)) {
+          for (const m of opts.volumes) await waitForDiskMounted(sandbox, m.mountPath);
+        }
         return { instance: sandbox, instanceId: sandbox.id };
       },
 
@@ -512,6 +542,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const ref = resolveVolumeRef(volume);
         const subPath = (volume as { subPath?: string }).subPath;
         await sandbox.attachDisk({ diskId: ref.id ?? ref.name!, mountPath, ...(subPath ? { subPath } : {}) });
+        await waitForDiskMounted(sandbox, mountPath);
       },
       detachVolume: async (sandbox: Sandbox, volume, mountPath) => {
         const ref = resolveVolumeRef(volume);
