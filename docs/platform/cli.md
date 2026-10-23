@@ -111,6 +111,23 @@ compute bench run           # execute a benchmark run
 compute bench check         # validate a benchmark definition
 ```
 
+`compute bench runs list` and `compute bench results` narrow results with the same filters the REST routes accept:
+
+* `--participant <slug[,slug]>` — only runs those participants were in, and only their rows
+* `--steps <name[,name]|all>` — per-step overviews (`results` only)
+* `--since` / `--until <YYYY-MM-DD | ISO | 24h | 7d | 2w>` — bounds on run creation time
+* `--day <YYYY-MM-DD>` — one calendar day (sugar for `--since`/`--until`; can't be combined with them)
+* `--tz <IANA>` — timezone for date-only bounds, defaults to the machine's zone
+* `--source-org <slug>` — read another org's benchmark you can see (`~/` paths) when a bare slug is ambiguous
+
+```bash
+compute bench results dax --participant e2b --steps all --since 7d
+compute bench runs list dax --participant e2b --day 2026-10-22
+compute bench logs dax <runId> --participant e2b --max-lines 500
+```
+
+`--json` prints the raw API response, including the `filter` echo showing what the server applied.
+
 ## `compute sandboxes`
 
 ```bash

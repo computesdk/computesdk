@@ -14,11 +14,12 @@ The ComputeSDK Platform ([platform.computesdk.com](https://platform.computesdk.c
 * **Benchmarks** — managed benchmark runs that measure sandbox, storage, browser, and AI gateway providers and publish reproducible results to your org's feed
 * **Actions** — a CI/workflow engine that executes GitHub-style workflows on real compute providers, not fixed runner VMs
 
-Everything the platform does is available three ways:
+Everything the platform does is available four ways:
 
 * the web dashboard at `https://platform.computesdk.com/<org-slug>/...`
 * the `compute` CLI (`@computesdk/cli` on npm)
 * the REST API under `https://platform.computesdk.com/api/v1`
+* the MCP server at `https://platform.computesdk.com/mcp` — for AI assistants (ChatGPT, Claude, Codex). Connects over OAuth; read tools like `benchmarks_list`/`benchmarks_get_results`/`benchmarks_get_participant_logs` expose the same benchmarks data as the REST routes, alongside the Actions and sandbox tools.
 
 ## Organizations
 
