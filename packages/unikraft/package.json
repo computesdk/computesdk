@@ -1,0 +1,67 @@
+{
+  "name": "@computesdk/unikraft",
+  "version": "0.1.0",
+  "description": "Unikraft Cloud provider for ComputeSDK - microVM sandboxes that boot in milliseconds",
+  "author": "Unikraft GmbH",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "computesdk",
+    "unikraft",
+    "sandbox",
+    "microvm",
+    "code-execution",
+    "cloud",
+    "compute",
+    "provider"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/unikraft"
+  },
+  "homepage": "https://www.computesdk.com",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  },
+  "dependencies": {
+    "@computesdk/provider": "workspace:*",
+    "@unikraft/cloud": "link:/Users/abdallah_unikraft/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_j75pt4nbaw-1/js-sdk",
+    "computesdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
