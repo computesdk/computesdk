@@ -22,19 +22,27 @@ npm install @computesdk/ec2-firecrab
 import { ec2Firecrab } from '@computesdk/ec2-firecrab';
 
 const provider = ec2Firecrab({
-  apiUrl: 'http://127.0.0.1:5523',           // or EC2_FIRECRAB_API_URL
-  microNetworkId: '<micro-network-uuid>',    // or EC2_FIRECRAB_MICRO_NETWORK_ID
-  template: 'catthehacker-ubuntu-act-latest',// or EC2_FIRECRAB_TEMPLATE
+  // Off-host operation: one SSH target + key. The adapter lazily opens an
+  // SSH local-forward to the host's loopback API and derives the guest-exec
+  // jumphost from the same credentials — no manual tunnel or ProxyCommand.
+  sshTarget: 'ubuntu@<host-public-ip>',       // or EC2_FIRECRAB_SSH_TARGET
+  sshIdentityPem: process.env.SSH_KEY_PEM,    // or EC2_FIRECRAB_SSH_KEY (key material)
+  // sshIdentityPath: '~/.ssh/firecrab.pem',  // or EC2_FIRECRAB_SSH_KEY_PATH
+
+  microNetwork: 'lab',                        // name or EC2_FIRECRAB_MICRO_NETWORK;
+                                              // or microNetworkId / EC2_FIRECRAB_MICRO_NETWORK_ID
+  template: 'catthehacker-ubuntu-act-latest', // or EC2_FIRECRAB_TEMPLATE
   cpus: 2,
   memoryMib: 4096,
   diskGb: 16,
-  egressPolicy: 'internet',                  // or 'isolated'
-  sshUser: 'root',                           // or EC2_FIRECRAB_SSH_USER
-  // Required when the caller is NOT on the host — the guest bridge IP is
-  // host-local, so exec rides a jumphost:
-  sshProxyCommand: 'ssh -W %h:%p ubuntu@<host-public-ip>', // or EC2_FIRECRAB_SSH_PROXY_COMMAND
+  egressPolicy: 'internet',                   // or 'isolated'
+  sshUser: 'root',                            // or EC2_FIRECRAB_SSH_USER
 });
 ```
+
+Already on the host or tunneled yourself? Omit `sshTarget` and use
+`apiUrl` (`EC2_FIRECRAB_API_URL`, default `http://127.0.0.1:5523`); `sshProxyCommand`
+(`EC2_FIRECRAB_SSH_PROXY_COMMAND`) remains an escape hatch for custom jumphosts.
 
 ## Usage
 

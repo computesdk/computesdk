@@ -33,14 +33,20 @@ layout:
 npm install @computesdk/ec2-firecrab
 ```
 
-Point the adapter at your firecrab host:
+Point the adapter at your firecrab host — off-host callers only need an SSH
+target and key; the adapter opens the API tunnel and derives the exec
+jumphost itself:
 
 ```bash
-EC2_FIRECRAB_API_URL=http://127.0.0.1:5523
-EC2_FIRECRAB_MICRO_NETWORK_ID=<micro-network-uuid>
+EC2_FIRECRAB_SSH_TARGET=ubuntu@<host-public-ip>
+EC2_FIRECRAB_SSH_KEY="-----BEGIN OPENSSH PRIVATE KEY-----..."
+# or: EC2_FIRECRAB_SSH_KEY_PATH=~/.ssh/firecrab.pem
+EC2_FIRECRAB_MICRO_NETWORK=lab          # network name (or use ..._NETWORK_ID for a UUID)
 EC2_FIRECRAB_TEMPLATE=catthehacker-ubuntu-act-latest
-EC2_FIRECRAB_SSH_PROXY_COMMAND="ssh -W %h:%p ubuntu@<host-public-ip>"
 ```
+
+Running on the host itself? Skip the SSH vars and set
+`EC2_FIRECRAB_API_URL=http://127.0.0.1:5523` instead.
 
 Host prerequisites: a nested-virtualization EC2 instance (`m8i`/`c8i`/`r8i` families or `.metal` types with `NestedVirtualization=enabled`), firecrab installed, a MicroNetwork whose CIDR doesn't overlap the VPC's, and an imported OCI image. The API is unauthenticated loopback — reach it via SSH/SSM port-forward or run the adapter on the host.
 

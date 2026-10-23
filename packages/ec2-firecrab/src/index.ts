@@ -18,6 +18,7 @@ import type {
   RunCommandOptions,
 } from '@computesdk/provider';
 import { runSshCommand } from './ssh.js';
+import { ensureAccess } from './transport.js';
 
 const PROVIDER = 'ec2-firecrab' as const;
 const DEFAULT_API_URL = 'http://127.0.0.1:5523';
@@ -44,6 +45,27 @@ export interface Ec2FirecrabConfig {
   /** firecrab MicroNetwork UUID the microVMs join.
    *  Falls back to EC2_FIRECRAB_MICRO_NETWORK_ID. */
   microNetworkId?: string;
+  /**
+   * MicroNetwork *name* (resolved to its UUID via the API) — a friendlier
+   * alternative to microNetworkId. Falls back to EC2_FIRECRAB_MICRO_NETWORK.
+   */
+  microNetwork?: string;
+  /**
+   * SSH target for off-host operation, e.g. 'ubuntu@<host-ip>' or a
+   * ProxyJump alias. When set, the adapter lazily spawns an SSH
+   * local-forward to the host's loopback API and derives the exec
+   * ProxyCommand from the same target — no manual tunnel or jumphost
+   * wiring required. Falls back to EC2_FIRECRAB_SSH_TARGET.
+   */
+  sshTarget?: string;
+  /**
+   * PEM private key material for sshTarget (vault-friendly: pass the key
+   * contents, the adapter writes them to a 0600 temp file). Falls back to
+   * EC2_FIRECRAB_SSH_KEY. Ignored when it doesn't look like PEM.
+   */
+  sshIdentityPem?: string;
+  /** Path to an SSH private key for sshTarget (EC2_FIRECRAB_SSH_KEY_PATH). */
+  sshIdentityPath?: string;
   /** Per-microVM egress: 'internet' or 'isolated'. */
   egressPolicy?: 'internet' | 'isolated';
   /** Default vCPUs per microVM. */
@@ -97,20 +119,43 @@ export interface Ec2FirecrabInstance {
   timeoutMs: number;
 }
 
-function resolveApiUrl(config: Ec2FirecrabConfig): string {
-  return config.apiUrl ?? process.env.EC2_FIRECRAB_API_URL ?? DEFAULT_API_URL;
+interface MicroNetwork {
+  id: string;
+  name: string;
 }
 
-function resolveProxyCommand(config: Ec2FirecrabConfig): string | undefined {
-  return config.sshProxyCommand ?? process.env.EC2_FIRECRAB_SSH_PROXY_COMMAND;
+async function resolveMicroNetworkId(
+  config: Ec2FirecrabConfig,
+  apiUrl: string,
+): Promise<string> {
+  // An explicit id is used verbatim; a name is resolved via the API.
+  const id =
+    config.microNetworkId ?? process.env.EC2_FIRECRAB_MICRO_NETWORK_ID;
+  if (id) return id;
+  const name =
+    config.microNetwork ?? process.env.EC2_FIRECRAB_MICRO_NETWORK;
+  if (!name) {
+    throw new Error(
+      "ec2-firecrab requires a firecrab MicroNetwork ('microNetwork' name or 'microNetworkId' in config, or EC2_FIRECRAB_MICRO_NETWORK / EC2_FIRECRAB_MICRO_NETWORK_ID)",
+    );
+  }
+  const nets = await firecrab<MicroNetwork[]>(apiUrl, 'GET', '/api/micro-networks');
+  const match = nets.find((n) => n.name === name || n.id === name);
+  if (!match) {
+    const names = nets.map((n) => n.name).join(', ') || '(none)';
+    throw new Error(
+      `ec2-firecrab: no MicroNetwork named '${name}' on ${apiUrl} (have: ${names})`,
+    );
+  }
+  return match.id;
 }
 
-function toInstance(vm: FirecrabVm, apiUrl: string, config: Ec2FirecrabConfig): Ec2FirecrabInstance {
+function toInstance(vm: FirecrabVm, apiUrl: string, config: Ec2FirecrabConfig, proxyCommand?: string): Ec2FirecrabInstance {
   return {
     vm,
     apiUrl,
     sshUser: config.sshUser ?? process.env.EC2_FIRECRAB_SSH_USER ?? 'root',
-    sshProxyCommand: resolveProxyCommand(config),
+    sshProxyCommand: proxyCommand,
     timeoutMs: config.timeout ?? DEFAULT_TIMEOUT_MS,
   };
 }
@@ -203,14 +248,9 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
     instances: {
       create: async (config, options?: CreateInstanceOptions) => {
         options?.signal?.throwIfAborted();
-        const apiUrl = resolveApiUrl(config);
-        const microNetworkId =
-          config.microNetworkId ?? process.env.EC2_FIRECRAB_MICRO_NETWORK_ID;
-        if (!microNetworkId) {
-          throw new Error(
-            "ec2-firecrab requires a firecrab MicroNetwork id ('microNetworkId' in config or EC2_FIRECRAB_MICRO_NETWORK_ID)",
-          );
-        }
+        const access = await ensureAccess(config);
+        const apiUrl = access.apiUrl;
+        const microNetworkId = await resolveMicroNetworkId(config, apiUrl);
         const name = options?.name ?? `${config.namePrefix ?? DEFAULT_NAME_PREFIX}${randomUUID()}`;
         const created = await firecrab<unknown>(apiUrl, 'POST', '/api/vms', {
           name,
@@ -227,29 +267,32 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
         // TODO: block until the in-guest computesdk-runtime enrolls (the
         // piece that upgrades exec/fs to the standard HTTP v1 surface),
         // then record its runtime URL on the instance.
-        return { instance: toInstance(vm, apiUrl, config), instanceId: id };
+        return { instance: toInstance(vm, apiUrl, config, access.proxyCommand), instanceId: id };
       },
 
       getById: async (config, instanceId: string) => {
-        const apiUrl = resolveApiUrl(config);
+        const access = await ensureAccess(config);
+        const apiUrl = access.apiUrl;
         try {
           const vm = await getVm(apiUrl, instanceId);
-          return { instance: toInstance(vm, apiUrl, config), instanceId };
+          return { instance: toInstance(vm, apiUrl, config, access.proxyCommand), instanceId };
         } catch {
           return null;
         }
       },
 
       list: async (config) => {
-        const apiUrl = resolveApiUrl(config);
+        const access = await ensureAccess(config);
+        const apiUrl = access.apiUrl;
         const vms = await firecrab<FirecrabVm[]>(apiUrl, 'GET', '/api/vms');
         return (vms ?? [])
           .filter((vm) => vm.name?.startsWith(config.namePrefix ?? DEFAULT_NAME_PREFIX))
-          .map((vm) => ({ instance: toInstance(vm, apiUrl, config), instanceId: vm.id }));
+          .map((vm) => ({ instance: toInstance(vm, apiUrl, config, access.proxyCommand), instanceId: vm.id }));
       },
 
       destroy: async (config, instanceId: string) => {
-        const apiUrl = resolveApiUrl(config);
+        const access = await ensureAccess(config);
+        const apiUrl = access.apiUrl;
         // DELETE on a running VM returns 409 invalid_state — stop is
         // mandatory, and it's a ~30s graceful ACPI shutdown (no force flag
         // in current builds).
