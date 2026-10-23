@@ -81,4 +81,39 @@ describe('ec2Firecrab', () => {
     );
     expect(result.stdout).toBe('hi\n');
   });
+
+  it('getById tries every configured host until the VM is found', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse([])) // tunnel probe, host A
+      .mockResolvedValueOnce(jsonResponse([])) // tunnel probe, host B
+      .mockResolvedValueOnce(new Response('not found', { status: 404 })) // getVm, host A: miss
+      .mockResolvedValueOnce(
+        jsonResponse({ id: 'vm-9', name: 'csdk-fc-y', state: 'running', ipv4: '10.0.0.7' }),
+      ); // getVm, host B: hit
+
+    const provider = ec2Firecrab({
+      microNetworkId: 'net-1',
+      sshTargets: ['ubuntu@host-a', 'ubuntu@host-b'],
+      sshIdentityPath: '/tmp/nope-key',
+    });
+    const found = await provider.instances.getById('vm-9');
+    expect(found).toBeTruthy();
+    expect((found as any).instance.apiUrl).toContain('127.0.0.1');
+  });
+
+  it('list merges sandboxes across all configured hosts', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse([])) // tunnel probe, host A
+      .mockResolvedValueOnce(jsonResponse([])) // tunnel probe, host B
+      .mockResolvedValueOnce(jsonResponse([{ id: 'vm-a', name: 'csdk-fc-a', state: 'running' }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: 'vm-b', name: 'csdk-fc-b', state: 'running' }]));
+
+    const provider = ec2Firecrab({
+      microNetworkId: 'net-1',
+      sshTargets: ['ubuntu@host-a', 'ubuntu@host-b'],
+      sshIdentityPath: '/tmp/nope-key-2',
+    });
+    const all = await provider.instances.list();
+    expect(all.map((i: any) => i.instanceId).sort()).toEqual(['vm-a', 'vm-b']);
+  });
 });

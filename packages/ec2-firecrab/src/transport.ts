@@ -5,6 +5,8 @@
 // local-forward for the API and a ProxyCommand jumphost for guest exec.
 // Rather than making the caller wire both (and a tunnel step in CI), one
 // `sshTarget` + key is used to lazily establish both, cached per process.
+// Multiple hosts (a pool) come from `sshTargets` / EC2_FIRECRAB_SSH_TARGETS —
+// one tunnel per host, the same key material.
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -36,9 +38,15 @@ const sshBase = [
   '-o', 'LogLevel=ERROR',
 ];
 
-function resolveSsh(config: Ec2FirecrabConfig): ResolvedSsh | null {
-  const target = config.sshTarget ?? process.env.EC2_FIRECRAB_SSH_TARGET;
-  if (!target) return null;
+function resolveSshTargets(config: Ec2FirecrabConfig): string[] {
+  if (config.sshTargets?.length) return config.sshTargets;
+  const csv = process.env.EC2_FIRECRAB_SSH_TARGETS;
+  if (csv) return csv.split(',').map((s) => s.trim()).filter(Boolean);
+  const single = config.sshTarget ?? process.env.EC2_FIRECRAB_SSH_TARGET;
+  return single ? [single] : [];
+}
+
+function resolveSsh(config: Ec2FirecrabConfig, target: string): ResolvedSsh {
   const pem =
     config.sshIdentityPem ??
     process.env.EC2_FIRECRAB_SSH_KEY ??
@@ -103,15 +111,18 @@ process.on('exit', () => {
   }
 });
 
-async function establish(config: Ec2FirecrabConfig): Promise<FirecrabAccess> {
-  const ssh = resolveSsh(config);
-  if (!ssh) {
+async function establish(
+  config: Ec2FirecrabConfig,
+  target: string | null,
+): Promise<FirecrabAccess> {
+  if (!target) {
     // No SSH target: caller is on the host or already tunneled.
     const apiUrl = config.apiUrl ?? process.env.EC2_FIRECRAB_API_URL;
     return apiUrl
       ? { apiUrl, proxyCommand: config.sshProxyCommand }
       : { apiUrl: 'http://127.0.0.1:5523', proxyCommand: config.sshProxyCommand };
   }
+  const ssh = resolveSsh(config, target);
 
   const key = `${ssh.target}|${ssh.identityPath ?? ''}`;
   let access = tunnelCache.get(key);
@@ -154,5 +165,18 @@ async function establish(config: Ec2FirecrabConfig): Promise<FirecrabAccess> {
 }
 
 export function ensureAccess(config: Ec2FirecrabConfig): Promise<FirecrabAccess> {
-  return establish(config);
+  return establish(config, resolveSshTargets(config)[0] ?? null);
+}
+
+/**
+ * Access for every configured host. With multiple sshTargets each host gets
+ * its own API tunnel and derived ProxyCommand; the caller round-robins
+ * creates and routes per-instance ops through the stamped apiUrl/proxyCommand.
+ */
+export function ensureAccesses(
+  config: Ec2FirecrabConfig,
+): Promise<FirecrabAccess[]> {
+  const targets = resolveSshTargets(config);
+  if (!targets.length) return establish(config, null).then((a) => [a]);
+  return Promise.all(targets.map((t) => establish(config, t)));
 }

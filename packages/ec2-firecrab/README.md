@@ -26,6 +26,8 @@ const provider = ec2Firecrab({
   // SSH local-forward to the host's loopback API and derives the guest-exec
   // jumphost from the same credentials — no manual tunnel or ProxyCommand.
   sshTarget: 'ubuntu@<host-public-ip>',       // or EC2_FIRECRAB_SSH_TARGET
+  // sshTargets: ['ubuntu@ip1', 'ubuntu@ip2'], // host pool — or EC2_FIRECRAB_SSH_TARGETS (csv);
+                                              // creates round-robin across hosts
   sshIdentityPem: process.env.SSH_KEY_PEM,    // or EC2_FIRECRAB_SSH_KEY (key material)
   // sshIdentityPath: '~/.ssh/firecrab.pem',  // or EC2_FIRECRAB_SSH_KEY_PATH
 

@@ -18,7 +18,8 @@ import type {
   RunCommandOptions,
 } from '@computesdk/provider';
 import { runSshCommand } from './ssh.js';
-import { ensureAccess } from './transport.js';
+import { ensureAccesses } from './transport.js';
+import type { FirecrabAccess } from './transport.js';
 
 const PROVIDER = 'ec2-firecrab' as const;
 const DEFAULT_API_URL = 'http://127.0.0.1:5523';
@@ -58,6 +59,13 @@ export interface Ec2FirecrabConfig {
    * wiring required. Falls back to EC2_FIRECRAB_SSH_TARGET.
    */
   sshTarget?: string;
+  /**
+   * Multiple SSH targets — a host pool. Each host gets its own API tunnel
+   * and derived ProxyCommand (same key material); `create` round-robins
+   * across hosts and per-instance ops route via the stamped host. Falls
+   * back to EC2_FIRECRAB_SSH_TARGETS (comma-separated).
+   */
+  sshTargets?: string[];
   /**
    * PEM private key material for sshTarget (vault-friendly: pass the key
    * contents, the adapter writes them to a 0600 temp file). Falls back to
@@ -242,15 +250,37 @@ async function execViaSsh(
   });
 }
 
+// Host pool: create() round-robins across resolved hosts; every instance
+// carries the apiUrl + proxyCommand of the host it landed on, so exec,
+// getById, and destroy route back correctly.
+let hostCounter = 0;
+const microNetworkCache = new Map<string, Promise<string>>();
+
+function pickAccess(accesses: FirecrabAccess[]): FirecrabAccess {
+  return accesses[hostCounter++ % accesses.length];
+}
+
+function resolveMicroNetworkIdCached(
+  config: Ec2FirecrabConfig,
+  apiUrl: string,
+): Promise<string> {
+  let p = microNetworkCache.get(apiUrl);
+  if (!p) {
+    p = resolveMicroNetworkId(config, apiUrl);
+    microNetworkCache.set(apiUrl, p);
+  }
+  return p;
+}
+
 const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, never, never>({
   name: PROVIDER,
   methods: {
     instances: {
       create: async (config, options?: CreateInstanceOptions) => {
         options?.signal?.throwIfAborted();
-        const access = await ensureAccess(config);
+        const access = pickAccess(await ensureAccesses(config));
         const apiUrl = access.apiUrl;
-        const microNetworkId = await resolveMicroNetworkId(config, apiUrl);
+        const microNetworkId = await resolveMicroNetworkIdCached(config, apiUrl);
         const name = options?.name ?? `${config.namePrefix ?? DEFAULT_NAME_PREFIX}${randomUUID()}`;
         const created = await firecrab<unknown>(apiUrl, 'POST', '/api/vms', {
           name,
@@ -271,33 +301,48 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
       },
 
       getById: async (config, instanceId: string) => {
-        const access = await ensureAccess(config);
-        const apiUrl = access.apiUrl;
-        try {
-          const vm = await getVm(apiUrl, instanceId);
-          return { instance: toInstance(vm, apiUrl, config, access.proxyCommand), instanceId };
-        } catch {
-          return null;
+        const accesses = await ensureAccesses(config);
+        for (const access of accesses) {
+          try {
+            const vm = await getVm(access.apiUrl, instanceId);
+            return { instance: toInstance(vm, access.apiUrl, config, access.proxyCommand), instanceId };
+          } catch {
+            // not on this host — try the next
+          }
         }
+        return null;
       },
 
       list: async (config) => {
-        const access = await ensureAccess(config);
-        const apiUrl = access.apiUrl;
-        const vms = await firecrab<FirecrabVm[]>(apiUrl, 'GET', '/api/vms');
-        return (vms ?? [])
-          .filter((vm) => vm.name?.startsWith(config.namePrefix ?? DEFAULT_NAME_PREFIX))
-          .map((vm) => ({ instance: toInstance(vm, apiUrl, config, access.proxyCommand), instanceId: vm.id }));
+        const accesses = await ensureAccesses(config);
+        const perHost = await Promise.all(
+          accesses.map((access) =>
+            firecrab<FirecrabVm[]>(access.apiUrl, 'GET', '/api/vms').then((vms) =>
+              (vms ?? [])
+                .filter((vm) => vm.name?.startsWith(config.namePrefix ?? DEFAULT_NAME_PREFIX))
+                .map((vm) => ({ instance: toInstance(vm, access.apiUrl, config, access.proxyCommand), instanceId: vm.id })),
+            ),
+          ),
+        );
+        return perHost.flat();
       },
 
       destroy: async (config, instanceId: string) => {
-        const access = await ensureAccess(config);
-        const apiUrl = access.apiUrl;
-        // DELETE on a running VM returns 409 invalid_state — stop is
-        // mandatory, and it's a ~30s graceful ACPI shutdown (no force flag
-        // in current builds).
-        await firecrab(apiUrl, 'POST', `/api/vms/${instanceId}/stop`).catch(() => {});
-        await firecrab(apiUrl, 'DELETE', `/api/vms/${instanceId}`);
+        const accesses = await ensureAccesses(config);
+        // Find the host that owns this VM; DELETE on a running VM returns
+        // 409 invalid_state — stop is mandatory, and it's a ~30s graceful
+        // ACPI shutdown (no force flag in current builds).
+        for (const access of accesses) {
+          try {
+            await getVm(access.apiUrl, instanceId);
+          } catch {
+            continue;
+          }
+          await firecrab(access.apiUrl, 'POST', `/api/vms/${instanceId}/stop`).catch(() => {});
+          await firecrab(access.apiUrl, 'DELETE', `/api/vms/${instanceId}`);
+          return;
+        }
+        throw new Error(`ec2-firecrab: no configured host knows microVM ${instanceId}`);
       },
 
       runCommand: async (
