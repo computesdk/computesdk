@@ -152,7 +152,10 @@ it('uses the real Boat SDK over HTTP for lifecycle, commands, streaming, files, 
     expect(new Uint8Array(await readFile(shellPath))).toEqual(large);
     expect(await readBoatFile(sandbox.getInstance(), shellPath)).toEqual(large);
     expect((await sandbox.runCommand('pwd; printf after', { cwd: '/missing' })).stdout).not.toContain('after');
-    expect(await sandbox.runCommand('printf "%s" trailing \\', { cwd: directory })).toMatchObject({ stdout: 'trailing', exitCode: 0 });
+    // A trailing backslash must not swallow the cwd guard's line break. bash drops it; dash prints it.
+    const trailing = await sandbox.runCommand('printf "%s" trailing \\', { cwd: directory });
+    expect(trailing.exitCode).toBe(0);
+    expect(trailing.stdout).toMatch(/^trailing\\?$/);
     expect((await sandbox.runCommand('unused', { background: true })).exitCode).toBe(0);
     expect(await sandbox.getUrl({ port: 8000 })).toBe('https://bx_local-8000.on.boat.dev?_token=local');
   } finally { await sandbox.destroy(); }
