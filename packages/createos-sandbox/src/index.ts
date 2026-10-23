@@ -36,7 +36,7 @@ import type {
   SandboxStatus,
   Shape,
 } from "@nodeops-createos/sandbox";
-import { defineProvider, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from "@computesdk/provider";
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -324,7 +324,7 @@ export function toCreateRequest(
   if (egress) req.egress = egress;
 
   // Unified mounts → createos disk attachments {disk_id, mount_path, sub_path}.
-  if (Array.isArray(opts.volumes) && opts.volumes.length > 0) {
+  if (isUnifiedVolumeMounts(opts.volumes)) {
     req.disks = opts.volumes.map((m) => {
       const ref = resolveVolumeRef(m.volume);
       const subPath = (m as { subPath?: string }).subPath;
@@ -398,7 +398,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           // volumes post-fork through the runtime disk API instead. Destroy
           // the fork on failure — it is already running, and the caller gets
           // no instance handle to clean up with.
-          if (Array.isArray(opts.volumes) && opts.volumes.length > 0) {
+          if (isUnifiedVolumeMounts(opts.volumes)) {
             try {
               for (const m of opts.volumes) {
                 const ref = resolveVolumeRef(m.volume);

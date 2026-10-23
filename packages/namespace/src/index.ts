@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { randomUUID } from 'node:crypto';
-import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
@@ -296,7 +296,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             }),
             // Unified mounts → instanceOptions.volumes entries (tag-keyed
             // PERSISTENT volumes; they materialize on attach).
-            ...(Array.isArray(options?.volumes) && options.volumes.length > 0 && {
+            ...(isUnifiedVolumeMounts(options?.volumes) && {
               volumes: [
                 ...(options?.snapshotId ? [{
                   mount_point: SNAPSHOT_VOLUME_MOUNTPOINT,

@@ -3,7 +3,7 @@
  */
 
 import { Daytona, DaytonaNotFoundError, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
-import { resolveVolumeRef, withVolumeSettle, errorText } from '@computesdk/provider';
+import { resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, errorText } from '@computesdk/provider';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -99,12 +99,18 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             ...providerOptions
           } = options || {};
 
+          // `volumes` only counts as unified VolumeMount[] when every entry
+          // carries `volume`; a provider-native volumes spec stays in
+          // providerOptions and reaches the wire untouched.
+          const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+          if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
+
           const createParams: Record<string, any> = {
             language: runtime === 'python' ? 'python' : 'javascript',
             ...providerOptions,
             // Unified mounts → daytona's [{volumeId, mountPath}] wire shape.
-            ...(Array.isArray(volumes) && volumes.length > 0 && {
-              volumes: volumes.map((m: any) => ({
+            ...(unifiedVolumes && {
+              volumes: unifiedVolumes.map((m: any) => ({
                 volumeId: resolveVolumeRef(m.volume).id ?? resolveVolumeRef(m.volume).name,
                 mountPath: m.mountPath,
               })),

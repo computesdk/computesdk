@@ -7,7 +7,7 @@ import {
   ApiClientInMemoryContextProvider,
   ApiClient,
 } from '@northflank/js-client';
-import { defineProvider, resolveVolumeRef, escapeShellArg, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, escapeShellArg, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   InstanceInfo,
@@ -216,7 +216,7 @@ const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, Northfl
 
         // Unified mounts → northflank's volumesToAttach (the volume carries
         // its own containerMountPath from volume creation).
-        if (Array.isArray(opts.volumes) && opts.volumes.length > 0) {
+        if (isUnifiedVolumeMounts(opts.volumes)) {
           data.createOptions = {
             volumesToAttach: opts.volumes.map((m: any) => {
               const ref = resolveVolumeRef(m.volume);

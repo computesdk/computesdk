@@ -3,7 +3,7 @@
  */
 
 import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive } from '@vercel/sandbox';
-import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
@@ -85,6 +85,11 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
             volumes,
             ...providerOptions
           } = options || {};
+          // `volumes` only counts as unified VolumeMount[] when every entry
+          // carries `volume`; a provider-native volumes spec stays in
+          // providerOptions and reaches the wire untouched.
+          const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+          if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
           const optRuntime = (options as any)?.runtime;
           const optPorts = (options as any)?.ports;
           const optSource = (options as any)?.source;
@@ -115,8 +120,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           }
 
           // Unified mounts → vercel's {path: {drive, mode}} wire shape.
-          if (Array.isArray(volumes) && volumes.length > 0) {
-            params.mounts = Object.fromEntries((volumes as any[]).map((m) => {
+          if (unifiedVolumes) {
+            params.mounts = Object.fromEntries((unifiedVolumes as any[]).map((m) => {
               const ref = resolveVolumeRef(m.volume);
               // The `drive` field serializes verbatim and the API resolves it
               // by NAME (a Drive object mounts as mount.name) — sending

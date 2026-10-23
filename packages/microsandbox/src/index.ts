@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { defineProvider, resolveVolumeRef, createConfigGate, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, createConfigGate, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -561,8 +561,8 @@ const _microsandbox = defineProvider<
         // pre-creates the volume anyway.
         // `named` binds an existing volume — ensure-create lives in
         // volume.create, which callers run before mounting.
-        if (Array.isArray(options?.volumes) && options.volumes.length > 0) {
-          for (const m of options.volumes as any[]) {
+        if (isUnifiedVolumeMounts(options?.volumes)) {
+          for (const m of options!.volumes! as any[]) {
             const ref = resolveVolumeRef(m.volume);
             builder = builder.volume(m.mountPath, (b: any) => b.named(ref.name ?? ref.id));
           }

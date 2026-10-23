@@ -7,7 +7,7 @@
 
 import { APIError, Client } from 'sandbox0';
 import type { Sandbox as Sandbox0Sandbox } from 'sandbox0';
-import { defineProvider, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -138,9 +138,9 @@ function buildClaimOptions(
     ...(Object.keys(sandboxConfig).length > 0 ? { config: sandboxConfig } : {}),
     ...(options?.snapshotId ? { snapshotId: options.snapshotId } : {}),
     // Unified mounts → claim's [{sandboxvolumeId, mountPoint}] wire shape.
-    ...(Array.isArray(options?.volumes) && options.volumes.length > 0
+    ...(isUnifiedVolumeMounts(options?.volumes)
       ? {
-          mounts: options.volumes.map((m) => {
+          mounts: options!.volumes!.map((m) => {
             const ref = resolveVolumeRef(m.volume);
             const sandboxvolumeId = ref.id ?? ref.name;
             if (!sandboxvolumeId) {
