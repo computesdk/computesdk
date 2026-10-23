@@ -1,5 +1,12 @@
 # @computesdk/lizard
 
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.0.5
 
 ### Patch Changes

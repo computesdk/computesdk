@@ -1,5 +1,12 @@
 # @computesdk/upstash
 
+## 0.3.25
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 0.3.24
 
 ### Patch Changes

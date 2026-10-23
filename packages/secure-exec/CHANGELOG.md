@@ -1,5 +1,12 @@
 # @computesdk/secure-exec
 
+## 0.1.26
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 0.1.25
 
 ### Patch Changes

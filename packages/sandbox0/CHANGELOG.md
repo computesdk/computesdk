@@ -1,5 +1,16 @@
 # @computesdk/sandbox0
 
+## 1.0.17
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.0.16
 
 ### Patch Changes
