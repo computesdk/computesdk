@@ -1,5 +1,12 @@
 # @computesdk/aws
 
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.0.7
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/lizard",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "ComputeSDK provider for Lizard Sandboxes",
   "author": "ComputeSDK",
   "license": "MIT",

@@ -1,5 +1,12 @@
 # @computesdk/givemeanode
 
+## 1.2.12
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.2.11
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @computesdk/runtime
 
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 0.1.10
 
 ### Patch Changes

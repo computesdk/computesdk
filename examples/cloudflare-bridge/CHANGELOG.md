@@ -1,5 +1,11 @@
 # @computesdk/example-cloudflare-bridge
 
+## 0.0.19
+
+### Patch Changes
+
+- @computesdk/cloudflare@2.1.9
+
 ## 0.0.18
 
 ### Patch Changes
