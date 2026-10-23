@@ -115,6 +115,8 @@ export interface FirecrabVm {
   diskGb?: number;
   microNetworkId?: string;
   egressPolicy?: string;
+  /** Guest sshd host-key fingerprint reported by the API ('SHA256:...'). */
+  sshHostFingerprint?: string;
 }
 
 export interface Ec2FirecrabInstance {
@@ -263,6 +265,8 @@ async function execViaSsh(
     user: instance.sshUser,
     identityPem: pem,
     proxyCommand: instance.sshProxyCommand,
+    vmId: instance.vm.id,
+    expectedHostFingerprint: instance.vm.sshHostFingerprint,
     command,
     cwd: options?.cwd,
     env: options?.env,
