@@ -38,6 +38,27 @@ curl $BASE/benchmarks/~/computesdk/dax/runs   -H "Authorization: Bearer $COMPUTE
 curl $BASE/benchmarks/~/computesdk/dax/results -H "Authorization: Bearer $COMPUTE_API_KEY"
 ```
 
+### Filtering runs and results
+
+`GET /benchmarks/{slug}/runs` and `GET /benchmarks/{slug}/results` take a shared filter:
+
+* `participant` — comma-separated slugs; only runs they took part in, and only their rows
+* `since` / `until` — `YYYY-MM-DD` or an ISO timestamp, on run creation time (a date-only `until` is inclusive of that day)
+* `timeZone` — IANA zone for date-only bounds, default `UTC`
+* `steps` — results only; comma-separated step names or `all` for per-step overviews
+
+```bash
+# Runs e2b took part in since Oct 16
+curl "$BASE/benchmarks/dax/runs?participant=e2b&since=2026-10-16" \
+  -H "Authorization: Bearer $COMPUTE_API_KEY"
+
+# One participant's per-step results
+curl "$BASE/benchmarks/dax/results?participant=e2b&steps=create,install" \
+  -H "Authorization: Bearer $COMPUTE_API_KEY"
+```
+
+Filtered responses echo the applied values back in a `filter` field, so a client can tell the server understood the filter.
+
 ### Runs, participants, and workers
 
 Within a run:
@@ -65,6 +86,14 @@ compute bench logs           # run logs
 compute bench export         # export results
 compute bench run            # execute a run
 compute bench check          # validate a benchmark definition
+```
+
+`runs` and `results` take the same filters as the API:
+
+```bash
+compute bench results dax --participant e2b --steps all --since 7d
+compute bench runs list dax --participant e2b --day 2026-10-22 --tz America/Los_Angeles
+compute bench logs dax <runId> --participant e2b
 ```
 
 See the [CLI reference](cli.md#compute-bench--the-benchmarks-toolchain) for auth and flags.

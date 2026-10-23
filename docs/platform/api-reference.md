@@ -65,14 +65,22 @@ Owner/admin keys only. Not gated on the Actions entitlement. `repo=<owner>/<name
 
 Org keys see their own benchmarks plus subscribed (entitled) ones — never other orgs' private definitions. Foreign-but-entitled benchmarks are addressed via `/benchmarks/~/{sourceOrgSlug}/{benchmarkSlug}`.
 
+**Filtering.** `GET /benchmarks/{slug}/runs`, `GET /benchmarks/{slug}/results`, and their `~/` variants accept these query params; filtered responses echo the normalized values back in a top-level `filter` object:
+
+- `participant` — comma-separated participant slugs. Only runs that participant took part in, and only that participant's rows (max 20).
+- `since` / `until` — bounds on run creation time. `YYYY-MM-DD` or an ISO 8601 timestamp; a date-only `since` means the start of that day and `until` is inclusive of that day, both resolved in `timeZone` (IANA name, default `UTC`).
+- `steps` — comma-separated step names or `all` (results only; passing it to `/runs` is a `400`). Adds per-step overviews to each run.
+
+`/results` paginates by run: `limit` (default 25, max 100) and `offset`. `/runs` takes `limit` (max 500, no default) and `offset`.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/benchmarks` | List visible benchmarks (`limit`/`offset`, max 500) |
 | GET/PUT/PATCH | `/benchmarks/{slug}` | Benchmark detail, create/update definition |
-| GET | `/benchmarks/{slug}/results` | Latest published results |
+| GET | `/benchmarks/{slug}/results` | Per-run results overview — task counts, success rate, p50/p95/p99 latency (filters above) |
 | GET | `/benchmarks/{slug}/branding` | Benchmark branding |
 | GET | `/benchmarks/{slug}/model-index` | Model index |
-| GET | `/benchmarks/{slug}/runs` | Run list; `/runs/days`, `/runs/day/{day}`, `/runs/summary` for rollups |
+| GET | `/benchmarks/{slug}/runs` | Run list (filters above); `/runs/days`, `/runs/day/{day}`, `/runs/summary` for rollups |
 | GET/POST | `/benchmarks/{slug}/runs` | List / create runs |
 | GET | `/benchmarks/{slug}/runs/{runId}` | Run detail |
 | GET | `/benchmarks/{slug}/runs/{runId}/summary` | Run summary |
