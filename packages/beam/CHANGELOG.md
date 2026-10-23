@@ -1,5 +1,14 @@
 # @computesdk/beam
 
+## 0.3.21
+
+### Patch Changes
+
+- 5b60513: Read `err_msg`/`error_msg` alongside the camelCase spellings from beam gateway error bodies so an attached-state error reaches `withVolumeSettle`'s retry check instead of collapsing to the generic message.
+- ce95b5c: Implement `volume.delete` for beam via the gateway's transcoded DeleteVolume route (`POST /api/v1/gateway/volumes/{name}/delete`), and normalize beam `Volume.id` to the name — every beam volume op is name-keyed. Widen the attach-side settle deadline to 180s: provider attach-consistency windows run ~120s, leaving ~0 margin at the 120s default.
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
 ## 0.3.20
 
 ### Patch Changes

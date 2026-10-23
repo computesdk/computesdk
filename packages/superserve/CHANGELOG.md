@@ -1,5 +1,12 @@
 # @computesdk/superserve
 
+## 0.2.16
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
 ## 0.2.15
 
 ### Patch Changes

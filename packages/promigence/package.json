@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/promigence",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Promigence provider for ComputeSDK - production-grade sandboxes for AI agents, with filesystem and streaming output",
   "author": "Promigence AI, Inc. <support@promigence.ai>",
   "license": "MIT",

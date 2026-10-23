@@ -1,5 +1,19 @@
 # @computesdk/example-basic
 
+## 0.4.121
+
+### Patch Changes
+
+- @computesdk/blaxel@1.6.37
+- @computesdk/codesandbox@1.5.66
+- @computesdk/daytona@1.7.48
+- @computesdk/docker@1.2.64
+- @computesdk/e2b@1.7.66
+- @computesdk/modal@1.9.23
+- @computesdk/runloop@1.3.70
+- @computesdk/superserve@0.2.16
+- @computesdk/vercel@1.7.50
+
 ## 0.4.120
 
 ### Patch Changes

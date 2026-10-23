@@ -1,5 +1,12 @@
 # @computesdk/provider
 
+## 2.1.18
+
+### Patch Changes
+
+- ce95b5c: Implement `volume.delete` for beam via the gateway's transcoded DeleteVolume route (`POST /api/v1/gateway/volumes/{name}/delete`), and normalize beam `Volume.id` to the name — every beam volume op is name-keyed. Widen the attach-side settle deadline to 180s: provider attach-consistency windows run ~120s, leaving ~0 margin at the 120s default.
+  - daemond@0.1.8
+
 ## 2.1.17
 
 ### Patch Changes
