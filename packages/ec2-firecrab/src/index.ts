@@ -232,8 +232,18 @@ async function firecrabText(apiUrl: string, method: string, path: string): Promi
   return res.text();
 }
 
+// instanceId is caller-supplied and lands in the URL path — reject anything
+// that isn't a plain id before it can traverse to another endpoint
+// (e.g. '../vms/<other>/ssh-key' reading a different VM's private key).
+function vmPath(id: string, suffix = ''): string {
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+    throw new Error(`ec2-firecrab: invalid microVM id '${id}'`);
+  }
+  return `/api/vms/${id}${suffix}`;
+}
+
 async function getVm(apiUrl: string, id: string): Promise<FirecrabVm> {
-  return firecrab<FirecrabVm>(apiUrl, 'GET', `/api/vms/${id}`);
+  return firecrab<FirecrabVm>(apiUrl, 'GET', vmPath(id));
 }
 
 async function waitForRunning(apiUrl: string, id: string): Promise<FirecrabVm> {
@@ -259,7 +269,7 @@ async function execViaSsh(
   if (!instance.vm.ipv4) {
     throw new Error(`microVM ${instance.vm.id} has no guest IP yet`);
   }
-  const pem = await firecrabText(instance.apiUrl, 'GET', `/api/vms/${instance.vm.id}/ssh-key`);
+  const pem = await firecrabText(instance.apiUrl, 'GET', vmPath(instance.vm.id, '/ssh-key'));
   return runSshCommand({
     host: instance.vm.ipv4,
     user: instance.sshUser,
@@ -324,14 +334,14 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
         const id = vmId(created);
         let vm: FirecrabVm;
         try {
-          await firecrab(apiUrl, 'POST', `/api/vms/${id}/start`);
+          await firecrab(apiUrl, 'POST', vmPath(id, '/start'));
           vm = await waitForRunning(apiUrl, id);
         } catch (err) {
           // A failed start/timeout would otherwise orphan the allocated VM
           // on the host — the caller never learns its id. Best-effort
           // stop+delete, then rethrow.
-          await firecrab(apiUrl, 'POST', `/api/vms/${id}/stop`).catch(() => {});
-          await firecrab(apiUrl, 'DELETE', `/api/vms/${id}`).catch(() => {});
+          await firecrab(apiUrl, 'POST', vmPath(id, '/stop')).catch(() => {});
+          await firecrab(apiUrl, 'DELETE', vmPath(id)).catch(() => {});
           throw err;
         }
         // TODO: block until the in-guest computesdk-runtime enrolls (the
@@ -378,8 +388,8 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
           } catch {
             continue;
           }
-          await firecrab(access.apiUrl, 'POST', `/api/vms/${instanceId}/stop`).catch(() => {});
-          await firecrab(access.apiUrl, 'DELETE', `/api/vms/${instanceId}`);
+          await firecrab(access.apiUrl, 'POST', vmPath(instanceId, '/stop')).catch(() => {});
+          await firecrab(access.apiUrl, 'DELETE', vmPath(instanceId));
           return;
         }
         throw new Error(`ec2-firecrab: no configured host knows microVM ${instanceId}`);
