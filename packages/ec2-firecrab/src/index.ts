@@ -341,7 +341,15 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
         let vm: FirecrabVm;
         try {
           await firecrab(apiUrl, 'POST', vmPath(id, '/start'));
-          vm = await waitForRunning(apiUrl, id, config.bootTimeoutMs ?? BOOT_TIMEOUT_MS);
+          vm = await waitForRunning(
+            apiUrl,
+            id,
+            // A non-finite or non-positive deadline would never fire,
+            // stranding the allocated VM — fall back to the default.
+            Number.isFinite(config.bootTimeoutMs) && config.bootTimeoutMs! > 0
+              ? config.bootTimeoutMs!
+              : BOOT_TIMEOUT_MS,
+          );
         } catch (err) {
           // A failed start/timeout would otherwise orphan the allocated VM
           // on the host — the caller never learns its id. Best-effort
