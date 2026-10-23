@@ -93,6 +93,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
 | **Declaw** | `DECLAW_API_KEY` | Isolated cloud sandboxes |
 | **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
+| **EC2 Firecrab** | `EC2_FIRECRAB_MICRO_NETWORK_ID` (+ `EC2_FIRECRAB_API_URL`, `EC2_FIRECRAB_TEMPLATE`, `EC2_FIRECRAB_SSH_PROXY_COMMAND`) | Self-hosted Firecracker microVMs on EC2 |
 | **Freestyle** | `FREESTYLE_API_KEY` | Full Linux VMs for long-running agent tasks, with snapshots and persistence |
 | **GravixLayer** | `GRAVIXLAYER_API_KEY` | Cloud runtimes with filesystem, port publishing, and snapshots |
 | **HopX** | `HOPX_API_KEY` | Fast ephemeral sandboxes |
@@ -313,6 +314,7 @@ npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/daytona          # Daytona provider
 npm install @computesdk/declaw           # Declaw provider
 npm install @computesdk/e2b              # E2B provider
+npm install @computesdk/ec2-firecrab     # Firecracker microVMs on self-hosted EC2
 npm install @computesdk/freestyle        # Freestyle provider
 npm install @computesdk/givemeanode      # givemeanode provider
 npm install @computesdk/gravixlayer      # GravixLayer provider

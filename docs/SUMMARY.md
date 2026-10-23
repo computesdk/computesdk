@@ -26,6 +26,7 @@
   * [Declaw](providers/declaw.md)
   * [Docker](providers/docker.md)
   * [E2B](providers/e2b.md)
+  * [EC2 Firecrab](providers/ec2-firecrab.md)
   * [Freestyle](providers/freestyle.md)
   * [givemeanode](providers/givemeanode.md)
   * [GravixLayer](providers/gravixlayer.md)
