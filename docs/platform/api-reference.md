@@ -82,7 +82,7 @@ Org keys see their own benchmarks plus subscribed (entitled) ones — never othe
 | GET | `/benchmarks/{slug}/model-index` | Model index |
 | GET | `/benchmarks/{slug}/runs` | Run list (filters above); `/runs/days`, `/runs/day/{day}`, `/runs/summary` for rollups |
 | GET/POST | `/benchmarks/{slug}/runs` | List / create runs |
-| GET | `/benchmarks/{slug}/runs/{runId}` | Run detail |
+| GET | `/benchmarks/{slug}/runs/{runId}` | Run detail — includes `actionRun: {id, dashboardUrl}` for the owning org when the run was produced by an Actions job |
 | GET | `/benchmarks/{slug}/runs/{runId}/summary` | Run summary |
 | GET | `/benchmarks/{slug}/runs/{runId}/progress` | Live progress |
 | GET | `/benchmarks/{slug}/runs/{runId}/iterations` | Per-iteration data |
@@ -92,5 +92,7 @@ Org keys see their own benchmarks plus subscribed (entitled) ones — never othe
 | GET/POST | `/benchmarks/{slug}/runs/{runId}/participants` | Participants under test |
 | GET | `.../participants/{slug}` · `.../participants/{slug}/logs` · `.../participants/{slug}/workers` · `.../workers/claim` | Participant state, logs, and worker fleet |
 | GET/POST | `.../runs/{runId}/workers/{workerId}` · `/events` · `/heartbeat` · `/complete` · `/fail` · `/release` · `/artifacts` | Worker lifecycle — for benchmark executors |
+
+**Notable fields.** `GET /benchmarks/{slug}` returns `source` — the platform's source descriptor for the bench file (`{githubOwner, repo, ref, path}`). `POST /runs` accepts `ciRunId` (a `ci_runs` id owned by the same org, e.g. `COMPUTESDK_RUN_ID` inside an Actions job) to link the benchmark run to its producing Actions run.
 
 
