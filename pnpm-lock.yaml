@@ -431,6 +431,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/boat:
+    dependencies:
+      '@boatdev/sdk':
+        specifier: ^1.9.9
+        version: 1.9.9
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/brezel:
     dependencies:
       '@computesdk/provider':
@@ -2805,6 +2842,9 @@ importers:
       '@computesdk/blaxel':
         specifier: workspace:*
         version: link:../blaxel
+      '@computesdk/boat':
+        specifier: workspace:*
+        version: link:../boat
       '@computesdk/cloud-run':
         specifier: workspace:*
         version: link:../cloud-run
@@ -3196,6 +3236,9 @@ packages:
   '@blaxel/core@0.3.21':
     resolution: {integrity: sha512-a+JxiT1I6OKcm+6mxPcVjWo9u1LjBwPf8hmspnrGU73UbJYzvG6YeYz7VLQubf+rKocDpiqhzkMjasG/I77b8Q==}
     engines: {node: '>=18'}
+
+  '@boatdev/sdk@1.9.9':
+    resolution: {integrity: sha512-VsemzYh6sfLA+XFH5To22rGfwL+rXVy6TlXZ0Zi2bAheh6Iw8c1vdNWdmQxOHV/lSd5eVia3iDx+Cve4Lmlf6Q==}
 
   '@borewit/text-codec@0.2.1':
     resolution: {integrity: sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw==}
@@ -10125,6 +10168,8 @@ snapshots:
       - debug
       - supports-color
       - utf-8-validate
+
+  '@boatdev/sdk@1.9.9': {}
 
   '@borewit/text-codec@0.2.1': {}
 

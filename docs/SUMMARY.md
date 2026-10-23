@@ -15,6 +15,7 @@
   * [Archil](providers/archil.md)
   * [Beam](providers/beam.md)
   * [Blaxel](providers/blaxel.md)
+  * [Boat](providers/boat.md)
   * [Brezel](providers/brezel.md)
   * [Buddy](providers/buddy.md)
   * [Cloud Run (GCP)](providers/cloud-run.md)
