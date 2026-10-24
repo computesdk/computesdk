@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 33.0.19
+
+### Patch Changes
+
+- Updated dependencies [7668bf8]
+  - @computesdk/namespace@1.6.36
+
 ## 33.0.18
 
 ### Patch Changes
