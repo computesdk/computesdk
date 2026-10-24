@@ -444,8 +444,15 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         sandboxConfig.set(sandbox, config);
         // Disks attach at create but mount asynchronously in the guest —
         // wait for every requested mount before handing back the instance.
+        // Destroy the sandbox on failure — the caller gets no handle to
+        // clean it up with (same contract as the fork path above).
         if (Array.isArray(opts.volumes)) {
-          for (const m of opts.volumes) await waitForDiskMounted(sandbox, m.mountPath);
+          try {
+            for (const m of opts.volumes) await waitForDiskMounted(sandbox, m.mountPath);
+          } catch (err) {
+            await sandbox.destroy().catch(() => {});
+            throw err;
+          }
         }
         return { instance: sandbox, instanceId: sandbox.id };
       },

@@ -189,6 +189,10 @@ function isRetryable(error: unknown): boolean {
   return status === 429 || (status !== undefined && status >= 500 && status <= 599);
 }
 
+function isRateLimited(error: unknown): boolean {
+  return statusCode(error) === 429;
+}
+
 // The contexts API reports "runtime access is not ready for this generation"
 // for a short window after a sandbox is claimed — creating the command
 // context right away can race the runtime coming up.
@@ -481,8 +485,12 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
           } catch (error) {
             const remaining =
               deadline === undefined ? Number.POSITIVE_INFINITY : deadline - Date.now();
+            // Retry only failures that provably happened before the command
+            // context was created — runtime-not-ready and 429. A generic 5xx
+            // can arrive after cmd() already created the context server-side,
+            // so retrying it would run a non-idempotent command twice.
             if (
-              (!isRuntimeNotReady(error) && !isRetryable(error)) ||
+              (!isRuntimeNotReady(error) && !isRateLimited(error)) ||
               remaining <= 0 ||
               attempt >= 5
             ) {
