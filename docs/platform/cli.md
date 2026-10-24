@@ -109,6 +109,7 @@ compute bench logs          # run logs
 compute bench export        # export results
 compute bench run           # execute a benchmark run
 compute bench check         # validate a benchmark definition
+compute bench fork          # private tracked fork of a catalog benchmark
 ```
 
 `compute bench runs list` and `compute bench results` narrow results with the same filters the REST routes accept:
