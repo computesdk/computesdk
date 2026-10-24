@@ -123,6 +123,8 @@ bench run benchmarks/sandbox/dax.bench.ts --benchmark dax-myinfra --provider you
 
 Runs execute in *your* Actions. Only participants whose credentials are present in your environment activate — with just your own provider key, only your participant runs. When a run is created inside an Actions job, the bench client reports `ciRunId` (the `COMPUTESDK_RUN_ID` env var) back to the platform, so `GET /api/v1/benchmarks/{slug}/runs/{runId}` returns an `actionRun` link to the producing Actions run for callers in your org.
 
+Keep in mind: a private run is a practice range, not a leaderboard preview. It executes on your compute, your regions, your warm pools — the same workload produces different numbers than the public run. Treat it as a directional signal, then confirm on the next public run.
+
 ### Your own copy of the benchmarks repo
 
 Clone [computesdk/benchmarks](https://github.com/computesdk/benchmarks), edit provider configs or parameters, and dispatch the repo's workflow on your branch — the same workflow runs against your private benchmark. No upstream PR needed.
