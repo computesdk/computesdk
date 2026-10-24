@@ -5,6 +5,7 @@ const sdk = {
   sandbox: {
     create: vi.fn(),
     list: vi.fn(),
+    getById: vi.fn(),
     delete: vi.fn(),
     shell: vi.fn(),
     getSignedPreviewUrl: vi.fn(),
@@ -24,18 +25,14 @@ vi.mock('sandock', () => ({
 
 import { sandock } from '../index';
 
-/** Answers a wrapped command the way Sandock does: the real exit code only behind the marker. */
-function shellResult(opts: { stdout?: string; stderr?: string; exitCode?: number; timedOut?: boolean }, cmd: string) {
-  const token = /printf '\\n(__COMPUTESDK_EXIT_[0-9a-f]+__=)%d'/.exec(cmd)?.[1];
-  const real = opts.exitCode ?? 0;
-  const stderr = (opts.stderr ?? '') + (token && !opts.timedOut ? `\n${token}${real}` : '');
+/** A Sandock shell result. */
+function shellResult(opts: { stdout?: string; stderr?: string; exitCode?: number; timedOut?: boolean }, _cmd?: string) {
   return {
     success: true,
     data: {
       stdout: opts.stdout ?? '',
-      stderr,
-      // Sandock flattens every non-zero exit to 1.
-      exitCode: opts.timedOut ? 137 : real === 0 ? 0 : 1,
+      stderr: opts.stderr ?? '',
+      exitCode: opts.timedOut ? 137 : (opts.exitCode ?? 0),
       timedOut: opts.timedOut ?? false,
       durationMs: 5,
     },
@@ -52,6 +49,7 @@ describe('sandock provider', () => {
     vi.clearAllMocks();
     clientOptions.length = 0;
     sdk.sandbox.list.mockResolvedValue({ success: true, data: { items: [{ id: 'sdb_1', status: 'RUNNING' }] } });
+    sdk.sandbox.getById.mockImplementation(async (id: string) => (id === 'sdb_1' ? { id, status: 'RUNNING' } : null));
     sdk.sandbox.delete.mockResolvedValue({ success: true, data: { id: 'sdb_1', deleted: true } });
   });
 
@@ -144,14 +142,15 @@ describe('sandock provider', () => {
   });
 
   describe('getById / list / destroy', () => {
-    it('returns null for a sandbox that is not listed', async () => {
+    it('returns null for a sandbox Sandock does not know', async () => {
       expect(await sandock({ apiKey: 'key' }).instances.getById('missing')).toBeNull();
     });
 
-    it('finds a listed sandbox, in the configured space', async () => {
+    it('looks a sandbox up directly by id, without listing', async () => {
       const found = await sandock({ apiKey: 'key', spaceId: 'space_9' }).instances.getById('sdb_1');
       expect(found?.instanceId).toBe('sdb_1');
-      expect(sdk.sandbox.list).toHaveBeenCalledWith({ spaceId: 'space_9' });
+      expect(sdk.sandbox.getById).toHaveBeenCalledWith('sdb_1');
+      expect(sdk.sandbox.list).not.toHaveBeenCalled();
     });
 
     it('lists every sandbox', async () => {
@@ -167,7 +166,6 @@ describe('sandock provider', () => {
 
     it('treats destroying an already-deleted sandbox as done', async () => {
       sdk.sandbox.delete.mockRejectedValueOnce(new Error('Failed to delete sandbox: {"code":500}'));
-      sdk.sandbox.list.mockResolvedValueOnce({ success: true, data: { items: [] } });
       await expect(sandock({ apiKey: 'key' }).instances.destroy('gone')).resolves.toBeUndefined();
     });
 
@@ -177,20 +175,21 @@ describe('sandock provider', () => {
     });
 
     it('retries a dropped connection on reads', async () => {
-      sdk.sandbox.list.mockRejectedValueOnce(Object.assign(new TypeError('fetch failed'), { cause: new Error('other side closed') }));
+      sdk.sandbox.getById.mockRejectedValueOnce(Object.assign(new TypeError('fetch failed'), { cause: new Error('other side closed') }));
       expect(await sandock({ apiKey: 'key' }).instances.getById('sdb_1')).not.toBeNull();
-      expect(sdk.sandbox.list).toHaveBeenCalledTimes(2);
+      expect(sdk.sandbox.getById).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('runCommand', () => {
-    it('reports the real exit code, which Sandock flattens to 1', async () => {
+    it('reports the exit code the command exited with', async () => {
       const sandbox = await createSandbox();
       sdk.sandbox.shell.mockImplementationOnce(async (_id: string, opts: { cmd: string }) =>
         shellResult({ stdout: 'out\n', stderr: 'err\n', exitCode: 3 }, opts.cmd)
       );
       const result = await sandbox.runCommand('echo out; echo err >&2; exit 3');
       expect(result).toMatchObject({ stdout: 'out\n', stderr: 'err\n', exitCode: 3 });
+      expect(sdk.sandbox.shell.mock.calls[0][1].cmd).toBe('echo out; echo err >&2; exit 3');
     });
 
     it('passes cwd, env and timeout, with a 5 minute default timeout', async () => {
@@ -201,7 +200,7 @@ describe('sandock provider', () => {
       await sandbox.runCommand('pwd');
       expect(sdk.sandbox.shell.mock.calls[1][1].timeoutMs).toBe(300_000);
       expect(sdk.sandbox.shell.mock.calls[1][1]).not.toHaveProperty('workdir');
-      expect(sdk.sandbox.shell.mock.calls[1][1].cmd).toContain('\npwd\n');
+      expect(sdk.sandbox.shell.mock.calls[1][1].cmd).toBe('pwd');
     });
 
     it('reports a command that outran its timeout with exit code 124', async () => {
@@ -223,13 +222,13 @@ describe('sandock provider', () => {
   });
 
   describe('streaming', () => {
-    it('streams stdout and stderr through Sandock callbacks, without the exit marker', async () => {
+    it('streams stdout and stderr through Sandock callbacks', async () => {
       const sandbox = await createSandbox();
       sdk.sandbox.shell.mockImplementationOnce(
         async (_id: string, opts: { cmd: string }, callbacks: { onStdout: (c: string) => void; onStderr: (c: string) => void }) => {
           const result = shellResult({ stdout: 'out\n', stderr: 'err\n', exitCode: 3 }, opts.cmd);
           callbacks.onStdout('out\n');
-          // Split the stderr (including the marker) into small chunks.
+          // Split the stderr into small chunks.
           for (let i = 0; i < result.data.stderr.length; i += 4) callbacks.onStderr(result.data.stderr.slice(i, i + 4));
           return result;
         }
@@ -244,13 +243,13 @@ describe('sandock provider', () => {
   });
 
   describe('getInfo / getUrl', () => {
-    it('maps Sandock status, and a sandbox no longer listed as stopped', async () => {
+    it('maps Sandock status, and a deleted sandbox as stopped', async () => {
       const sandbox = await createSandbox({ apiKey: 'key', timeout: 600_000 });
       sdk.sandbox.create.mockClear();
       expect(await sandbox.getInfo()).toMatchObject({ id: 'sdb_1', provider: 'sandock', status: 'running', timeout: 600_000 });
-      sdk.sandbox.list.mockResolvedValueOnce({ success: true, data: { items: [{ id: 'sdb_1', status: 'STOPPED' }] } });
+      sdk.sandbox.getById.mockResolvedValueOnce({ id: 'sdb_1', status: 'STOPPED' });
       expect((await sandbox.getInfo()).status).toBe('stopped');
-      sdk.sandbox.list.mockResolvedValueOnce({ success: true, data: { items: [] } });
+      sdk.sandbox.getById.mockResolvedValueOnce(null);
       expect(await sandbox.getInfo()).toMatchObject({ status: 'stopped', metadata: { sandockStatus: 'DELETED' } });
     });
 
@@ -273,18 +272,18 @@ describe('sandock provider', () => {
       expect(await sandbox.filesystem.readFile('/tmp/a')).toBe('hello');
     });
 
-    it('throws for a missing file, which Sandock reads as empty', async () => {
+    it('passes on the error Sandock gives for a missing file', async () => {
       const sandbox = await createSandbox();
-      sdk.fs.read.mockResolvedValueOnce({ success: true, data: { path: '/nope', content: '' } });
-      sdk.sandbox.shell.mockImplementationOnce(async (_id: string, opts: { cmd: string }) => shellResult({ exitCode: 1 }, opts.cmd));
-      await expect(sandbox.filesystem.readFile('/nope')).rejects.toThrow(/no such file/);
+      sdk.fs.read.mockRejectedValueOnce(new Error('Failed to read file: No such file or directory'));
+      await expect(sandbox.filesystem.readFile('/nope')).rejects.toThrow(/No such file/);
+      expect(sdk.sandbox.shell).not.toHaveBeenCalled();
     });
 
     it('returns an empty file as empty', async () => {
       const sandbox = await createSandbox();
       sdk.fs.read.mockResolvedValueOnce({ success: true, data: { path: '/tmp/e', content: '' } });
-      sdk.sandbox.shell.mockImplementationOnce(async (_id: string, opts: { cmd: string }) => shellResult({}, opts.cmd));
       expect(await sandbox.filesystem.readFile('/tmp/e')).toBe('');
+      expect(sdk.sandbox.shell).not.toHaveBeenCalled();
     });
 
     it('lists a directory with types, sizes and times', async () => {

@@ -41,7 +41,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "sandock": "^2.6.0"
+    "sandock": "^2.7.0"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",

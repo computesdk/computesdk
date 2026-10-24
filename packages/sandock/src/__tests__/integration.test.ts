@@ -45,7 +45,7 @@ describe.skipIf(!process.env.SANDOCK_API_KEY)('sandock (live)', () => {
     expect(await sandbox.filesystem.readFile('/tmp/computesdk/nested/rt.txt')).toBe(content);
     await sandbox.filesystem.writeFile('/tmp/computesdk/empty.txt', '');
     expect(await sandbox.filesystem.readFile('/tmp/computesdk/empty.txt')).toBe('');
-    await expect(sandbox.filesystem.readFile('/tmp/computesdk/missing.txt')).rejects.toThrow(/no such file/);
+    await expect(sandbox.filesystem.readFile('/tmp/computesdk/missing.txt')).rejects.toThrow();
     const entries = await sandbox.filesystem.readdir('/tmp/computesdk');
     expect(entries.find((e) => e.name === 'nested')?.type).toBe('directory');
     expect(entries.find((e) => e.name === 'empty.txt')).toMatchObject({ type: 'file', size: 0 });

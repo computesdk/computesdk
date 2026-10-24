@@ -16,8 +16,6 @@ import type {
 import { createSandockClient } from 'sandock';
 import type { ExecutionResult, SandboxItem, SandockClient } from 'sandock';
 
-import { createExitMarker, StderrMarkerFilter } from './exit-code';
-
 export interface SandockConfig {
   /** Sandock API key - if not provided, will use the SANDOCK_API_KEY env var */
   apiKey?: string;
@@ -131,18 +129,9 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
   }
 }
 
-/**
- * Looks a sandbox up by id. Sandock 2.6.0 has no get-by-id endpoint:
- * `client.sandbox.get()` lists the personal space and filters, and throws a
- * generic error when the id is missing. Listing here as well keeps a missing
- * sandbox a `null` and honors `spaceId`.
- * TODO: switch to a direct lookup once the Sandock SDK offers one.
- */
+/** Looks a sandbox up by id; `null` when it does not exist, was deleted, or is not the caller's. */
 async function findSandbox(config: SandockConfig, id: string): Promise<SandboxItem | null> {
-  const client = clientFor(config);
-  const spaceId = spaceIdFor(config);
-  const res = await withRetry(() => client.sandbox.list(spaceId ? { spaceId } : undefined));
-  return res.data.items.find((item) => item.id === id) ?? null;
+  return withRetry(() => clientFor(config).sandbox.getById(id));
 }
 
 function toInstance(config: SandockConfig, item: SandboxItem, known?: Partial<SandockInstance>): SandockInstance {
@@ -181,18 +170,10 @@ function lifetimeSeconds(ms: number): number {
   return Math.min(MAX_LIFETIME_SECONDS, Math.max(1, Math.ceil(ms / 1000)));
 }
 
-/** Sandock's result, with the real exit code (see ./exit-code) and a timeout reported as exit code 124. */
-function toCommandResult(
-  data: ExecutionResult,
-  stderr: string,
-  markerExitCode: number | undefined,
-  startedAt: number
-): CommandResult {
-  let exitCode: number;
-  if (data.timedOut) exitCode = TIMEOUT_EXIT_CODE;
-  else if (markerExitCode !== undefined) exitCode = markerExitCode;
-  else exitCode = data.exitCode ?? -1;
-  return { stdout: data.stdout ?? '', stderr, exitCode, durationMs: Date.now() - startedAt };
+/** Sandock's result, with a timeout reported as exit code 124. */
+function toCommandResult(data: ExecutionResult, startedAt: number): CommandResult {
+  const exitCode = data.timedOut ? TIMEOUT_EXIT_CODE : (data.exitCode ?? -1);
+  return { stdout: data.stdout ?? '', stderr: data.stderr ?? '', exitCode, durationMs: Date.now() - startedAt };
 }
 
 function shellOptions(inst: SandockInstance, cmd: string, options?: RunCommandOptions) {
@@ -293,12 +274,10 @@ export const sandock = defineProvider<SandockInstance, SandockConfig>({
           // Started and left running; its output is not collected.
           const cmd = `nohup sh -c "${escapeShellArg(command)}" > /dev/null 2>&1 &`;
           const res = await inst.client.sandbox.shell(inst.id, shellOptions(inst, cmd, options));
-          return toCommandResult(res.data, res.data.stderr ?? '', undefined, startedAt);
+          return toCommandResult(res.data, startedAt);
         }
-        const marker = createExitMarker();
-        const res = await inst.client.sandbox.shell(inst.id, shellOptions(inst, marker.wrap(command), options));
-        const { stderr, exitCode } = marker.extract(res.data.stderr ?? '');
-        return toCommandResult(res.data, stderr, exitCode, startedAt);
+        const res = await inst.client.sandbox.shell(inst.id, shellOptions(inst, command, options));
+        return toCommandResult(res.data, startedAt);
       },
 
       /**
@@ -307,22 +286,18 @@ export const sandock = defineProvider<SandockInstance, SandockConfig>({
        */
       streamCommand: async (inst: SandockInstance, command: string, options: RunCommandOptions): Promise<CommandResult> => {
         const startedAt = Date.now();
-        const marker = createExitMarker();
-        const stderrFilter = new StderrMarkerFilter(marker.head, options.onStderr);
         let streamError: unknown;
-        const res = await inst.client.sandbox.shell(inst.id, shellOptions(inst, marker.wrap(command), options), {
+        const res = await inst.client.sandbox.shell(inst.id, shellOptions(inst, command, options), {
           onStdout: (chunk) => options.onStdout?.(chunk),
-          onStderr: (chunk) => stderrFilter.push(chunk),
+          onStderr: (chunk) => options.onStderr?.(chunk),
           onError: (error) => {
             streamError ??= error;
           },
         });
-        stderrFilter.end();
-        const { stderr, exitCode } = marker.extract(res.data.stderr ?? '');
-        if (exitCode === undefined && res.data.exitCode === null && !res.data.timedOut && streamError) {
+        if (res.data.exitCode === null && !res.data.timedOut && streamError) {
           throw streamError instanceof Error ? streamError : new Error(`Sandock: shell stream failed: ${String(streamError)}`);
         }
-        return toCommandResult(res.data, stderr, exitCode, startedAt);
+        return toCommandResult(res.data, startedAt);
       },
 
       getInfo: async (inst: SandockInstance): Promise<InstanceInfo> => {
@@ -357,15 +332,10 @@ export const sandock = defineProvider<SandockInstance, SandockConfig>({
       getInstance: (inst: SandockInstance): SandockInstance => inst,
 
       filesystem: {
-        readFile: async (inst: SandockInstance, path: string, run: FsRunCommand): Promise<string> => {
+        readFile: async (inst: SandockInstance, path: string): Promise<string> => {
+          // Sandock rejects a read of a missing file.
           const res = await withRetry(() => inst.client.fs.read(inst.id, path));
-          const content = res.data.content ?? '';
-          if (content === '') {
-            // Sandock 2.6.0 reads a missing file as empty content rather than an error.
-            const check = await run(inst, `test -f "${escapeShellArg(path)}"`);
-            if (check.exitCode !== 0) throw new Error(`Sandock: cannot read ${path}: no such file`);
-          }
-          return content;
+          return res.data.content ?? '';
         },
 
         writeFile: async (inst: SandockInstance, path: string, content: string): Promise<void> => {
