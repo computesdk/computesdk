@@ -79,6 +79,40 @@ function workdirOf(
   return probe;
 }
 
+/** `ctx.sandbox.run("sh", …)` honoring exactly the options given — no
+ *  writable-workdir defaulting. `workdirOf`'s probe must run through this
+ *  and not the public `runCommand`: probing through the cwd-defaulting
+ *  runner would await the probe it is itself part of. */
+async function runBare(
+  ctx: TensorlakeSandboxContext,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const startTime = Date.now();
+  try {
+    const result = await ctx.sandbox.run("sh", {
+      args: ["-c", command],
+      ...(options?.env &&
+        Object.keys(options.env).length > 0 && { env: options.env }),
+      ...(options?.cwd && { workingDir: options.cwd }),
+      ...(options?.timeout !== undefined && { timeout: options.timeout / 1000 }),
+    });
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode ?? 0,
+      durationMs: Date.now() - startTime,
+    };
+  } catch (error) {
+    return {
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+      exitCode: 127,
+      durationMs: Date.now() - startTime,
+    };
+  }
+}
+
 /** Join `path` onto the sandbox workdir. Absolute paths pass through and skip
  *  the probe; empty and `.` segments are dropped; `..` segments are preserved
  *  for the sandbox filesystem to resolve physically — collapsing them
@@ -86,11 +120,10 @@ function workdirOf(
 async function resolveSandboxPath(
   ctx: TensorlakeSandboxContext,
   path: string,
-  runCommand: CommandRunner,
 ): Promise<string> {
   const combined = path.startsWith("/")
     ? path
-    : `${await workdirOf(ctx, runCommand)}/${path}`;
+    : `${await workdirOf(ctx, runBare)}/${path}`;
   const segments: string[] = [];
   for (const segment of combined.split("/")) {
     if (segment === "" || segment === ".") continue;
@@ -236,6 +269,10 @@ export const tensorlake = defineProvider<
       ): Promise<CommandResult> => {
         const startTime = Date.now();
 
+        // The sandbox's default cwd is "/", which isn't writable — relative
+        // commands run from the same workdir filesystem paths resolve to.
+        const workingDir = options?.cwd ?? (await workdirOf(ctx, runBare));
+
         if (options?.background) {
           try {
             await ctx.sandbox.startProcess("sh", {
@@ -244,7 +281,7 @@ export const tensorlake = defineProvider<
               stderrMode: OutputMode.DISCARD,
               ...(options.env &&
                 Object.keys(options.env).length > 0 && { env: options.env }),
-              ...(options.cwd && { workingDir: options.cwd }),
+              workingDir,
             });
           } catch (error) {
             return {
@@ -261,7 +298,7 @@ export const tensorlake = defineProvider<
             args: ["-c", command],
             ...(options?.env &&
               Object.keys(options.env).length > 0 && { env: options.env }),
-            ...(options?.cwd && { workingDir: options.cwd }),
+            workingDir,
             ...(options?.timeout !== undefined && { timeout: options.timeout / 1000 }),
           });
 
@@ -291,7 +328,10 @@ export const tensorlake = defineProvider<
         command: string,
         options: RunCommandOptions,
       ): Promise<CommandResult> =>
-        await streamTensorlakeCommand(ctx.sandbox, command, options),
+        await streamTensorlakeCommand(ctx.sandbox, command, {
+          ...options,
+          cwd: options.cwd ?? (await workdirOf(ctx, runBare)),
+        }),
 
       getInfo: async (
         ctx: TensorlakeSandboxContext,
@@ -364,9 +404,9 @@ export const tensorlake = defineProvider<
         readFile: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<string> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           const bytes = await ctx.sandbox.readFile(resolved);
           return Buffer.from(bytes).toString("utf-8");
         },
@@ -375,9 +415,9 @@ export const tensorlake = defineProvider<
           ctx: TensorlakeSandboxContext,
           path: string,
           content: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<void> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           await ctx.sandbox.writeFile(
             resolved,
             Buffer.from(content, "utf-8"),
@@ -387,9 +427,9 @@ export const tensorlake = defineProvider<
         mkdir: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<void> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           const result = await ctx.sandbox.run("mkdir", {
             args: ["-p", resolved],
           });
@@ -403,9 +443,9 @@ export const tensorlake = defineProvider<
         readdir: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<FileEntry[]> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           const response = await ctx.sandbox.listDirectory(resolved);
           return response.entries.map((e) => ({
             name: e.name,
@@ -418,9 +458,9 @@ export const tensorlake = defineProvider<
         exists: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<boolean> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           try {
             await ctx.sandbox.readFile(resolved);
             return true;
@@ -435,7 +475,7 @@ export const tensorlake = defineProvider<
         remove: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<void> => {
           // An empty or dot-only path would resolve to the workdir itself —
           // refuse it rather than `rm -rf` the sandbox's whole cwd.
@@ -444,7 +484,7 @@ export const tensorlake = defineProvider<
               `remove: refusing ambiguous path: ${JSON.stringify(path)}`,
             );
           }
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           try {
             await ctx.sandbox.deleteFile(resolved);
           } catch {

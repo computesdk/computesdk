@@ -189,6 +189,13 @@ function isRetryable(error: unknown): boolean {
   return status === 429 || (status !== undefined && status >= 500 && status <= 599);
 }
 
+// The contexts API reports "runtime access is not ready for this generation"
+// for a short window after a sandbox is claimed — creating the command
+// context right away can race the runtime coming up.
+function isRuntimeNotReady(error: unknown): boolean {
+  return error instanceof Error && /not ready for this generation/i.test(error.message);
+}
+
 function retryDelay(error: unknown, attempt: number): number {
   const retryAfter = error instanceof APIError ? error.retryAfter : undefined;
   if (retryAfter !== undefined) {
@@ -460,13 +467,30 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
         const deadline = timeout !== undefined && timeout > 0
           ? startedAt + timeout
           : undefined;
-        const started = await sandbox.cmd(command, {
-          command: ['sh', '-lc', command],
-          wait: false,
-          cwd: options?.cwd,
-          envVars: options?.env,
-          ttlSec,
-        });
+        let started: Awaited<ReturnType<Sandbox0Sandbox['cmd']>>;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            started = await sandbox.cmd(command, {
+              command: ['sh', '-lc', command],
+              wait: false,
+              cwd: options?.cwd,
+              envVars: options?.env,
+              ttlSec,
+            });
+            break;
+          } catch (error) {
+            const remaining =
+              deadline === undefined ? Number.POSITIVE_INFINITY : deadline - Date.now();
+            if (
+              (!isRuntimeNotReady(error) && !isRetryable(error)) ||
+              remaining <= 0 ||
+              attempt >= 5
+            ) {
+              throw error;
+            }
+            await sleep(Math.min(retryDelay(error, attempt), Math.max(1, remaining)));
+          }
+        }
         if (options?.background) {
           return {
             stdout: started.stdout || '',
