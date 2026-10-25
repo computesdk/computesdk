@@ -127,6 +127,23 @@ function wrapCommand(command: string, options?: RunCommandOptions): string {
   return cmd;
 }
 
+// A leading dash would be read as an option by base64, find, mkdir and rm.
+function shellPath(path: string): string {
+  return `"${escapeShellArg(path.startsWith('-') ? `./${path}` : path)}"`;
+}
+
+async function exec(sandbox: Agent37Sandbox, command: string, timeoutMs?: number): Promise<ExecResponse> {
+  const { data } = await request<ExecResponse>(
+    sandbox,
+    'POST',
+    `/v1/instances/${encodeURIComponent(sandbox.id)}/exec`,
+    { command, ...(sandbox.runAsRoot ? { user: 'root' } : {}) },
+    timeoutMs,
+  );
+  if (!data) throw new Error(`Agent37 instance ${sandbox.id} not found`);
+  return data;
+}
+
 function infoStatus(status: string): InstanceInfo['status'] {
   if (status === 'failed') return 'error';
   if (status === 'stopped' || status === 'stopping' || status === 'deleting' || status === 'deleted') return 'stopped';
@@ -169,14 +186,7 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
 
       runCommand: async (sandbox: Agent37Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const start = Date.now();
-        const { data } = await request<ExecResponse>(
-          sandbox,
-          'POST',
-          `/v1/instances/${encodeURIComponent(sandbox.id)}/exec`,
-          { command: wrapCommand(command, options), ...(sandbox.runAsRoot ? { user: 'root' } : {}) },
-          options?.timeout,
-        );
-        if (!data) throw new Error(`Agent37 instance ${sandbox.id} not found`);
+        const data = await exec(sandbox, wrapCommand(command, options), options?.timeout);
         return { stdout: data.stdout, stderr: data.stderr, exitCode: data.exit_code, durationMs: Date.now() - start };
       },
 
@@ -209,29 +219,32 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
           { port: options.port },
         );
         if (!data?.url) throw new Error(`Agent37 instance ${sandbox.id} not found`);
-        return options.protocol ? data.url.replace(/^https?/, options.protocol) : data.url;
+        // The URL carries its own access token, so it is only ever handed out encrypted.
+        return options.protocol === 'ws' || options.protocol === 'wss' ? data.url.replace(/^https/, 'wss') : data.url;
       },
 
       getInstance: (sandbox: Agent37Sandbox): Agent37Sandbox => sandbox,
 
       filesystem: {
-        readFile: async (sandbox: Agent37Sandbox, path: string, run: FsRunCommand): Promise<string> => {
-          const result = await mustSucceed(run, sandbox, `base64 -w0 "${escapeShellArg(path)}"`, `read ${path}`);
+        readFile: async (sandbox: Agent37Sandbox, path: string): Promise<string> => {
+          const result = await exec(sandbox, `base64 -w0 ${shellPath(path)}`);
+          if (result.exit_code !== 0) throw new Error(`Failed to read ${path}: ${result.stderr.trim() || `exit code ${result.exit_code}`}`);
+          if (result.truncated) throw new Error(`Failed to read ${path}: the file is larger than one command's output limit`);
           return Buffer.from(result.stdout, 'base64').toString('utf8');
         },
         writeFile: async (sandbox: Agent37Sandbox, path: string, content: string, run: FsRunCommand): Promise<void> => {
           const encoded = Buffer.from(content, 'utf8').toString('base64');
-          const target = `"${escapeShellArg(path)}"`;
+          const target = shellPath(path);
           await mustSucceed(run, sandbox, `mkdir -p "$(dirname ${target})" && printf '%s' '${encoded}' | base64 -d > ${target}`, `write ${path}`);
         },
         mkdir: async (sandbox: Agent37Sandbox, path: string, run: FsRunCommand): Promise<void> => {
-          await mustSucceed(run, sandbox, `mkdir -p "${escapeShellArg(path)}"`, `create ${path}`);
+          await mustSucceed(run, sandbox, `mkdir -p ${shellPath(path)}`, `create ${path}`);
         },
         readdir: async (sandbox: Agent37Sandbox, path: string, run: FsRunCommand): Promise<FileEntry[]> => {
           const result = await mustSucceed(
             run,
             sandbox,
-            `find "${escapeShellArg(path)}" -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
+            `find ${shellPath(path)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
             `list ${path}`,
           );
           return result.stdout
@@ -248,11 +261,11 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
             });
         },
         exists: async (sandbox: Agent37Sandbox, path: string, run: FsRunCommand): Promise<boolean> => {
-          const result = await run(sandbox, `test -e "${escapeShellArg(path)}"`);
+          const result = await run(sandbox, `test -e ${shellPath(path)}`);
           return result.exitCode === 0;
         },
         remove: async (sandbox: Agent37Sandbox, path: string, run: FsRunCommand): Promise<void> => {
-          await mustSucceed(run, sandbox, `rm -rf "${escapeShellArg(path)}"`, `remove ${path}`);
+          await mustSucceed(run, sandbox, `rm -rf ${shellPath(path)}`, `remove ${path}`);
         },
       },
     },
