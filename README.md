@@ -88,6 +88,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Brezel** | `BREZEL_API_KEY`, `BREZEL_API_URL`, `BREZEL_PROJECT_ID`, `BREZEL_ENVIRONMENT_REVISION` | Self-hosted Firecracker sandboxes |
 | **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
 | **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_API_KEY` | Edge computing |
+| **Cocoon Stack** | `COCOONSTACK_API_URL`, `COCOONSTACK_API_KEY` | Self-hosted microVM sandboxes from warm pools |
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
 | **CreateOS** | `CREATEOS_SANDBOX_API_KEY`, `CREATEOS_SANDBOX_BASE_URL` | VM sandboxes with pause/resume/fork snapshots |
 | **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
@@ -310,6 +311,7 @@ npm install @computesdk/brezel           # Brezel provider
 npm install @computesdk/buddy            # Buddy provider
 npm install @computesdk/gcp              # Google Cloud providers (Cloud Run: @computesdk/gcp/cloud-run)
 npm install @computesdk/cloudflare       # Cloudflare provider
+npm install @computesdk/cocoonstack      # Cocoon Stack provider
 npm install @computesdk/codesandbox      # CodeSandbox provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/daytona          # Daytona provider
@@ -360,6 +362,7 @@ See individual provider READMEs for details:
 - **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
 - **[@computesdk/gcp](./packages/gcp)** - Google Cloud providers: Cloud Run sandboxes via `@computesdk/gcp/cloud-run`
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
+- **[@computesdk/cocoonstack](./packages/cocoonstack)** - Self-hosted microVM sandboxes served from warm pools by sandboxd
 - **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
