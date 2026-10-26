@@ -1,5 +1,13 @@
 # @computesdk/sandbox0
 
+## 1.0.18
+
+### Patch Changes
+
+- 7668bf8: tensorlake: default `runCommand`/`streamCommand` cwd to the writable workdir already probed for filesystem paths — the sandbox default cwd is `/`, which isn't writable, so relative-path commands (e.g. `mkdir bench-rootfs`) failed with EACCES.
+
+  sandbox0: retry `sandbox.cmd` context creation on the transient "runtime access is not ready for this generation" response (and retryable 429/5xx), bounded by the command deadline — a claimed sandbox can race its runtime coming up.
+
 ## 1.0.17
 
 ### Patch Changes
