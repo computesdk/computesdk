@@ -289,7 +289,10 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               virtual_cpu: config.virtualCpu || 2,
               memory_megabytes: config.memoryMegabytes || 4096,
               machine_arch: config.machineArch || 'amd64',
-              os: config.os || 'linux'
+              os: config.os || 'linux',
+              // Per-create shape override: instanceOptions.shape takes
+              // precedence over the factory config.
+              ...(plainObject(options?.instanceOptions).shape as Record<string, unknown> | undefined),
             },
             // snapshotId restores filesystem state by seeding a new
             // persistent volume from the given snapshot — Namespace's
