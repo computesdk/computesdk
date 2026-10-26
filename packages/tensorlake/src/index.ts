@@ -200,31 +200,48 @@ export const tensorlake = defineProvider<
           apiUrl,
         };
 
-        try {
-          const startTime = Date.now();
-          const instance = await Sandbox.create(params);
-
-          const sandbox: TensorlakeSandboxContext = {
-            config,
-            sandbox: instance,
-          };
-          const durationMs = Date.now() - startTime;
-          return { instance: sandbox, instanceId: instance.sandboxId,
-            durationMs,
-          };
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("401")) {
-            throw new Error(
-              `Tensorlake authentication failed. Please check your TENSORLAKE_API_KEY. ` +
-                `Get your API key from https://app.tensorlake.ai`,
+        // terminate() resolves before the project's quota slot is released,
+        // so a destroy→create cycle can hit "reached its quota" even though
+        // nothing is still running — retry briefly to ride out the async
+        // slot release.
+        const startTime = Date.now();
+        const quotaDeadline = startTime + 30_000;
+        let lastError: unknown;
+        for (let attempt = 0; ; attempt++) {
+          try {
+            const instance = await Sandbox.create(params);
+            const sandbox: TensorlakeSandboxContext = {
+              config,
+              sandbox: instance,
+            };
+            const durationMs = Date.now() - startTime;
+            return { instance: sandbox, instanceId: instance.sandboxId,
+              durationMs,
+            };
+          } catch (error) {
+            lastError = error;
+            const message =
+              error instanceof Error ? error.message : String(error);
+            if (!message.includes("reached its quota") || Date.now() >= quotaDeadline) {
+              break;
+            }
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.min(1000 * (attempt + 1), 3000)),
             );
           }
+        }
+        const error = lastError;
+        if (error instanceof Error && error.message.includes("401")) {
           throw new Error(
-            `Failed to create Tensorlake sandbox: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Tensorlake authentication failed. Please check your TENSORLAKE_API_KEY. ` +
+              `Get your API key from https://app.tensorlake.ai`,
           );
         }
+        throw new Error(
+          `Failed to create Tensorlake sandbox: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       },
 
       getById: async (config: TensorlakeConfig, sandboxId: string) => {
