@@ -134,6 +134,17 @@ const SNAPSHOT_VOLUME_MOUNTPOINT = '/computesdk-data';
 const RUNTIME_VOLUME_SIZE_MB = 1024;
 
 /**
+ * VM-level mount root for runtime-attached volumes. Volumes attach to the
+ * instance's VM namespace only — a container sees them through a
+ * `host_mount` bind (the recipe nsc's `cluster run --volume` uses:
+ * volume at /volumes/volumeN + bind into the container at the requested
+ * path). Mounting the block device directly at the container path leaves
+ * it invisible to the CommandService container — and instances whose
+ * volumes can't provision are destroyed while waiting for readiness.
+ */
+const VOLUME_HOST_ROOT = '/volumes';
+
+/**
  * Load bearer token from a JSON token file (e.g. from `nsc login`)
  */
 async function loadTokenFromFile(filePath: string): Promise<string> {
@@ -281,6 +292,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const { token } = await getAndValidateCredentials(config);
         const containerName = config.targetContainerName || 'main-container';
         const image = options?.image;
+        const mounts = options?.volumes;
 
         try {
           const requestBody = {
@@ -307,7 +319,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             }),
             // Unified mounts → instanceOptions.volumes entries (tag-keyed
             // PERSISTENT volumes; they materialize on attach).
-            ...(isUnifiedVolumeMounts(options?.volumes) && {
+            ...(isUnifiedVolumeMounts(mounts) && {
               volumes: [
                 ...(options?.snapshotId ? [{
                   mount_point: SNAPSHOT_VOLUME_MOUNTPOINT,
@@ -315,8 +327,8 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
                   persistency_kind: 'PERSISTENT',
                   from_snapshot_id: options.snapshotId,
                 }] : []),
-                ...options.volumes.map((m: any) => ({
-                  mount_point: m.mountPath,
+                ...mounts.map((m: any, i: number) => ({
+                  mount_point: `${VOLUME_HOST_ROOT}/volume${i}`,
                   tag: resolveVolumeRef(m.volume).name ?? resolveVolumeRef(m.volume).id,
                   persistency_kind: 'PERSISTENT',
                   size_mb: RUNTIME_VOLUME_SIZE_MB,
@@ -340,7 +352,20 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               ...(typeof options?.dockerSockPath === 'string' &&
                 options.dockerSockPath !== '' && {
                   docker_sock_path: options.dockerSockPath
-                })
+                }),
+              // Bind each VM-level volume into this container at the
+              // requested mountPath — the CommandService execs inside the
+              // container, so a VM-side mount alone is invisible to
+              // runCommand.
+              ...(isUnifiedVolumeMounts(mounts) && {
+                experimental: {
+                  ...(plainObject(options?.containerOptions) as any)?.experimental,
+                  host_mount: mounts.map((m: any, i: number) => ({
+                    host_path: `${VOLUME_HOST_ROOT}/volume${i}`,
+                    container_path: m.mountPath,
+                  })),
+                },
+              })
             }],
             documented_purpose: config.documentedPurpose || 'ComputeSDK sandbox',
             deadline: new Date(
