@@ -55,18 +55,33 @@ const FALLBACK_WORKDIR = "/";
  *  is "/", which isn't — falling back to a writable `$HOME`, then `/tmp`. */
 const workdirs = new WeakMap<TensorlakeSandboxContext, Promise<string>>();
 
+const WORKDIR_PROBE =
+  'for d in "$(pwd)" "$HOME" /tmp; do [ -n "$d" ] && [ -d "$d" ] && [ -w "$d" ] && printf %s "$d" && break; done';
+
+// A probe can race the sandbox's exec endpoint coming up right after
+// create() returns — retry a few times before accepting the "/" fallback,
+// which would send every relative command to an unwritable cwd.
+async function probeWorkdir(
+  ctx: TensorlakeSandboxContext,
+  runCommand: CommandRunner,
+): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    const result = await runCommand(ctx, WORKDIR_PROBE);
+    const dir = result.stdout.trim();
+    if (result.exitCode === 0 && dir.startsWith("/")) return dir;
+    if (attempt >= 3) return "";
+    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+}
+
 function workdirOf(
   ctx: TensorlakeSandboxContext,
   runCommand: CommandRunner,
 ): Promise<string> {
   let probe = workdirs.get(ctx);
   if (!probe) {
-    probe = runCommand(
-      ctx,
-      'for d in "$(pwd)" "$HOME" /tmp; do [ -n "$d" ] && [ -d "$d" ] && [ -w "$d" ] && printf %s "$d" && break; done',
-    ).then((result) => {
-      const dir = result.stdout.trim();
-      if (result.exitCode === 0 && dir.startsWith("/")) return dir;
+    probe = probeWorkdir(ctx, runCommand).then((dir) => {
+      if (dir) return dir;
       // runCommand reports exec failures as results, not rejections, so a
       // failed probe must not pin the workdir to the fallback forever —
       // evict and let the next filesystem op probe again.
