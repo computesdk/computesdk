@@ -1484,14 +1484,20 @@ async function execInSandbox(
         ) {
           throw error;
         }
-        sandboxTransport.set(sandbox.record.id, "account");
-        sandbox.runner = undefined;
         const response = await miosaRequest<{ data: MiosaExecResult }>(
           sandbox,
           "POST",
           `/sandboxes/${sandbox.record.id}/exec`,
           body,
         );
+        // The account API answering is what proves it owns the sandbox: a
+        // regional sandbox still attaching 404s on the runner too, so
+        // caching "account" on that signal alone would misroute every later
+        // command on this handle even after the sandbox attaches. If this
+        // request 404s as well nothing is learned - the handle stays on the
+        // runner and a later command can succeed once attach completes.
+        sandboxTransport.set(sandbox.record.id, "account");
+        sandbox.runner = undefined;
         result = response.data ?? {};
       }
     } else {
