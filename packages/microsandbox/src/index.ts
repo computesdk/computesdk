@@ -386,12 +386,82 @@ function backgroundScript(command: string): string {
   return `nohup /bin/sh -c ${quoted} >/dev/null 2>&1 &`;
 }
 
+function shellSingleQuote(text: string): string {
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
 /** The agent's exec stream closed before sending an exit event — a
  *  channel-level flake, not a command outcome. Worth one transparent
  *  retry: runCommand has no exactly-once contract, and the alternative is
  *  losing everything the command already emitted. */
 function isExecSessionDrop(error: unknown): boolean {
   return error instanceof Error && /exec session ended without exit event/i.test(error.message);
+}
+
+/**
+ * Cloud relay drops long-lived exec sessions (~2min observed); no exec
+ * channel survives a multi-minute command. Detached mode sidesteps the cap:
+ * the command runs under setsid writing exit state to files, and every
+ * subsequent poll is a sub-second exec the relay can't age out.
+ */
+interface DetachedPaths {
+  pid: string;
+  out: string;
+  err: string;
+  code: string;
+}
+
+function detachedPaths(id: string): DetachedPaths {
+  const base = `/tmp/.csdk-exec-${id}`;
+  return { pid: `${base}.pid`, out: `${base}.out`, err: `${base}.err`, code: `${base}.code` };
+}
+
+/** Worker: record own pid, run the command capturing out/err, write the
+ *  exit code sentinel. Launched under setsid so the exec session's
+ *  process-group cleanup can't take the worker down with it. */
+function detachedLaunchScript(command: string, paths: DetachedPaths): string {
+  const inner =
+    `echo $$ > ${paths.pid}; ( ${command} ) > ${paths.out} 2> ${paths.err};` +
+    ` printf '%s' "$?" > ${paths.code}`;
+  return `setsid /bin/sh -c ${shellSingleQuote(inner)} </dev/null >/dev/null 2>&1 &`;
+}
+
+/** One short exec per poll. exit 0 = done, 2 = worker died before writing
+ *  its exit code (provider reaps detached processes — an honest limit we
+ *  fail fast on instead of burning the timeout), 1 = still running. */
+function detachedStatusScript(paths: DetachedPaths): string {
+  return (
+    `test -f ${paths.code} && exit 0;` +
+    ` test -f ${paths.pid} && P=$(cat ${paths.pid}) && [ -n "$P" ] && ! kill -0 "$P" 2>/dev/null && exit 2;` +
+    ` exit 1`
+  );
+}
+
+function detachedKillScript(paths: DetachedPaths): string {
+  return (
+    `P=$(cat ${paths.pid} 2>/dev/null);` +
+    ` [ -n "$P" ] && { kill -TERM -"$P" 2>/dev/null || kill -TERM "$P" 2>/dev/null; };` +
+    ` sleep 1;` +
+    ` [ -n "$P" ] && { kill -KILL -"$P" 2>/dev/null || kill -KILL "$P" 2>/dev/null; };` +
+    ` true`
+  );
+}
+
+function detachedCleanupScript(paths: DetachedPaths): string {
+  return `rm -f ${paths.pid} ${paths.out} ${paths.err} ${paths.code}`;
+}
+
+async function execShort(native: NativeSandbox, script: string) {
+  return native.execWith('/bin/sh', (builder) => builder.args(['-c', script]));
+}
+
+async function readGuestFile(native: NativeSandbox, path: string): Promise<string> {
+  try {
+    return await native.fs().readToString(path);
+  } catch {
+    const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
+    return output.stdout();
+  }
 }
 
 async function runCommand(
@@ -401,20 +471,85 @@ async function runCommand(
 ): Promise<CommandResult> {
   const startedAt = performance.now();
   const native = await connectedSandbox(sandbox);
-  const script = options?.background ? backgroundScript(command) : command;
-  let output;
-  for (let attempt = 0; ; attempt++) {
+
+  if (options?.background) {
+    const output = await native.execWith('/bin/sh', (builder) =>
+      configureExec(builder, backgroundScript(command), options));
+    return {
+      stdout: output.stdout(),
+      stderr: output.stderr(),
+      exitCode: output.code,
+      durationMs: performance.now() - startedAt,
+    };
+  }
+
+  const paths = detachedPaths(randomUUID().slice(0, 8));
+  const launch = detachedLaunchScript(command, paths);
+
+  // The launch exec returns in well under the channel's lifetime cap. If it
+  // drops anyway, probe before relaunching — the worker may have started.
+  let launched = false;
+  for (let attempt = 0; attempt < 2 && !launched; attempt++) {
     try {
-      output = await native.execWith('/bin/sh', (builder) => configureExec(builder, script, options));
-      break;
+      await native.execWith('/bin/sh', (builder) => configureExec(builder, launch, options, false));
+      launched = true;
     } catch (error) {
       if (!isExecSessionDrop(error) || attempt === 1) throw error;
+      for (let probe = 0; probe < 3 && !launched; probe++) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        const status = await execShort(native, detachedStatusScript(paths)).catch(() => null);
+        if (status && status.code !== 2) launched = true;
+      }
     }
   }
+
+  const deadline =
+    options?.timeout != null ? startedAt + options.timeout : Number.POSITIVE_INFINITY;
+  let pollErrors = 0;
+  for (;;) {
+    let status;
+    try {
+      status = await execShort(native, detachedStatusScript(paths));
+      pollErrors = 0;
+    } catch (error) {
+      if (++pollErrors >= 3) throw error;
+      status = null;
+    }
+    if (status?.code === 0) break;
+    if (status?.code === 2) {
+      throw new Error(
+        `microsandbox detached command died before completing (pid ${paths.pid} gone, no exit sentinel)`,
+      );
+    }
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) {
+      await execShort(native, detachedKillScript(paths)).catch(() => undefined);
+      const [stdout, stderr] = await Promise.all([
+        readGuestFile(native, paths.out).catch(() => ''),
+        readGuestFile(native, paths.err).catch(() => ''),
+      ]);
+      await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
+      return {
+        stdout,
+        stderr,
+        exitCode: 124,
+        durationMs: performance.now() - startedAt,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(2_000, Math.max(remaining, 1))));
+  }
+
+  const [stdout, stderr, codeText] = await Promise.all([
+    readGuestFile(native, paths.out),
+    readGuestFile(native, paths.err),
+    readGuestFile(native, paths.code),
+  ]);
+  await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
+  const exitCode = Number.parseInt(codeText.trim(), 10);
   return {
-    stdout: output.stdout(),
-    stderr: output.stderr(),
-    exitCode: output.code,
+    stdout,
+    stderr,
+    exitCode: Number.isNaN(exitCode) ? 1 : exitCode,
     durationMs: performance.now() - startedAt,
   };
 }

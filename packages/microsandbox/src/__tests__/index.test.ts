@@ -11,6 +11,8 @@ const mock = vi.hoisted(() => ({
   execEvents: [] as Array<Record<string, unknown>>,
   execEventDelayMs: 0,
   execKilled: false,
+  detachedDies: false,
+  detachedNeverDone: false,
   removeError: null as Error | null,
   stopFailures: 0,
   stopAttempts: 0,
@@ -62,6 +64,35 @@ vi.mock('microsandbox', () => {
     async execWith(_command: string, configure: (builder: ExecBuilder) => ExecBuilder) {
       const builder = configure(new ExecBuilder());
       const script = (builder.options.args as string[])[1];
+      // Detached-exec protocol: launch writes pid/out/err/code files; status
+      // probes return 0 once the code sentinel exists; cleanup removes them.
+      const base = script.match(/\/tmp\/\.csdk-exec-[a-z0-9]+/)?.[0];
+      if (base) {
+        const [pid, out, err, code] = [`${base}.pid`, `${base}.out`, `${base}.err`, `${base}.code`];
+        if (script.startsWith('setsid ')) {
+          this.fsOps.files.set(pid, '4242');
+          const inner = script;
+          const failed = inner.includes('missing-command');
+          this.fsOps.files.set(out, inner.includes('echo hello') ? 'hello\n' : '');
+          this.fsOps.files.set(err, failed ? 'not found\n' : '');
+          if (!mock.detachedNeverDone) this.fsOps.files.set(code, failed ? '127' : '0');
+          if (mock.detachedDies) this.fsOps.files.delete(code);
+          return { code: 0, stdout: () => '', stderr: () => '' };
+        }
+        if (script.includes('test -f')) {
+          if (this.fsOps.files.has(code)) return { code: 0, stdout: () => '', stderr: () => '' };
+          if (mock.detachedDies) return { code: 2, stdout: () => '', stderr: () => '' };
+          return { code: 1, stdout: () => '', stderr: () => '' };
+        }
+        if (script.startsWith('cat ')) {
+          const target = script.match(/'([^']+)'/)?.[1] ?? '';
+          return { code: 0, stdout: () => this.fsOps.files.get(target) ?? '', stderr: () => '' };
+        }
+        if (script.startsWith('rm -f') || script.includes('kill')) {
+          for (const path of [pid, out, err, code]) this.fsOps.files.delete(path);
+          return { code: 0, stdout: () => '', stderr: () => '' };
+        }
+      }
       return {
         code: script.includes('missing-command') ? 127 : 0,
         stdout: () => script.includes('echo hello') ? 'hello\n' : '',
@@ -207,6 +238,8 @@ beforeEach(async () => {
   mock.execEvents.length = 0;
   mock.execEventDelayMs = 0;
   mock.execKilled = false;
+  mock.detachedDies = false;
+  mock.detachedNeverDone = false;
   mock.removeError = null;
   mock.stopFailures = 0;
   mock.stopAttempts = 0;
@@ -560,6 +593,22 @@ describe('microsandbox provider', () => {
     const result = await sandbox.runCommand('sleep 60', { timeout: 5, onStdout: () => {} });
 
     expect(mock.execKilled).toBe(true);
+    expect(result.exitCode).toBe(124);
+  });
+
+  it('fails fast when the provider reaps the detached worker', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'reaped-box' });
+    mock.detachedDies = true;
+
+    await expect(sandbox.runCommand('echo hello')).rejects.toThrow(/detached command died/);
+  });
+
+  it('times out detached commands with partial output and exit 124', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'slow-box' });
+    mock.detachedNeverDone = true;
+
+    const result = await sandbox.runCommand('sleep 60', { timeout: 5 });
+
     expect(result.exitCode).toBe(124);
   });
 
