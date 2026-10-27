@@ -1497,7 +1497,7 @@ async function runInstanceCommand(
     }
   }
 
-  process.exitCode = exitCode ?? (destroyRequested ? 130 : 1);
+  process.exitCode = detachRequested ? 0 : (exitCode ?? (destroyRequested ? 130 : 1));
 }
 
 // ─── serve ───────────────────────────────────────────────────────────────────
