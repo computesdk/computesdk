@@ -1748,9 +1748,10 @@ async function cpUpload(
   // statSync first so a missing path errors before anything is created.
   const abs = path.resolve(localPath);
   fs.statSync(abs);
-  const tmp = path.join(os.tmpdir(), `compute-cp-up-${process.pid}-${Date.now()}.tar.gz`);
-  // The tarball can hold sensitive files — pin it to the owner before writing.
-  fs.closeSync(fs.openSync(tmp, 'w', 0o600));
+  // Private 0700 dir: a shared /tmp path can be pre-created by another
+  // local user and the tarball written somewhere attacker-readable.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'compute-cp-up-'));
+  const tmp = path.join(tmpDir, 'archive.tar.gz');
   try {
     await tar.create({ gzip: true, file: tmp, cwd: path.dirname(abs) }, [path.basename(abs)]);
     const size = fs.statSync(tmp).size;
@@ -1780,7 +1781,7 @@ async function cpUpload(
       {},
     );
   } finally {
-    fs.rmSync(tmp, { force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
@@ -1799,8 +1800,8 @@ async function cpDownload(
   assertTransferUrl(created.downloadUrl);
   const res = await fetch(created.downloadUrl);
   if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
-  const tmp = path.join(os.tmpdir(), `compute-cp-dl-${process.pid}-${Date.now()}.tar.gz`);
-  fs.closeSync(fs.openSync(tmp, 'w', 0o600));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'compute-cp-dl-'));
+  const tmp = path.join(tmpDir, 'archive.tar.gz');
   try {
     const progress = cpProgress(created.bytes ?? 0, opts);
     const ws = fs.createWriteStream(tmp);
@@ -1830,7 +1831,7 @@ async function cpDownload(
     await tar.extract({ file: tmp, cwd: localDir, filter: tarEntryIsSafe });
     return { path: localDir, bytes: created.bytes ?? fs.statSync(tmp).size, files: created.files ?? 0 };
   } finally {
-    fs.rmSync(tmp, { force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
