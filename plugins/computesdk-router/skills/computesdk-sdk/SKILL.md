@@ -1,54 +1,44 @@
 ---
 name: computesdk-sdk
-description: Write code that drives ComputeSDK sandboxes — the hosted REST API for first-party use, or the `computesdk` TypeScript SDK with BYOK provider packages. Use when the user wants a script or app that controls sandboxes outside ChatGPT.
+description: Write code that drives ComputeSDK sandboxes — the hosted platform via `@computesdk/platform`, or BYOK with the `computesdk` SDK plus a provider package. Use when the user wants a script or app that controls sandboxes outside ChatGPT.
 ---
 
 # Driving ComputeSDK sandboxes from code
 
 Two paths, depending on who provides the compute.
 
-## First-party: hosted REST API
+## First-party: `@computesdk/platform`
 
-The `computesdk` SDK has no gateway transport — programmatic use of hosted
-sandboxes goes through the REST API (the same one the `compute` CLI uses),
-authenticated with an org API key:
+`npm install computesdk @computesdk/platform` — the provider talks to the
+hosted platform (the same API the `compute` CLI uses), authenticated with an
+org API key or a `compute login` session:
 
 ```typescript
-const BASE = 'https://platform.computesdk.com/api/v1';
-const headers = {
-  authorization: `Bearer ${process.env.COMPUTE_API_KEY}`,
-  'content-type': 'application/json',
-};
-const api = (path: string, init?: RequestInit) =>
-  fetch(`${BASE}${path}`, { ...init, headers }).then((r) => {
-    if (!r.ok) throw new Error(`${init?.method ?? 'GET'} ${path}: ${r.status}`);
-    return r.json();
-  });
+import { compute } from 'computesdk';
+import { platform } from '@computesdk/platform';
 
-// Create — the response wraps the sandbox: { sandbox: { id, … } }
-const { sandbox } = await api('/sandboxes', {
-  method: 'POST',
-  body: JSON.stringify({ label: 'my-job', timeoutMs: 30 * 60 * 1000 }),
-});
-const id = sandbox.id;
+compute.setConfig({ provider: platform({ apiKey: process.env.COMPUTE_API_KEY }) });
 
-// Run a command (buffered; ~290s cap)
-const { stdout, stderr, exitCode } = await api(`/sandboxes/${id}/commands`, {
-  method: 'POST',
-  body: JSON.stringify({ command: 'python -c "print(1+1)"' }),
-});
+// Creates are idempotent — the SDK mints an idempotency key per call
+const sandbox = await compute.sandbox.create({ label: 'my-job', timeout: 30 * 60 * 1000 });
 
-// Files (absolute paths)
-// Write takes `path` in the body (reads/lists take it as ?path= instead)
-await api(`/sandboxes/${id}/files`, {
-  method: 'POST',
-  body: JSON.stringify({ path: '/tmp/out.txt', content: stdout }),
-});
-const listing = await api(`/sandboxes/${id}/files?path=/tmp`);
+// Run a command (buffered; ~290s cap — longer work uses { background: true })
+const { stdout, stderr, exitCode } = await sandbox.runCommand('python -c "print(1+1)"');
+
+// Files (absolute paths, ~4 MB per call)
+await sandbox.filesystem.writeFile('/tmp/out.txt', stdout);
+const entries = await sandbox.filesystem.readdir('/tmp');
 
 // Always clean up — wrap real programs in try/finally
-await api(`/sandboxes/${id}`, { method: 'DELETE' });
+await sandbox.destroy();
 ```
+
+Auth precedence: `apiKey` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
+> a `compute login` session (needs `@benchsdk/cli` installed). Hosted
+sandboxes place on the org's provider order — market by default, the org's
+own provider keys when `providerOrder` names them; see the package README for
+`size`/`maxPrice`/`orderType` and the market error codes
+(`insufficient_credits`, `no_market_capacity`, …) on `err.code`.
 
 ## BYOK: the `computesdk` SDK + provider package
 

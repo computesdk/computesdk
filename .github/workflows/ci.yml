@@ -194,7 +194,7 @@ jobs:
 
     strategy:
       matrix:
-        provider: [e2b, vercel, daytona, modal, archil, blaxel]
+        provider: [e2b, vercel, daytona, modal, archil, blaxel, platform]
       fail-fast: false
 
     steps:
@@ -233,6 +233,7 @@ jobs:
         ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID }}
         BL_API_KEY: ${{ secrets.BL_API_KEY }}
         BL_WORKSPACE: ${{ secrets.BL_WORKSPACE }}
+        COMPUTE_PLATFORM_TEST_API_KEY: ${{ secrets.COMPUTE_PLATFORM_TEST_API_KEY }}
       run: |
         case "$TEST_PROVIDER" in
           e2b)
@@ -268,6 +269,12 @@ jobs:
           blaxel)
             if [ -z "$BL_API_KEY" ] || [ -z "$BL_WORKSPACE" ]; then
               echo "Skipping computesdk integration for blaxel - missing Blaxel credentials (BL_API_KEY, BL_WORKSPACE)"
+              exit 0
+            fi
+            ;;
+          platform)
+            if [ -z "$COMPUTE_PLATFORM_TEST_API_KEY" ]; then
+              echo "Skipping computesdk integration for platform - missing COMPUTE_PLATFORM_TEST_API_KEY"
               exit 0
             fi
             ;;

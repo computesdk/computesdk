@@ -329,6 +329,7 @@ npm install @computesdk/miosa            # MIOSA provider
 npm install @computesdk/mosaic           # Mosaic provider
 npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/novita           # Novita Sandbox provider
+npm install @computesdk/platform         # ComputeSDK Platform hosted sandboxes (market or own keys)
 npm install @computesdk/promigence       # Promigence provider
 npm install @computesdk/run-cloud        # Run Cloud Firecracker sandbox provider
 npm install @computesdk/runloop          # Runloop provider
@@ -377,6 +378,7 @@ See individual provider READMEs for details:
 - **[@computesdk/neevcloud](./packages/neevcloud)** - Secure cloud sandboxes with command execution, filesystem, snapshots, and preview URLs
 - **[@computesdk/novita](./packages/novita)** - Novita cloud sandboxes with native streaming, filesystem access, snapshots, and template management
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
+- **[@computesdk/platform](./packages/platform)** - ComputeSDK Platform hosted sandboxes: market placement or your own provider keys, one API and sandbox ID space
 - **[@computesdk/promigence](./packages/promigence)** - Production-grade sandboxes for AI agents, with filesystem and streaming output
 - **[@computesdk/run-cloud](./packages/run-cloud)** - Fast Firecracker microVM sandboxes with filesystem and snapshot support
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation

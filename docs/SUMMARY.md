@@ -70,6 +70,7 @@
 * [CLI reference](platform/cli.md)
 * [Actions](platform/actions.md)
 * [Benchmarks](platform/benchmarks.md)
+* [Sandboxes](platform/sandboxes.md)
 * [API reference](platform/api-reference.md)
 
 ## Reference
