@@ -1,5 +1,19 @@
 # @computesdk/workbench
 
+## 33.0.21
+
+### Patch Changes
+
+- Updated dependencies [e3f821f]
+- Updated dependencies [e3f821f]
+- Updated dependencies [e3f821f]
+- Updated dependencies [e3f821f]
+- Updated dependencies [e3f821f]
+- Updated dependencies [e3f821f]
+  - @computesdk/microsandbox@0.1.20
+  - @computesdk/namespace@1.6.38
+  - @computesdk/sprites@0.1.31
+
 ## 33.0.20
 
 ### Patch Changes

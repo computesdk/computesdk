@@ -1,5 +1,12 @@
 # @computesdk/microsandbox
 
+## 0.1.20
+
+### Patch Changes
+
+- e3f821f: Run `runCommand` commands as detached workers (setsid + on-guest sentinel files) and poll status with short-lived execs. The cloud relay drops exec sessions around ~2 minutes, which killed any long-running command mid-flight; detached mode keeps every exec under the lifetime cap while preserving exit code, stdout/stderr, timeout (exit 124 + process-group kill), and a fast failure when the runtime reaps the worker.
+- e3f821f: Retry `runCommand` once when the agent's exec stream ends without an exit event — a channel-level flake that was surfacing as a hard failure and dropping all captured output.
+
 ## 0.1.19
 
 ### Patch Changes

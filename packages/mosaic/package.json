@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/mosaic",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "Mosaic provider for ComputeSDK - Firecracker-based sandbox environments",
   "license": "MIT",
   "main": "./dist/index.js",
