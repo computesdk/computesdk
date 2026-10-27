@@ -1,17 +1,79 @@
 /**
- * Thin client for the benchmarks-platform Actions v1 API.
+ * The platform transport moved to `@computesdk/platform` in cli 2.x — this
+ * file re-exports the moved names under their old `Actions*` names for one
+ * release, keeps the Actions wire types, and defines `ActionsClient` as the
+ * `PlatformClient` subclass with the Actions `org()` endpoint.
  * Types mirror the wire shapes in benchmarks-platform `lib/ci/types.ts` —
  * keep them in sync by hand; the API is the contract.
  */
+import {
+  DEFAULT_BASE_URL,
+  PlatformApiError,
+  PlatformClient,
+  PlatformClientError,
+  codeForStatus,
+  errorDetails,
+  isSecurePlatformTransport,
+  isTrustedPlatformHost,
+  readSseEvents,
+  readSseNamedEvents,
+  resolvePlatformAuth,
+  toErrorEnvelope,
+} from '@computesdk/platform';
+import type {
+  PlatformAuth,
+  PlatformClientErrorCode,
+  PlatformErrorEnvelope,
+  StoredPlatformAuth,
+  StoredPlatformAuthResolver,
+} from '@computesdk/platform';
 
+export {
+  DEFAULT_BASE_URL,
+  PlatformApiError as ActionsApiError,
+  PlatformClientError as ActionsCliError,
+  codeForStatus,
+  errorDetails,
+  isSecurePlatformTransport as isSecureActionsTransport,
+  isTrustedPlatformHost as isTrustedActionsHost,
+  readSseEvents,
+  readSseNamedEvents,
+  toErrorEnvelope,
+};
 
-export const DEFAULT_BASE_URL = 'https://platform.computesdk.com';
+const CLI_CREDENTIALS_HINT =
+  'Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.';
 
-export interface ActionsAuth {
-  apiKey: string;
-  baseUrl: string;
-  /** Sent as `X-Org-Slug` when set (--org / COMPUTE_ORG / stored login org). */
-  orgSlug?: string;
+/** `resolvePlatformAuth` with the CLI's flag-style credentials hint. */
+export function resolveActionsAuth(
+  opts: Parameters<typeof resolvePlatformAuth>[0],
+  resolveStored?: StoredPlatformAuthResolver,
+): Promise<PlatformAuth> {
+  return resolvePlatformAuth(opts, resolveStored, CLI_CREDENTIALS_HINT);
+}
+export type {
+  PlatformAuth as ActionsAuth,
+  PlatformClientErrorCode as ActionsCliErrorCode,
+  PlatformErrorEnvelope as ActionsErrorEnvelope,
+  StoredPlatformAuth,
+  StoredPlatformAuthResolver,
+};
+
+export interface ActionsOrg {
+  organizationId: string;
+  name: string;
+  slug: string;
+}
+
+/** `id:jobId:step:offset` — the run-stream watch cursor wire format. */
+export function encodeWatchCursor(
+  id: string,
+  jobId: string,
+  step: number | 'runner' | null,
+  offset: number,
+): string {
+  const stepPart = step === null ? '-' : step === 'runner' ? 'runner' : String(step);
+  return `${id}:${jobId}:${stepPart}:${offset}`;
 }
 
 export interface CiWorkflowInput {
@@ -357,11 +419,6 @@ export interface CiRunHistory {
   runs: CiRunHistoryEntry[];
 }
 
-export interface ActionsOrg {
-  organizationId: string;
-  name: string;
-  slug: string;
-}
 
 /**
  * One row of `GET /api/v1/actions/repos`: a repo the org can run CI on,
@@ -453,475 +510,16 @@ export interface CiVaultDeleteResponse {
   deleted: true;
 }
 
-export class ActionsApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public body?: unknown,
-  ) {
-    super(message);
-    this.name = 'ActionsApiError';
-  }
-}
-
-/** Stable machine-readable codes for errors raised by the CLI itself. */
-export type ActionsCliErrorCode =
-  | 'no_credentials'
-  | 'untrusted_host'
-  | 'untrusted_host_stored_auth'
-  | 'insecure_transport'
-  | 'invalid_argument'
-  | 'workflow_not_found';
-
-/** An error the CLI raised before or instead of an API call. */
-export class ActionsCliError extends Error {
-  constructor(
-    public code: ActionsCliErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ActionsCliError';
-  }
-}
-
-/** The `--json` error envelope; `code` is stable, `message` is for humans. */
-export interface ActionsErrorEnvelope {
-  ok: false;
-  error: {
-    code: string;
-    message: string;
-    /** Present when the platform answered; absent for local/transport failures. */
-    httpStatus?: number;
-    retryable: boolean;
-    /** The platform's `details` object, when its error response carried one. */
-    details?: Record<string, unknown>;
-  };
-}
-
-function codeForStatus(status: number): string {
-  switch (status) {
-    case 400: return 'bad_request';
-    case 401: return 'unauthenticated';
-    case 403: return 'forbidden';
-    case 404: return 'not_found';
-    case 409: return 'conflict';
-    case 413: return 'payload_too_large';
-    case 429: return 'rate_limited';
-    default: return status >= 500 ? 'server_error' : 'http_error';
-  }
-}
-
-function errorDetails(body: unknown): Record<string, unknown> | undefined {
-  if (body && typeof body === 'object' && 'details' in body) {
-    const details = (body as { details: unknown }).details;
-    if (details && typeof details === 'object' && !Array.isArray(details)) {
-      return details as Record<string, unknown>;
-    }
-  }
-  return undefined;
-}
-
 /**
- * Classify any error thrown by an Actions command. API errors carry the HTTP
- * status; CLI errors carry their own code; a fetch rejection (DNS, refused
- * connection, TLS) is `network`; anything else is `unknown`.
+ * The CLI's platform client — `PlatformClient` plus the Actions-only
+ * `org()` endpoint the dashboard URL builders need.
  */
-export function toErrorEnvelope(error: unknown): ActionsErrorEnvelope {
-  if (error instanceof ActionsApiError) {
-    const details = errorDetails(error.body);
-    // The platform's OAuth layer answers 403 insufficient_scope when the
-    // stored login's grant doesn't cover the call — point at re-login rather
-    // than leaving the raw error.
-    const insufficientScope =
-      error.message.includes('insufficient_scope') ||
-      (typeof error.body === 'string' && error.body.includes('insufficient_scope')) ||
-      (typeof error.body === 'object' && error.body !== null &&
-        JSON.stringify(error.body).includes('insufficient_scope'));
-    return {
-      ok: false,
-      error: {
-        code: codeForStatus(error.status),
-        message: insufficientScope
-          ? `${error.message} — run \`compute login\` to sign in again.`
-          : error.message,
-        httpStatus: error.status,
-        retryable: error.status === 429 || error.status === 502 || error.status === 503 || error.status === 504,
-        ...(details !== undefined && { details }),
-      },
-    };
-  }
-  if (error instanceof ActionsCliError) {
-    return { ok: false, error: { code: error.code, message: error.message, retryable: false } };
-  }
-  // undici/Node fetch rejects with a TypeError whose cause is the socket error.
-  if (error instanceof TypeError && /fetch failed/i.test(error.message)) {
-    const cause = (error as { cause?: unknown }).cause;
-    const detail = cause instanceof Error ? `: ${cause.message}` : '';
-    return {
-      ok: false,
-      error: { code: 'network', message: `${error.message}${detail}`, retryable: true },
-    };
-  }
-  return {
-    ok: false,
-    error: {
-      code: 'unknown',
-      message: error instanceof Error ? error.message : String(error),
-      retryable: false,
-    },
-  };
-}
-
-export class ActionsClient {
+export class ActionsClient extends PlatformClient {
   private orgPromise: Promise<ActionsOrg> | null = null;
-
-  constructor(
-    private readonly auth: ActionsAuth,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
-
-  get baseUrl(): string {
-    return this.auth.baseUrl;
-  }
 
   /** The credential's org — fetched once, needed for dashboard URLs. */
   org(): Promise<ActionsOrg> {
     this.orgPromise ??= this.get<ActionsOrg>('/api/v1/actions/org');
     return this.orgPromise;
   }
-
-  async get<T>(path: string, params?: Record<string, string | string[] | undefined>): Promise<T> {
-    const url = new URL(`${this.auth.baseUrl}${path}`);
-    for (const [key, value] of Object.entries(params ?? {})) {
-      if (value === undefined) continue;
-      for (const v of Array.isArray(value) ? value : [value]) url.searchParams.append(key, v);
-    }
-    const res = await this.fetchImpl(url, { headers: this.headers() });
-    return this.parse<T>(res);
-  }
-
-  async post<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'POST',
-      headers: { ...this.headers(), 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return this.parse<T>(res);
-  }
-
-  /** POST a raw text body (e.g. a unified diff to `/api/v1/actions/patches`). */
-  async postText<T>(path: string, body: string, contentType: string): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'POST',
-      headers: { ...this.headers(), 'content-type': contentType },
-      body,
-    });
-    return this.parse<T>(res);
-  }
-
-  async put<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'PUT',
-      headers: { ...this.headers(), 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return this.parse<T>(res);
-  }
-
-  async patch<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'PATCH',
-      headers: { ...this.headers(), 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return this.parse<T>(res);
-  }
-
-  async del<T>(path: string): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'DELETE',
-      headers: this.headers(),
-    });
-    return this.parse<T>(res);
-  }
-
-  /**
-   * One `data:` JSON payload per SSE event. `next()` resolves to the payload,
-   * or null when the stream ends. Call `close()` to abort.
-   */
-  async *sse(path: string, params?: Record<string, string | string[] | undefined>): AsyncGenerator<unknown> {
-    const url = new URL(`${this.auth.baseUrl}${path}`);
-    for (const [key, value] of Object.entries(params ?? {})) {
-      if (value === undefined) continue;
-      for (const v of Array.isArray(value) ? value : [value]) url.searchParams.append(key, v);
-    }
-    const res = await this.fetchImpl(url, {
-      headers: { ...this.headers(), accept: 'text/event-stream' },
-    });
-    if (!res.ok) {
-      await this.parse(res); // throws
-    }
-    if (!res.body) throw new Error('SSE response has no body');
-    yield* readSseEvents(res.body);
-  }
-
-  /**
-   * `sse()` with the frame's `event:` name preserved — for streams whose
-   * events are distinguished by name rather than payload shape (process
-   * follow: stdout/stderr share a `{chunk}` payload).
-   */
-  async *sseNamed(
-    path: string,
-    params?: Record<string, string | string[] | undefined>,
-  ): AsyncGenerator<{ event: string; data: unknown }> {
-    const url = new URL(`${this.auth.baseUrl}${path}`);
-    for (const [key, value] of Object.entries(params ?? {})) {
-      if (value === undefined) continue;
-      for (const v of Array.isArray(value) ? value : [value]) url.searchParams.append(key, v);
-    }
-    const res = await this.fetchImpl(url, {
-      headers: { ...this.headers(), accept: 'text/event-stream' },
-    });
-    if (!res.ok) {
-      await this.parse(res); // throws
-    }
-    if (!res.body) throw new Error('SSE response has no body');
-    yield* readSseNamedEvents(res.body);
-  }
-
-  /** Download bytes following redirects (artifact URLs 302 to storage). */
-  async download(path: string): Promise<Uint8Array> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      headers: this.headers(),
-      redirect: 'follow',
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => undefined);
-      throw new ActionsApiError(res.status, errorMessage(body, res.status), body);
-    }
-    return new Uint8Array(await res.arrayBuffer());
-  }
-
-  private headers(): Record<string, string> {
-    const headers: Record<string, string> = {
-      authorization: `Bearer ${this.auth.apiKey}`,
-      accept: 'application/json',
-    };
-    if (this.auth.orgSlug) headers['X-Org-Slug'] = this.auth.orgSlug;
-    return headers;
-  }
-
-  private async parse<T>(res: Response): Promise<T> {
-    const body = await res.json().catch(() => undefined);
-    if (!res.ok) throw new ActionsApiError(res.status, errorMessage(body, res.status), body);
-    return body as T;
-  }
-}
-
-function errorMessage(body: unknown, status: number): string {
-  if (body && typeof body === 'object' && 'error' in body && typeof (body as { error: unknown }).error === 'string') {
-    return (body as { error: string }).error;
-  }
-  return `Request failed with status ${status}`;
-}
-
-/** Minimal SSE reader: yields the JSON payload of each `data:` event. */
-export async function* readSseEvents(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<unknown> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const event = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        for (const line of event.split('\n')) {
-          if (line.startsWith('data: ')) {
-            yield JSON.parse(line.slice(6));
-          }
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-/** `readSseEvents` with the `event:` name preserved alongside the JSON payload. */
-export async function* readSseNamedEvents(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<{ event: string; data: unknown }> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const frame = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        let event = 'message';
-        const dataLines: string[] = [];
-        for (const line of frame.split('\n')) {
-          if (line.startsWith('event: ')) event = line.slice(7);
-          else if (line.startsWith('data: ')) dataLines.push(line.slice(6));
-        }
-        if (dataLines.length > 0) {
-          yield { event, data: JSON.parse(dataLines.join('\n')) };
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-/** `id:jobId:step:offset` — the run-stream watch cursor wire format. */
-export function encodeWatchCursor(
-  id: string,
-  jobId: string,
-  step: number | 'runner' | null,
-  offset: number,
-): string {
-  const stepPart = step === null ? '-' : step === 'runner' ? 'runner' : String(step);
-  return `${id}:${jobId}:${stepPart}:${offset}`;
-}
-
-/** The subset of `@benchsdk/cli`'s `resolveAuth` result Actions needs. */
-export type StoredPlatformAuth = { apiKey?: string; token?: string; orgSlug?: string; orgId?: string };
-export type StoredPlatformAuthResolver = (opts: { baseUrl: string }) => Promise<StoredPlatformAuth>;
-
-const NO_CREDENTIALS_HINT =
-  'Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.';
-
-/**
- * Precedence: `--api-key` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
- * (legacy) > platform OAuth credentials stored by `compute login`
- * (`~/.benchsdk/credentials.json`, via `@benchsdk/cli`'s `resolveAuth`, which
- * refreshes an expired access token but never opens a browser). `compute
- * login` writes the same store, so a platform login covers these commands.
- */
-export async function resolveActionsAuth(
-  opts: {
-    apiKey?: string;
-    baseUrl?: string;
-    allowUntrustedHost?: boolean;
-    /** One-off org override: sent as X-Org-Slug (also settable via COMPUTE_ORG). */
-    org?: string;
-  },
-  resolveStored: StoredPlatformAuthResolver = resolveStoredPlatformAuth,
-): Promise<ActionsAuth> {
-  const baseUrl = (
-    opts.baseUrl ||
-    process.env.COMPUTE_PLATFORM_URL ||
-    process.env.BENCHMARKS_PLATFORM_URL || // legacy name
-    DEFAULT_BASE_URL
-  ).replace(/\/+$/, '');
-
-  // One-off org override: --org flag or COMPUTE_ORG sends X-Org-Slug on every
-  // request. Falls back to the stored login's saved org. The platform ignores
-  // the header for org API keys (they are already org-scoped).
-  let orgSlug = opts.org || process.env.COMPUTE_ORG || undefined;
-
-  // The bearer key is attached to every request, so an attacker-controlled
-  // --base-url would exfiltrate it. Only trusted hosts are allowed silently;
-  // anything else must be opted into with --allow-untrusted-host.
-  if (!opts.allowUntrustedHost && !isTrustedActionsHost(baseUrl)) {
-    throw new ActionsCliError(
-      'untrusted_host',
-      `Refusing to send the API key to ${baseUrl} — it is not a computesdk.com or localhost host. ` +
-        'If this is a self-hosted/dev deployment you trust, pass --allow-untrusted-host.',
-    );
-  }
-  // Host trust and transport security are separate: --allow-untrusted-host
-  // says who may receive the key, never that it may travel in plaintext.
-  if (!isSecureActionsTransport(baseUrl)) {
-    throw new ActionsCliError(
-      'insecure_transport',
-      `Refusing to send the API key over plaintext HTTP to ${baseUrl}. ` +
-        'Use an https:// base URL; http:// is only allowed for localhost/loopback.',
-    );
-  }
-
-  // `||` not `??`: empty-string env vars (common in CI matrices) should fall
-  // through to the next source, not count as configured.
-  let apiKey =
-    opts.apiKey ||
-    process.env.COMPUTE_API_KEY ||
-    process.env.BENCHMARKS_PLATFORM_API_KEY || // legacy name
-    undefined;
-  if (!apiKey) {
-    // Stored platform OAuth is only ever resolved (and refreshed) for trusted
-    // hosts. --allow-untrusted-host opts an explicit key into a host, not the
-    // user's saved session.
-    if (!isTrustedActionsHost(baseUrl)) {
-      throw new ActionsCliError(
-        'untrusted_host_stored_auth',
-        `Refusing to use stored platform credentials with untrusted host ${baseUrl}. ` +
-          'Pass --api-key or set COMPUTE_API_KEY to use an explicit key with --allow-untrusted-host.',
-      );
-    }
-    let stored: StoredPlatformAuth;
-    try {
-      stored = await resolveStored({ baseUrl });
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      // `@benchsdk/cli`'s "nothing stored" message names `bench` commands and
-      // env vars that only apply to that CLI; keep ours for that case and
-      // surface the reason only for expired/failed-refresh sessions.
-      const detail = reason.startsWith('No credentials found') ? 'No API key.' : reason;
-      throw new ActionsCliError('no_credentials', `${detail} ${NO_CREDENTIALS_HINT}`);
-    }
-    apiKey = stored.apiKey || stored.token || undefined;
-    // The stored orgSlug is only a cache of the last `org use` on this
-    // machine — the server's consent row is the source of truth, and
-    // sending it would pin this machine to a stale org after a switch
-    // elsewhere. Only --org/COMPUTE_ORG send X-Org-Slug.
-  }
-  if (!apiKey) {
-    throw new ActionsCliError('no_credentials', `No API key. ${NO_CREDENTIALS_HINT}`);
-  }
-  return { apiKey, baseUrl, ...(orgSlug && { orgSlug }) };
-}
-
-async function resolveStoredPlatformAuth(opts: { baseUrl: string }): Promise<StoredPlatformAuth> {
-  const { resolveAuth } = await import('@benchsdk/cli');
-  const auth = await resolveAuth({ baseUrl: opts.baseUrl });
-  return { apiKey: auth.apiKey, token: auth.token, orgSlug: auth.orgSlug, orgId: auth.orgId };
-}
-
-function isLoopbackHost(host: string): boolean {
-  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
-}
-
-/** https://, or http:// to a loopback host only. */
-export function isSecureActionsTransport(baseUrl: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(baseUrl);
-  } catch {
-    return false;
-  }
-  if (url.protocol === 'https:') return true;
-  return url.protocol === 'http:' && isLoopbackHost(url.hostname);
-}
-
-/** computesdk.com (and subdomains) or localhost — safe to receive the API key. */
-export function isTrustedActionsHost(baseUrl: string): boolean {
-  let host: string;
-  try {
-    host = new URL(baseUrl).hostname;
-  } catch {
-    return false;
-  }
-  return host === 'computesdk.com' || host.endsWith('.computesdk.com') || isLoopbackHost(host);
 }

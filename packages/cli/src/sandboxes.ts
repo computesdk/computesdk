@@ -42,106 +42,29 @@ import { formatMoney, formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits 
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
-
-export interface SandboxCost {
-  rate: { usd: number; unit: string } | null;
-  runtimeSeconds: number;
-  costUsd: number | null;
-  settled: boolean;
-}
-
-/** `toSummary` — one row of GET /api/v1/sandboxes. */
-export interface SandboxSummary {
-  id: string;
-  label: string | null;
-  provider: string | null;
-  providerSandboxId: string | null;
-  status: 'creating' | 'running' | 'destroyed' | string;
-  placementAttempts: unknown[];
-  commandCount: number;
-  secrets: string[];
-  /** The `boot.image` asked for, and what the provider actually booted. */
-  requestedImage: string | null;
-  image: string | null;
-  createdAt: string;
-  lastCommandAt: string | null;
-  destroyedAt: string | null;
-  destroyError: string | null;
-  /** How the sandbox was placed — source, order type, rate, max price, the
-   * requested platform `size` and the seller's `box` on a market fill. */
-  placement: {
-    source: 'market' | 'own-key';
-    size?: string | null;
-    box?: {
-      provider: string;
-      sizeName: string | null;
-      resources?: { cpus: number | null; memoryMb: number | null; ephemeralDiskMb: number | null };
-    };
-    orderType?: 'market' | 'limit';
-    rate: { usd: number; per: string };
-    maxPrice?: { usd: number; per: string };
-  } | null;
-  cost: SandboxCost;
-}
-
-/** `toDetail` — POST /sandboxes and GET /sandboxes/{id}. */
-export interface SandboxDetail extends SandboxSummary {
-  /** BYOK direct-attach descriptor — null on market fills and ambient providers. */
-  attach: { provider: string; providerSandboxId: string; region: string | null } | null;
-}
-
-export interface SandboxProcess {
-  id: string;
-  jobId: string;
-  pid: number | null;
-  command: string;
-  cwd: string | null;
-  envNames: string[];
-  /** Whether the job's stdin pipe is open (spawn `--stdin`). */
-  stdin: boolean;
-  status: string;
-  exitCode: number | null;
-  signal: string | null;
-  startedAt: string;
-  exitedAt: string | null;
-}
-
-export interface SandboxProcessStatus extends SandboxProcess {
-  stdout: string;
-  stderr: string;
-}
-
-export interface CommandResult {
-  commandId: string;
-  exitCode: number;
-  durationMs: number;
-  stdout: string;
-  stderr: string;
-}
-
-export interface FileEntry {
-  name: string;
-  type: 'file' | 'directory';
-  size?: number;
-  modified?: string;
-}
-
-export type PathView =
-  | { path: string; type: 'file'; content: string }
-  | { path: string; type: 'directory'; entries: FileEntry[] };
-
-/** `snapshotView` — one row of GET /sandboxes/{id}/snapshots. */
-export interface SandboxSnapshot {
-  id: string;
-  sandboxId: string;
-  provider: string;
-  region: string | null;
-  providerSnapshotId: string;
-  label: string | null;
-  expiresAt: string | null;
-  createdAt: string;
-  deletedAt: string | null;
-}
+// The definitions moved to @computesdk/platform in cli 2.x — re-exported here
+// for one release so the CLI's public names don't change.
+export type {
+  CommandResult,
+  FileEntry,
+  PathView,
+  SandboxCost,
+  SandboxDetail,
+  SandboxProcess,
+  SandboxProcessStatus,
+  SandboxSnapshot,
+  SandboxSummary,
+} from '@computesdk/platform';
+import type {
+  CommandResult,
+  FileEntry,
+  PathView,
+  SandboxDetail,
+  SandboxProcess,
+  SandboxProcessStatus,
+  SandboxSnapshot,
+  SandboxSummary,
+} from '@computesdk/platform';
 
 /** POSIX single-quote: argv survives intact through the remote `sh -lc`. */
 function shellQuote(arg: string): string {
@@ -300,6 +223,8 @@ const AUTH_LEAD_OPTS: LeadOptSpec[] = [
 
 const EXEC_LEAD_OPTS: LeadOptSpec[] = [
   ...AUTH_LEAD_OPTS,
+  { aliases: ['--cwd'], key: 'cwd', flag: 'value' },
+  { aliases: ['-e', '--env'], key: 'env', flag: 'repeat' },
   { aliases: ['--timeout-ms'], key: 'timeoutMs', flag: 'value' },
 ];
 
@@ -827,11 +752,13 @@ export function registerSandboxesCommands(program: Command): void {
   cmd
     .command('exec [sandboxId] [command...]')
     .description('Run a one-shot command and print its result (options before the command; -- also works)')
+    .option('--cwd <dir>', 'working directory')
+    .option('-e, --env <key=value>', 'environment variable (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
     .option('--timeout-ms <ms>', 'command timeout in ms')
     .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
     .option('--json', 'print the raw response')
     .passThroughOptions()
-    .action(async (argId: string | undefined, rawCommand: string[], rawOpts: CommonOpts & { timeoutMs?: string }) => {
+    .action(async (argId: string | undefined, rawCommand: string[], rawOpts: CommonOpts & { cwd?: string; env?: string[]; timeoutMs?: string }) => {
       let opts = rawOpts;
       try {
         // A non-UUID first positional is the first word of the command, not
@@ -850,6 +777,8 @@ export function registerSandboxesCommands(program: Command): void {
           `/api/v1/sandboxes/${resolved.id}/commands`,
           {
             command: command.map(shellQuote).join(' '),
+            ...(opts.cwd ? { cwd: opts.cwd } : {}),
+            ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
             ...(opts.timeoutMs ? { timeoutMs: Number(opts.timeoutMs) } : {}),
           },
         ).catch((e) => { resolved.clearStale(e); throw e; });

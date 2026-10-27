@@ -121,6 +121,21 @@ function getProviderErrorDetail(error: unknown): string {
   return String(error);
 }
 
+/**
+ * AggregateError-style failure for multi-provider creates: the original
+ * errors stay inspectable on `.errors` (`AggregateError` itself isn't in the
+ * es2020 lib this package targets).
+ */
+class MultiProviderError extends Error {
+  constructor(
+    public errors: unknown[],
+    message: string,
+  ) {
+    super(message);
+    this.name = 'AggregateError';
+  }
+}
+
 function resolveProviders(config: ExplicitComputeConfig): DirectProvider[] {
   const candidates: unknown[] = [];
 
@@ -257,6 +272,7 @@ class ComputeManager {
     const candidates = this.getCreateCandidates(preferredProviderName);
     const canFallback = this.fallbackOnError && !preferredProviderName;
     const errors: string[] = [];
+    const providerErrors: unknown[] = [];
 
     for (const [index, provider] of candidates.entries()) {
       try {
@@ -284,6 +300,14 @@ class ComputeManager {
         if (error instanceof Error && (error as any).name === 'AbortError') {
           throw error;
         }
+        // `fallback: false` marks an error whose outcome is unknown — e.g.
+        // @computesdk/platform's create_outcome_unknown, where a hosted box
+        // may already exist and be billing. Trying the next provider could
+        // boot a second box, so rethrow immediately.
+        if (error instanceof Error && (error as { fallback?: boolean }).fallback === false) {
+          throw error;
+        }
+        providerErrors.push(error);
         errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         if (!canFallback) {
           throw error;
@@ -291,7 +315,10 @@ class ComputeManager {
       }
     }
 
-    throw new Error(
+    // Keep the original provider errors on `.errors` so callers can inspect
+    // each provider's error code in multi-provider mode.
+    throw new MultiProviderError(
+      providerErrors,
       `Failed to create instance across ${candidates.length} provider(s).\n` +
       errors.map((error) => `- ${error}`).join('\n')
     );

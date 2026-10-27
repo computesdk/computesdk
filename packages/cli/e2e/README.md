@@ -68,6 +68,20 @@ Caveats:
   are live in the sandbox lane — it can only pause asks it can list, so a
   foreign seller's cheap ask would still win fills and skew the checks.
 
+## `platform-sdk.mjs`
+
+One market-path run of the `@computesdk/platform` SDK provider: creates a
+small sandbox with no `providerOrder` (so the org defaults to the market),
+runs a command, streams a command over SSE, checks `getInfo`, round-trips a
+file, fetches it back with `getById`, and destroys it. Same requirements as
+the buyer role above — only `E2E_BUYER_KEY` is needed. The SDK package must be
+built (`pnpm build` at the repo root) first.
+
+```bash
+export E2E_BUYER_KEY=csdk_...
+node e2e/platform-sdk.mjs
+```
+
 ## `mcp-oauth-client.mjs`
 
 Part C of the E2E: exercises the platform MCP endpoint

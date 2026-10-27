@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { compute, type DirectProvider } from '../compute';
 
-type SupportedProvider = 'e2b' | 'vercel' | 'daytona' | 'modal' | 'archil' | 'blaxel';
+type SupportedProvider = 'e2b' | 'vercel' | 'daytona' | 'modal' | 'archil' | 'blaxel' | 'platform';
 
 const runIntegration = process.env.COMPUTESDK_INTEGRATION === '1';
 const testProvider = process.env.TEST_PROVIDER as SupportedProvider | undefined;
@@ -45,6 +45,7 @@ async function loadProviderFactory(provider: SupportedProvider): Promise<(config
     modal: resolve(workspaceRoot, 'packages/modal/dist/index.mjs'),
     archil: resolve(workspaceRoot, 'packages/archil/dist/index.mjs'),
     blaxel: resolve(workspaceRoot, 'packages/blaxel/dist/index.mjs'),
+    platform: resolve(workspaceRoot, 'packages/platform/dist/index.mjs'),
   };
 
   const factoryMap: Record<SupportedProvider, string> = {
@@ -54,6 +55,7 @@ async function loadProviderFactory(provider: SupportedProvider): Promise<(config
     modal: 'modal',
     archil: 'archil',
     blaxel: 'blaxel',
+    platform: 'platform',
   };
 
   const moduleUrl = pathToFileURL(modulePaths[provider]).href;
@@ -96,6 +98,13 @@ function getProviderConfig(provider: SupportedProvider): Record<string, string> 
       return {
         apiKey: requireEnv('BL_API_KEY'),
         workspace: requireEnv('BL_WORKSPACE'),
+      };
+    case 'platform':
+      // A dedicated test org's API key: on the sandbox access list, with its
+      // own provider key and providerOrder pinned to that provider, so the run
+      // covers the own-keys path rather than the market.
+      return {
+        apiKey: requireEnv('COMPUTE_PLATFORM_TEST_API_KEY'),
       };
     default:
       throw new Error(`Unsupported TEST_PROVIDER: ${String(provider)}`);
