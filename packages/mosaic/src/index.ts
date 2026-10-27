@@ -24,7 +24,15 @@ const BUILD_TIMEOUT_MS = 20 * 60 * 1000;
 const BUILD_POLL_INTERVAL_MS = 2_000;
 const WORKSPACE = '/workspace';
 /** Mosaic's stock templates. Anything else is one of the caller's environments. */
-const STOCK_TEMPLATES = ['node-20', 'python-3.11'] as const;
+const STOCK_TEMPLATES = [
+  'base',
+  'node-20',
+  'node-22',
+  'node-26',
+  'node-22-agents',
+  'python-3.11',
+  'python-3.14',
+] as const;
 
 export interface MosaicConfig {
   /** Public or private Mosaic REST endpoint. Falls back to MOSAIC_API_URL. */
