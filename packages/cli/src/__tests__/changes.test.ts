@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentBranch, dispatchBody, hasLocalChanges, localChangesPatch, remoteNamesRepo, type GitRunner } from '../actions.js';
+import { currentBranch, dispatchBody, patchTouches, hasLocalChanges, localChangesPatch, remoteNamesRepo, type GitRunner } from '../actions.js';
 
 const ci = {
   id: 'w-1', name: 'CI', path: '.github/workflows/ci.yml', dispatchable: true, refs: ['refs/heads/main'],
@@ -132,5 +132,35 @@ describe('remoteNamesRepo', () => {
     expect(remoteNamesRepo('https://github.com/acme/app.git', 'acme/app')).toBe(true);
     expect(remoteNamesRepo('git@github.com:acme/app', 'Acme/App')).toBe(true);
     expect(remoteNamesRepo('https://github.com/acme/app-two.git', 'acme/app')).toBe(false);
+  });
+});
+
+describe('dispatching a workflow that exists only in the diff', () => {
+  it('patchTouches matches a +++ b/ header for the exact path', () => {
+    const patch = 'diff --git a/.github/workflows/new.yml b/.github/workflows/new.yml\n--- /dev/null\n+++ b/.github/workflows/new.yml\n@@ -0,0 +1 @@\n+name: new\n';
+    expect(patchTouches(patch, '.github/workflows/new.yml')).toBe(true);
+    expect(patchTouches(patch, '.github/workflows/ci.yml')).toBe(false);
+    expect(patchTouches(patch, 'workflows/new.yml')).toBe(false);
+  });
+
+  it('patchTouches accepts the tab-terminated and quoted headers git emits for unusual paths', () => {
+    expect(patchTouches('+++ b/.github/workflows/my bench.yml\t\n', '.github/workflows/my bench.yml')).toBe(true);
+    expect(patchTouches('+++ "b/.github/workflows/b\\303\\244nch.yml"\n', '.github/workflows/b\\303\\244nch.yml')).toBe(true);
+    expect(patchTouches('+++ b/.github/workflows/my bench.yml.bak\t\n', '.github/workflows/my bench.yml')).toBe(false);
+  });
+
+  it('dispatchBody addresses a patched workflow by repo + path and skips catalog-only checks', () => {
+    const body = dispatchBody(
+      { repoFullName: 'acme/web', workflowPath: '.github/workflows/new.yml' },
+      { ref: 'feature', patchId: 'p-1', inputs: ['suite=dax'] },
+    );
+    expect(body).toEqual({
+      repoFullName: 'acme/web',
+      workflowPath: '.github/workflows/new.yml',
+      ref: 'feature',
+      inputs: { suite: 'dax' },
+      patchId: 'p-1',
+    });
+    expect(() => dispatchBody({ repoFullName: 'acme/web', workflowPath: '.github/workflows/new.yml' }, {})).toThrow('--ref');
   });
 });
