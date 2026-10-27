@@ -529,11 +529,30 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           }
 
+          const timeoutMs =
+            typeof options?.timeout === 'number' &&
+            Number.isFinite(options.timeout) &&
+            options.timeout > 0
+              ? Math.floor(options.timeout)
+              : undefined;
+
           const result = await fetchNamespace(
             sandbox.token,
             COMMAND_SERVICE.RUN_COMMAND_SYNC,
             {
               method: 'POST',
+              headers:
+                // Connect protocol deadline: the server aborts the command
+                // when it expires (Namespace's `timeoutMs` call option maps
+                // to this header). The client-side abort only fires if the
+                // server ignores it — a wedged exec must never hang.
+                timeoutMs !== undefined
+                  ? { 'Connect-Timeout-Ms': String(timeoutMs) }
+                  : undefined,
+              signal:
+                timeoutMs !== undefined
+                  ? AbortSignal.timeout(timeoutMs + 10_000)
+                  : undefined,
               body: JSON.stringify({
                 instanceId: sandbox.instanceId,
                 targetContainerName: sandbox.targetContainerName,

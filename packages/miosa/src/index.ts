@@ -1042,6 +1042,179 @@ function unwrapExecResult(raw: Record<string, unknown>): MiosaExecResult {
     : (raw as MiosaExecResult);
 }
 
+// Headroom past the command's own server-side timeout for the exec stream
+// to finish: the runner enforces `timeout` seconds on the command itself,
+// so a stream still open this long after it must be wedged - readiness
+// queueing and final drain ride inside the slack.
+const RUNNER_EXEC_DRAIN_SLACK_MS = 120_000;
+
+// How long exec waits for a runner sandbox to finish launching. Runner
+// create answers while the machine is still coming up (its create result
+// reports state "stopped"), and an exec issued mid-launch parks in a
+// server-side hold that drops the stream after about a minute - before
+// the command ever runs. A fresh sandbox needs the launch window plus a
+// margin; a warm one costs this call a single GET.
+const RUNNER_READY_WAIT_MS = 180_000;
+const RUNNER_READY_POLL_MS = 2_000;
+
+/**
+ * Waits until the runner reports the sandbox ready to exec. While it
+ * launches the per-sandbox GET answers 404 (the runner has not attached
+ * the sandbox record on its host yet) - that is a keep-waiting signal,
+ * not a failure. `stopping`/gone sandboxes throw; anything else unusual
+ * surfaces on expiry.
+ */
+async function waitForRunnerReady(
+  client: MiosaRunnerClient,
+  sandboxId: string,
+  budgetMs: number,
+): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  let lastState: string | undefined;
+  for (;;) {
+    try {
+      const record = await client.get(sandboxId);
+      lastState = record.state;
+      if (record.state === "ready") return;
+      if (record.state === "stopping" || record.state === "stopped") {
+        throw new Error(
+          `miosa runner sandbox ${sandboxId} is ${record.state} - not running the command`,
+        );
+      }
+    } catch (error) {
+      if (!isNotFoundError(error)) throw error;
+      lastState = undefined;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `miosa runner sandbox ${sandboxId} still ${lastState ?? "not provisioned"} after ${Math.round(budgetMs / 1000)}s - never became ready`,
+      );
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(RUNNER_READY_POLL_MS, deadline - Date.now())),
+    );
+  }
+}
+
+/**
+ * Runs a command on the runner via exec/stream and folds the events into
+ * the buffered result shape callers receive.
+ *
+ * RunnerClient.exec rides on a transport request whose deadline is the
+ * SDK's 30s default - exec never overrides it - so every buffered exec
+ * dies client-side at 30s no matter what server-side `timeout` it asked
+ * for, and any install/build legitimately past that reads as a command
+ * failure. exec/stream carries no transport deadline (the request settles
+ * on response headers), so it is the only runner exec that can outlive
+ * 30s. The caller's own budget still binds: the server-side `timeout`
+ * enforces it, and the client deadline here stops a wedged stream at
+ * budget + slack.
+ */
+async function execOnRunner(
+  client: MiosaRunnerClient,
+  sandboxId: string,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<MiosaExecResult> {
+  // A create-then-exec sequence reaches here while the sandbox is still
+  // launching; without the wait the exec's stream dies in the server-side
+  // hold and the command never runs.
+  await waitForRunnerReady(client, sandboxId, RUNNER_READY_WAIT_MS);
+  const events = await client.execStream(sandboxId, command, {
+    ...(options?.cwd !== undefined ? { cwd: options.cwd } : {}),
+    ...(options?.env !== undefined ? { env: options.env } : {}),
+    ...(options?.timeout !== undefined
+      ? { timeout: Math.ceil(options.timeout / 1000) }
+      : {}),
+  });
+
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  let exitCode: number | undefined;
+
+  // Server-side exec timeout defaults to 30s when the caller sends none.
+  const commandBudgetMs = options?.timeout ?? 30_000;
+  const deadline = Date.now() + commandBudgetMs + RUNNER_EXEC_DRAIN_SLACK_MS;
+  const iterator = events[Symbol.asyncIterator]();
+  const STALLED = Symbol("stalled");
+  let stalled = false;
+  let eventsSeen = 0;
+  let firstUnrecognized: unknown;
+  let lastUnrecognized: unknown;
+  for (;;) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      stalled = true;
+      break;
+    }
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+    const raced = await Promise.race([
+      iterator.next(),
+      new Promise<typeof STALLED>((resolve) => {
+        stallTimer = setTimeout(() => resolve(STALLED), remaining);
+      }),
+    ]);
+    if (stallTimer !== undefined) clearTimeout(stallTimer);
+    if (raced === STALLED) {
+      stalled = true;
+      break;
+    }
+    if (raced.done) break;
+    const event = raced.value;
+    eventsSeen += 1;
+    // Terminal-event shape follows the SDK's normalizeExecEvent: `exit` is
+    // the documented type, but a frame carrying an exit code under any
+    // other event name, or a bare numeric payload, is the same signal.
+    // The runner's real wire shape is flatter than its type declaration:
+    // output frames arrive as `{"text": "<chunk>"}` with no channel field
+    // (stdout and stderr are merged), so text frames fold into stdout.
+    const raw = event as Record<string, unknown>;
+    if (typeof raw?.["text"] === "string") {
+      stdout.push(raw["text"]);
+    } else if (event.type === "stdout") stdout.push(event.line);
+    else if (event.type === "stderr") stderr.push(event.line);
+    else {
+      const code =
+        raw?.["exit_code"] ?? raw?.["exitCode"] ?? (typeof raw === "number" ? raw : undefined);
+      if (typeof code === "number" && Number.isFinite(code)) {
+        exitCode = code;
+      } else {
+        if (firstUnrecognized === undefined) firstUnrecognized = raw;
+        lastUnrecognized = raw;
+      }
+    }
+  }
+
+  if (stalled) {
+    stderr.push(
+      `runner exec stream did not finish within ${Math.ceil(commandBudgetMs / 1000)}s + drain slack\n`,
+    );
+  } else if (exitCode === undefined) {
+    // The stream closed without an exit event - the server dropped the
+    // command mid-run, so it cannot report success.
+    const tail =
+      lastUnrecognized === undefined
+        ? ""
+        : ` last event: ${JSON.stringify(lastUnrecognized).slice(0, 300)}`;
+    stderr.push(
+      `runner exec stream ended without an exit event after ${eventsSeen} event(s)${tail}\n`,
+    );
+  } else if (exitCode !== 0 && firstUnrecognized !== undefined) {
+    // A failed command whose output frames arrived in a shape the fold
+    // does not recognize - surface the wire shape for diagnosis.
+    stderr.push(
+      `runner stream events unrecognized: first=${JSON.stringify(firstUnrecognized).slice(0, 200)} last=${JSON.stringify(lastUnrecognized).slice(0, 200)}\n`,
+    );
+  }
+  // `line` is a raw output chunk (it carries its own newline), so the fold
+  // is plain concatenation - the same fold the SDK's own client uses.
+  return {
+    stdout: stdout.join(""),
+    stderr: stderr.join(""),
+    exit_code: exitCode ?? 127,
+  };
+}
+
 /** True for both MiosaApiError (control plane) and the runner's own error
  * class - both carry a numeric `.status`, so this needs no instanceof
  * against a class loaded via dynamic import. */
@@ -1052,6 +1225,29 @@ function isNotFoundError(error: unknown): boolean {
     (error as { status?: unknown }).status === 404
   );
 }
+
+/** The control plane and the runner both refuse a destroy while another
+ * lifecycle operation (create, exec, stop, snapshot) is still running on
+ * the sandbox. The refusal comes back as code/message `SANDBOX_BUSY` on
+ * either error class - distinct from the runner's admission `runtime_busy`
+ * (see RunnerError.isBusy), which is about capacity, not this sandbox. */
+function isSandboxBusyError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const shaped = error as { code?: unknown; message?: unknown };
+  return (
+    (typeof shaped.code === "string" &&
+      shaped.code.startsWith("SANDBOX_BUSY")) ||
+    (typeof shaped.message === "string" &&
+      shaped.message.includes("SANDBOX_BUSY"))
+  );
+}
+
+// How long destroy waits for an in-flight lifecycle operation to release
+// the sandbox before reporting the refusal. SANDBOX_BUSY means the destroy
+// was refused, not attempted: a short bounded retry turns a drain window
+// into a clean teardown instead of a leaked sandbox.
+const DESTROY_BUSY_BUDGET_MS = 60_000;
+const DESTROY_BUSY_INTERVAL_MS = 2_000;
 
 function resolveAuth(config: MiosaConfig): MiosaAuth {
   const apiKey =
@@ -1254,14 +1450,14 @@ async function execInSandbox(
       // the same contract as the control plane (C2).
       const client = await getRunnerClient(sandbox);
       try {
-        const raw = await client.exec(sandbox.record.id, fullCommand, {
-          ...(options?.cwd !== undefined ? { cwd: options.cwd } : {}),
-          ...(options?.env !== undefined ? { env: options.env } : {}),
-          ...(options?.timeout !== undefined
-            ? { timeout: Math.ceil(options.timeout / 1000) }
-            : {}),
-        });
-        result = unwrapExecResult(raw);
+        // Streamed, not buffered: the buffered exec dies on the transport's
+        // 30s request deadline whatever the command's own timeout is.
+        result = await execOnRunner(
+          client,
+          sandbox.record.id,
+          fullCommand,
+          options,
+        );
       } catch (error) {
         // A handle from getById/list for a sandbox created in another
         // process carries no recorded origin, so it defaults to the regional
@@ -1687,14 +1883,25 @@ const createMiosaProvider = defineProvider<
           ).destroySandbox(sandboxId);
         };
         // Resolves true only when the endpoint answered 404, meaning it never
-        // had this sandbox - which says nothing about the other endpoint.
+        // had this sandbox - which says nothing about the other endpoint. A
+        // SANDBOX_BUSY refusal retries inside the shared busy budget: the
+        // busy window is sandbox-scoped, not endpoint-scoped, so the budget
+        // is wall-clock across whichever endpoints get tried.
+        const busyDeadline = Date.now() + DESTROY_BUSY_BUDGET_MS;
         const missing = async (run: () => Promise<unknown>): Promise<boolean> => {
-          try {
-            await run();
-            return false;
-          } catch (error) {
-            if (isNotFoundError(error)) return true;
-            throw error;
+          for (;;) {
+            try {
+              await run();
+              return false;
+            } catch (error) {
+              if (isNotFoundError(error)) return true;
+              if (!isSandboxBusyError(error) || Date.now() >= busyDeadline) {
+                throw error;
+              }
+              await new Promise((resolve) =>
+                setTimeout(resolve, DESTROY_BUSY_INTERVAL_MS),
+              );
+            }
           }
         };
 
