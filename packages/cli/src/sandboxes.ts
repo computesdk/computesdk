@@ -1539,14 +1539,8 @@ async function serveInstanceCommand(
   const waitMs = opts.timeoutMs ? Number(opts.timeoutMs) : SERVE_DEFAULT_WAIT_MS;
   const deadline = Date.now() + waitMs;
   let entry: PortsResponse['ports'][number] | undefined;
-  while (true) {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      console.error(pc.red(`Port ${port} never listened within ${fmtTimeout(waitMs)}.`));
-      printServeJobFooter(jobId);
-      process.exitCode = 1;
-      return;
-    }
+  let remaining = waitMs;
+  while (!entry && remaining > 0) {
     const res = await c.get<PortsResponse>(
       `/api/v1/sandboxes/${id}/ports?wait=${port}&timeoutMs=${Math.min(SERVE_POLL_MS, remaining)}`,
     );
@@ -1566,6 +1560,14 @@ async function serveInstanceCommand(
       process.exitCode = 1;
       return;
     }
+    remaining = deadline - Date.now();
+  }
+
+  if (!entry) {
+    console.error(pc.red(`Port ${port} never listened within ${fmtTimeout(waitMs)}.`));
+    printServeJobFooter(jobId);
+    process.exitCode = 1;
+    return;
   }
 
   if (!entry.public) {
