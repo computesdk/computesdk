@@ -52,6 +52,8 @@ compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
 - Run dashboard URLs: `{base}/{orgSlug}/actions/runs/{runId}`.
 
+- Run local changes without committing: `compute actions dispatch <owner/repo> --workflow <path|name> --with-changes` — diffs the working tree against `origin/<ref>` (default `--ref`: current branch), uploads it to `POST /api/v1/actions/patches`, dispatches with `patchId`; the job applies it after checkout. A dirty tree without the flag gets a hint on stderr.
+
 ## Sandboxes quick reference
 
 ```
