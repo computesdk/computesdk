@@ -276,7 +276,7 @@ export function resultsSummary(results: CiRunBenchmarkResult[]): string {
     .map((r) => {
       const rows = overallRows(r);
       if (rows.length === 0) return `${safeTerm(r.benchmarkSlug)} (${safeTerm(r.status)}, no results yet)`;
-      const failed = rows.filter((p) => !p.skipped && (p.successRate ?? 0) < 1).length;
+      const failed = rows.filter((p) => !p.skipped && p.successRate !== null && p.successRate < 1).length;
       return `${safeTerm(r.benchmarkSlug)} · ${rows.length} providers${failed > 0 ? ` · ${failed} failed` : ''}`;
     })
     .join('; ');
@@ -284,11 +284,20 @@ export function resultsSummary(results: CiRunBenchmarkResult[]): string {
 
 /**
  * The runner reports one overall row per provider (`dimensions: {}`) plus one
- * per dimension (e.g. phase). The table shows the overall rows; `--json` has all.
+ * per dimension (e.g. phase). The table shows one row per provider — its
+ * overall row, or its best dimension row when it has no overall; `--json` has all.
  */
 function overallRows(result: CiRunBenchmarkResult): CiRunBenchmarkProvider[] {
-  const overall = result.providers.filter((p) => Object.keys(p.dimensions).length === 0);
-  return overall.length > 0 ? overall : result.providers;
+  const byProvider = new Map<string, CiRunBenchmarkProvider>();
+  for (const p of result.providers) {
+    const cur = byProvider.get(p.provider);
+    const isOverall = Object.keys(p.dimensions).length === 0;
+    const curIsOverall = cur ? Object.keys(cur.dimensions).length === 0 : false;
+    if (!cur || (isOverall && !curIsOverall) || (!curIsOverall && (p.compositeScore ?? -1) > (cur.compositeScore ?? -1))) {
+      byProvider.set(p.provider, p);
+    }
+  }
+  return Array.from(byProvider.values());
 }
 
 function formatScore(n: number | null): string {

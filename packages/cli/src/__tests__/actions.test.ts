@@ -1169,4 +1169,28 @@ describe('formatRunResults', () => {
     expect(resultsSummary([result])).toBe('sandbox-cpu · 2 providers · 1 failed');
     expect(resultsSummary([{ ...result, providers: [] }])).toBe('sandbox-cpu (completed, no results yet)');
   });
+
+  it('digest does not count an unreported success rate as a failure', () => {
+    const providers = result.providers.map((p) => ({ ...p, successRate: null }));
+    expect(resultsSummary([{ ...result, providers }])).toBe('sandbox-cpu · 2 providers');
+  });
+
+  it('a provider with only dimension rows still gets a row next to providers with an overall', () => {
+    const sprites = result.providers.find((p) => p.provider === 'sprites' && !('phase' in p.dimensions))!;
+    const e2b = result.providers.find((p) => p.provider === 'e2b' && 'phase' in p.dimensions)!;
+    const providers = [sprites, { ...e2b, dimensions: { phase: 'small' }, successRate: 0.25 }, e2b];
+    expect(resultsSummary([{ ...result, providers }])).toBe('sandbox-cpu · 2 providers · 1 failed');
+  });
+
+  it('a benchmark with only dimension rows counts one row per provider', () => {
+    const providers = result.providers.flatMap((p) => [
+      { ...p, dimensions: { phase: 'small' }, compositeScore: 1 },
+      { ...p, dimensions: { phase: 'large' }, compositeScore: 2 },
+    ]);
+    expect(resultsSummary([{ ...result, providers }])).toBe('sandbox-cpu · 2 providers · 1 failed');
+    const out = formatRunResults([{ ...result, providers }]);
+    for (const p of result.providers) {
+      expect(out.split('\n').filter((l) => l.includes(p.provider))).toHaveLength(1);
+    }
+  });
 });
