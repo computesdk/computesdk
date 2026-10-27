@@ -348,6 +348,10 @@ describe('run', () => {
       expect(text).toContain('job j1');
       expect(text).toContain('instance timeout: 1h');
       expect(text).toContain(`logs j1`);
+      // Full id in the header; bare `destroy` (the pick is already set).
+      expect(text).toContain(`instance ${ID_A}`);
+      expect(out.mock.calls.map((c) => String(c[0]))).toContain('  destroy:  compute instances destroy');
+      expect(text).not.toContain('\u2026');
       expect(fakeClient.del).not.toHaveBeenCalled();
     } finally {
       out.mockRestore();
@@ -399,6 +403,21 @@ describe('run', () => {
     fakeClient.get.mockResolvedValueOnce({ process: { ...proc, jobId: JOB_UUID, status: 'exited', exitCode: 0 } });
     await buildProgram().parseAsync(['sandboxes', 'logs', JOB_UUID], { from: 'user' });
     expect(fakeClient.get).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}/processes/${JOB_UUID}`);
+  });
+
+  it('snapshot-delete <snapshotId> on the implicit instance prints the resolved id', async () => {
+    const { setCurrentInstance, orgKey } = await import('../current-instance.js');
+    setCurrentInstance(ID_A, orgKey({}));
+    const SNAP = 'snap-123';
+    fakeClient.del.mockResolvedValueOnce({ ok: true });
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'snapshot-delete', SNAP], { from: 'user' });
+      expect(fakeClient.del).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}/snapshots/${SNAP}`);
+      expect(out.mock.calls.map((c) => String(c[0]))).toContain(`deleted snapshot ${SNAP}`);
+    } finally {
+      out.mockRestore();
+    }
   });
 
   it('run --keep -d is a usage error', async () => {
