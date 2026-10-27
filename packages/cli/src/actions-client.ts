@@ -577,6 +577,16 @@ export class ActionsClient {
     return this.parse<T>(res);
   }
 
+  /** POST a raw text body (e.g. a unified diff to `/api/v1/actions/patches`). */
+  async postText<T>(path: string, body: string, contentType: string): Promise<T> {
+    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { ...this.headers(), 'content-type': contentType },
+      body,
+    });
+    return this.parse<T>(res);
+  }
+
   async put<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
     const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
       method: 'PUT',
