@@ -360,10 +360,13 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               ...(isUnifiedVolumeMounts(mounts) && {
                 experimental: {
                   ...(plainObject(options?.containerOptions) as any)?.experimental,
-                  host_mount: mounts.map((m: any, i: number) => ({
-                    host_path: `${VOLUME_HOST_ROOT}/volume${i}`,
-                    container_path: m.mountPath,
-                  })),
+                  host_mount: [
+                    ...((plainObject(options?.containerOptions) as any)?.experimental?.host_mount ?? []),
+                    ...mounts.map((m: any, i: number) => ({
+                      host_path: `${VOLUME_HOST_ROOT}/volume${i}`,
+                      container_path: m.mountPath,
+                    })),
+                  ],
                 },
               })
             }],
