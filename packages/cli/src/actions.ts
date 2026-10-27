@@ -593,9 +593,18 @@ export function isPatchedWorkflowTarget(target: CiWorkflow | PatchedWorkflowTarg
   return 'workflowPath' in target;
 }
 
-/** True when a unified diff creates or edits `path` (a `+++ b/<path>` header). */
+/**
+ * True when a unified diff creates or edits `path`: a `+++ b/<path>` header.
+ * Git tab-terminates the header when the path contains whitespace and quotes
+ * it (`+++ "b/<path>"`) for non-ASCII bytes under core.quotePath.
+ */
 export function patchTouches(patch: string, path: string): boolean {
-  return patch.split('\n').some((line) => line === `+++ b/${path}`);
+  const plain = `+++ b/${path}`;
+  const quoted = `+++ "b/${path}"`;
+  return patch.split('\n').some((line) => {
+    const header = line.replace(/\t.*$/, '');
+    return header === plain || header === quoted;
+  });
 }
 
 export function dispatchBody(

@@ -143,6 +143,12 @@ describe('dispatching a workflow that exists only in the diff', () => {
     expect(patchTouches(patch, 'workflows/new.yml')).toBe(false);
   });
 
+  it('patchTouches accepts the tab-terminated and quoted headers git emits for unusual paths', () => {
+    expect(patchTouches('+++ b/.github/workflows/my bench.yml\t\n', '.github/workflows/my bench.yml')).toBe(true);
+    expect(patchTouches('+++ "b/.github/workflows/b\\303\\244nch.yml"\n', '.github/workflows/b\\303\\244nch.yml')).toBe(true);
+    expect(patchTouches('+++ b/.github/workflows/my bench.yml.bak\t\n', '.github/workflows/my bench.yml')).toBe(false);
+  });
+
   it('dispatchBody addresses a patched workflow by repo + path and skips catalog-only checks', () => {
     const body = dispatchBody(
       { repoFullName: 'acme/web', workflowPath: '.github/workflows/new.yml' },
