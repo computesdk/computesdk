@@ -699,10 +699,14 @@ export function localChangesPatch(
     throw new ActionsCliError('invalid_argument', `git diff against ${base} failed: ${tracked.stderr.trim()}`);
   }
   const parts = [tracked.stdout];
-  const untracked = git(['ls-files', '--others', '--exclude-standard', '-z']);
+  // Untracked files must be diffed from the repo root: `ls-files --others`
+  // lists only the cwd's subtree and `diff --no-index` emits cwd-relative
+  // paths, so from a subdirectory the patch would drop or misplace files.
+  const topLevel = git(['rev-parse', '--show-toplevel']).stdout.trim();
+  const untracked = git(['-C', topLevel, 'ls-files', '--others', '--exclude-standard', '-z']);
   for (const file of untracked.stdout.split('\0').filter((f) => f !== '')) {
     // --no-index exits 1 when the files differ, which is the expected case.
-    const d = git(['diff', '--no-color', '--no-ext-diff', '--no-index', '--src-prefix=a/', '--dst-prefix=b/', '--', '/dev/null', file]);
+    const d = git(['-C', topLevel, 'diff', '--no-color', '--no-ext-diff', '--no-index', '--src-prefix=a/', '--dst-prefix=b/', '--', '/dev/null', file]);
     if (d.stdout !== '') parts.push(d.stdout);
   }
   const patch = parts.filter((p) => p !== '').join('');

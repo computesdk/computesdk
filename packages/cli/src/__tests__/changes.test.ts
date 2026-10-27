@@ -44,8 +44,9 @@ describe('localChangesPatch', () => {
       'fetch --quiet origin feature': {},
       'rev-parse --verify --quiet origin/feature^{commit}': { stdout: 'abc\n' },
       'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/feature --': { stdout: tracked },
-      'ls-files --others --exclude-standard -z': { stdout: 'new.ts\0' },
-      'diff --no-color --no-ext-diff --no-index': { status: 1, stdout: untracked },
+      'rev-parse --show-toplevel': { stdout: '/repo\n' },
+      '-C /repo ls-files --others --exclude-standard -z': { stdout: 'new.ts\0' },
+      '-C /repo diff --no-color --no-ext-diff --no-index': { status: 1, stdout: untracked },
     });
     const result = localChangesPatch('refs/heads/feature', git);
     expect(result).not.toBeNull();
@@ -54,12 +55,37 @@ describe('localChangesPatch', () => {
     expect(result?.patch).toBe(tracked + untracked);
   });
 
+  it('lists and diffs untracked files from the repo root', () => {
+    // From a subdirectory, `ls-files --others` misses files outside the cwd
+    // and `diff --no-index` emits cwd-relative paths; both must run at the
+    // toplevel so patch paths match the checkout the platform applies to.
+    const calls: string[] = [];
+    const inner = fakeGit({
+      'fetch --quiet origin main': {},
+      'rev-parse --verify --quiet origin/main^{commit}': { stdout: 'abc\n' },
+      'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/main --': { stdout: tracked },
+      'rev-parse --show-toplevel': { stdout: '/repo\n' },
+      '-C /repo ls-files --others --exclude-standard -z': { stdout: 'sub/new.ts\0' },
+      '-C /repo diff --no-color --no-ext-diff --no-index': { status: 1, stdout: untracked },
+    });
+    const git: GitRunner = (args) => {
+      calls.push(args.join(' '));
+      return inner(args);
+    };
+    const result = localChangesPatch('main', git);
+    expect(result?.files).toBe(2);
+    expect(calls).toContain('rev-parse --show-toplevel');
+    expect(calls).toContain('-C /repo ls-files --others --exclude-standard -z');
+    expect(calls.some((c) => c.startsWith('-C /repo diff --no-color --no-ext-diff --no-index'))).toBe(true);
+  });
+
   it('returns null when there is nothing beyond the remote', () => {
     const git = fakeGit({
       'fetch --quiet origin main': {},
       'rev-parse --verify --quiet origin/main^{commit}': { stdout: 'abc\n' },
       'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/main --': { stdout: '' },
-      'ls-files --others --exclude-standard -z': { stdout: '' },
+      'rev-parse --show-toplevel': { stdout: '/repo\n' },
+      '-C /repo ls-files --others --exclude-standard -z': { stdout: '' },
     });
     expect(localChangesPatch('main', git)).toBeNull();
   });
@@ -70,7 +96,8 @@ describe('localChangesPatch', () => {
       'fetch --quiet origin main': {},
       'rev-parse --verify --quiet origin/main^{commit}': { stdout: 'abc\n' },
       'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/main --': { stdout: 'diff --git a/b b/b\n+++ b/b\n\0' },
-      'ls-files --others --exclude-standard -z': { stdout: '' },
+      'rev-parse --show-toplevel': { stdout: '/repo\n' },
+      '-C /repo ls-files --others --exclude-standard -z': { stdout: '' },
     });
     expect(() => localChangesPatch('main', git)).toThrow('binary');
   });
@@ -88,7 +115,8 @@ describe('localChangesPatch guards', () => {
       'fetch --quiet origin main': {},
       'rev-parse --verify --quiet origin/main^{commit}': { stdout: 'abc\n' },
       'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/main --': { stdout: 'diff --git a/x.png b/x.png\nBinary files a/x.png and b/x.png differ\n' },
-      'ls-files --others --exclude-standard -z': { stdout: '' },
+      'rev-parse --show-toplevel': { stdout: '/repo\n' },
+      '-C /repo ls-files --others --exclude-standard -z': { stdout: '' },
     });
     expect(() => localChangesPatch('main', git, 'acme/app')).toThrow('binary');
   });
