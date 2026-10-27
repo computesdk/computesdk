@@ -1165,8 +1165,13 @@ async function execOnRunner(
     // Terminal-event shape follows the SDK's normalizeExecEvent: `exit` is
     // the documented type, but a frame carrying an exit code under any
     // other event name, or a bare numeric payload, is the same signal.
+    // The runner's real wire shape is flatter than its type declaration:
+    // output frames arrive as `{"text": "<chunk>"}` with no channel field
+    // (stdout and stderr are merged), so text frames fold into stdout.
     const raw = event as Record<string, unknown>;
-    if (event.type === "stdout") stdout.push(event.line);
+    if (typeof raw?.["text"] === "string") {
+      stdout.push(raw["text"]);
+    } else if (event.type === "stdout") stdout.push(event.line);
     else if (event.type === "stderr") stderr.push(event.line);
     else {
       const code =
