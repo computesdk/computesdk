@@ -347,11 +347,27 @@ export class PlatformClient {
 
   /** Download bytes following redirects (artifact URLs 302 to storage). */
   async download(path: string, opts?: RequestOpts): Promise<Uint8Array> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
+    // Follow redirects manually: the bearer token is only ever sent to the
+    // origin that authenticated this request — a redirect target elsewhere
+    // (a signed storage URL carries its own credentials) must not see it.
+    let url = `${this.auth.baseUrl}${path}`;
+    let res = await this.fetchImpl(url, {
       headers: this.headers(),
-      redirect: 'follow',
+      redirect: 'manual',
       signal: opts?.signal,
     });
+    for (let hops = 0; hops < 5 && res.status >= 300 && res.status < 400; hops += 1) {
+      const location = res.headers.get('location');
+      if (!location) break;
+      const target = new URL(location, url);
+      const sameOrigin = target.origin === new URL(url).origin;
+      res = await this.fetchImpl(target, {
+        headers: sameOrigin ? this.headers() : { accept: '*/*' },
+        redirect: 'manual',
+        signal: opts?.signal,
+      });
+      url = target.toString();
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => undefined);
       throw apiError(res, body);
@@ -440,6 +456,9 @@ export async function* readSseEvents(
       }
     }
   } finally {
+    // Cancel, not just releaseLock: an early exit (e.g. the command's `exit`
+    // event) must close the HTTP stream rather than leave it dangling.
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
@@ -472,6 +491,7 @@ export async function* readSseNamedEvents(
       }
     }
   } finally {
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
