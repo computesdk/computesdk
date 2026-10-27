@@ -1543,7 +1543,7 @@ async function serveInstanceCommand(
       const logs = `${proc.stdout}${proc.stderr}`.trimEnd().split('\n');
       if (logs.length > 0 && logs[0] !== '') {
         console.error(pc.dim('--- last log lines ---'));
-        for (const line of logs.slice(-50)) console.error(line);
+        for (const line of logs.slice(-50)) console.error(safeTerm(line));
       }
     }
     fail(new Error(`The server exited (code ${proc.exitCode ?? '?'}) before port ${port} listened.`), opts);
@@ -1585,7 +1585,7 @@ async function serveInstanceCommand(
   if (!entry.public) {
     if (!opts.json) printServeJobFooter(id, jobId);
     fail(new Error(
-      `Port ${port} is listening on ${entry.address} only. ` +
+      `Port ${port} is listening on ${safeTerm(entry.address)} only. ` +
       `Bind to 0.0.0.0 (e.g. --host 0.0.0.0) so it can be reached.`),
       opts,
     );
@@ -1594,11 +1594,12 @@ async function serveInstanceCommand(
 
   const { url } = await c.get<{ url: string }>(`/api/v1/sandboxes/${id}/urls?port=${port}`);
   if (opts.quiet) {
-    console.log(url);
+    console.log(safeTerm(url));
     return;
   }
+  // --json emits the raw field; only terminal output is sanitized.
   output(opts, { url }, () => {
-    console.log(url);
+    console.log(safeTerm(url));
     printServeJobFooter(id, jobId);
   });
 }

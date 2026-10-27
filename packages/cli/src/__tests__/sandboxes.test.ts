@@ -531,4 +531,21 @@ describe('serve', () => {
       exit.mockRestore();
     }
   });
+
+  it('strips control characters from the printed URL', async () => {
+    mockServe([{ port: 3000, address: '0.0.0.0', public: true }], 'https://3000-x.dev[2K[1G.evil');
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(
+        ['sandboxes', 'serve', ID_A, '--port', '3000', '-q', '--', 'python3', '-m', 'http.server', '3000'],
+        { from: 'user' },
+      );
+      const printed = String(out.mock.calls[0]?.[0]);
+      expect(printed).not.toContain('');
+      expect(printed).toContain('�');
+      expect(printed).toContain('https://3000-x.dev');
+    } finally {
+      out.mockRestore();
+    }
+  });
 });
