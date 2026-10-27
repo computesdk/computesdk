@@ -272,7 +272,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.48(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.66)(@computesdk/modal@1.9.23)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.49(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.67)(@computesdk/modal@1.9.24)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -614,6 +614,9 @@ importers:
       picocolors:
         specifier: ^1.0.0
         version: 1.1.1
+      tar:
+        specifier: ^7.4.3
+        version: 7.5.22
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -3436,17 +3439,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.48':
-    resolution: {integrity: sha512-QK3LJ5UInJ4aIc/q1/8PAT4oY9vCi4MfDnvz1zPP6c/k9uUW5xAqBGFyd68SFF6gAwG+lL7kgf6I1BMoOFt9Mg==}
+  '@computesdk/daytona@1.7.49':
+    resolution: {integrity: sha512-Zg0CXMGeaYbsr2Bgh9SR9jwK9yvVZsdWBgYq45vRLkj+icFTlyhq61NjzzWIlTbNEDs4OLfiCTyksbEL5IWZqg==}
 
-  '@computesdk/e2b@1.7.66':
-    resolution: {integrity: sha512-mBBbUWPA4QOh7HAVhZdsHgzn+ntYYMdWerIKYADF63JQrkAGaFL9lMp2Oj1dskzW1d79glYUw3P45f/1gxiG6A==}
+  '@computesdk/e2b@1.7.67':
+    resolution: {integrity: sha512-aT8rUj0I0EorBoVvaPL6+ZH+KoReC5OCP4pyWhIdsbL629OH8QwT4a1veIG1enH7x0kLCWDRb6hRbPIKXZE+RQ==}
 
-  '@computesdk/modal@1.9.23':
-    resolution: {integrity: sha512-dTVOulWr2j5NoxfBmzfdTRnQioE5fOpAVPrJcFmHFI5BhgjsSSn+t6wZWMxv4TVAqbICetWFk+q9LS6SrD4/4w==}
+  '@computesdk/modal@1.9.24':
+    resolution: {integrity: sha512-scOvDU6PQeka4e8pCIUUy3iBWKIhj9CyoAvJ6iGGG4CYBqvUO6lPydkgSPVQaCptLqnGf9UXuy4HRbEfP8a/aQ==}
 
-  '@computesdk/provider@2.1.18':
-    resolution: {integrity: sha512-to/SLMuWZjB7h1f7LWgOqikfomjQt6GDQjr0RqpJe8MzILl+/vQxl5L9978kVE7GLRNvjRv7vc2bQOBJ7CofJA==}
+  '@computesdk/provider@2.1.19':
+    resolution: {integrity: sha512-U/KnutpV7BLecGXgrYqdt58KRjiG6opHCtBC67Y8DXh+Jg0I698UTxCQ0jXUrHIOWjHytyM6KbRJ2J2HG83nHw==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -8916,16 +8919,8 @@ packages:
     engines: {node: '>=10'}
     deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
-  tar@7.5.16:
-    resolution: {integrity: sha512-56adEpPMouktRlBLXiaYFFzZ/3+JXa8P9n7WbR+ibIjtviN55mEaOkiysCnPnWm+7kkui1Dn8J9l+g6zV8731w==}
-    engines: {node: '>=18'}
-
   tar@7.5.22:
     resolution: {integrity: sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==}
-    engines: {node: '>=18'}
-
-  tar@7.5.9:
-    resolution: {integrity: sha512-BTLcK0xsDh2+PUe9F6c2TlRp4zOOBMTkoQHQIWSIzI0R7KG46uEwq4OPk2W7bZcprBMsuaeFsqwYr7pjh6CuHg==}
     engines: {node: '>=18'}
 
   teex@1.0.1:
@@ -9658,15 +9653,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.48(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.66)(@computesdk/modal@1.9.23)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.49(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.67)(@computesdk/modal@1.9.24)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.48(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      '@computesdk/e2b': 1.7.66
-      '@computesdk/modal': 1.9.23
+      '@computesdk/daytona': 1.7.49(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@computesdk/e2b': 1.7.67
+      '@computesdk/modal': 1.9.24
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10453,9 +10448,9 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.48(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@computesdk/daytona@1.7.49(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      '@computesdk/provider': 2.1.18
+      '@computesdk/provider': 2.1.19
       '@daytonaio/sdk': 0.224.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk: 4.1.13
     transitivePeerDependencies:
@@ -10465,21 +10460,21 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@computesdk/e2b@1.7.66':
+  '@computesdk/e2b@1.7.67':
     dependencies:
-      '@computesdk/provider': 2.1.18
+      '@computesdk/provider': 2.1.19
       computesdk: 4.1.13
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.23':
+  '@computesdk/modal@1.9.24':
     dependencies:
-      '@computesdk/provider': 2.1.18
+      '@computesdk/provider': 2.1.19
       computesdk: 4.1.13
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.18':
+  '@computesdk/provider@2.1.19':
     dependencies:
       '@computesdk/cmd': 0.4.1
       computesdk: 4.1.13
@@ -11020,7 +11015,7 @@ snapshots:
       axios: 1.11.0
       form-data: 4.0.4
       glob: 10.4.5
-      tar: 7.5.9
+      tar: 7.5.22
       ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
@@ -11359,7 +11354,7 @@ snapshots:
       lodash-es: 4.18.1
       node-fetch: 2.6.7
       pump: 3.0.3
-      tar: 7.5.16
+      tar: 7.5.22
       utf-8-validate: 6.0.6
       whatwg-url: 14.2.0
       ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
@@ -13853,7 +13848,7 @@ snapshots:
       glob: 11.1.0
       openapi-fetch: 0.14.1
       platform: 1.3.6
-      tar: 7.5.16
+      tar: 7.5.22
       undici: 7.28.0
 
   eastasianwidth@0.2.0: {}
@@ -16573,23 +16568,7 @@ snapshots:
       mkdirp: 1.0.4
       yallist: 4.0.0
 
-  tar@7.5.16:
-    dependencies:
-      '@isaacs/fs-minipass': 4.0.1
-      chownr: 3.0.0
-      minipass: 7.1.3
-      minizlib: 3.1.0
-      yallist: 5.0.0
-
   tar@7.5.22:
-    dependencies:
-      '@isaacs/fs-minipass': 4.0.1
-      chownr: 3.0.0
-      minipass: 7.1.3
-      minizlib: 3.1.0
-      yallist: 5.0.0
-
-  tar@7.5.9:
     dependencies:
       '@isaacs/fs-minipass': 4.0.1
       chownr: 3.0.0

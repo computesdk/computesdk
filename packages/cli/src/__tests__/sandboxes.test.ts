@@ -549,3 +549,108 @@ describe('serve', () => {
     }
   });
 });
+
+describe('cp', () => {
+  const TMP = '/tmp/cli-cp-test';
+  let fetchCalls: { url: string; init?: RequestInit }[];
+
+  beforeEach(async () => {
+    post.mockReset();
+    fakeClient.get.mockReset();
+    process.env.BENCHSDK_STATE_DIR = TMP;
+    delete process.env.COMPUTE_INSTANCE;
+    const { _resetStateFileForTests } = await import('../current-instance.js');
+    _resetStateFileForTests();
+    const fs = await import('node:fs');
+    fs.rmSync(TMP, { recursive: true, force: true });
+    fs.mkdirSync(`${TMP}/src/nested`, { recursive: true });
+    fs.writeFileSync(`${TMP}/src/nested/hello.txt`, 'hi');
+    post.mockImplementation(async (p: string, body: unknown) => {
+      if (p.endsWith('/transfers')) {
+        return (body as { direction: string }).direction === 'upload'
+          ? { transferId: 't1', uploadUrl: 'https://storage.example/put/t1', expiresAt: 'x' }
+          : { transferId: 't2', downloadUrl: 'https://storage.example/get/t2', expiresAt: 'x', bytes: 100, files: 3 };
+      }
+      if (p.includes('/complete')) return { path: '/app', bytes: 12, files: 3 };
+      return {};
+    });
+    fetchCalls = [];
+  });
+
+  it('local → id:/path tars, PUTs, and completes the transfer', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, init?: RequestInit) => {
+      fetchCalls.push({ url: String(url), init });
+      // drain the PUT body so the stream completes
+      const body = init?.body as ReadableStream | undefined;
+      if (body?.getReader) { const r = body.getReader(); while (!(await r.read()).done) { /* drain */ } }
+      return new Response('ok');
+    }));
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'cp', `${TMP}/src`, `${ID_A}:/app`], { from: 'user' });
+      expect(post).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}/transfers`, { direction: 'upload', path: '/app' });
+      expect(fetchCalls[0].url).toBe('https://storage.example/put/t1');
+      expect(fetchCalls[0].init?.method).toBe('PUT');
+      expect(post).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}/transfers/t1/complete`, {});
+      expect(out.mock.calls.map((c) => String(c[0])).join('')).toContain('copied 3 files (12 B) → a1b2…:/app');
+    } finally {
+      out.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('id:/path → local downloads and extracts under the local dir', async () => {
+    const fs = await import('node:fs');
+    const tar = await import('tar');
+    const tb = `${TMP}/t.tar.gz`;
+    await tar.create({ gzip: true, file: tb, cwd: TMP }, ['src']);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(fs.readFileSync(tb))));
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'cp', `${ID_A}:/app/src`, `${TMP}/out`], { from: 'user' });
+      expect(post).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}/transfers`, { direction: 'download', path: '/app/src' });
+      expect(fs.readFileSync(`${TMP}/out/src/nested/hello.txt`, 'utf8')).toBe('hi');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it(':/path uses the current instance', async () => {
+    process.env.COMPUTE_INSTANCE = ID_B;
+    vi.stubGlobal('fetch', vi.fn(async (_u: unknown, init?: RequestInit) => {
+      const body = init?.body as ReadableStream | undefined;
+      if (body?.getReader) { const r = body.getReader(); while (!(await r.read()).done) { /* drain */ } }
+      return new Response('ok');
+    }));
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'cp', `${TMP}/src`, ':/app'], { from: 'user' });
+      expect(post).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_B}/transfers`, { direction: 'upload', path: '/app' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects two remote sides and -q prints nothing', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'cp', `${ID_A}:/a`, `${ID_B}:/b`], { from: 'user' });
+      expect(exit).toHaveBeenCalledWith(1);
+    } finally {
+      err.mockRestore();
+      exit.mockRestore();
+    }
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async (_u: unknown, init?: RequestInit) => {
+      const body = init?.body as ReadableStream | undefined;
+      if (body?.getReader) { const r = body.getReader(); while (!(await r.read()).done) { /* drain */ } }
+      return new Response('ok');
+    }));
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'cp', `${TMP}/src`, `${ID_A}:/app`, '-q'], { from: 'user' });
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+});

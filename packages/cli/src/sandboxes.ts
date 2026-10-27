@@ -10,9 +10,14 @@
  * them in sync by hand; the API is the contract.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as readline from 'node:readline';
+import { Readable } from 'node:stream';
 import { Command } from 'commander';
 import pc from 'picocolors';
+import * as tar from 'tar';
 import { ActionsApiError, type ActionsClient } from './actions-client.js';
 import {
   client,
@@ -1229,6 +1234,22 @@ export function registerSandboxesCommands(program: Command): void {
     });
 
   cmd
+    .command('cp <src> <dst>')
+    .description('Copy files/dirs between here and an instance — remote side is [id:]/abs/path')
+    .option('-q, --quiet', 'print nothing on success')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--org <slug>')
+    .option('--json', 'print the raw response')
+    .action(async (src: string, dst: string, opts: QuietOpts) => {
+      try {
+        checkQuietJson(opts);
+        await cpCommand(src, dst, opts);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
     .command('url [sandboxId]')
     .description('Resolve the provider\'s public URL for a port')
     .requiredOption('--port <n>', 'port the service listens on')
@@ -1612,3 +1633,172 @@ function printServeJobFooter(sandboxId: string, jobId: string): void {
 }
 
 
+
+// ─── cp ─────────────────────────────────────────────────────────────────────
+
+/** Wire shapes for the platform `/transfers` endpoints. */
+interface TransferCreate {
+  transferId: string;
+  uploadUrl?: string;
+  downloadUrl?: string;
+  expiresAt?: string;
+  bytes?: number;
+  files?: number;
+}
+interface TransferComplete {
+  path: string;
+  bytes: number;
+  files: number;
+}
+
+/** Stderr progress appears past this size on TTYs. */
+const CP_PROGRESS_MIN_BYTES = 10 * 1024 * 1024;
+
+/**
+ * One side of `cp <src> <dst>`: a remote endpoint is `[uuid:]/abs/path`
+ * (omitted uuid = the current instance); anything else is a local path —
+ * `box:./x` and `label:…` stay local, matching the positional-ID rule.
+ */
+function parseCpEndpoint(arg: string): { remoteId?: string; remotePath: string } | { local: string } {
+  const m = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?:(\/.*)$/.exec(arg);
+  if (m) return { remoteId: m[1] || undefined, remotePath: m[2] };
+  return { local: arg };
+}
+
+/**
+ * `compute instances cp` — one side remote (`[id:]/abs/path`), one side local.
+ * Upload: tar.gz the local path → PUT the presigned `uploadUrl` → `/complete`
+ * makes the box pull + extract under the remote dir. Download: `/transfers`
+ * makes the box tar + PUT; we GET the `downloadUrl` and extract into the
+ * local dir (created if missing — the remote basename always stays the
+ * top-level entry, docker-style `cp src dst/…` semantics; no rename form).
+ */
+async function cpCommand(src: string, dst: string, opts: QuietOpts): Promise<void> {
+  const s = parseCpEndpoint(src);
+  const d = parseCpEndpoint(dst);
+  const sRemote = 'remotePath' in s;
+  const dRemote = 'remotePath' in d;
+  if (sRemote === dRemote) {
+    throw new Error('cp needs exactly one remote side — write it as [id:]/abs/path (e.g. 3f2a…:/app or :/app)');
+  }
+  const c = await client(opts);
+  if (!sRemote && 'remotePath' in d && 'local' in s) {
+    const resolved = resolveSandbox(d.remoteId, opts);
+    const r = await cpUpload(c, resolved.id, s.local, d.remotePath);
+    output(opts, r, (done) => {
+      if (!opts.quiet) console.log(`copied ${done.files} files (${formatBytes(done.bytes)}) → ${shortId(resolved.id)}:${d.remotePath}`);
+    });
+  } else if ('remotePath' in s && 'local' in d) {
+    const resolved = resolveSandbox(s.remoteId, opts);
+    const r = await cpDownload(c, resolved.id, s.remotePath, d.local);
+    output(opts, r, (done) => {
+      if (!opts.quiet) console.log(`copied ${done.files} files (${formatBytes(done.bytes)}) → ${d.local}`);
+    });
+  }
+}
+
+/** Write `X/Y MB` progress to stderr while a known total streams by. */
+function cpProgress(total: number): { bump: (n: number) => void; done: () => void } {
+  const show = process.stderr.isTTY && total > CP_PROGRESS_MIN_BYTES;
+  let sent = 0;
+  return {
+    bump(n) {
+      if (!show) return;
+      sent += n;
+      process.stderr.write(`\r${formatBytes(sent)} / ${formatBytes(total)} (${Math.round((sent / total) * 100)}%)`);
+    },
+    done() {
+      if (show) process.stderr.write('\n');
+    },
+  };
+}
+
+async function cpUpload(
+  c: ActionsClient,
+  sandboxId: string,
+  localPath: string,
+  remotePath: string,
+): Promise<TransferComplete> {
+  // statSync first so a missing path errors before anything is created.
+  const abs = path.resolve(localPath);
+  fs.statSync(abs);
+  const tmp = path.join(os.tmpdir(), `compute-cp-up-${process.pid}-${Date.now()}.tar.gz`);
+  try {
+    await tar.create({ gzip: true, file: tmp, cwd: path.dirname(abs) }, [path.basename(abs)]);
+    const size = fs.statSync(tmp).size;
+    const created = await c.post<TransferCreate>(
+      `/api/v1/sandboxes/${sandboxId}/transfers`,
+      { direction: 'upload', path: remotePath },
+    );
+    if (!created.uploadUrl) throw new Error('platform did not return an upload URL');
+    const progress = cpProgress(size);
+    try {
+      const stream = fs.createReadStream(tmp);
+      stream.on('data', (chunk: Buffer | string) => progress.bump(typeof chunk === 'string' ? chunk.length : chunk.byteLength));
+      const res = await fetch(created.uploadUrl, {
+        method: 'PUT',
+        headers: { 'content-length': String(size), 'content-type': 'application/gzip' },
+        // @ts-expect-error Readable.toWeb body is supported at runtime; DOM types lag
+        body: Readable.toWeb(stream),
+        duplex: 'half',
+      });
+      if (!res.ok) throw new Error(`upload failed: HTTP ${res.status}`);
+    } finally {
+      progress.done();
+    }
+    return await c.post<TransferComplete>(
+      `/api/v1/sandboxes/${sandboxId}/transfers/${created.transferId}/complete`,
+      {},
+    );
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
+async function cpDownload(
+  c: ActionsClient,
+  sandboxId: string,
+  remotePath: string,
+  localDir: string,
+): Promise<TransferComplete> {
+  const created = await c.post<TransferCreate>(
+    `/api/v1/sandboxes/${sandboxId}/transfers`,
+    { direction: 'download', path: remotePath },
+  );
+  if (!created.downloadUrl) throw new Error('platform did not return a download URL');
+  const res = await fetch(created.downloadUrl);
+  if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
+  const tmp = path.join(os.tmpdir(), `compute-cp-dl-${process.pid}-${Date.now()}.tar.gz`);
+  try {
+    const progress = cpProgress(created.bytes ?? 0);
+    const ws = fs.createWriteStream(tmp);
+    ws.on('drain', () => undefined);
+    const reader = res.body!.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done || value === undefined) break;
+      progress.bump(value.byteLength);
+      if (!ws.write(value)) await new Promise<void>((r) => ws.once('drain', () => r()));
+    }
+    await new Promise<void>((resolve, reject) => {
+      ws.end(() => resolve());
+      ws.on('error', reject);
+    });
+    progress.done();
+    fs.mkdirSync(localDir, { recursive: true });
+    await tar.extract({ file: tmp, cwd: localDir });
+    return { path: localDir, bytes: created.bytes ?? fs.statSync(tmp).size, files: created.files ?? 0 };
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
+/** Human byte count for the cp summary line and progress. */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}
