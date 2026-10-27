@@ -25,7 +25,7 @@ tokens renew automatically.
 
 ```
 compute actions …               # Actions API — repos, dispatch, runs, logs, vault
-compute market …                # sell side of the compute market
+compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
 compute bench …                 # benchmarks CLI (run, auth, org, results, …)
 compute providers               # sandbox provider credential status
