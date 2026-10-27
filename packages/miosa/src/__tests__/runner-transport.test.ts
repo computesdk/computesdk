@@ -1479,6 +1479,42 @@ describe("regional sandbox endpoint", () => {
       ).toHaveLength(2);
     });
 
+    it("should fall back to the account API when the runner's sandbox GET 404s past the attach window", async () => {
+      // Regression test: the readiness poll treats a 404 as "still
+      // launching", but a sandbox the runner never owned 404s forever -
+      // the poll must give up within the attach grace so the error reaches
+      // exec's wrong-endpoint fallback instead of stalling the command.
+      const id = "b1000000-0000-0000-0000-000000000005";
+      fetchMock.mockImplementation(async (url: string) =>
+        url.endsWith("/exec")
+          ? jsonResponse({
+              data: { stdout: "from-account-api\n", stderr: "", exit_code: 0 },
+            })
+          : jsonResponse(sandboxRecord({ id })),
+      );
+      runnerSpies.get.mockReset().mockRejectedValue(notFound());
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.getById(id);
+
+      vi.useFakeTimers();
+      try {
+        const first = sandbox!.runCommand("echo ok");
+        await vi.advanceTimersByTimeAsync(60_000);
+        vi.useRealTimers();
+        const second = await sandbox!.runCommand("echo ok");
+
+        expect((await first).stdout).toBe("from-account-api\n");
+        expect(second.stdout).toBe("from-account-api\n");
+        // Learned once, then addressed directly.
+        expect(runnerSpies.execStream).not.toHaveBeenCalled();
+        expect(
+          fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/exec")),
+        ).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("should not re-run a reattached command on the account API after an ambiguous regional failure", async () => {
       const id = "b1000000-0000-0000-0000-000000000002";
       fetchMock.mockImplementation(async () => jsonResponse(sandboxRecord({ id })));

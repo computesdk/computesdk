@@ -13,6 +13,7 @@ const mock = vi.hoisted(() => ({
   execKilled: false,
   detachedDies: false,
   detachedNeverDone: false,
+  detachedNeverStarted: false,
   removeError: null as Error | null,
   stopFailures: 0,
   stopAttempts: 0,
@@ -70,17 +71,20 @@ vi.mock('microsandbox', () => {
       if (base) {
         const [pid, out, err, code] = [`${base}.pid`, `${base}.out`, `${base}.err`, `${base}.code`];
         if (script.startsWith('setsid ')) {
-          this.fsOps.files.set(pid, '4242');
-          const inner = script;
-          const failed = inner.includes('missing-command');
-          this.fsOps.files.set(out, inner.includes('echo hello') ? 'hello\n' : '');
-          this.fsOps.files.set(err, failed ? 'not found\n' : '');
-          if (!mock.detachedNeverDone) this.fsOps.files.set(code, failed ? '127' : '0');
-          if (mock.detachedDies) this.fsOps.files.delete(code);
+          if (!mock.detachedNeverStarted) {
+            this.fsOps.files.set(pid, '4242');
+            const inner = script;
+            const failed = inner.includes('missing-command');
+            this.fsOps.files.set(out, inner.includes('echo hello') ? 'hello\n' : '');
+            this.fsOps.files.set(err, failed ? 'not found\n' : '');
+            if (!mock.detachedNeverDone) this.fsOps.files.set(code, failed ? '127' : '0');
+            if (mock.detachedDies) this.fsOps.files.delete(code);
+          }
           return { code: 0, stdout: () => '', stderr: () => '' };
         }
         if (script.includes('test -f')) {
           if (this.fsOps.files.has(code)) return { code: 0, stdout: () => '', stderr: () => '' };
+          if (!this.fsOps.files.has(pid)) return { code: 3, stdout: () => '', stderr: () => '' };
           if (mock.detachedDies) return { code: 2, stdout: () => '', stderr: () => '' };
           return { code: 1, stdout: () => '', stderr: () => '' };
         }
@@ -240,6 +244,7 @@ beforeEach(async () => {
   mock.execKilled = false;
   mock.detachedDies = false;
   mock.detachedNeverDone = false;
+  mock.detachedNeverStarted = false;
   mock.removeError = null;
   mock.stopFailures = 0;
   mock.stopAttempts = 0;
@@ -601,6 +606,21 @@ describe('microsandbox provider', () => {
     mock.detachedDies = true;
 
     await expect(sandbox.runCommand('echo hello')).rejects.toThrow(/detached command died/);
+  });
+
+  it('fails fast when the detached worker never starts', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'never-box' });
+    mock.detachedNeverStarted = true;
+
+    vi.useFakeTimers();
+    try {
+      const pending = sandbox.runCommand('echo hello');
+      const assertion = expect(pending).rejects.toThrow(/never started/);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('times out detached commands with partial output and exit 124', async () => {

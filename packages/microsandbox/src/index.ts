@@ -426,16 +426,26 @@ function detachedLaunchScript(command: string, paths: DetachedPaths): string {
   return `setsid /bin/sh -c ${shellSingleQuote(inner)} </dev/null >/dev/null 2>&1 &`;
 }
 
-/** One short exec per poll. exit 0 = done, 2 = worker died before writing
- *  its exit code (provider reaps detached processes — an honest limit we
- *  fail fast on instead of burning the timeout), 1 = still running. */
+/** One short exec per poll. exit 0 = done, 3 = worker never started (no
+ *  sentinel files — the launch dropped before it ran, or it was reaped
+ *  before its first write), 2 = worker died before writing its exit code
+ *  (provider reaps detached processes — an honest limit we fail fast on
+ *  instead of burning the timeout), 1 = still running. */
 function detachedStatusScript(paths: DetachedPaths): string {
   return (
     `test -f ${paths.code} && exit 0;` +
-    ` test -f ${paths.pid} && P=$(cat ${paths.pid}) && [ -n "$P" ] && ! kill -0 "$P" 2>/dev/null && exit 2;` +
+    ` test -f ${paths.pid} || exit 3;` +
+    ` P=$(cat ${paths.pid});` +
+    ` [ -n "$P" ] && ! kill -0 "$P" 2>/dev/null && exit 2;` +
     ` exit 1`
   );
 }
+
+/** How many consecutive never-started polls the wait tolerates before
+ *  concluding the worker was reaped before writing its pid sentinel —
+ *  without a bound the poll loop spins to the caller's timeout, or forever
+ *  when none was set. ~2s per poll. */
+const DETACHED_NEVER_STARTED_POLL_LIMIT = 15;
 
 function detachedKillScript(paths: DetachedPaths): string {
   return (
@@ -498,7 +508,11 @@ async function runCommand(
       for (let probe = 0; probe < 3 && !launched; probe++) {
         await new Promise((resolve) => setTimeout(resolve, 1_000));
         const status = await execShort(native, detachedStatusScript(paths)).catch(() => null);
-        if (status && status.code !== 2) launched = true;
+        // 0/1 = worker running or already finished; 2 = started then died
+        // (relaunch); 3 = nothing started yet — keep probing, it may be
+        // mid-launch, and fall through to the retry if it stays absent.
+        if (status && (status.code === 0 || status.code === 1)) launched = true;
+        else if (status?.code === 2) break;
       }
     }
   }
@@ -506,6 +520,7 @@ async function runCommand(
   const deadline =
     options?.timeout != null ? startedAt + options.timeout : Number.POSITIVE_INFINITY;
   let pollErrors = 0;
+  let neverStartedPolls = 0;
   for (;;) {
     let status;
     try {
@@ -520,6 +535,15 @@ async function runCommand(
       throw new Error(
         `microsandbox detached command died before completing (pid ${paths.pid} gone, no exit sentinel)`,
       );
+    }
+    if (status?.code === 3) {
+      if (++neverStartedPolls >= DETACHED_NEVER_STARTED_POLL_LIMIT) {
+        throw new Error(
+          `microsandbox detached command never started (no sentinel files after ~${Math.round((neverStartedPolls * 2_000) / 1000)}s)`,
+        );
+      }
+    } else {
+      neverStartedPolls = 0;
     }
     const remaining = deadline - performance.now();
     if (remaining <= 0) {
