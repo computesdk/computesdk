@@ -1536,6 +1536,19 @@ async function serveInstanceCommand(
   );
   const jobId = spawned.process.jobId;
 
+  const jobStatus = () =>
+    c.get<{ process: SandboxProcessStatus }>(`/api/v1/sandboxes/${id}/processes/${jobId}`);
+  const reportExit = (proc: SandboxProcessStatus): void => {
+    if (!opts.json) {
+      const logs = `${proc.stdout}${proc.stderr}`.trimEnd().split('\n');
+      if (logs.length > 0 && logs[0] !== '') {
+        console.error(pc.dim('--- last log lines ---'));
+        for (const line of logs.slice(-50)) console.error(line);
+      }
+    }
+    fail(new Error(`The server exited (code ${proc.exitCode ?? '?'}) before port ${port} listened.`), opts);
+  };
+
   const waitMs = opts.timeoutMs ? Number(opts.timeoutMs) : SERVE_DEFAULT_WAIT_MS;
   const deadline = Date.now() + waitMs;
   let entry: PortsResponse['ports'][number] | undefined;
@@ -1547,36 +1560,35 @@ async function serveInstanceCommand(
     entry = res.ports.find((p) => p.port === port);
     if (entry) break;
     // Not listening — did the server die?
-    const proc = await c.get<{ process: SandboxProcessStatus }>(
-      `/api/v1/sandboxes/${id}/processes/${jobId}`,
-    );
+    const proc = await jobStatus();
     if (proc.process.status === 'exited') {
-      console.error(pc.red(`The server exited (code ${proc.process.exitCode ?? '?'}) before port ${port} listened.`));
-      const logs = `${proc.process.stdout}${proc.process.stderr}`.trimEnd().split('\n');
-      if (logs.length > 0 && logs[0] !== '') {
-        console.error(pc.dim('--- last log lines ---'));
-        for (const line of logs.slice(-50)) console.error(line);
-      }
-      process.exitCode = 1;
-      return;
+      reportExit(proc.process);
+      return; // fail() stubs process.exit in tests — don't keep polling.
     }
     remaining = deadline - Date.now();
   }
 
-  if (!entry) {
-    console.error(pc.red(`Port ${port} never listened within ${fmtTimeout(waitMs)}.`));
-    printServeJobFooter(jobId);
-    process.exitCode = 1;
+  if (entry) {
+    // A listener doesn't prove our server bound the port — when another
+    // process already owns it our job dies silently. Check before printing.
+    const proc = await jobStatus();
+    if (proc.process.status === 'exited') {
+      reportExit(proc.process);
+      return;
+    }
+  } else {
+    if (!opts.json) printServeJobFooter(id, jobId);
+    fail(new Error(`Port ${port} never listened within ${fmtTimeout(waitMs)}.`), opts);
     return;
   }
 
   if (!entry.public) {
-    console.error(
-      pc.red(`Port ${port} is listening on ${entry.address} only. ` +
-        `Bind to 0.0.0.0 (e.g. --host 0.0.0.0) so it can be reached.`),
+    if (!opts.json) printServeJobFooter(id, jobId);
+    fail(new Error(
+      `Port ${port} is listening on ${entry.address} only. ` +
+      `Bind to 0.0.0.0 (e.g. --host 0.0.0.0) so it can be reached.`),
+      opts,
     );
-    printServeJobFooter(jobId);
-    process.exitCode = 1;
     return;
   }
 
@@ -1587,14 +1599,15 @@ async function serveInstanceCommand(
   }
   output(opts, { url }, () => {
     console.log(url);
-    printServeJobFooter(jobId);
+    printServeJobFooter(id, jobId);
   });
 }
 
-function printServeJobFooter(jobId: string): void {
+function printServeJobFooter(sandboxId: string, jobId: string): void {
+  // Always name the instance: the implicit instance may be a different box.
   console.error(pc.dim(`  job ${jobId}`));
-  console.error(pc.dim(`  logs:   compute instances logs ${jobId}`));
-  console.error(pc.dim(`  kill:   compute instances kill ${jobId}`));
+  console.error(pc.dim(`  logs:   compute instances logs ${sandboxId} ${jobId}`));
+  console.error(pc.dim(`  kill:   compute instances kill ${sandboxId} ${jobId}`));
 }
 
 
