@@ -1139,6 +1139,7 @@ async function execOnRunner(
   const STALLED = Symbol("stalled");
   let stalled = false;
   let eventsSeen = 0;
+  let firstUnrecognized: unknown;
   let lastUnrecognized: unknown;
   for (;;) {
     const remaining = deadline - Date.now();
@@ -1173,6 +1174,7 @@ async function execOnRunner(
       if (typeof code === "number" && Number.isFinite(code)) {
         exitCode = code;
       } else {
+        if (firstUnrecognized === undefined) firstUnrecognized = raw;
         lastUnrecognized = raw;
       }
     }
@@ -1191,6 +1193,12 @@ async function execOnRunner(
         : ` last event: ${JSON.stringify(lastUnrecognized).slice(0, 300)}`;
     stderr.push(
       `runner exec stream ended without an exit event after ${eventsSeen} event(s)${tail}\n`,
+    );
+  } else if (exitCode !== 0 && firstUnrecognized !== undefined) {
+    // A failed command whose output frames arrived in a shape the fold
+    // does not recognize - surface the wire shape for diagnosis.
+    stderr.push(
+      `runner stream events unrecognized: first=${JSON.stringify(firstUnrecognized).slice(0, 200)} last=${JSON.stringify(lastUnrecognized).slice(0, 200)}\n`,
     );
   }
   // `line` is a raw output chunk (it carries its own newline), so the fold
