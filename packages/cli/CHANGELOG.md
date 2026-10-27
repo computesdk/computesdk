@@ -1,5 +1,14 @@
 # @computesdk/cli
 
+## 2.5.7
+
+### Patch Changes
+
+- 854e118: `run -d`/Ctrl-C-`d` summary: print the full instance id and a bare `destroy` hint (the short `3f2a…` form was not accepted back by the command). `snapshot-delete <id>` on the implicit instance now logs the resolved id instead of "undefined".
+- e5e1bea: instances UX: compact human output for create/get/list (`--verbose` for the old detail view), `-q/--quiet` for script-friendly IDs and URLs, a per-directory current instance (`use`, `COMPUTE_INSTANCE`, implicit ID resolution across all commands), and `run` (create + spawn + wait + destroy in one command, with `--keep` and `-d` modes and an interactive Ctrl-C prompt).
+- 81c38d5: `compute instances cp` — copy files and directories between the local filesystem and a sandbox through the platform transfers API (`POST /sandboxes/{id}/transfers` + `/complete`). Remote side is `[id:]/abs/path` (omitted id = current instance); upload tars locally, PUTs to a presigned URL, and the box extracts; download reverses it. Prints `copied N files (size) → dest` (`-q` prints nothing; TTY progress past 10 MB).
+- f22f0a8: `compute instances serve` — spawn a server, wait for its port to listen on a public address (via the platform `/ports` endpoint), and print the provider URL. Loopback-only binds fail with the 0.0.0.0 bind hint; a server that exits first reports its exit code and last log lines. `-q` prints only the URL.
+
 ## 2.5.6
 
 ### Patch Changes
