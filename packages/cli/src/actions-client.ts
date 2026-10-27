@@ -93,6 +93,38 @@ export interface CiRun {
   providerOverride?: string | null;
   jobs: CiJob[];
   logTail: string[];
+  /**
+   * Benchmark runs this run produced (linked by `benchmark_run_executions.ci_run_id`).
+   * `[]` when the workflow ran no benchmark; a benchmark still running is listed
+   * with `providers: []` until its summary is uploaded.
+   */
+  results?: CiRunBenchmarkResult[];
+}
+
+/** One benchmark run linked to an Actions run, from `GET /api/v1/actions/runs/{id}`. */
+export interface CiRunBenchmarkResult {
+  benchmarkSlug: string;
+  benchmarkName: string;
+  benchmarkRunId: string;
+  status: string;
+  dashboardUrl: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  providers: CiRunBenchmarkProvider[];
+}
+
+/** One provider row of a benchmark result; `dimensions: {}` is the provider's overall row. */
+export interface CiRunBenchmarkProvider {
+  provider: string;
+  dimensions: Record<string, unknown>;
+  compositeScore: number | null;
+  scoringVersion: string | null;
+  successRate: number | null;
+  skipped: boolean;
+  skipReason: string | null;
+  metrics: Record<string, { median: number; p95: number; p99: number; unit: string }>;
+  scalars: Record<string, number>;
+  scalarUnits: Record<string, string>;
 }
 
 /**
