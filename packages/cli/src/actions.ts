@@ -639,6 +639,12 @@ const runGit: GitRunner = (args) => {
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 };
 
+/** True when a git remote URL (https or ssh, with or without `.git`) names `owner/repo`. */
+export function remoteNamesRepo(remote: string, repo: string): boolean {
+  const normalized = remote.trim().replace(/\.git$/, '').replace(/\/+$/, '');
+  return normalized.toLowerCase().endsWith(`/${repo.toLowerCase()}`) || normalized.toLowerCase().endsWith(`:${repo.toLowerCase()}`);
+}
+
 /** The checked-out branch, or null outside a git repo / on a detached HEAD. */
 export function currentBranch(git: GitRunner = runGit): string | null {
   const r = git(['rev-parse', '--abbrev-ref', 'HEAD']);
@@ -663,9 +669,25 @@ export function hasLocalChanges(git: GitRunner = runGit): boolean {
 export function localChangesPatch(
   ref: string,
   git: GitRunner = runGit,
+  repo?: string,
 ): { patch: string; files: number; base: string } | null {
   const branch = ref.replace(/^refs\/heads\//, '');
   const base = `origin/${branch}`;
+  if (repo !== undefined) {
+    const remote = git(['remote', 'get-url', 'origin']).stdout.trim();
+    if (!remoteNamesRepo(remote, repo)) {
+      throw new ActionsCliError(
+        'invalid_argument',
+        `--with-changes sends this checkout's changes, but its origin (${remote || 'none'}) is not ${repo}. Run it from a checkout of ${repo}.`,
+      );
+    }
+  }
+  // The platform resolves the ref on the remote, so the diff must be against
+  // the remote's current head, not whatever origin/<branch> was last fetched as.
+  const fetched = git(['fetch', '--quiet', 'origin', branch]);
+  if (fetched.status !== 0) {
+    throw new ActionsCliError('invalid_argument', `git fetch origin ${branch} failed: ${fetched.stderr.trim() || 'is the branch pushed?'}`);
+  }
   if (git(['rev-parse', '--verify', '--quiet', `${base}^{commit}`]).status !== 0) {
     throw new ActionsCliError(
       'invalid_argument',
@@ -685,7 +707,7 @@ export function localChangesPatch(
   }
   const patch = parts.filter((p) => p !== '').join('');
   if (patch.trim() === '') return null;
-  if (patch.includes('\0')) {
+  if (patch.includes('\0') || /^Binary files .* differ$/m.test(patch)) {
     throw new ActionsCliError('invalid_argument', 'Local changes include a binary file; --with-changes sends text diffs only.');
   }
   const files = patch.match(/^\+\+\+ /gm)?.length ?? 0;
@@ -873,7 +895,7 @@ export function registerActionsCommands(program: Command): void {
       if (opts.withChanges) {
         ref ??= currentBranch() ?? undefined;
         if (!ref) throw new ActionsCliError('invalid_argument', '--with-changes needs a branch: check one out or pass --ref.');
-        const local = localChangesPatch(ref);
+        const local = localChangesPatch(ref, undefined, repo);
         if (local) {
           const uploaded = await c.postText<{ patchId: string; sha256: string; bytes: number; files: number }>(
             '/api/v1/actions/patches',

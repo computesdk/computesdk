@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentBranch, dispatchBody, hasLocalChanges, localChangesPatch, type GitRunner } from '../actions.js';
+import { currentBranch, dispatchBody, hasLocalChanges, localChangesPatch, remoteNamesRepo, type GitRunner } from '../actions.js';
 
 const ci = {
   id: 'w-1', name: 'CI', path: '.github/workflows/ci.yml', dispatchable: true, refs: ['refs/heads/main'],
@@ -41,6 +41,7 @@ describe('localChangesPatch', () => {
 
   it('diffs against origin/<branch> and appends untracked files', () => {
     const git = fakeGit({
+      'fetch --quiet origin feature': {},
       'rev-parse --verify --quiet origin/feature^{commit}': { stdout: 'abc\n' },
       'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/feature --': { stdout: tracked },
       'ls-files --others --exclude-standard -z': { stdout: 'new.ts\0' },
@@ -55,6 +56,7 @@ describe('localChangesPatch', () => {
 
   it('returns null when there is nothing beyond the remote', () => {
     const git = fakeGit({
+      'fetch --quiet origin main': {},
       'rev-parse --verify --quiet origin/main^{commit}': { stdout: 'abc\n' },
       'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/main --': { stdout: '' },
       'ls-files --others --exclude-standard -z': { stdout: '' },
@@ -63,12 +65,44 @@ describe('localChangesPatch', () => {
   });
 
   it('refuses a branch that is not on origin and binary content', () => {
-    expect(() => localChangesPatch('nowhere', fakeGit({}))).toThrow('origin/nowhere');
+    expect(() => localChangesPatch('nowhere', fakeGit({}))).toThrow('git fetch origin nowhere failed');
     const git = fakeGit({
+      'fetch --quiet origin main': {},
       'rev-parse --verify --quiet origin/main^{commit}': { stdout: 'abc\n' },
       'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/main --': { stdout: 'diff --git a/b b/b\n+++ b/b\n\0' },
       'ls-files --others --exclude-standard -z': { stdout: '' },
     });
     expect(() => localChangesPatch('main', git)).toThrow('binary');
+  });
+});
+
+describe('localChangesPatch guards', () => {
+  it('refuses a checkout whose origin is another repo', () => {
+    const git = fakeGit({ 'remote get-url origin': { stdout: 'git@github.com:acme/other.git\n' } });
+    expect(() => localChangesPatch('main', git, 'acme/app')).toThrow('not acme/app');
+  });
+
+  it('refuses a binary marker from git diff', () => {
+    const git = fakeGit({
+      'remote get-url origin': { stdout: 'https://github.com/acme/app.git\n' },
+      'fetch --quiet origin main': {},
+      'rev-parse --verify --quiet origin/main^{commit}': { stdout: 'abc\n' },
+      'diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ origin/main --': { stdout: 'diff --git a/x.png b/x.png\nBinary files a/x.png and b/x.png differ\n' },
+      'ls-files --others --exclude-standard -z': { stdout: '' },
+    });
+    expect(() => localChangesPatch('main', git, 'acme/app')).toThrow('binary');
+  });
+
+  it('fails when the remote branch cannot be fetched', () => {
+    const git = fakeGit({ 'fetch --quiet origin gone': { status: 128, stderr: "fatal: couldn't find remote ref gone" } });
+    expect(() => localChangesPatch('gone', git)).toThrow('git fetch origin gone failed');
+  });
+});
+
+describe('remoteNamesRepo', () => {
+  it('matches https and ssh remotes, with or without .git', () => {
+    expect(remoteNamesRepo('https://github.com/acme/app.git', 'acme/app')).toBe(true);
+    expect(remoteNamesRepo('git@github.com:acme/app', 'Acme/App')).toBe(true);
+    expect(remoteNamesRepo('https://github.com/acme/app-two.git', 'acme/app')).toBe(false);
   });
 });
