@@ -347,10 +347,10 @@ describe('run', () => {
       const text = out.mock.calls.map((c) => String(c[0])).join('\n');
       expect(text).toContain('job j1');
       expect(text).toContain('instance timeout: 1h');
-      expect(text).toContain(`logs j1`);
-      // Full id in the header; bare `destroy` (the pick is already set).
+      // Full ids in the header and every hint (COMPUTE_INSTANCE/pick-proof).
       expect(text).toContain(`instance ${ID_A}`);
-      expect(out.mock.calls.map((c) => String(c[0]))).toContain('  destroy:  compute instances destroy');
+      expect(out.mock.calls.map((c) => String(c[0]))).toContain(`  destroy:  compute instances destroy ${ID_A}`);
+      expect(out.mock.calls.map((c) => String(c[0]))).toContain(`  follow:   compute instances logs ${ID_A} j1`);
       expect(text).not.toContain('\u2026');
       expect(fakeClient.del).not.toHaveBeenCalled();
     } finally {
