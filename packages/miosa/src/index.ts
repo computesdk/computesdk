@@ -1139,6 +1139,7 @@ async function execOnRunner(
   const STALLED = Symbol("stalled");
   let stalled = false;
   let eventsSeen = 0;
+  let lastUnrecognized: unknown;
   for (;;) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
@@ -1160,9 +1161,21 @@ async function execOnRunner(
     if (raced.done) break;
     const event = raced.value;
     eventsSeen += 1;
+    // Terminal-event shape follows the SDK's normalizeExecEvent: `exit` is
+    // the documented type, but a frame carrying an exit code under any
+    // other event name, or a bare numeric payload, is the same signal.
+    const raw = event as Record<string, unknown>;
     if (event.type === "stdout") stdout.push(event.line);
     else if (event.type === "stderr") stderr.push(event.line);
-    else if (event.type === "exit") exitCode = event.exit_code;
+    else {
+      const code =
+        raw?.["exit_code"] ?? raw?.["exitCode"] ?? (typeof raw === "number" ? raw : undefined);
+      if (typeof code === "number" && Number.isFinite(code)) {
+        exitCode = code;
+      } else {
+        lastUnrecognized = raw;
+      }
+    }
   }
 
   if (stalled) {
@@ -1172,8 +1185,12 @@ async function execOnRunner(
   } else if (exitCode === undefined) {
     // The stream closed without an exit event - the server dropped the
     // command mid-run, so it cannot report success.
+    const tail =
+      lastUnrecognized === undefined
+        ? ""
+        : ` last event: ${JSON.stringify(lastUnrecognized).slice(0, 300)}`;
     stderr.push(
-      `runner exec stream ended without an exit event after ${eventsSeen} event(s)\n`,
+      `runner exec stream ended without an exit event after ${eventsSeen} event(s)${tail}\n`,
     );
   }
   // `line` is a raw output chunk (it carries its own newline), so the fold
