@@ -356,11 +356,12 @@ export class PlatformClient {
       redirect: 'manual',
       signal: opts?.signal,
     });
+    const baseOrigin = new URL(this.auth.baseUrl).origin;
     for (let hops = 0; hops < 5 && res.status >= 300 && res.status < 400; hops += 1) {
       const location = res.headers.get('location');
       if (!location) break;
       const target = new URL(location, url);
-      const sameOrigin = target.origin === new URL(url).origin;
+      const sameOrigin = target.origin === baseOrigin;
       res = await this.fetchImpl(target, {
         headers: sameOrigin ? this.headers() : { accept: '*/*' },
         redirect: 'manual',

@@ -306,6 +306,50 @@ describe('PlatformApiError', () => {
   });
 });
 
+describe('download', () => {
+  const BASE = 'https://platform.computesdk.com';
+
+  const recordingFetch = (responses: Response[]) => {
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    const fetchImpl = vi.fn(
+      async (input: string | URL, init?: { headers?: Record<string, string> }) => {
+        calls.push({ url: String(input), headers: init?.headers ?? {} });
+        return responses[Math.min(calls.length, responses.length) - 1];
+      },
+    );
+    return { calls, fetchImpl };
+  };
+
+  const redirect = (location: string) =>
+    new Response(null, { status: 302, headers: { location } });
+
+  it('sends credentials only to the base origin across multi-hop redirects', async () => {
+    const { calls, fetchImpl } = recordingFetch([
+      redirect('https://tigris.storage.example/signed-1'),
+      // A second hop within the storage origin must NOT regain the token —
+      // "same origin" means the API's origin, not the previous hop's.
+      redirect('/signed-2'),
+      new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+    ]);
+    const client = new PlatformClient({ apiKey: 'k', baseUrl: BASE }, fetchImpl as never);
+    expect(await client.download('/artifact/1')).toEqual(new Uint8Array([1, 2, 3]));
+    expect(calls).toHaveLength(3);
+    expect(calls[0].headers.authorization).toBe('Bearer k');
+    expect(calls[1].headers.authorization).toBeUndefined();
+    expect(calls[2].headers.authorization).toBeUndefined();
+  });
+
+  it('keeps credentials on a same-origin redirect', async () => {
+    const { calls, fetchImpl } = recordingFetch([
+      redirect('https://platform.computesdk.com/artifact/2'),
+      new Response(new Uint8Array([9]), { status: 200 }),
+    ]);
+    const client = new PlatformClient({ apiKey: 'k', baseUrl: BASE }, fetchImpl as never);
+    await client.download('/artifact/1');
+    expect(calls[1].headers.authorization).toBe('Bearer k');
+  });
+});
+
 describe('toErrorEnvelope / codeForStatus / errorDetails', () => {
   it('envelopes API errors with their code and retryable flag', () => {
     const err = new PlatformApiError(429, 'slow down');
