@@ -241,9 +241,12 @@ describe('current instance resolution', () => {
 });
 
 describe('quiet and verbose output', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     post.mockReset();
     fakeClient.get.mockReset();
+    process.env.BENCHSDK_STATE_DIR = '/tmp/cli-state-test';
+    const { _resetStateFileForTests } = await import('../current-instance.js');
+    _resetStateFileForTests();
   });
 
   it('create -q prints only the instance ID', async () => {
@@ -254,6 +257,8 @@ describe('quiet and verbose output', () => {
       await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use'], { from: 'user' });
       const lines = out.mock.calls.map((c) => String(c[0]));
       expect(lines).toEqual([ID_A]);
+      const { readFileCurrent, orgKey } = await import('../current-instance.js');
+      expect(readFileCurrent(orgKey({}))).toBeUndefined();
     } finally {
       out.mockRestore();
       err.mockRestore();
@@ -303,10 +308,13 @@ describe('quiet and verbose output', () => {
 });
 
 describe('run', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     post.mockReset();
     fakeClient.del.mockReset();
+    fakeClient.get.mockReset();
     process.env.BENCHSDK_STATE_DIR = '/tmp/cli-state-test';
+    const { _resetStateFileForTests } = await import('../current-instance.js');
+    _resetStateFileForTests();
   });
 
   it('run -- cmd creates, spawns, waits, destroys — exit code passes through', async () => {
@@ -360,6 +368,37 @@ describe('run', () => {
     expect(fakeClient.del).not.toHaveBeenCalled();
     const { readFileCurrent, orgKey } = await import('../current-instance.js');
     expect(readFileCurrent(orgKey({}))).toBe(ID_A);
+  });
+
+  it('run --keep destroys the instance when the wait fails', async () => {
+    post.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/sandboxes') return { sandbox };
+      if (path.endsWith('/processes')) return { process: proc };
+      if (path.endsWith('/wait')) throw new Error('connection dropped');
+      return {};
+    });
+    fakeClient.del.mockResolvedValueOnce({ sandbox: { ...sandbox, status: 'destroyed' } });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'run', '--keep', '--', 'true'], { from: 'user' });
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(fakeClient.del).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}`);
+    } finally {
+      err.mockRestore();
+      exit.mockRestore();
+    }
+    const { readFileCurrent, orgKey } = await import('../current-instance.js');
+    expect(readFileCurrent(orgKey({}))).toBeUndefined();
+  });
+
+  it('logs <uuid-job> resolves the implicit instance', async () => {
+    const { setCurrentInstance, orgKey } = await import('../current-instance.js');
+    setCurrentInstance(ID_A, orgKey({}));
+    const JOB_UUID = 'f1e2d3c4-b5a6-7890-aaaa-bbbbccccdddd';
+    fakeClient.get.mockResolvedValueOnce({ process: { ...proc, jobId: JOB_UUID, status: 'exited', exitCode: 0 } });
+    await buildProgram().parseAsync(['sandboxes', 'logs', JOB_UUID], { from: 'user' });
+    expect(fakeClient.get).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}/processes/${JOB_UUID}`);
   });
 
   it('run --keep -d is a usage error', async () => {
