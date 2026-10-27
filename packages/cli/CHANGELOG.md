@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.5.8
+
+### Patch Changes
+
+- 4e05572: `compute actions benchmarks <run-id>` — the benchmark runs an Actions run produced (per-provider composite score, success rate, metrics; `--json` for agents), and `compute actions run` shows a one-line `benchmarks:` digest when the run carried a benchmark.
+
 ## 2.5.7
 
 ### Patch Changes
