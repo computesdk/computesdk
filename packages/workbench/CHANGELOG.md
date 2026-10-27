@@ -1,5 +1,15 @@
 # @computesdk/workbench
 
+## 33.0.20
+
+### Patch Changes
+
+- Updated dependencies [d24737a]
+- Updated dependencies [d24737a]
+- Updated dependencies [d24737a]
+  - @computesdk/microsandbox@0.1.19
+  - @computesdk/namespace@1.6.37
+
 ## 33.0.19
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @computesdk/tensorlake
 
+## 0.1.30
+
+### Patch Changes
+
+- d24737a: Retry sandbox create briefly on "reached its quota": terminate() resolves before the project quota slot is released, so a destroy→create cycle could fail even with nothing still running.
+- d24737a: Retry the writable-workdir probe before falling back to "/". Right after create() the exec endpoint can lag the sandbox's reported readiness, so a single failed probe sent relative runCommand calls to an unwritable "/" cwd.
+
 ## 0.1.29
 
 ### Patch Changes
