@@ -10,9 +10,14 @@
  * them in sync by hand; the API is the contract.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as readline from 'node:readline';
+import { Readable } from 'node:stream';
 import { Command } from 'commander';
 import pc from 'picocolors';
+import * as tar from 'tar';
 import { ActionsApiError, type ActionsClient } from './actions-client.js';
 import {
   client,
@@ -304,6 +309,12 @@ const SPAWN_LEAD_OPTS: LeadOptSpec[] = [
   { aliases: ['--cwd'], key: 'cwd', flag: 'value' },
   { aliases: ['-e', '--env'], key: 'env', flag: 'repeat' },
   { aliases: ['--stdin'], key: 'stdin', flag: 'bool' },
+];
+
+const SERVE_LEAD_OPTS: LeadOptSpec[] = [
+  ...SPAWN_LEAD_OPTS,
+  { aliases: ['--port'], key: 'port', flag: 'value' },
+  { aliases: ['--timeout-ms'], key: 'timeoutMs', flag: 'value' },
 ];
 
 /**
@@ -779,6 +790,41 @@ export function registerSandboxesCommands(program: Command): void {
     });
 
   cmd
+    .command('serve [sandboxId] [command...]')
+    .description('Start a server, wait for its port to listen publicly, and print the URL')
+    .option('--port <n>', 'the TCP port the server listens on (required)')
+    .option('--cwd <dir>', 'working directory')
+    .option('-e, --env <key=value>', 'environment variable (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
+    .option('--timeout-ms <ms>', 'give up waiting for the port after this (default 120000)')
+    .option('-q, --quiet', 'print only the URL')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .passThroughOptions()
+    .action(async (argId: string | undefined, rawCommand: string[], rawOpts: QuietOpts & { port: string; cwd?: string; env?: string[]; timeoutMs?: string }) => {
+      let opts = rawOpts;
+      try {
+        checkQuietJson(opts);
+        if (argId !== undefined && !isUuid(argId)) {
+          rawCommand.unshift(argId);
+          argId = undefined;
+        }
+        const lead = takeLeadingOptions(rawCommand, SERVE_LEAD_OPTS);
+        opts = mergeLeadOpts(rawOpts, lead.inline);
+        const command = lead.command;
+        if (command.length === 0) throw new Error('missing command to serve');
+        if (opts.port === undefined) throw new Error('--port is required');
+        const port = Number(opts.port);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error('--port must be an integer between 1 and 65535');
+        }
+        const resolved = resolveSandbox(argId, opts);
+        await serveInstanceCommand(resolved.id, command, port, opts);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
     .command('exec [sandboxId] [command...]')
     .description('Run a one-shot command and print its result (options before the command; -- also works)')
     .option('--timeout-ms <ms>', 'command timeout in ms')
@@ -1188,6 +1234,22 @@ export function registerSandboxesCommands(program: Command): void {
     });
 
   cmd
+    .command('cp <src> <dst>')
+    .description('Copy files/dirs between here and an instance — remote side is [id:]/abs/path')
+    .option('-q, --quiet', 'print nothing on success')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--org <slug>')
+    .option('--json', 'print the raw response')
+    .action(async (src: string, dst: string, opts: QuietOpts) => {
+      try {
+        checkQuietJson(opts);
+        await cpCommand(src, dst, opts);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
     .command('url [sandboxId]')
     .description('Resolve the provider\'s public URL for a port')
     .requiredOption('--port <n>', 'port the service listens on')
@@ -1456,5 +1518,329 @@ async function runInstanceCommand(
     }
   }
 
-  process.exitCode = exitCode ?? (destroyRequested ? 130 : 1);
+  process.exitCode = detachRequested ? 0 : (exitCode ?? (destroyRequested ? 130 : 1));
+}
+
+// ─── serve ───────────────────────────────────────────────────────────────────
+
+interface PortsResponse {
+  ports: { port: number; address: string; public: boolean }[];
+  waited?: boolean;
+  found?: boolean;
+}
+
+/** Wait-cap per `/ports?wait=` call — the route caps at 60s. */
+const SERVE_POLL_MS = 30_000;
+const SERVE_DEFAULT_WAIT_MS = 120_000;
+
+/**
+ * `compute instances serve` — start a server process and wait until its port
+ * listens on a public address, then print the provider URL.
+ *
+ * Failure modes per spec: a loopback-only bind fails with the bind hint; the
+ * process exiting early prints its exit code and last log lines.
+ */
+async function serveInstanceCommand(
+  id: string,
+  command: string[],
+  port: number,
+  opts: QuietOpts & { cwd?: string; env?: string[]; timeoutMs?: string },
+): Promise<void> {
+  const c = await client(opts);
+  const spawned = await c.post<{ process: SandboxProcess }>(
+    `/api/v1/sandboxes/${id}/processes`,
+    {
+      command: command.map(shellQuote).join(' '),
+      ...(opts.cwd ? { cwd: opts.cwd } : {}),
+      ...(opts.env?.length ? { env: parseInputs(opts.env) } : {}),
+    },
+  );
+  const jobId = spawned.process.jobId;
+
+  const jobStatus = () =>
+    c.get<{ process: SandboxProcessStatus }>(`/api/v1/sandboxes/${id}/processes/${jobId}`);
+  const reportExit = (proc: SandboxProcessStatus): void => {
+    if (!opts.json) {
+      const logs = `${proc.stdout}${proc.stderr}`.trimEnd().split('\n');
+      if (logs.length > 0 && logs[0] !== '') {
+        console.error(pc.dim('--- last log lines ---'));
+        for (const line of logs.slice(-50)) console.error(safeTerm(line));
+      }
+    }
+    fail(new Error(`The server exited (code ${proc.exitCode ?? '?'}) before port ${port} listened.`), opts);
+  };
+
+  const waitMs = opts.timeoutMs ? Number(opts.timeoutMs) : SERVE_DEFAULT_WAIT_MS;
+  const deadline = Date.now() + waitMs;
+  let entry: PortsResponse['ports'][number] | undefined;
+  let remaining = waitMs;
+  while (!entry && remaining > 0) {
+    const res = await c.get<PortsResponse>(
+      `/api/v1/sandboxes/${id}/ports?wait=${port}&timeoutMs=${Math.min(SERVE_POLL_MS, remaining)}`,
+    );
+    entry = res.ports.find((p) => p.port === port);
+    if (entry) break;
+    // Not listening — did the server die?
+    const proc = await jobStatus();
+    if (proc.process.status === 'exited') {
+      reportExit(proc.process);
+      return; // fail() stubs process.exit in tests — don't keep polling.
+    }
+    remaining = deadline - Date.now();
+  }
+
+  if (entry) {
+    // A listener doesn't prove our server bound the port — when another
+    // process already owns it our job dies silently. Check before printing.
+    const proc = await jobStatus();
+    if (proc.process.status === 'exited') {
+      reportExit(proc.process);
+      return;
+    }
+  } else {
+    if (!opts.json) printServeJobFooter(id, jobId);
+    fail(new Error(`Port ${port} never listened within ${fmtTimeout(waitMs)}.`), opts);
+    return;
+  }
+
+  if (!entry.public) {
+    if (!opts.json) printServeJobFooter(id, jobId);
+    fail(new Error(
+      `Port ${port} is listening on ${safeTerm(entry.address)} only. ` +
+      `Bind to 0.0.0.0 (e.g. --host 0.0.0.0) so it can be reached.`),
+      opts,
+    );
+    return;
+  }
+
+  const { url } = await c.get<{ url: string }>(`/api/v1/sandboxes/${id}/urls?port=${port}`);
+  if (opts.quiet) {
+    console.log(safeTerm(url));
+    return;
+  }
+  // --json emits the raw field; only terminal output is sanitized.
+  output(opts, { url }, () => {
+    console.log(safeTerm(url));
+    printServeJobFooter(id, jobId);
+  });
+}
+
+function printServeJobFooter(sandboxId: string, jobId: string): void {
+  // Always name the instance: the implicit instance may be a different box.
+  console.error(pc.dim(`  job ${jobId}`));
+  console.error(pc.dim(`  logs:   compute instances logs ${sandboxId} ${jobId}`));
+  console.error(pc.dim(`  kill:   compute instances kill ${sandboxId} ${jobId}`));
+}
+
+
+
+// ─── cp ─────────────────────────────────────────────────────────────────────
+
+/** Wire shapes for the platform `/transfers` endpoints. */
+interface TransferCreate {
+  transferId: string;
+  uploadUrl?: string;
+  downloadUrl?: string;
+  expiresAt?: string;
+  bytes?: number;
+  files?: number;
+}
+interface TransferComplete {
+  path: string;
+  bytes: number;
+  files: number;
+}
+
+/** Stderr progress appears past this size on TTYs. */
+const CP_PROGRESS_MIN_BYTES = 10 * 1024 * 1024;
+
+/** Presigned transfer URLs must be https — except loopback, for local dev. */
+function assertTransferUrl(raw: string): void {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error('platform returned a malformed transfer URL');
+  }
+  if (u.protocol === 'https:') return;
+  const loopback = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(u.hostname);
+  if (!(u.protocol === 'http:' && loopback)) {
+    throw new Error(`refusing insecure transfer URL: ${u.protocol}//${u.hostname} (expected https)`);
+  }
+}
+
+/** tar entries that would write outside the extract root. */
+function tarEntryIsSafe(p: string, entry: unknown): boolean {
+  if (path.isAbsolute(p) || p.split('/').includes('..')) return false;
+  const { type, linkpath } = entry as { type?: string; linkpath?: string };
+  if ((type === 'Link' || type === 'SymbolicLink') && linkpath) {
+    if (path.isAbsolute(linkpath) || linkpath.split('/').includes('..')) return false;
+  }
+  return true;
+}
+
+/**
+ * One side of `cp <src> <dst>`: a remote endpoint is `[uuid:]/abs/path`
+ * (omitted uuid = the current instance); anything else is a local path —
+ * `box:./x` and `label:…` stay local, matching the positional-ID rule.
+ */
+function parseCpEndpoint(arg: string): { remoteId?: string; remotePath: string } | { local: string } {
+  const m = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?:(\/.*)$/.exec(arg);
+  if (m) return { remoteId: m[1] || undefined, remotePath: m[2] };
+  return { local: arg };
+}
+
+/**
+ * `compute instances cp` — one side remote (`[id:]/abs/path`), one side local.
+ * Upload: tar.gz the local path → PUT the presigned `uploadUrl` → `/complete`
+ * makes the box pull + extract under the remote dir. Download: `/transfers`
+ * makes the box tar + PUT; we GET the `downloadUrl` and extract into the
+ * local dir (created if missing — the remote basename always stays the
+ * top-level entry, docker-style `cp src dst/…` semantics; no rename form).
+ */
+async function cpCommand(src: string, dst: string, opts: QuietOpts): Promise<void> {
+  const s = parseCpEndpoint(src);
+  const d = parseCpEndpoint(dst);
+  const sRemote = 'remotePath' in s;
+  const dRemote = 'remotePath' in d;
+  if (sRemote === dRemote) {
+    throw new Error('cp needs exactly one remote side — write it as [id:]/abs/path (e.g. 3f2a…:/app or :/app)');
+  }
+  const c = await client(opts);
+  if (!sRemote && 'remotePath' in d && 'local' in s) {
+    const resolved = resolveSandbox(d.remoteId, opts);
+    const r = await cpUpload(c, resolved.id, s.local, d.remotePath, opts);
+    output(opts, r, (done) => {
+      if (!opts.quiet) console.log(`copied ${done.files} files (${formatBytes(done.bytes)}) → ${shortId(resolved.id)}:${d.remotePath}`);
+    });
+  } else if ('remotePath' in s && 'local' in d) {
+    const resolved = resolveSandbox(s.remoteId, opts);
+    const r = await cpDownload(c, resolved.id, s.remotePath, d.local, opts);
+    output(opts, r, (done) => {
+      if (!opts.quiet) console.log(`copied ${done.files} files (${formatBytes(done.bytes)}) → ${d.local}`);
+    });
+  }
+}
+
+/** Write `X/Y MB` progress to stderr while a known total streams by. */
+function cpProgress(total: number, opts: QuietOpts): { bump: (n: number) => void; done: () => void } {
+  const show = !opts.quiet && !opts.json && process.stderr.isTTY && total > CP_PROGRESS_MIN_BYTES;
+  let sent = 0;
+  return {
+    bump(n) {
+      if (!show) return;
+      sent += n;
+      process.stderr.write(`\r${formatBytes(sent)} / ${formatBytes(total)} (${Math.round((sent / total) * 100)}%)`);
+    },
+    done() {
+      if (show) process.stderr.write('\n');
+    },
+  };
+}
+
+async function cpUpload(
+  c: ActionsClient,
+  sandboxId: string,
+  localPath: string,
+  remotePath: string,
+  opts: QuietOpts,
+): Promise<TransferComplete> {
+  // statSync first so a missing path errors before anything is created.
+  const abs = path.resolve(localPath);
+  fs.statSync(abs);
+  // Private 0700 dir: a shared /tmp path can be pre-created by another
+  // local user and the tarball written somewhere attacker-readable.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'compute-cp-up-'));
+  const tmp = path.join(tmpDir, 'archive.tar.gz');
+  try {
+    await tar.create({ gzip: true, file: tmp, cwd: path.dirname(abs) }, [path.basename(abs)]);
+    const size = fs.statSync(tmp).size;
+    const created = await c.post<TransferCreate>(
+      `/api/v1/sandboxes/${sandboxId}/transfers`,
+      { direction: 'upload', path: remotePath },
+    );
+    if (!created.uploadUrl) throw new Error('platform did not return an upload URL');
+    assertTransferUrl(created.uploadUrl);
+    const progress = cpProgress(size, opts);
+    try {
+      const stream = fs.createReadStream(tmp);
+      stream.on('data', (chunk: Buffer | string) => progress.bump(typeof chunk === 'string' ? chunk.length : chunk.byteLength));
+      const res = await fetch(created.uploadUrl, {
+        method: 'PUT',
+        headers: { 'content-length': String(size), 'content-type': 'application/gzip' },
+        // @ts-expect-error Readable.toWeb body is supported at runtime; DOM types lag
+        body: Readable.toWeb(stream),
+        duplex: 'half',
+      });
+      if (!res.ok) throw new Error(`upload failed: HTTP ${res.status}`);
+    } finally {
+      progress.done();
+    }
+    return await c.post<TransferComplete>(
+      `/api/v1/sandboxes/${sandboxId}/transfers/${created.transferId}/complete`,
+      {},
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+async function cpDownload(
+  c: ActionsClient,
+  sandboxId: string,
+  remotePath: string,
+  localDir: string,
+  opts: QuietOpts,
+): Promise<TransferComplete> {
+  const created = await c.post<TransferCreate>(
+    `/api/v1/sandboxes/${sandboxId}/transfers`,
+    { direction: 'download', path: remotePath },
+  );
+  if (!created.downloadUrl) throw new Error('platform did not return a download URL');
+  assertTransferUrl(created.downloadUrl);
+  const res = await fetch(created.downloadUrl);
+  if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'compute-cp-dl-'));
+  const tmp = path.join(tmpDir, 'archive.tar.gz');
+  try {
+    const progress = cpProgress(created.bytes ?? 0, opts);
+    const ws = fs.createWriteStream(tmp);
+    try {
+      // A stream error (e.g. ENOSPC) must fail the copy, not hang on 'drain'.
+      await new Promise<void>((resolve, reject) => {
+        ws.once('error', reject);
+        const reader = res.body!.getReader();
+        const pump = async (): Promise<void> => {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done || value === undefined) break;
+            progress.bump(value.byteLength);
+            if (!ws.write(value)) await new Promise<void>((r) => ws.once('drain', () => r()));
+          }
+        };
+        pump().then(
+          () => ws.end(() => resolve()),
+          reject,
+        );
+      });
+    } finally {
+      ws.destroy();
+    }
+    progress.done();
+    fs.mkdirSync(localDir, { recursive: true });
+    await tar.extract({ file: tmp, cwd: localDir, filter: tarEntryIsSafe });
+    return { path: localDir, bytes: created.bytes ?? fs.statSync(tmp).size, files: created.files ?? 0 };
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+/** Human byte count for the cp summary line and progress. */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
 }
