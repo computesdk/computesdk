@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runProviderTestSuite } from '@computesdk/test-utils';
+import type { ExecView } from '@buddy-works/sandbox-sdk';
 
 import { buddy, ensureTimeout, toSeconds } from '../index';
 import {
@@ -7,8 +8,8 @@ import {
   buildShellCommand,
   killCommand,
   runCommand,
+  outcomeOf,
   usesExec,
-  waitForExitCode,
 } from '../commands';
 import { retryBootRaces } from '../boot';
 import {
@@ -176,25 +177,40 @@ describe('command building', () => {
   });
 });
 
-/** Fakes the SDK client surface `runCommand` touches. */
-function fakeCommandClient(
-  logs: Array<{ type: 'STDOUT' | 'STDERR'; data: string }>,
-  details: Array<{ exit_code?: number; status?: string }>,
-) {
+/**
+ * Fakes the SDK client surface `runCommand` touches. Status requests answer
+ * from `details` (the last entry repeats) until the command is cancelled.
+ */
+function fakeCommandClient(details: Array<Partial<ExecView>>) {
   const pending = [...details];
+  let cancelled = false;
   const client = {
-    executeCommand: vi.fn(async () => ({ id: 'cmd-1' })),
+    executeCommand: vi.fn(async (): Promise<ExecView> => ({ execution_id: 'exec-1', status: 'INPROGRESS' })),
     execCommand: vi.fn(),
-    getCommandLogs: vi.fn(),
-    getCommandDetails: vi.fn(async () => pending.length > 1 ? pending.shift()! : pending[0]),
-    terminateCommand: vi.fn(async () => {}),
+    getCommandLog: vi.fn(async (_request: { query: { offset: bigint } }): Promise<unknown> => ({ lines: [] })),
+    getCommandDetails: vi.fn(async (_request: unknown): Promise<Partial<ExecView>> => {
+      if (cancelled) return { execution_id: 'exec-1', status: 'CANCELLED' };
+      return { execution_id: 'exec-1', ...(pending.length > 1 ? pending.shift()! : pending[0]) };
+    }),
+    cancelCommand: vi.fn(async (_request: unknown) => { cancelled = true; }),
   };
   const sandbox = { sandboxId: 'sb-1', client } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  return { client, sandbox, logs };
+  return { client, sandbox };
 }
 
-/** Pins a test to the `commands` log stream; without a callback `runCommand` would take the `exec` route. */
-const streaming = { onStderr: () => {} };
+/** Replaces the SDK's log reader, so a test controls what the command prints and when. */
+async function fakeLogs(read: () => AsyncGenerator<string, void, undefined>) {
+  const { Command } = await import('@buddy-works/sandbox-sdk');
+  return vi.spyOn(Command.prototype, 'logs').mockImplementation(read);
+}
+
+/** Never yields: the command keeps running until something stops it. */
+async function* endless(): AsyncGenerator<string, void, undefined> {
+  await new Promise(() => {});
+}
+
+/** Pins a test to the `execs` resource; without a callback `runCommand` would take the `exec` route. */
+const streaming = { onStdout: () => {} };
 
 /** An error shaped like the SDK's `HttpError`: `status` plus Buddy's message. */
 function apiError(status: number, message: string) {
@@ -222,57 +238,105 @@ describe('command execution', () => {
     expect((buddy({}).sandbox as any).methods.streamCommand).toBe(runCommand);
   });
 
-  it('terminates every log record with a newline', async () => {
-    const { sandbox, logs } = fakeCommandClient(
-      [{ type: 'STDOUT', data: 'one' }, { type: 'STDOUT', data: 'two' }, { type: 'STDERR', data: 'warn' }],
-      [{ exit_code: 0, status: 'SUCCESSFUL' }],
-    );
-    const { Command } = await import('@buddy-works/sandbox-sdk');
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { yield* logs; });
+  it('terminates every log line with a newline and reports it as stdout', async () => {
+    const { sandbox } = fakeCommandClient([{ execution_id: 'exec-1', exit_code: 0, status: 'SUCCESSFUL' }]);
+    await fakeLogs(async function* () { yield 'one'; yield 'two'; yield 'warn'; });
 
     const chunks: string[] = [];
-    const result = await runCommand(sandbox, 'printf "one\\ntwo"', { onStdout: chunk => chunks.push(chunk) });
+    const onStderr = vi.fn();
+    const result = await runCommand(sandbox, 'printf "one\\ntwo"', { onStdout: chunk => chunks.push(chunk), onStderr });
 
-    expect(result.stdout).toBe('one\ntwo\n');
-    expect(result.stderr).toBe('warn\n');
+    expect(result.stdout).toBe('one\ntwo\nwarn\n');
+    expect(result.stderr).toBe('');
     expect(chunks.join('')).toBe(result.stdout);
+    expect(onStderr).not.toHaveBeenCalled();
     expect(result.exitCode).toBe(0);
   });
 
-  it('returns the timeout exit code without waiting for the stream to close', async () => {
-    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
-    // The stream never ends: the kill is what would normally close it.
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { await new Promise(() => {}); });
+  it('reads the log and the exit code through the execs resource', async () => {
+    vi.restoreAllMocks();
+    const { sandbox, client } = fakeCommandClient([{ execution_id: 'exec-1', exit_code: 3, status: 'FAILED' }]);
+    client.getCommandLog
+      .mockResolvedValueOnce({ execution_id: 'exec-1', lines: ['first'], next_offset: 1n })
+      .mockResolvedValue({ execution_id: 'exec-1', lines: ['last'], next_offset: 2n });
+
+    const result = await runCommand(sandbox, 'exit 3', { timeout: 5_000 });
+
+    expect(result).toMatchObject({ stdout: 'first\nlast\n', stderr: '', exitCode: 3 });
+    expect(client.executeCommand).toHaveBeenCalledWith({
+      path: { sandbox_id: 'sb-1' },
+      body: { command: 'exit 3', runtime: 'BASH' },
+    });
+    expect(client.getCommandLog.mock.calls.map(([request]) => request.query.offset)).toEqual([0n, 1n]);
+    expect(client.getCommandDetails).toHaveBeenCalledTimes(1);
+    expect(client.getCommandDetails.mock.calls[0][0]).toMatchObject({
+      path: { sandbox_id: 'sb-1', exec_id: 'exec-1' },
+    });
+    expect(client.cancelCommand).not.toHaveBeenCalled();
+  });
+
+  it('names the concurrency limit when Buddy refuses to start the command', async () => {
+    const { sandbox, client } = fakeCommandClient([]);
+    client.executeCommand.mockRejectedValue(
+      Object.assign(new Error('Failed to run command (HTTP 409)'), { statusCode: 409 }),
+    );
+
+    await expect(runCommand(sandbox, 'true', { timeout: 5_000 }))
+      .rejects.toThrow(/too many commands are running.*HTTP 409/);
+    expect(client.executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries the submission while the sandbox is still booting', async () => {
+    const { sandbox, client } = fakeCommandClient([{ execution_id: 'exec-1', exit_code: 0, status: 'SUCCESSFUL' }]);
+    client.executeCommand
+      .mockRejectedValueOnce(apiError(400, 'Sandbox must be running'))
+      .mockResolvedValue({ execution_id: 'exec-1', status: 'INPROGRESS' });
+    await fakeLogs(async function* () {});
+
+    const result = await runCommand(sandbox, 'true', { timeout: 5_000 });
+    expect(result.exitCode).toBe(0);
+    expect(client.executeCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns the timeout exit code without waiting for the log to end', async () => {
+    const { sandbox, client } = fakeCommandClient([{ status: 'INPROGRESS' }]);
+    await fakeLogs(endless);
 
     const started = Date.now();
     const result = await runCommand(sandbox, 'sleep 60', { timeout: 20, ...streaming });
 
     expect(Date.now() - started).toBeLessThan(1_000);
-    expect(client.terminateCommand).toHaveBeenCalledTimes(1);
-    expect(client.getCommandDetails).not.toHaveBeenCalled();
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
+    await vi.waitFor(() => expect(client.cancelCommand).toHaveBeenCalledTimes(1));
+  });
+
+  it('stops the SDK reading the log once the deadline passes', async () => {
+    const { sandbox } = fakeCommandClient([{ status: 'INPROGRESS' }]);
+    const logs = await fakeLogs(endless);
+
+    await runCommand(sandbox, 'sleep 60', { timeout: 20, ...streaming });
+
+    const { signal } = logs.mock.calls[0][0] as { signal: AbortSignal };
+    expect(signal.aborted).toBe(true);
   });
 
   it('still times out when the kill itself fails', async () => {
-    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
-    client.terminateCommand.mockImplementation(async () => { throw new Error('gateway timeout'); });
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { await new Promise(() => {}); });
+    const { sandbox, client } = fakeCommandClient([{ status: 'INPROGRESS' }]);
+    client.cancelCommand.mockRejectedValue(new Error('gateway timeout'));
+    await fakeLogs(endless);
 
     const result = await runCommand(sandbox, 'sleep 60', { timeout: 20, ...streaming });
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
   });
 
   it('counts a slow submission against the timeout', async () => {
-    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
+    const { sandbox, client } = fakeCommandClient([{ status: 'INPROGRESS' }]);
     // Buddy holds the submission (e.g. while the sandbox boots) past the deadline.
     client.executeCommand.mockImplementation(async () => {
       await new Promise(resolve => setTimeout(resolve, 60));
-      return { id: 'cmd-1' };
+      return { execution_id: 'exec-1', status: 'INPROGRESS' };
     });
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { await new Promise(() => {}); });
+    await fakeLogs(endless);
 
     const started = Date.now();
     const result = await runCommand(sandbox, 'sleep 60', { timeout: 30, ...streaming });
@@ -282,9 +346,9 @@ describe('command execution', () => {
   });
 
   it('returns the timeout result while Buddy still holds the submission', async () => {
-    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
-    let accept!: (value: { id: string }) => void;
-    client.executeCommand.mockImplementation(() => new Promise<{ id: string }>(resolve => { accept = resolve; }));
+    const { sandbox, client } = fakeCommandClient([{ status: 'INPROGRESS' }]);
+    let accept!: (value: ExecView) => void;
+    client.executeCommand.mockImplementation(() => new Promise<ExecView>(resolve => { accept = resolve; }));
 
     const started = Date.now();
     const result = await runCommand(sandbox, 'sleep 60', { timeout: 20, ...streaming });
@@ -292,18 +356,18 @@ describe('command execution', () => {
     expect(Date.now() - started).toBeLessThan(500);
 
     // Once Buddy finally reports the command, it is killed.
-    accept({ id: 'cmd-late' });
-    await vi.waitFor(() => expect(client.terminateCommand).toHaveBeenCalledTimes(1));
+    accept({ execution_id: 'exec-late', status: 'INPROGRESS' });
+    await vi.waitFor(() => expect(client.cancelCommand).toHaveBeenCalledTimes(1));
+    expect(client.cancelCommand.mock.calls[0][0]).toMatchObject({ path: { exec_id: 'exec-late' } });
   });
 
   it('stops forwarding output after the timeout result was returned', async () => {
-    const { sandbox } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
+    const { sandbox } = fakeCommandClient([{ status: 'INPROGRESS' }]);
     let release!: () => void;
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {
+    await fakeLogs(async function* () {
       await new Promise<void>(resolve => { release = resolve; });
-      yield { type: 'STDOUT', data: 'late' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-      yield { type: 'STDOUT', data: 'later' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      yield 'late';
+      yield 'later';
     });
 
     const onStdout = vi.fn();
@@ -316,26 +380,21 @@ describe('command execution', () => {
   });
 
   it('keeps the output collected before the deadline in the timeout result', async () => {
-    const { sandbox } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {
-      yield { type: 'STDOUT', data: 'step 1' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-      yield { type: 'STDERR', data: 'warn' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const { sandbox } = fakeCommandClient([{ status: 'INPROGRESS' }]);
+    await fakeLogs(async function* () {
+      yield 'step 1';
+      yield 'warn';
       await new Promise(() => {}); // the command never finishes
     });
 
     const result = await runCommand(sandbox, 'sleep 60', { timeout: 30, ...streaming });
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
-    expect(result.stdout).toBe('step 1\n');
-    expect(result.stderr).toBe('warn\n');
+    expect(result.stdout).toBe('step 1\nwarn\n');
   });
 
-  it('holds the exit-code poll to the deadline once the stream has closed', async () => {
-    const { sandbox, client } = fakeCommandClient([{ type: 'STDOUT', data: 'done' }], [{ status: 'INPROGRESS' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {
-      yield { type: 'STDOUT', data: 'done' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    });
+  it('holds the wait for the final status to the deadline once the log has ended', async () => {
+    const { sandbox, client } = fakeCommandClient([{ status: 'INPROGRESS' }]);
+    await fakeLogs(async function* () { yield 'done'; });
 
     const started = Date.now();
     const result = await runCommand(sandbox, 'true', { timeout: 100 });
@@ -343,7 +402,7 @@ describe('command execution', () => {
     expect(Date.now() - started).toBeLessThan(1_000);
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
     expect(result.stdout).toBe('done\n');
-    await vi.waitFor(() => expect(client.terminateCommand).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(client.cancelCommand).toHaveBeenCalledTimes(1));
   });
 
   it('retries a failed kill before giving up', async () => {
@@ -358,29 +417,33 @@ describe('command execution', () => {
     expect(hopeless).toHaveBeenCalledTimes(3);
   });
 
-  it('kills the command when its log stream breaks mid-run', async () => {
-    const { sandbox, client } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () { throw new Error('stream reset'); });
+  it('kills the command when reading its log breaks mid-run', async () => {
+    const { sandbox, client } = fakeCommandClient([{ status: 'INPROGRESS' }]);
+    // eslint-disable-next-line require-yield
+    await fakeLogs(async function* () { throw new Error('connection reset'); });
 
-    await expect(runCommand(sandbox, 'sleep 60', { timeout: 5_000, ...streaming })).rejects.toThrow(/stream reset/);
-    expect(client.terminateCommand).toHaveBeenCalledTimes(1);
-    expect(client.getCommandDetails).not.toHaveBeenCalled();
+    await expect(runCommand(sandbox, 'sleep 60', { timeout: 5_000, ...streaming })).rejects.toThrow(/connection reset/);
+    await vi.waitFor(() => expect(client.cancelCommand).toHaveBeenCalledTimes(1));
   });
 
-  it('waits for the exit code instead of assuming success while in progress', async () => {
-    const { sandbox, client } = fakeCommandClient([], [
-      { status: 'INPROGRESS' },
-      { status: 'INPROGRESS' },
-      { exit_code: 3, status: 'FAILED' },
-    ]);
-    await expect(waitForExitCode(sandbox, 'cmd-1', 5_000)).resolves.toBe(3);
-    expect(client.getCommandDetails).toHaveBeenCalledTimes(3);
+  it('turns a final state into an exit code', () => {
+    expect(outcomeOf({ exit_code: 3, status: 'FAILED' })).toEqual({ exitCode: 3 });
+    expect(outcomeOf({ exit_code: 0, status: 'SUCCESSFUL' })).toEqual({ exitCode: 0 });
+    expect(outcomeOf({ status: 'SUCCESSFUL' })).toEqual({ exitCode: 0 });
+
+    const stopped = outcomeOf({ execution_id: 'exec-1', status: 'FAILED', error_message: 'Execution timed out' });
+    expect(stopped.exitCode).toBe(1);
+    expect(stopped.message).toMatch(/exec-1 ended FAILED: Execution timed out/);
+    expect(outcomeOf({ status: 'CANCELLED' }).exitCode).toBe(1);
   });
 
-  it('gives up on a command that never reports a result', async () => {
-    const { sandbox } = fakeCommandClient([], [{ status: 'INPROGRESS' }]);
-    await expect(waitForExitCode(sandbox, 'cmd-1', 0)).rejects.toThrow(/no exit code/);
+  it('reports why Buddy ended a command without an exit code', async () => {
+    const { sandbox } = fakeCommandClient([{ execution_id: 'exec-1', status: 'FAILED', failure_reason: 'TIMEOUT' }]);
+    await fakeLogs(async function* () { yield 'partial'; });
+
+    const result = await runCommand(sandbox, 'sleep 6000', { timeout: 5_000 });
+    expect(result).toMatchObject({ stdout: 'partial\n', exitCode: 1 });
+    expect(result.stderr).toMatch(/ended FAILED: TIMEOUT/);
   });
 });
 
@@ -401,8 +464,8 @@ describe('command execution via exec', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
-  it('runs a plain command in one request and never touches the commands resource', async () => {
-    const { sandbox, client } = fakeCommandClient([], []);
+  it('runs a plain command in one request and never touches the execs resource', async () => {
+    const { sandbox, client } = fakeCommandClient([]);
     const exec = fakeExec(client, [{ command: 'x', runtime: 'BASH', exit_code: 3, stdout: 'out\n', stderr: 'err\n' }]);
 
     const result = await runCommand(sandbox, 'exit 3', { cwd: '/w', env: { A: '1' } });
@@ -418,13 +481,13 @@ describe('command execution via exec', () => {
   });
 
   it('rejects a response without an exit code instead of assuming success', async () => {
-    const { sandbox, client } = fakeCommandClient([], []);
+    const { sandbox, client } = fakeCommandClient([]);
     fakeExec(client, [{ stdout: 'ok' }]);
     await expect(runCommand(sandbox, 'true', {})).rejects.toThrow(/no exit code/);
   });
 
   it('retries while the sandbox is still booting', async () => {
-    const { sandbox, client } = fakeCommandClient([], []);
+    const { sandbox, client } = fakeCommandClient([]);
     const exec = fakeExec(client, [
       apiError(400, 'Sandbox must be running'),
       apiError(400, 'Sandbox must be running'),
@@ -437,29 +500,26 @@ describe('command execution via exec', () => {
   });
 
   it('surfaces other exec errors unchanged', async () => {
-    const { sandbox, client } = fakeCommandClient([], []);
+    const { sandbox, client } = fakeCommandClient([]);
     const failure = apiError(400, 'Error executing sandbox command');
     fakeExec(client, [failure]);
     await expect(runCommand(sandbox, 'boom', {})).rejects.toBe(failure);
   });
 
   it('maps the server-side exec limit to the timeout exit code', async () => {
-    const { sandbox, client } = fakeCommandClient([], []);
+    const { sandbox, client } = fakeCommandClient([]);
     fakeExec(client, [apiError(400, 'Error executing sandbox command command did not finish on instance sb-1 within 60s')]);
 
     const result = await runCommand(sandbox, 'sleep 90', {});
     expect(result.exitCode).toBe(TIMEOUT_EXIT_CODE);
     expect(result.stdout).toBe('');
     expect(result.stderr).toMatch(/did not finish on instance sb-1 within 60s/);
-    expect(client.terminateCommand).not.toHaveBeenCalled();
+    expect(client.cancelCommand).not.toHaveBeenCalled();
   });
 
-  it('streams a long timed call through the commands resource', async () => {
-    const { sandbox, client } = fakeCommandClient([{ type: 'STDOUT', data: 'long' }], [{ exit_code: 0, status: 'SUCCESSFUL' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {
-      yield { type: 'STDOUT', data: 'long' } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    });
+  it('streams a long timed call through the execs resource', async () => {
+    const { sandbox, client } = fakeCommandClient([{ exit_code: 0, status: 'SUCCESSFUL' }]);
+    await fakeLogs(async function* () { yield 'long'; });
 
     const result = await runCommand(sandbox, 'sleep 100', { timeout: 120_000 });
     expect(result).toMatchObject({ stdout: 'long\n', exitCode: 0 });
@@ -467,10 +527,9 @@ describe('command execution via exec', () => {
     expect(client.executeCommand).toHaveBeenCalledTimes(1);
   });
 
-  it('sends a timed call to the commands resource, where the timeout can kill it', async () => {
-    const { sandbox, client } = fakeCommandClient([], [{ exit_code: 0, status: 'SUCCESSFUL' }]);
-    const { Command } = await import('@buddy-works/sandbox-sdk');
-    vi.spyOn(Command.prototype, 'logs').mockImplementation(async function* () {});
+  it('sends a timed call to the execs resource, where the timeout can kill it', async () => {
+    const { sandbox, client } = fakeCommandClient([{ exit_code: 0, status: 'SUCCESSFUL' }]);
+    await fakeLogs(async function* () {});
 
     await runCommand(sandbox, 'true', { timeout: 5_000 });
     expect(client.execCommand).not.toHaveBeenCalled();
