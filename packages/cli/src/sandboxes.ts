@@ -306,6 +306,12 @@ const SPAWN_LEAD_OPTS: LeadOptSpec[] = [
   { aliases: ['--stdin'], key: 'stdin', flag: 'bool' },
 ];
 
+const SERVE_LEAD_OPTS: LeadOptSpec[] = [
+  ...SPAWN_LEAD_OPTS,
+  { aliases: ['--port'], key: 'port', flag: 'value' },
+  { aliases: ['--timeout-ms'], key: 'timeoutMs', flag: 'value' },
+];
+
 /**
  * `exec`/`spawn` run under `.passThroughOptions()`: everything after
  * `<sandboxId>` arrives in the variadic `<command...>` untouched, so a flag
@@ -773,6 +779,41 @@ export function registerSandboxesCommands(program: Command): void {
         const command = lead.command;
         if (command.length === 0) throw new Error('missing command to run');
         await runInstanceCommand(command, opts);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
+
+  cmd
+    .command('serve [sandboxId] [command...]')
+    .description('Start a server, wait for its port to listen publicly, and print the URL')
+    .option('--port <n>', 'the TCP port the server listens on (required)')
+    .option('--cwd <dir>', 'working directory')
+    .option('-e, --env <key=value>', 'environment variable (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
+    .option('--timeout-ms <ms>', 'give up waiting for the port after this (default 120000)')
+    .option('-q, --quiet', 'print only the URL')
+    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+    .option('--json', 'print the raw response')
+    .passThroughOptions()
+    .action(async (argId: string | undefined, rawCommand: string[], rawOpts: QuietOpts & { port: string; cwd?: string; env?: string[]; timeoutMs?: string }) => {
+      let opts = rawOpts;
+      try {
+        checkQuietJson(opts);
+        if (argId !== undefined && !isUuid(argId)) {
+          rawCommand.unshift(argId);
+          argId = undefined;
+        }
+        const lead = takeLeadingOptions(rawCommand, SERVE_LEAD_OPTS);
+        opts = mergeLeadOpts(rawOpts, lead.inline);
+        const command = lead.command;
+        if (command.length === 0) throw new Error('missing command to serve');
+        if (opts.port === undefined) throw new Error('--port is required');
+        const port = Number(opts.port);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error('--port must be an integer between 1 and 65535');
+        }
+        const resolved = resolveSandbox(argId, opts);
+        await serveInstanceCommand(resolved.id, command, port, opts);
       } catch (e) {
         fail(e, opts);
       }
@@ -1458,3 +1499,100 @@ async function runInstanceCommand(
 
   process.exitCode = exitCode ?? (destroyRequested ? 130 : 1);
 }
+
+// ─── serve ───────────────────────────────────────────────────────────────────
+
+interface PortsResponse {
+  ports: { port: number; address: string; public: boolean }[];
+  waited?: boolean;
+  found?: boolean;
+}
+
+/** Wait-cap per `/ports?wait=` call — the route caps at 60s. */
+const SERVE_POLL_MS = 30_000;
+const SERVE_DEFAULT_WAIT_MS = 120_000;
+
+/**
+ * `compute instances serve` — start a server process and wait until its port
+ * listens on a public address, then print the provider URL.
+ *
+ * Failure modes per spec: a loopback-only bind fails with the bind hint; the
+ * process exiting early prints its exit code and last log lines.
+ */
+async function serveInstanceCommand(
+  id: string,
+  command: string[],
+  port: number,
+  opts: QuietOpts & { cwd?: string; env?: string[]; timeoutMs?: string },
+): Promise<void> {
+  const c = await client(opts);
+  const spawned = await c.post<{ process: SandboxProcess }>(
+    `/api/v1/sandboxes/${id}/processes`,
+    {
+      command: command.map(shellQuote).join(' '),
+      ...(opts.cwd ? { cwd: opts.cwd } : {}),
+      ...(opts.env?.length ? { env: parseInputs(opts.env) } : {}),
+    },
+  );
+  const jobId = spawned.process.jobId;
+
+  const waitMs = opts.timeoutMs ? Number(opts.timeoutMs) : SERVE_DEFAULT_WAIT_MS;
+  const deadline = Date.now() + waitMs;
+  let entry: PortsResponse['ports'][number] | undefined;
+  while (true) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      console.error(pc.red(`Port ${port} never listened within ${fmtTimeout(waitMs)}.`));
+      printServeJobFooter(jobId);
+      process.exitCode = 1;
+      return;
+    }
+    const res = await c.get<PortsResponse>(
+      `/api/v1/sandboxes/${id}/ports?wait=${port}&timeoutMs=${Math.min(SERVE_POLL_MS, remaining)}`,
+    );
+    entry = res.ports.find((p) => p.port === port);
+    if (entry) break;
+    // Not listening — did the server die?
+    const proc = await c.get<{ process: SandboxProcessStatus }>(
+      `/api/v1/sandboxes/${id}/processes/${jobId}`,
+    );
+    if (proc.process.status === 'exited') {
+      console.error(pc.red(`The server exited (code ${proc.process.exitCode ?? '?'}) before port ${port} listened.`));
+      const logs = `${proc.process.stdout}${proc.process.stderr}`.trimEnd().split('\n');
+      if (logs.length > 0 && logs[0] !== '') {
+        console.error(pc.dim('--- last log lines ---'));
+        for (const line of logs.slice(-50)) console.error(line);
+      }
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  if (!entry.public) {
+    console.error(
+      pc.red(`Port ${port} is listening on ${entry.address} only. ` +
+        `Bind to 0.0.0.0 (e.g. --host 0.0.0.0) so it can be reached.`),
+    );
+    printServeJobFooter(jobId);
+    process.exitCode = 1;
+    return;
+  }
+
+  const { url } = await c.get<{ url: string }>(`/api/v1/sandboxes/${id}/urls?port=${port}`);
+  if (opts.quiet) {
+    console.log(url);
+    return;
+  }
+  output(opts, { url }, () => {
+    console.log(url);
+    printServeJobFooter(jobId);
+  });
+}
+
+function printServeJobFooter(jobId: string): void {
+  console.error(pc.dim(`  job ${jobId}`));
+  console.error(pc.dim(`  logs:   compute instances logs ${jobId}`));
+  console.error(pc.dim(`  kill:   compute instances kill ${jobId}`));
+}
+
+

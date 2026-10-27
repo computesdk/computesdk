@@ -414,3 +414,100 @@ describe('run', () => {
     }
   });
 });
+
+describe('serve', () => {
+  const TMP = '/tmp/cli-state-test';
+  beforeEach(() => {
+    post.mockReset();
+    fakeClient.get.mockReset();
+    process.env.BENCHSDK_STATE_DIR = TMP;
+  });
+
+  function mockServe(ports: { port: number; address: string; public: boolean }[], url = 'https://3000-x.dev'): void {
+    post.mockImplementation(async (path: string) =>
+      path.endsWith('/processes') ? { process: proc } : {},
+    );
+    fakeClient.get.mockImplementation(async (path: string) => {
+      if (path.includes('/ports')) return { ports, waited: true, found: ports.length > 0 };
+      if (path.includes('/urls')) return { url };
+      return { process: proc };
+    });
+  }
+
+  it('waits for the port then prints the URL and job footer', async () => {
+    mockServe([{ port: 3000, address: '0.0.0.0', public: true }]);
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(
+        ['sandboxes', 'serve', ID_A, '--port', '3000', '--', 'python3', '-m', 'http.server', '3000'],
+        { from: 'user' },
+      );
+      expect(fakeClient.get).toHaveBeenCalledWith(
+        expect.stringContaining(`/api/v1/sandboxes/${ID_A}/ports?wait=3000`),
+      );
+      expect(out.mock.calls.map((c) => String(c[0]))).toContain('https://3000-x.dev');
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+    }
+  });
+
+  it('-q prints only the URL', async () => {
+    mockServe([{ port: 3000, address: '0.0.0.0', public: true }]);
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(
+        ['sandboxes', 'serve', ID_A, '--port', '3000', '-q', '--', 'python3', '-m', 'http.server', '3000'],
+        { from: 'user' },
+      );
+      expect(out.mock.calls.map((c) => String(c[0]))).toEqual(['https://3000-x.dev']);
+    } finally {
+      out.mockRestore();
+    }
+  });
+
+  it('fails with the bind hint when the port is loopback-only', async () => {
+    mockServe([{ port: 3000, address: '127.0.0.1', public: false }]);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const prev = process.exitCode;
+    try {
+      await buildProgram().parseAsync(
+        ['sandboxes', 'serve', ID_A, '--port', '3000', '--', 'python3', '-m', 'http.server', '3000', '--bind', '127.0.0.1'],
+        { from: 'user' },
+      );
+      const text = err.mock.calls.map((c) => String(c[0])).join('');
+      expect(text).toContain('127.0.0.1 only');
+      expect(text).toContain('0.0.0.0');
+      expect(process.exitCode).toBe(1);
+    } finally {
+      err.mockRestore();
+      process.exitCode = prev;
+    }
+  });
+
+  it('fails with the exit code when the server dies first', async () => {
+    post.mockImplementation(async (path: string) =>
+      path.endsWith('/processes') ? { process: proc } : {},
+    );
+    fakeClient.get.mockImplementation(async (path: string) => {
+      if (path.includes('/ports')) return { ports: [], waited: true, found: false };
+      return { process: { ...EXITED, exitCode: 2, stdout: 'traceback\n' } };
+    });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const prev = process.exitCode;
+    try {
+      await buildProgram().parseAsync(
+        ['sandboxes', 'serve', ID_A, '--port', '3000', '--', 'python3', 'bad.py'],
+        { from: 'user' },
+      );
+      const text = err.mock.calls.map((c) => String(c[0])).join('');
+      expect(text).toContain('exited (code 2)');
+      expect(text).toContain('traceback');
+      expect(process.exitCode).toBe(1);
+    } finally {
+      err.mockRestore();
+      process.exitCode = prev;
+    }
+  });
+});
