@@ -386,6 +386,14 @@ function backgroundScript(command: string): string {
   return `nohup /bin/sh -c ${quoted} >/dev/null 2>&1 &`;
 }
 
+/** The agent's exec stream closed before sending an exit event — a
+ *  channel-level flake, not a command outcome. Worth one transparent
+ *  retry: runCommand has no exactly-once contract, and the alternative is
+ *  losing everything the command already emitted. */
+function isExecSessionDrop(error: unknown): boolean {
+  return error instanceof Error && /exec session ended without exit event/i.test(error.message);
+}
+
 async function runCommand(
   sandbox: MicrosandboxSandbox,
   command: string,
@@ -394,7 +402,15 @@ async function runCommand(
   const startedAt = performance.now();
   const native = await connectedSandbox(sandbox);
   const script = options?.background ? backgroundScript(command) : command;
-  const output = await native.execWith('/bin/sh', (builder) => configureExec(builder, script, options));
+  let output;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      output = await native.execWith('/bin/sh', (builder) => configureExec(builder, script, options));
+      break;
+    } catch (error) {
+      if (!isExecSessionDrop(error) || attempt === 1) throw error;
+    }
+  }
   return {
     stdout: output.stdout(),
     stderr: output.stderr(),
