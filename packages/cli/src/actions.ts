@@ -702,7 +702,7 @@ export function localChangesPatch(
   // Untracked files must be diffed from the repo root: `ls-files --others`
   // lists only the cwd's subtree and `diff --no-index` emits cwd-relative
   // paths, so from a subdirectory the patch would drop or misplace files.
-  const topLevel = git(['rev-parse', '--show-toplevel']).stdout.trim();
+  const topLevel = git(['rev-parse', '--show-toplevel']).stdout.replace(/\r?\n$/, '');
   const untracked = git(['-C', topLevel, 'ls-files', '--others', '--exclude-standard', '-z']);
   for (const file of untracked.stdout.split('\0').filter((f) => f !== '')) {
     // --no-index exits 1 when the files differ, which is the expected case.
