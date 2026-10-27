@@ -470,7 +470,7 @@ describe('serve', () => {
   it('fails with the bind hint when the port is loopback-only', async () => {
     mockServe([{ port: 3000, address: '127.0.0.1', public: false }]);
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const prev = process.exitCode;
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     try {
       await buildProgram().parseAsync(
         ['sandboxes', 'serve', ID_A, '--port', '3000', '--', 'python3', '-m', 'http.server', '3000', '--bind', '127.0.0.1'],
@@ -479,10 +479,10 @@ describe('serve', () => {
       const text = err.mock.calls.map((c) => String(c[0])).join('');
       expect(text).toContain('127.0.0.1 only');
       expect(text).toContain('0.0.0.0');
-      expect(process.exitCode).toBe(1);
+      expect(exit).toHaveBeenCalledWith(1);
     } finally {
       err.mockRestore();
-      process.exitCode = prev;
+      exit.mockRestore();
     }
   });
 
@@ -495,7 +495,7 @@ describe('serve', () => {
       return { process: { ...EXITED, exitCode: 2, stdout: 'traceback\n' } };
     });
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const prev = process.exitCode;
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     try {
       await buildProgram().parseAsync(
         ['sandboxes', 'serve', ID_A, '--port', '3000', '--', 'python3', 'bad.py'],
@@ -504,10 +504,31 @@ describe('serve', () => {
       const text = err.mock.calls.map((c) => String(c[0])).join('');
       expect(text).toContain('exited (code 2)');
       expect(text).toContain('traceback');
-      expect(process.exitCode).toBe(1);
+      expect(exit).toHaveBeenCalledWith(1);
     } finally {
       err.mockRestore();
-      process.exitCode = prev;
+      exit.mockRestore();
+    }
+  });
+
+  it('fails instead of printing a URL when the port is owned by a stale listener', async () => {
+    mockServe([{ port: 3000, address: '0.0.0.0', public: true }]);
+    fakeClient.get.mockImplementation(async (path: string) => {
+      if (path.includes('/ports')) return { ports: [{ port: 3000, address: '0.0.0.0', public: true }] };
+      return { process: { ...EXITED, exitCode: 1 } };
+    });
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      await buildProgram().parseAsync(
+        ['sandboxes', 'serve', ID_A, '--port', '3000', '--', 'python3', 'bad.py'],
+        { from: 'user' },
+      );
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(out.mock.calls.map((c) => String(c[0])).join('')).not.toContain('https://3000');
+    } finally {
+      out.mockRestore();
+      exit.mockRestore();
     }
   });
 });
