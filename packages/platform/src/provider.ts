@@ -335,10 +335,19 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
               if (signal?.aborted) throw signal.reason ?? error;
               if (error instanceof PlatformApiError && error.status === 404) {
                 current = null;
-              } else if (isNetworkError(error)) {
+              } else if (
+                isNetworkError(error) ||
+                (error instanceof PlatformApiError && (error.retryable || error.status >= 500))
+              ) {
+                // Transient — keep polling until the deadline.
                 await sleep(CREATE_POLL_MS);
                 continue;
               } else {
+                // A `creating` row exists and its fate is now unknown; it may
+                // still land and bill. Whatever this error is, escaping
+                // without fallback: false would let createWithFallback boot
+                // the same sandbox on the next provider.
+                (error as { fallback?: boolean }).fallback = false;
                 throw error;
               }
             }

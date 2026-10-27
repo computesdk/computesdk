@@ -226,6 +226,39 @@ describe('create', () => {
     expect(calls[0].body?.idempotencyKey).toBe(calls[1].body?.idempotencyKey);
   });
 
+  it('retries transient poll errors and still returns the sandbox', async () => {
+    let gets = 0;
+    const { fetchImpl } = mockFetch((call) => {
+      if (call.method === 'POST') return json({ sandbox: detail({ status: 'creating' }) }, 200);
+      gets += 1;
+      if (gets === 1) return json({ error: 'boom' }, 500);
+      if (gets === 2) return json({ error: 'slow down' }, 429);
+      return json({ sandbox: detail() });
+    });
+    const provider = platform(config(fetchImpl));
+    const sbx = await provider.sandbox.create({});
+    expect(sbx.sandboxId).toBe('sb_1');
+    expect(gets).toBe(3);
+  });
+
+  it('stamps fallback: false when a poll fails non-transiently after a creating row', async () => {
+    const { fetchImpl } = mockFetch((call) =>
+      call.method === 'POST'
+        ? json({ sandbox: detail({ status: 'creating' }) }, 200)
+        : json({ error: 'gone' }, 401),
+    );
+    const provider = platform(config(fetchImpl));
+    const err = await provider.sandbox.create({}).then(
+      () => {
+        throw new Error('expected create to fail');
+      },
+      (e: unknown) => e as { fallback?: boolean },
+    );
+    // The platform box may still be creating — createWithFallback must not
+    // boot a second one on another provider.
+    expect(err.fallback).toBe(false);
+  });
+
   it('does not replay a normal API error', async () => {
     const { fetchImpl, calls } = mockFetch(() =>
       json({ error: 'No capacity', code: 'no_market_capacity' }, 503),
