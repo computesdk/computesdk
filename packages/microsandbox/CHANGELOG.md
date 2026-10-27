@@ -1,5 +1,11 @@
 # @computesdk/microsandbox
 
+## 0.1.19
+
+### Patch Changes
+
+- d24737a: Retry `runCommand` once when the agent's exec stream ends without an exit event — a channel-level flake that was surfacing as a hard failure and dropping all captured output.
+
 ## 0.1.18
 
 ### Patch Changes
