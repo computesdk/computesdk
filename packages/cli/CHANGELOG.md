@@ -1,5 +1,12 @@
 # @computesdk/cli
 
+## 2.5.6
+
+### Patch Changes
+
+- c50c46e: `compute actions dispatch --with-changes`: a workflow file that exists only in your working tree can now be dispatched. The CLI computes the diff before the catalog lookup and, when the diff creates the requested workflow, dispatches it by `repoFullName + workflowPath` so the platform builds the run from the diff. Dispatching a missing `.github/workflows/*` path from a dirty tree without the flag now hints at `--with-changes`.
+- c93d05b: `compute market` now covers the buyer side: `cap` (show/set/clear the org market cap), `bids`, `bid`, `cancel-bid`, `purchases`, `credits`, `ledger`, and `topup` (prints a Stripe checkout link).
+
 ## 2.5.5
 
 ### Patch Changes

@@ -1,5 +1,21 @@
 # @computesdk/namespace
 
+## 1.6.38
+
+### Patch Changes
+
+- e3f821f: Honor `runCommand`'s `options.timeout` server-side. The Namespace CommandService runs each `RunCommandSync` call inside a single RPC, so the caller's timeout is now sent as the Connect `Connect-Timeout-Ms` deadline header — the server aborts the command when it expires instead of the request running away. A client-side abort at timeout + 10s remains as a fallback if the server ignores the deadline. Previously `options.timeout` was accepted but silently ignored.
+- e3f821f: fix(namespace): attach volumes at VM level + bind into container — nsc recipe
+
+  Runtime-attached volumes were mounted directly at the requested `mountPath` on
+  the instance's VM namespace, which the CommandService container never sees —
+  and instances whose volumes can't provision that way are destroyed while
+  waiting for readiness. Mirrors nsc's `cluster run --volume` recipe: the volume
+  mounts VM-side at `/volumes/volumeN` and an `experimental.host_mount` bind
+  exposes it inside the container at the requested `mountPath`.
+
+- e3f821f: Allow per-create shape overrides via `instanceOptions.shape` (virtual_cpu, memory_megabytes, machine_arch, os), previously only settable at provider construction.
+
 ## 1.6.37
 
 ### Patch Changes
