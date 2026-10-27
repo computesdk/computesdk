@@ -1057,11 +1057,19 @@ const RUNNER_EXEC_DRAIN_SLACK_MS = 120_000;
 const RUNNER_READY_WAIT_MS = 180_000;
 const RUNNER_READY_POLL_MS = 2_000;
 
+// While a fresh sandbox attaches, the per-sandbox GET answers 404 - a
+// keep-waiting signal, but only inside this window. A 404 that outlives it
+// means the runner never owned the sandbox (its create went to the account
+// API), and the error must surface so exec's catch can route around the
+// endpoint instead of stalling here for the whole launch budget.
+const RUNNER_NOT_FOUND_GRACE_MS = 30_000;
+
 /**
  * Waits until the runner reports the sandbox ready to exec. While it
  * launches the per-sandbox GET answers 404 (the runner has not attached
- * the sandbox record on its host yet) - that is a keep-waiting signal,
- * not a failure. `stopping`/gone sandboxes throw; anything else unusual
+ * the sandbox record on its host yet) - a keep-waiting signal only until
+ * the attach window is plainly past, when the 404 means "not mine" and
+ * rethrows. `stopping`/gone sandboxes throw; anything else unusual
  * surfaces on expiry.
  */
 async function waitForRunnerReady(
@@ -1071,9 +1079,11 @@ async function waitForRunnerReady(
 ): Promise<void> {
   const deadline = Date.now() + budgetMs;
   let lastState: string | undefined;
+  let notFoundSince: number | undefined;
   for (;;) {
     try {
       const record = await client.get(sandboxId);
+      notFoundSince = undefined;
       lastState = record.state;
       if (record.state === "ready") return;
       if (record.state === "stopping" || record.state === "stopped") {
@@ -1084,6 +1094,8 @@ async function waitForRunnerReady(
     } catch (error) {
       if (!isNotFoundError(error)) throw error;
       lastState = undefined;
+      notFoundSince ??= Date.now();
+      if (Date.now() - notFoundSince >= RUNNER_NOT_FOUND_GRACE_MS) throw error;
     }
     if (Date.now() >= deadline) {
       throw new Error(
@@ -1472,14 +1484,20 @@ async function execInSandbox(
         ) {
           throw error;
         }
-        sandboxTransport.set(sandbox.record.id, "account");
-        sandbox.runner = undefined;
         const response = await miosaRequest<{ data: MiosaExecResult }>(
           sandbox,
           "POST",
           `/sandboxes/${sandbox.record.id}/exec`,
           body,
         );
+        // The account API answering is what proves it owns the sandbox: a
+        // regional sandbox still attaching 404s on the runner too, so
+        // caching "account" on that signal alone would misroute every later
+        // command on this handle even after the sandbox attaches. If this
+        // request 404s as well nothing is learned - the handle stays on the
+        // runner and a later command can succeed once attach completes.
+        sandboxTransport.set(sandbox.record.id, "account");
+        sandbox.runner = undefined;
         result = response.data ?? {};
       }
     } else {

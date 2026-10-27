@@ -13,6 +13,11 @@ const mock = vi.hoisted(() => ({
   execKilled: false,
   detachedDies: false,
   detachedNeverDone: false,
+  detachedNeverStarted: false,
+  detachedLaunchDrops: false,
+  detachedLateClaim: false,
+  detachedLaunches: 0,
+  detachedCommandRuns: 0,
   removeError: null as Error | null,
   stopFailures: 0,
   stopAttempts: 0,
@@ -69,18 +74,40 @@ vi.mock('microsandbox', () => {
       const base = script.match(/\/tmp\/\.csdk-exec-[a-z0-9]+/)?.[0];
       if (base) {
         const [pid, out, err, code] = [`${base}.pid`, `${base}.out`, `${base}.err`, `${base}.code`];
-        if (script.startsWith('setsid ')) {
-          this.fsOps.files.set(pid, '4242');
-          const inner = script;
-          const failed = inner.includes('missing-command');
-          this.fsOps.files.set(out, inner.includes('echo hello') ? 'hello\n' : '');
-          this.fsOps.files.set(err, failed ? 'not found\n' : '');
-          if (!mock.detachedNeverDone) this.fsOps.files.set(code, failed ? '127' : '0');
-          if (mock.detachedDies) this.fsOps.files.delete(code);
+        // Relaunch after a proven-dead worker prefixes `rm -f <pid>;`.
+        const rm = script.match(/^rm -f ([^;]+);/);
+        if (rm) for (const path of rm[1].trim().split(/\s+/)) this.fsOps.files.delete(path);
+        if (script.includes('setsid ')) {
+          mock.detachedLaunches++;
+          const firstLaunch = mock.detachedLaunches === 1;
+          const dropped = mock.detachedLaunchDrops && firstLaunch;
+          // A slow first worker may claim the sentinel just as the relaunch
+          // lands; whichever claims first runs the command, the other must
+          // exit without running it again.
+          if (mock.detachedLateClaim && !firstLaunch && !this.fsOps.files.has(pid)) {
+            this.fsOps.files.set(pid, '9999');
+            this.fsOps.files.set(out, 'late-worker\n');
+            this.fsOps.files.set(err, '');
+            this.fsOps.files.set(code, '0');
+            mock.detachedCommandRuns++;
+          }
+          // The worker's pid write is noclobber: an existing sentinel means
+          // a competing worker owns the run.
+          if (!this.fsOps.files.has(pid) && !mock.detachedNeverStarted && !(dropped && !mock.detachedDies)) {
+            this.fsOps.files.set(pid, '4242');
+            const failed = script.includes('missing-command');
+            this.fsOps.files.set(out, script.includes('echo hello') ? 'hello\n' : '');
+            this.fsOps.files.set(err, failed ? 'not found\n' : '');
+            if (!mock.detachedNeverDone) this.fsOps.files.set(code, failed ? '127' : '0');
+            if (mock.detachedDies && firstLaunch) this.fsOps.files.delete(code);
+            mock.detachedCommandRuns++;
+          }
+          if (dropped) throw new Error('exec session ended without exit event');
           return { code: 0, stdout: () => '', stderr: () => '' };
         }
         if (script.includes('test -f')) {
           if (this.fsOps.files.has(code)) return { code: 0, stdout: () => '', stderr: () => '' };
+          if (!this.fsOps.files.has(pid)) return { code: 3, stdout: () => '', stderr: () => '' };
           if (mock.detachedDies) return { code: 2, stdout: () => '', stderr: () => '' };
           return { code: 1, stdout: () => '', stderr: () => '' };
         }
@@ -240,6 +267,11 @@ beforeEach(async () => {
   mock.execKilled = false;
   mock.detachedDies = false;
   mock.detachedNeverDone = false;
+  mock.detachedNeverStarted = false;
+  mock.detachedLaunchDrops = false;
+  mock.detachedLateClaim = false;
+  mock.detachedLaunches = 0;
+  mock.detachedCommandRuns = 0;
   mock.removeError = null;
   mock.stopFailures = 0;
   mock.stopAttempts = 0;
@@ -601,6 +633,65 @@ describe('microsandbox provider', () => {
     mock.detachedDies = true;
 
     await expect(sandbox.runCommand('echo hello')).rejects.toThrow(/detached command died/);
+  });
+
+  it('fails fast when the detached worker never starts', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'never-box' });
+    mock.detachedNeverStarted = true;
+
+    vi.useFakeTimers();
+    try {
+      const pending = sandbox.runCommand('echo hello');
+      const assertion = expect(pending).rejects.toThrow(/never started/);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs the command once when a late first worker races the relaunch', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'racy-box' });
+    mock.detachedLaunchDrops = true;
+    mock.detachedLateClaim = true;
+
+    vi.useFakeTimers();
+    try {
+      const pending = sandbox.runCommand('echo hello');
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+
+      // The slow first worker claimed the sentinel as the relaunch landed;
+      // the relaunched worker must defer to it, not run the command again.
+      expect(result.stdout).toBe('late-worker\n');
+      expect(result.exitCode).toBe(0);
+      expect(mock.detachedLaunches).toBe(2);
+      expect(mock.detachedCommandRuns).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the stale pid claim before relaunching a dead worker', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'dead-worker-box' });
+    mock.detachedLaunchDrops = true;
+    mock.detachedDies = true;
+
+    vi.useFakeTimers();
+    try {
+      const pending = sandbox.runCommand('echo hello');
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+
+      // The dropped launch's worker claimed the pid then died; the relaunch
+      // must remove that stale claim or its own noclobber claim can never
+      // succeed.
+      expect(result.stdout).toBe('hello\n');
+      expect(result.exitCode).toBe(0);
+      expect(mock.detachedLaunches).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('times out detached commands with partial output and exit 124', async () => {
