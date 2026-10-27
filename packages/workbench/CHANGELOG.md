@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 33.0.22
+
+### Patch Changes
+
+- Updated dependencies [3b0030c]
+  - @computesdk/microsandbox@0.1.21
+
 ## 33.0.21
 
 ### Patch Changes
