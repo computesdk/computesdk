@@ -1654,6 +1654,31 @@ interface TransferComplete {
 /** Stderr progress appears past this size on TTYs. */
 const CP_PROGRESS_MIN_BYTES = 10 * 1024 * 1024;
 
+/** Presigned transfer URLs must be https — except loopback, for local dev. */
+function assertTransferUrl(raw: string): void {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error('platform returned a malformed transfer URL');
+  }
+  if (u.protocol === 'https:') return;
+  const loopback = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(u.hostname);
+  if (!(u.protocol === 'http:' && loopback)) {
+    throw new Error(`refusing insecure transfer URL: ${u.protocol}//${u.hostname} (expected https)`);
+  }
+}
+
+/** tar entries that would write outside the extract root. */
+function tarEntryIsSafe(p: string, entry: unknown): boolean {
+  if (path.isAbsolute(p) || p.split('/').includes('..')) return false;
+  const { type, linkpath } = entry as { type?: string; linkpath?: string };
+  if ((type === 'Link' || type === 'SymbolicLink') && linkpath) {
+    if (path.isAbsolute(linkpath) || linkpath.split('/').includes('..')) return false;
+  }
+  return true;
+}
+
 /**
  * One side of `cp <src> <dst>`: a remote endpoint is `[uuid:]/abs/path`
  * (omitted uuid = the current instance); anything else is a local path —
@@ -1684,13 +1709,13 @@ async function cpCommand(src: string, dst: string, opts: QuietOpts): Promise<voi
   const c = await client(opts);
   if (!sRemote && 'remotePath' in d && 'local' in s) {
     const resolved = resolveSandbox(d.remoteId, opts);
-    const r = await cpUpload(c, resolved.id, s.local, d.remotePath);
+    const r = await cpUpload(c, resolved.id, s.local, d.remotePath, opts);
     output(opts, r, (done) => {
       if (!opts.quiet) console.log(`copied ${done.files} files (${formatBytes(done.bytes)}) → ${shortId(resolved.id)}:${d.remotePath}`);
     });
   } else if ('remotePath' in s && 'local' in d) {
     const resolved = resolveSandbox(s.remoteId, opts);
-    const r = await cpDownload(c, resolved.id, s.remotePath, d.local);
+    const r = await cpDownload(c, resolved.id, s.remotePath, d.local, opts);
     output(opts, r, (done) => {
       if (!opts.quiet) console.log(`copied ${done.files} files (${formatBytes(done.bytes)}) → ${d.local}`);
     });
@@ -1698,8 +1723,8 @@ async function cpCommand(src: string, dst: string, opts: QuietOpts): Promise<voi
 }
 
 /** Write `X/Y MB` progress to stderr while a known total streams by. */
-function cpProgress(total: number): { bump: (n: number) => void; done: () => void } {
-  const show = process.stderr.isTTY && total > CP_PROGRESS_MIN_BYTES;
+function cpProgress(total: number, opts: QuietOpts): { bump: (n: number) => void; done: () => void } {
+  const show = !opts.quiet && !opts.json && process.stderr.isTTY && total > CP_PROGRESS_MIN_BYTES;
   let sent = 0;
   return {
     bump(n) {
@@ -1718,11 +1743,14 @@ async function cpUpload(
   sandboxId: string,
   localPath: string,
   remotePath: string,
+  opts: QuietOpts,
 ): Promise<TransferComplete> {
   // statSync first so a missing path errors before anything is created.
   const abs = path.resolve(localPath);
   fs.statSync(abs);
   const tmp = path.join(os.tmpdir(), `compute-cp-up-${process.pid}-${Date.now()}.tar.gz`);
+  // The tarball can hold sensitive files — pin it to the owner before writing.
+  fs.closeSync(fs.openSync(tmp, 'w', 0o600));
   try {
     await tar.create({ gzip: true, file: tmp, cwd: path.dirname(abs) }, [path.basename(abs)]);
     const size = fs.statSync(tmp).size;
@@ -1731,7 +1759,8 @@ async function cpUpload(
       { direction: 'upload', path: remotePath },
     );
     if (!created.uploadUrl) throw new Error('platform did not return an upload URL');
-    const progress = cpProgress(size);
+    assertTransferUrl(created.uploadUrl);
+    const progress = cpProgress(size, opts);
     try {
       const stream = fs.createReadStream(tmp);
       stream.on('data', (chunk: Buffer | string) => progress.bump(typeof chunk === 'string' ? chunk.length : chunk.byteLength));
@@ -1760,33 +1789,45 @@ async function cpDownload(
   sandboxId: string,
   remotePath: string,
   localDir: string,
+  opts: QuietOpts,
 ): Promise<TransferComplete> {
   const created = await c.post<TransferCreate>(
     `/api/v1/sandboxes/${sandboxId}/transfers`,
     { direction: 'download', path: remotePath },
   );
   if (!created.downloadUrl) throw new Error('platform did not return a download URL');
+  assertTransferUrl(created.downloadUrl);
   const res = await fetch(created.downloadUrl);
   if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
   const tmp = path.join(os.tmpdir(), `compute-cp-dl-${process.pid}-${Date.now()}.tar.gz`);
+  fs.closeSync(fs.openSync(tmp, 'w', 0o600));
   try {
-    const progress = cpProgress(created.bytes ?? 0);
+    const progress = cpProgress(created.bytes ?? 0, opts);
     const ws = fs.createWriteStream(tmp);
-    ws.on('drain', () => undefined);
-    const reader = res.body!.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done || value === undefined) break;
-      progress.bump(value.byteLength);
-      if (!ws.write(value)) await new Promise<void>((r) => ws.once('drain', () => r()));
+    try {
+      // A stream error (e.g. ENOSPC) must fail the copy, not hang on 'drain'.
+      await new Promise<void>((resolve, reject) => {
+        ws.once('error', reject);
+        const reader = res.body!.getReader();
+        const pump = async (): Promise<void> => {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done || value === undefined) break;
+            progress.bump(value.byteLength);
+            if (!ws.write(value)) await new Promise<void>((r) => ws.once('drain', () => r()));
+          }
+        };
+        pump().then(
+          () => ws.end(() => resolve()),
+          reject,
+        );
+      });
+    } finally {
+      ws.destroy();
     }
-    await new Promise<void>((resolve, reject) => {
-      ws.end(() => resolve());
-      ws.on('error', reject);
-    });
     progress.done();
     fs.mkdirSync(localDir, { recursive: true });
-    await tar.extract({ file: tmp, cwd: localDir });
+    await tar.extract({ file: tmp, cwd: localDir, filter: tarEntryIsSafe });
     return { path: localDir, bytes: created.bytes ?? fs.statSync(tmp).size, files: created.files ?? 0 };
   } finally {
     fs.rmSync(tmp, { force: true });
