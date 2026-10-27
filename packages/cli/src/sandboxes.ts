@@ -1322,7 +1322,7 @@ export function registerSandboxesCommands(program: Command): void {
         const res = await c.del<{ ok: boolean }>(
           `/api/v1/sandboxes/${resolved.id}/snapshots/${snap}`,
         );
-        output(opts, res, () => console.log(`deleted snapshot ${snapshotId}`));
+        output(opts, res, () => console.log(`deleted snapshot ${snap}`));
       } catch (e) {
         fail(e, opts);
       }
@@ -1383,10 +1383,11 @@ async function followProcess(
 
 /** The `-d`/`Ctrl-C d` summary — everything needed to re-attach later. */
 function printDetachSummary(sandboxId: string, jobId: string, timeoutText: string): void {
-  console.log(`instance ${shortId(sandboxId)}  job ${jobId}  (running; ${timeoutText})`);
-  console.log(`  follow:   compute instances logs ${jobId}`);
-  console.log(`  wait:     compute instances wait ${jobId}`);
-  console.log(`  destroy:  compute instances destroy ${shortId(sandboxId)}`);
+  console.log(`instance ${sandboxId}  job ${jobId}  (running; ${timeoutText})`);
+  // Explicit ids: COMPUTE_INSTANCE and the pick can point elsewhere.
+  console.log(`  follow:   compute instances logs ${sandboxId} ${jobId}`);
+  console.log(`  wait:     compute instances wait ${sandboxId} ${jobId}`);
+  console.log(`  destroy:  compute instances destroy ${sandboxId}`);
 }
 
 /** The timeout text for the detach summary: requested, else the platform default. */
