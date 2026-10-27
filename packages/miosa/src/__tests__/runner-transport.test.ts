@@ -16,6 +16,9 @@ const runnerSpies = vi.hoisted(() => ({
   createSandbox: vi.fn(),
   execStream: vi.fn(),
   destroySandbox: vi.fn(),
+  // The sandbox is already launched in every test that doesn't script a
+  // launch wait, so the readiness poll answers `ready` by default.
+  get: vi.fn().mockResolvedValue({ state: "ready" }),
   close: vi.fn().mockResolvedValue(undefined),
   transport: undefined as ScriptedTransport | undefined,
   constructed: [] as Array<{
@@ -52,6 +55,7 @@ vi.mock("@miosa/sdk", async (importOriginal) => {
             createSandbox: runnerSpies.createSandbox,
             execStream: runnerSpies.execStream,
             destroySandbox: runnerSpies.destroySandbox,
+            get: runnerSpies.get,
             close: runnerSpies.close,
           };
         },
@@ -146,6 +150,7 @@ describe("regional sandbox endpoint", () => {
     runnerSpies.createSandbox.mockReset();
     runnerSpies.execStream.mockReset();
     runnerSpies.destroySandbox.mockReset();
+    runnerSpies.get.mockReset().mockResolvedValue({ state: "ready" });
     runnerSpies.constructed.length = 0;
     runnerSpies.transport = undefined;
     delete process.env.MIOSA_RUNNER_MODE;
@@ -604,6 +609,41 @@ describe("regional sandbox endpoint", () => {
       expect(result.exitCode).toBe(127);
       expect(result.stderr).toMatch(/runtime_busy/);
     });
+
+    it("should wait for a launching sandbox before streaming the exec", async () => {
+      // Runner create answers while the machine is still coming up; an exec
+      // sent mid-launch dies in the server-side hold. The readiness poll
+      // rides out the launch - a 404 on the per-sandbox route just means
+      // the runner has not attached the record yet.
+      const sandbox = await createRunnerSandbox();
+      runnerSpies.get
+        .mockReset()
+        .mockRejectedValueOnce(
+          Object.assign(new Error("not provisioned"), { status: 404 })
+        )
+        .mockResolvedValue({ state: "ready" });
+      runnerSpies.execStream.mockReturnValueOnce(
+        execStreamEvents({ stdout: "warm\n" })
+      );
+
+      const result = await sandbox.runCommand("echo warm");
+
+      expect(runnerSpies.get).toHaveBeenCalledTimes(2);
+      expect(runnerSpies.execStream).toHaveBeenCalledTimes(1);
+      expect(result.stdout).toBe("warm\n");
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("should fail the command when the sandbox is stopping instead of running it", async () => {
+      const sandbox = await createRunnerSandbox();
+      runnerSpies.get.mockResolvedValue({ state: "stopping" });
+
+      const result = await sandbox.runCommand("echo hi");
+
+      expect(result.exitCode).toBe(127);
+      expect(result.stderr).toMatch(/stopping/);
+      expect(runnerSpies.execStream).not.toHaveBeenCalled();
+    });
   });
 
   describe("destroy", () => {
@@ -883,6 +923,21 @@ describe("regional sandbox endpoint", () => {
             ...(init.body !== undefined ? { body: String(init.body) } : {}),
           };
           runnerCalls.push(call);
+          // The adapter's pre-exec readiness poll is adapter plumbing, not
+          // part of the test's script: every sandbox answers `ready`.
+          if (
+            call.method === "GET" &&
+            /^\/api\/v1\/sandboxes\/[^/]+$/.test(call.path)
+          ) {
+            return {
+              status: 200,
+              headers: {},
+              body: JSON.stringify({
+                status: "ok",
+                result: { instance_id: call.path.split("/").pop(), state: "ready" },
+              }),
+            };
+          }
           const scripted = await reply(call);
           return {
             status: scripted.status,
@@ -1204,6 +1259,7 @@ describe("regional sandbox endpoint", () => {
       expect(result.stdout).toBe("from-runner\n");
       expect(runnerCalls.map((call) => `${call.method} ${call.path}`)).toEqual([
         "POST /api/v1/sandboxes",
+        `GET /api/v1/sandboxes/${sandbox.sandboxId}`,
         `POST /api/v1/sandboxes/${sandbox.sandboxId}/exec/stream`,
         `DELETE /api/v1/sandboxes/${sandbox.sandboxId}`,
       ]);

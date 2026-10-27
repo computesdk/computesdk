@@ -1048,6 +1048,54 @@ function unwrapExecResult(raw: Record<string, unknown>): MiosaExecResult {
 // queueing and final drain ride inside the slack.
 const RUNNER_EXEC_DRAIN_SLACK_MS = 120_000;
 
+// How long exec waits for a runner sandbox to finish launching. Runner
+// create answers while the machine is still coming up (its create result
+// reports state "stopped"), and an exec issued mid-launch parks in a
+// server-side hold that drops the stream after about a minute - before
+// the command ever runs. A fresh sandbox needs the launch window plus a
+// margin; a warm one costs this call a single GET.
+const RUNNER_READY_WAIT_MS = 180_000;
+const RUNNER_READY_POLL_MS = 2_000;
+
+/**
+ * Waits until the runner reports the sandbox ready to exec. While it
+ * launches the per-sandbox GET answers 404 (the runner has not attached
+ * the sandbox record on its host yet) - that is a keep-waiting signal,
+ * not a failure. `stopping`/gone sandboxes throw; anything else unusual
+ * surfaces on expiry.
+ */
+async function waitForRunnerReady(
+  client: MiosaRunnerClient,
+  sandboxId: string,
+  budgetMs: number,
+): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  let lastState: string | undefined;
+  for (;;) {
+    try {
+      const record = await client.get(sandboxId);
+      lastState = record.state;
+      if (record.state === "ready") return;
+      if (record.state === "stopping" || record.state === "stopped") {
+        throw new Error(
+          `miosa runner sandbox ${sandboxId} is ${record.state} - not running the command`,
+        );
+      }
+    } catch (error) {
+      if (!isNotFoundError(error)) throw error;
+      lastState = undefined;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `miosa runner sandbox ${sandboxId} still ${lastState ?? "not provisioned"} after ${Math.round(budgetMs / 1000)}s - never became ready`,
+      );
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(RUNNER_READY_POLL_MS, deadline - Date.now())),
+    );
+  }
+}
+
 /**
  * Runs a command on the runner via exec/stream and folds the events into
  * the buffered result shape callers receive.
@@ -1068,6 +1116,10 @@ async function execOnRunner(
   command: string,
   options?: RunCommandOptions,
 ): Promise<MiosaExecResult> {
+  // A create-then-exec sequence reaches here while the sandbox is still
+  // launching; without the wait the exec's stream dies in the server-side
+  // hold and the command never runs.
+  await waitForRunnerReady(client, sandboxId, RUNNER_READY_WAIT_MS);
   const events = await client.execStream(sandboxId, command, {
     ...(options?.cwd !== undefined ? { cwd: options.cwd } : {}),
     ...(options?.env !== undefined ? { env: options.env } : {}),
@@ -1086,6 +1138,7 @@ async function execOnRunner(
   const iterator = events[Symbol.asyncIterator]();
   const STALLED = Symbol("stalled");
   let stalled = false;
+  let eventsSeen = 0;
   for (;;) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
@@ -1106,6 +1159,7 @@ async function execOnRunner(
     }
     if (raced.done) break;
     const event = raced.value;
+    eventsSeen += 1;
     if (event.type === "stdout") stdout.push(event.line);
     else if (event.type === "stderr") stderr.push(event.line);
     else if (event.type === "exit") exitCode = event.exit_code;
@@ -1118,7 +1172,9 @@ async function execOnRunner(
   } else if (exitCode === undefined) {
     // The stream closed without an exit event - the server dropped the
     // command mid-run, so it cannot report success.
-    stderr.push("runner exec stream ended without an exit event\n");
+    stderr.push(
+      `runner exec stream ended without an exit event after ${eventsSeen} event(s)\n`,
+    );
   }
   // `line` is a raw output chunk (it carries its own newline), so the fold
   // is plain concatenation - the same fold the SDK's own client uses.

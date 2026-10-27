@@ -142,6 +142,21 @@ describe("lazy create", () => {
               : (JSON.parse(String(init.body)) as Record<string, unknown>),
         };
         runnerCalls.push(call);
+        // The adapter's pre-exec readiness poll is adapter plumbing, not
+        // part of the test's script: every sandbox answers `ready`.
+        if (
+          call.method === "GET" &&
+          /^\/api\/v1\/sandboxes\/[^/]+$/.test(call.path)
+        ) {
+          return {
+            status: 200,
+            headers: {},
+            body: JSON.stringify({
+              status: "ok",
+              result: { instance_id: call.path.split("/").pop(), state: "ready" },
+            }),
+          };
+        }
         const scripted = await reply(call);
         return {
           status: scripted.status,
@@ -419,6 +434,7 @@ describe("lazy create", () => {
 
       expect(runnerPaths()).toEqual([
         "POST /api/v1/sandboxes",
+        `GET /api/v1/sandboxes/${REAL_ID}`,
         `POST /api/v1/sandboxes/${REAL_ID}/exec/stream`,
       ]);
       expect(second.stdout).toBe("from-exec\n");
@@ -434,6 +450,7 @@ describe("lazy create", () => {
 
       expect(runnerPaths()).toEqual([
         "POST /api/v1/sandboxes",
+        `GET /api/v1/sandboxes/${REAL_ID}`,
         `POST /api/v1/sandboxes/${REAL_ID}/exec/stream`,
       ]);
       expect(creates()).toHaveLength(1);
