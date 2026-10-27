@@ -98,7 +98,7 @@ export interface CiRun {
    * `[]` when the workflow ran no benchmark; a benchmark still running is listed
    * with `providers: []` until its summary is uploaded.
    */
-  results?: CiRunBenchmarkResult[];
+  benchmarks?: CiRunBenchmarkResult[];
 }
 
 /** One benchmark run linked to an Actions run, from `GET /api/v1/actions/runs/{id}`. */

@@ -37,7 +37,7 @@ Resolution order: `--api-key` → `COMPUTE_API_KEY` → `BENCHMARKS_PLATFORM_API
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...] [--manual]
 compute actions runs <repo> [--status ...] [--branch ...]
 compute actions history <repo> --workflow <path|name> [--branch ...] [--job] [--limit n]
-compute actions run|summary|inspect|results <run-id>
+compute actions run|summary|inspect|benchmarks <run-id>
 compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
 compute actions cancel|rerun <run-id>
 compute actions artifacts <run-id> [--job] [--out <dir>]
@@ -116,11 +116,11 @@ A run that executed a benchmark (`@benchsdk/runner` reports `COMPUTESDK_RUN_ID`)
 numbers; agents read them instead of parsing logs:
 
 ```bash
-compute actions results <run-id>          # per-provider score / success table (overall rows)
-compute actions results <run-id> --json   # { runId, conclusion, results: [{ benchmarkSlug, status, dashboardUrl, providers: [...] }] }
+compute actions benchmarks <run-id>          # per-provider score / success table (overall rows)
+compute actions benchmarks <run-id> --json   # { runId, conclusion, benchmarks: [{ benchmarkSlug, status, dashboardUrl, providers: [...] }] }
 ```
 
-`results: []` means the workflow ran no benchmark; a benchmark still running is listed with
+`benchmarks: []` means the workflow ran no benchmark (Actions is general CI — `results` is not used for this); a benchmark still running is listed with
 `providers: []` until its summary uploads. `--json` includes every dimension row (e.g. `phase`);
 the table shows each provider's overall row. The Actions conclusion is the job exit code — a
 provider failing tasks shows as `successRate < 1` here, not as a failed run.

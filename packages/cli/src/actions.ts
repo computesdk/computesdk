@@ -249,7 +249,7 @@ export function formatRunDetail(run: CiRun, runUrl?: string): string {
   if (run.providerOverride) lines.push(`dispatched to: ${run.providerOverride}`);
   if (run.supersededByRunId) lines.push(`superseded by: ${run.supersededByRunId}`);
   if (runUrl) lines.push(`url: ${runUrl}`);
-  if (run.results && run.results.length > 0) lines.push(`results: ${resultsSummary(run.results)}`);
+  if (run.benchmarks && run.benchmarks.length > 0) lines.push(`benchmarks: ${resultsSummary(run.benchmarks)}`);
   if (run.jobs.length > 0) {
     lines.push('');
     lines.push(pc.bold('jobs'));
@@ -303,7 +303,7 @@ function formatRate(n: number | null): string {
   return n === null ? '-' : `${Math.round(n * 100)}%`;
 }
 
-/** `compute actions results` — per-provider score table for each linked benchmark run. */
+/** `compute actions benchmarks` — per-provider score table for each linked benchmark run. */
 export function formatRunResults(results: CiRunBenchmarkResult[]): string {
   if (results.length === 0) return pc.dim('no benchmark results on this run');
   const lines: string[] = [];
@@ -1121,14 +1121,14 @@ export function registerActionsCommands(program: Command): void {
 
   common(
     actions
-      .command('results')
-      .description('Show the benchmark results a run produced: per-provider score and success rate')
+      .command('benchmarks')
+      .description('Show the benchmark runs this run produced: per-provider score and success rate')
       .argument('<run-id>', 'run ID'),
   ).action(async (runId: string, opts: CommonOpts) => {
     try {
       const run = await (await client(opts)).get<CiRun>(`/api/v1/actions/runs/${runId}`);
-      const results = run.results ?? [];
-      output(opts, { runId: run.id, conclusion: run.conclusion, results }, () => console.log(formatRunResults(results)));
+      const benchmarks = run.benchmarks ?? [];
+      output(opts, { runId: run.id, conclusion: run.conclusion, benchmarks }, () => console.log(formatRunResults(benchmarks)));
     } catch (e) {
       fail(e, opts);
     }
