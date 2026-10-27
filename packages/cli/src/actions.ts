@@ -319,7 +319,7 @@ export function formatRunResults(results: CiRunBenchmarkResult[]): string {
   for (const [i, result] of results.entries()) {
     if (i > 0) lines.push('');
     lines.push(`${pc.bold(safeTerm(result.benchmarkName))}  ${safeTerm(result.status)}`);
-    lines.push(pc.dim(`${result.benchmarkRunId}  ${result.dashboardUrl}`));
+    lines.push(pc.dim(`${safeTerm(result.benchmarkRunId)}  ${safeTerm(result.dashboardUrl)}`));
     const rows = [...overallRows(result)].sort((a, b) => (b.compositeScore ?? -1) - (a.compositeScore ?? -1));
     if (rows.length === 0) {
       lines.push(pc.dim(result.status === 'failed' ? '  failed before reporting results' : '  no results yet'));

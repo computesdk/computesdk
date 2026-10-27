@@ -1170,6 +1170,15 @@ describe('formatRunResults', () => {
     expect(resultsSummary([{ ...result, providers: [] }])).toBe('sandbox-cpu (completed, no results yet)');
   });
 
+  it('strips control characters from the run id and dashboard URL', () => {
+    const out = formatRunResults([
+      { ...result, benchmarkRunId: 'run\u001b[31m-x', dashboardUrl: 'https://platform.computesdk.com/r\u0007un' },
+    ]);
+    expect(out).not.toContain('\u001b');
+    expect(out).not.toContain('\u0007');
+    expect(out).toContain('https://platform.computesdk.com/r');
+  });
+
   it('digest does not count an unreported success rate as a failure', () => {
     const providers = result.providers.map((p) => ({ ...p, successRate: null }));
     expect(resultsSummary([{ ...result, providers }])).toBe('sandbox-cpu · 2 providers');
