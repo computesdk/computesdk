@@ -46,6 +46,8 @@ import {
   type CiRepoSyncResponse,
   type CiReposResponse,
   type CiRun,
+  type CiRunBenchmarkProvider,
+  type CiRunBenchmarkResult,
   type CiRunHistory,
   type CiRunInspection,
   type CiRunSummary,
@@ -247,6 +249,7 @@ export function formatRunDetail(run: CiRun, runUrl?: string): string {
   if (run.providerOverride) lines.push(`dispatched to: ${run.providerOverride}`);
   if (run.supersededByRunId) lines.push(`superseded by: ${run.supersededByRunId}`);
   if (runUrl) lines.push(`url: ${runUrl}`);
+  if (run.benchmarks && run.benchmarks.length > 0) lines.push(`benchmarks: ${resultsSummary(run.benchmarks)}`);
   if (run.jobs.length > 0) {
     lines.push('');
     lines.push(pc.bold('jobs'));
@@ -262,6 +265,74 @@ export function formatRunDetail(run: CiRun, runUrl?: string): string {
         const exit = step.exitCode === null ? '' : ` (exit ${step.exitCode})`;
         lines.push(pc.dim(`    ${step.name}  ${step.state}${exit}  ${formatDuration(step.durationMs)}`));
       }
+    }
+  }
+  return lines.join('\n');
+}
+
+/** One-line digest: `sandbox-cpu · 26 providers · 13 failed`. */
+export function resultsSummary(results: CiRunBenchmarkResult[]): string {
+  return results
+    .map((r) => {
+      const rows = overallRows(r);
+      if (rows.length === 0) return `${safeTerm(r.benchmarkSlug)} (${safeTerm(r.status)}, no results yet)`;
+      const failed = rows.filter((p) => !p.skipped && p.successRate !== null && p.successRate < 1).length;
+      return `${safeTerm(r.benchmarkSlug)} · ${rows.length} providers${failed > 0 ? ` · ${failed} failed` : ''}`;
+    })
+    .join('; ');
+}
+
+/**
+ * The runner reports one overall row per provider (`dimensions: {}`) plus one
+ * per dimension (e.g. phase). The table shows one row per provider — its
+ * overall row, or its best dimension row when it has no overall; `--json` has all.
+ */
+function overallRows(result: CiRunBenchmarkResult): CiRunBenchmarkProvider[] {
+  const byProvider = new Map<string, CiRunBenchmarkProvider>();
+  for (const p of result.providers) {
+    const cur = byProvider.get(p.provider);
+    const isOverall = Object.keys(p.dimensions).length === 0;
+    const curIsOverall = cur ? Object.keys(cur.dimensions).length === 0 : false;
+    if (!cur || (isOverall && !curIsOverall) || (!curIsOverall && (p.compositeScore ?? -1) > (cur.compositeScore ?? -1))) {
+      byProvider.set(p.provider, p);
+    }
+  }
+  return Array.from(byProvider.values());
+}
+
+function formatScore(n: number | null): string {
+  return n === null ? '-' : n.toFixed(2);
+}
+
+function formatMetric(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(Math.abs(n) >= 100 ? 1 : 2);
+}
+
+function formatRate(n: number | null): string {
+  return n === null ? '-' : `${Math.round(n * 100)}%`;
+}
+
+/** `compute actions benchmarks` — per-provider score table for each linked benchmark run. */
+export function formatRunResults(results: CiRunBenchmarkResult[]): string {
+  if (results.length === 0) return pc.dim('no benchmark results on this run');
+  const lines: string[] = [];
+  for (const [i, result] of results.entries()) {
+    if (i > 0) lines.push('');
+    lines.push(`${pc.bold(safeTerm(result.benchmarkName))}  ${safeTerm(result.status)}`);
+    lines.push(pc.dim(`${safeTerm(result.benchmarkRunId)}  ${safeTerm(result.dashboardUrl)}`));
+    const rows = [...overallRows(result)].sort((a, b) => (b.compositeScore ?? -1) - (a.compositeScore ?? -1));
+    if (rows.length === 0) {
+      lines.push(pc.dim(result.status === 'failed' ? '  failed before reporting results' : '  no results yet'));
+      continue;
+    }
+    const width = Math.max(8, ...rows.map((p) => p.provider.length));
+    lines.push(pc.dim(`  ${'provider'.padEnd(width)}  ${'score'.padStart(7)}  ${'success'.padStart(7)}  metrics`));
+    for (const p of rows) {
+      const metrics = Object.entries(p.metrics)
+        .map(([name, m]) => `${safeTerm(name)} ${formatMetric(m.median)}${m.unit ? safeTerm(m.unit) : ''}`)
+        .join('  ');
+      const status = p.skipped ? pc.dim(`skipped${p.skipReason ? `: ${safeTerm(p.skipReason)}` : ''}`) : metrics;
+      lines.push(`  ${safeTerm(p.provider).padEnd(width)}  ${formatScore(p.compositeScore).padStart(7)}  ${formatRate(p.successRate).padStart(7)}  ${status}`);
     }
   }
   return lines.join('\n');
@@ -1052,6 +1123,21 @@ export function registerActionsCommands(program: Command): void {
     try {
       const summary = await (await client(opts)).get<CiRunSummary>(`/api/v1/actions/runs/${runId}/summary`);
       output(opts, summary, (s) => console.log(formatRunSummary(s)));
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    actions
+      .command('benchmarks')
+      .description('Show the benchmark runs this run produced: per-provider score and success rate')
+      .argument('<run-id>', 'run ID'),
+  ).action(async (runId: string, opts: CommonOpts) => {
+    try {
+      const run = await (await client(opts)).get<CiRun>(`/api/v1/actions/runs/${runId}`);
+      const benchmarks = run.benchmarks ?? [];
+      output(opts, { runId: run.id, conclusion: run.conclusion, benchmarks }, () => console.log(formatRunResults(benchmarks)));
     } catch (e) {
       fail(e, opts);
     }
