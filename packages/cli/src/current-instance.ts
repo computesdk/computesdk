@@ -13,13 +13,17 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /** Resolved lazily so tests can point BENCHSDK_STATE_DIR at a tmp dir. */
+function stateDir(): string {
+  return process.env.BENCHSDK_STATE_DIR ?? join(homedir(), '.benchsdk');
+}
+
 function statePath(): string {
-  return join(process.env.BENCHSDK_STATE_DIR ?? join(homedir(), '.benchsdk'), 'current-instances.json');
+  return join(stateDir(), 'current-instances.json');
 }
 
 /** `[dirKey][orgKey] = sandboxId`. */
@@ -53,6 +57,19 @@ export function orgKey(opts: { org?: string; apiKey?: string }): string {
   if (slug) return `org:${slug}`;
   const key = opts.apiKey || process.env.COMPUTE_API_KEY || process.env.BENCHMARKS_PLATFORM_API_KEY;
   if (key) return `key:${createHash('sha256').update(key).digest('hex').slice(0, 12)}`;
+  // OAuth login: key the pick to the org recorded by the last `org use` on
+  // this machine (a cache — the consent row is the truth), so switching orgs
+  // doesn't silently reuse the previous org's instance.
+  try {
+    const raw = JSON.parse(readFileSync(join(stateDir(), 'credentials.json'), 'utf8')) as {
+      orgId?: string;
+      orgSlug?: string;
+    };
+    const org = raw?.orgId ?? raw?.orgSlug;
+    if (org) return `org:${org}`;
+  } catch {
+    // No stored login — unauthenticated commands share 'default'.
+  }
   return 'default';
 }
 
@@ -67,26 +84,64 @@ function readStore(): Store {
 }
 
 function writeStore(store: Store): void {
-  mkdirSync(join(statePath(), '..'), { recursive: true });
-  writeFileSync(statePath(), JSON.stringify(store, null, 2) + '\n', { mode: 0o600 });
+  mkdirSync(stateDir(), { recursive: true });
+  // tmp+rename: readers never see a truncated file, and the rename lands with
+  // the fresh file's 0600 mode even when replacing a permissive old one.
+  const tmp = `${statePath()}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(store, null, 2) + '\n', { mode: 0o600 });
+  renameSync(tmp, statePath());
+}
+
+/**
+ * mkdir is atomic: the first creator wins. Writers serialize their
+ * read-modify-write so two commands updating different picks can't clobber
+ * each other; gives up after ~1s rather than hang on a stale lock dir.
+ */
+function withStoreLock<T>(fn: () => T): T {
+  const lock = `${statePath()}.lock`;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      mkdirSync(lock);
+      break;
+    } catch {
+      if (attempt === 99) return fn();
+      const until = Date.now() + 10;
+      while (Date.now() < until) {
+        // spin — writes take microseconds, so a short busy wait suffices
+      }
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try {
+      rmSync(lock, { recursive: true, force: true });
+    } catch {
+      // Already gone — another process took over a stale lock.
+    }
+  }
 }
 
 /** Persist `sandboxId` as the current instance for this directory + org. */
 export function setCurrentInstance(sandboxId: string, org: string, dir = dirKey()): void {
-  const store = readStore();
-  (store[dir] ??= {})[org] = sandboxId;
-  writeStore(store);
+  withStoreLock(() => {
+    const store = readStore();
+    (store[dir] ??= {})[org] = sandboxId;
+    writeStore(store);
+  });
 }
 
 /** Forget this directory + org's current instance; returns the forgotten id. */
 export function clearCurrentInstance(org: string, dir = dirKey()): string | undefined {
-  const store = readStore();
-  const prev = store[dir]?.[org];
-  if (prev === undefined) return undefined;
-  delete store[dir][org];
-  if (Object.keys(store[dir]).length === 0) delete store[dir];
-  writeStore(store);
-  return prev;
+  return withStoreLock(() => {
+    const store = readStore();
+    const prev = store[dir]?.[org];
+    if (prev === undefined) return undefined;
+    delete store[dir][org];
+    if (Object.keys(store[dir]).length === 0) delete store[dir];
+    writeStore(store);
+    return prev;
+  });
 }
 
 /** What `use --clear` and destroyed-instance cleanup report on. */
