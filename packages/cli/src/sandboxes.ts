@@ -450,6 +450,28 @@ function requireUuidOrImplicit(argId: string | undefined, opts: QuietOpts): Reso
   return resolveSandbox(argId, opts);
 }
 
+/**
+ * `[resourceOrSandboxId] [resourceId]` commands (logs/wait/kill/stdin/
+ * close-stdin/snapshot-delete): one positional is the resource on the
+ * implicit instance — UUID-shaped or not; two positionals are always
+ * `<sandboxId> <resourceId>`.
+ */
+function resolveTwoArgTarget(
+  argId: string | undefined,
+  resourceId: string | undefined,
+  opts: QuietOpts,
+  label: string,
+): { resolved: ResolvedSandbox; resource: string } {
+  if (resourceId === undefined) {
+    if (argId === undefined) throw new Error(`missing ${label}`);
+    return { resolved: resolveSandbox(undefined, opts), resource: argId };
+  }
+  if (argId !== undefined && !isUuid(argId)) {
+    throw new Error(`"${argId}" is not a sandbox ID — expected a UUID.`);
+  }
+  return { resolved: resolveSandbox(argId, opts), resource: resourceId };
+}
+
 // ─── create/run shared flags ─────────────────────────────────────────────────
 
 /** The create options `create` and `run` share — declared once. */
@@ -535,12 +557,13 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--base-url <url>', 'platform base URL')
     .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
     .option('--json', 'print the raw response')
-    .action(async (opts: QuietOpts & CreateFlagOpts & { noUse?: boolean }) => {
+    .action(async (opts: QuietOpts & CreateFlagOpts & { use?: boolean }) => {
       try {
         checkQuietJson(opts);
         const c = await client(opts);
         const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', buildCreateBody(opts));
-        if (!opts.noUse) {
+        // Commander stores --no-use as `use: false`.
+        if (opts.use !== false) {
           setCurrentInstance(res.sandbox.id, orgKey(opts));
           if (!opts.json && !opts.quiet) {
             console.error(pc.dim(`instance ${shortId(res.sandbox.id)} (current for ${dirKey()})`));
@@ -862,17 +885,7 @@ export function registerSandboxesCommands(program: Command): void {
     .action(async (argId: string | undefined, jobId: string | undefined, opts: QuietOpts & { follow?: boolean }) => {
       try {
         // `logs <jobId>` — a non-UUID first positional is the job, not the instance.
-        let resolved: ResolvedSandbox;
-        let job: string;
-        if (argId !== undefined && !isUuid(argId)) {
-          if (jobId !== undefined) throw new Error(`"${argId}" is not a sandbox ID — expected a UUID.`);
-          resolved = resolveSandbox(undefined, opts);
-          job = argId;
-        } else {
-          resolved = resolveSandbox(argId, opts);
-          if (jobId === undefined) throw new Error('missing jobId');
-          job = jobId;
-        }
+        const { resolved, resource: job } = resolveTwoArgTarget(argId, jobId, opts, 'jobId');
         const c = await client(opts);
         if (opts.follow) {
           await followProcess(c, resolved.id, job);
@@ -899,17 +912,7 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .action(async (argId: string | undefined, jobId: string | undefined, opts: QuietOpts & { timeoutMs?: string }) => {
       try {
-        let resolved: ResolvedSandbox;
-        let job: string;
-        if (argId !== undefined && !isUuid(argId)) {
-          if (jobId !== undefined) throw new Error(`"${argId}" is not a sandbox ID — expected a UUID.`);
-          resolved = resolveSandbox(undefined, opts);
-          job = argId;
-        } else {
-          resolved = resolveSandbox(argId, opts);
-          if (jobId === undefined) throw new Error('missing jobId');
-          job = jobId;
-        }
+        const { resolved, resource: job } = resolveTwoArgTarget(argId, jobId, opts, 'jobId');
         const c = await client(opts);
         const res = await c.post<{ process: SandboxProcessStatus }>(
           `/api/v1/sandboxes/${resolved.id}/processes/${job}/wait`,
@@ -933,17 +936,7 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .action(async (argId: string | undefined, jobId: string | undefined, opts: QuietOpts & { signal?: string }) => {
       try {
-        let resolved: ResolvedSandbox;
-        let job: string;
-        if (argId !== undefined && !isUuid(argId)) {
-          if (jobId !== undefined) throw new Error(`"${argId}" is not a sandbox ID — expected a UUID.`);
-          resolved = resolveSandbox(undefined, opts);
-          job = argId;
-        } else {
-          resolved = resolveSandbox(argId, opts);
-          if (jobId === undefined) throw new Error('missing jobId');
-          job = jobId;
-        }
+        const { resolved, resource: job } = resolveTwoArgTarget(argId, jobId, opts, 'jobId');
         const c = await client(opts);
         const res = await c.post<{ process: SandboxProcessStatus }>(
           `/api/v1/sandboxes/${resolved.id}/processes/${job}/kill`,
@@ -965,17 +958,7 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .action(async (argId: string | undefined, jobId: string | undefined, opts: QuietOpts & { data?: string; file?: string; base64?: boolean }) => {
       try {
-        let resolved: ResolvedSandbox;
-        let job: string;
-        if (argId !== undefined && !isUuid(argId)) {
-          if (jobId !== undefined) throw new Error(`"${argId}" is not a sandbox ID — expected a UUID.`);
-          resolved = resolveSandbox(undefined, opts);
-          job = argId;
-        } else {
-          resolved = resolveSandbox(argId, opts);
-          if (jobId === undefined) throw new Error('missing jobId');
-          job = jobId;
-        }
+        const { resolved, resource: job } = resolveTwoArgTarget(argId, jobId, opts, 'jobId');
         let data = opts.data;
         if (data === undefined && opts.file) {
           const { readFile } = await import('node:fs/promises');
@@ -1018,17 +1001,7 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .action(async (argId: string | undefined, jobId: string | undefined, opts: QuietOpts) => {
       try {
-        let resolved: ResolvedSandbox;
-        let job: string;
-        if (argId !== undefined && !isUuid(argId)) {
-          if (jobId !== undefined) throw new Error(`"${argId}" is not a sandbox ID — expected a UUID.`);
-          resolved = resolveSandbox(undefined, opts);
-          job = argId;
-        } else {
-          resolved = resolveSandbox(argId, opts);
-          if (jobId === undefined) throw new Error('missing jobId');
-          job = jobId;
-        }
+        const { resolved, resource: job } = resolveTwoArgTarget(argId, jobId, opts, 'jobId');
         const c = await client(opts);
         const res = await c.post<{ ok: boolean }>(
           `/api/v1/sandboxes/${resolved.id}/processes/${job}/close-stdin`,
@@ -1282,17 +1255,7 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--json', 'print the raw response')
     .action(async (argId: string | undefined, snapshotId: string | undefined, opts: QuietOpts) => {
       try {
-        let resolved: ResolvedSandbox;
-        let snap: string;
-        if (argId !== undefined && !isUuid(argId)) {
-          if (snapshotId !== undefined) throw new Error(`"${argId}" is not a sandbox ID — expected a UUID.`);
-          resolved = resolveSandbox(undefined, opts);
-          snap = argId;
-        } else {
-          resolved = resolveSandbox(argId, opts);
-          if (snapshotId === undefined) throw new Error('missing snapshotId');
-          snap = snapshotId;
-        }
+        const { resolved, resource: snap } = resolveTwoArgTarget(argId, snapshotId, opts, 'snapshotId');
         const c = await client(opts);
         const res = await c.del<{ ok: boolean }>(
           `/api/v1/sandboxes/${resolved.id}/snapshots/${snap}`,
@@ -1469,7 +1432,10 @@ async function runInstanceCommand(
     if (detachRequested) {
       setCurrentInstance(sandbox.id, org);
       printDetachSummary(sandbox.id, jobId, runTimeoutText(opts));
-    } else if (opts.keep) {
+    } else if (opts.keep && exitCode !== null) {
+      // --keep only keeps a run that reached an exit; a wait error or a
+      // destroy request falls through to deletion so a failed run can't
+      // leave a running instance behind.
       setCurrentInstance(sandbox.id, org);
       if (opts.quiet) console.log(sandbox.id);
       else {
