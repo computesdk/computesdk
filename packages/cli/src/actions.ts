@@ -586,8 +586,20 @@ function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: st
  * is run anyway; such a run has no inputs, so any given are refused rather
  * than silently dropped. A dispatchable workflow keeps its inputs either way.
  */
+/** A workflow that exists only in the dispatched diff: addressed by path since it has no catalog row yet. */
+export type PatchedWorkflowTarget = { repoFullName: string; workflowPath: string };
+
+export function isPatchedWorkflowTarget(target: CiWorkflow | PatchedWorkflowTarget): target is PatchedWorkflowTarget {
+  return 'workflowPath' in target;
+}
+
+/** True when a unified diff creates or edits `path` (a `+++ b/<path>` header). */
+export function patchTouches(patch: string, path: string): boolean {
+  return patch.split('\n').some((line) => line === `+++ b/${path}`);
+}
+
 export function dispatchBody(
-  workflow: CiWorkflow,
+  workflow: CiWorkflow | PatchedWorkflowTarget,
   opts: {
     ref?: string;
     inputs?: string[];
@@ -600,26 +612,27 @@ export function dispatchBody(
     patchId?: string;
   },
 ): Record<string, unknown> {
-  if (!workflow.dispatchable && !opts.manual) {
+  const patched = isPatchedWorkflowTarget(workflow);
+  if (!patched && !workflow.dispatchable && !opts.manual) {
     throw new ActionsCliError(
       'invalid_argument',
       `Workflow "${workflow.path}" does not declare workflow_dispatch. Pass --manual to run it anyway (no inputs).`,
     );
   }
-  if (!workflow.dispatchable && opts.inputs !== undefined && opts.inputs.length > 0) {
+  if (!patched && !workflow.dispatchable && opts.inputs !== undefined && opts.inputs.length > 0) {
     throw new ActionsCliError(
       'invalid_argument',
       `Workflow "${workflow.path}" has no workflow_dispatch inputs; --manual runs of it take no --inputs.`,
     );
   }
-  const ref = opts.ref ?? workflow.refs[0];
+  const ref = opts.ref ?? (patched ? undefined : workflow.refs[0]);
   if (!ref) throw new ActionsCliError('invalid_argument', 'No --ref given and the workflow has no watched refs.');
   if (opts.providerRegion !== undefined && opts.provider === undefined) {
     throw new ActionsCliError('invalid_argument', '--provider-region requires --provider.');
   }
   const maxPrice = maxPriceFields(opts.maxBid, opts.maxBidPer);
   return {
-    workflowId: workflow.id,
+    ...(patched ? { repoFullName: workflow.repoFullName, workflowPath: workflow.workflowPath } : { workflowId: workflow.id }),
     ref,
     inputs: parseInputs(opts.inputs),
     ...(opts.manual && { manual: true }),
@@ -882,36 +895,45 @@ export function registerActionsCommands(program: Command): void {
   ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string; maxBid?: string; maxBidPer?: string; withChanges?: boolean }) => {
     try {
       const c = await client(opts);
+      let ref = opts.ref;
+      let local: ReturnType<typeof localChangesPatch> = null;
+      if (opts.withChanges) {
+        ref ??= currentBranch() ?? undefined;
+        if (!ref) throw new ActionsCliError('invalid_argument', '--with-changes needs a branch: check one out or pass --ref.');
+        local = localChangesPatch(ref, undefined, repo);
+      } else if (!opts.json && hasLocalChanges()) {
+        console.error(pc.dim('You have uncommitted changes. Add --with-changes to run them.'));
+      }
       const { workflows } = await c.get<{ workflows: CiWorkflow[] }>(
         '/api/v1/actions/workflows',
         { repo },
       );
-      const workflow = matchWorkflow(workflows, opts.workflow);
+      // A workflow file the diff creates has no catalog row yet; the platform
+      // builds the run's definition from the diff when addressed by path.
+      const workflow: CiWorkflow | PatchedWorkflowTarget | undefined =
+        matchWorkflow(workflows, opts.workflow) ??
+        (local && patchTouches(local.patch, opts.workflow) ? { repoFullName: repo, workflowPath: opts.workflow } : undefined);
       if (!workflow) {
         const choices = workflows.map((w) => `${w.path} (${w.name})`).join(', ') || 'none';
+        const hint =
+          !opts.withChanges && hasLocalChanges() && /^\.github\/workflows\//.test(opts.workflow)
+            ? ' If it only exists in your working tree, add --with-changes.'
+            : '';
         throw new ActionsCliError(
           'workflow_not_found',
-          `No workflow "${opts.workflow}" in ${repo}. Available: ${choices}`,
+          `No workflow "${opts.workflow}" in ${repo}. Available: ${choices}${hint}`,
         );
       }
       let patch: { patchId: string; files: number; bytes: number } | undefined;
-      let ref = opts.ref;
-      if (opts.withChanges) {
-        ref ??= currentBranch() ?? undefined;
-        if (!ref) throw new ActionsCliError('invalid_argument', '--with-changes needs a branch: check one out or pass --ref.');
-        const local = localChangesPatch(ref, undefined, repo);
-        if (local) {
-          const uploaded = await c.postText<{ patchId: string; sha256: string; bytes: number; files: number }>(
-            '/api/v1/actions/patches',
-            local.patch,
-            'text/x-patch; charset=utf-8',
-          );
-          patch = { patchId: uploaded.patchId, files: uploaded.files, bytes: uploaded.bytes };
-        } else if (!opts.json) {
-          console.error(pc.dim(`no local changes beyond origin/${ref.replace(/^refs\/heads\//, '')}; running the ref as is`));
-        }
-      } else if (!opts.json && hasLocalChanges()) {
-        console.error(pc.dim('You have uncommitted changes. Add --with-changes to run them.'));
+      if (local) {
+        const uploaded = await c.postText<{ patchId: string; sha256: string; bytes: number; files: number }>(
+          '/api/v1/actions/patches',
+          local.patch,
+          'text/x-patch; charset=utf-8',
+        );
+        patch = { patchId: uploaded.patchId, files: uploaded.files, bytes: uploaded.bytes };
+      } else if (opts.withChanges && !opts.json && ref) {
+        console.error(pc.dim(`no local changes beyond origin/${ref.replace(/^refs\/heads\//, '')}; running the ref as is`));
       }
       const body = dispatchBody(workflow, { ...opts, ref, patchId: patch?.patchId });
       const result = await c.post<{ runId: string; created: boolean; headSha: string }>(
