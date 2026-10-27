@@ -255,14 +255,18 @@ function toInfo(detail: SandboxDetail, createTimeout?: number): InstanceInfo {
   };
 }
 
+function checkCommandLength(command: string): void {
+  if (new TextEncoder().encode(command).length > COMMAND_LENGTH_LIMIT_BYTES) {
+    throw invalidArgument(`Commands are limited to ${COMMAND_LENGTH_LIMIT_BYTES / 1024} KB on the platform`);
+  }
+}
+
 function commandBody(
   inst: PlatformInstance,
   command: string,
   options?: RunCommandOptions,
 ): Record<string, unknown> {
-  if (new TextEncoder().encode(command).length > COMMAND_LENGTH_LIMIT_BYTES) {
-    throw invalidArgument(`Commands are limited to ${COMMAND_LENGTH_LIMIT_BYTES / 1024} KB on the platform`);
-  }
+  checkCommandLength(command);
   const body: Record<string, unknown> = { command };
   if (options?.timeout !== undefined) {
     if (options.timeout > COMMAND_TIMEOUT_LIMIT_MS) throw invalidArgument(COMMAND_TIMEOUT_MESSAGE);
@@ -297,9 +301,12 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
           } catch (error) {
             if (signal?.aborted) throw signal.reason ?? error;
             // Network error or client timeout: the row may exist — replay
-            // the same request under the same idempotency key.
-            if ((isNetworkError(error) || isTimeoutError(error)) && Date.now() < deadline) {
-              continue;
+            // the same request under the same idempotency key until the
+            // deadline, then admit the outcome is unknowable rather than
+            // let a fallback provider double-boot.
+            if (isNetworkError(error) || isTimeoutError(error)) {
+              if (Date.now() < deadline) continue;
+              throw outcomeUnknown(key);
             }
             throw error;
           }
@@ -345,15 +352,7 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
 
           // A box may exist and be billing — falling back to another
           // provider would boot a second one.
-          if (Date.now() >= deadline) {
-            const err = new PlatformClientError(
-              'create_outcome_unknown',
-              `Sandbox create outcome unknown after 6 minutes (idempotencyKey: ${key}). ` +
-                'Check the org dashboard before retrying — the sandbox may still be creating.',
-            );
-            err.fallback = false;
-            throw err;
-          }
+          if (Date.now() >= deadline) throw outcomeUnknown(key);
         }
       },
 
@@ -406,6 +405,8 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
 
       runCommand: async (inst: PlatformInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         if (options?.background) {
+          // Same request-size guard the buffered path applies.
+          checkCommandLength(command);
           await request(
             () =>
               inst.client.post(`${SANDBOXES}/${inst.id}/processes`, {
@@ -511,11 +512,15 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
         },
 
         writeFile: async (inst: PlatformInstance, path: string, content: string): Promise<void> => {
-          if (new TextEncoder().encode(content).length > FILE_CONTENT_LIMIT_BYTES) {
+          // The platform's ~4 MB cap applies to the request on the wire,
+          // not the raw string: JSON escaping expands quotes, backslashes
+          // and newlines, so measure the body actually sent.
+          const body = { path, content };
+          if (new TextEncoder().encode(JSON.stringify(body)).length > FILE_CONTENT_LIMIT_BYTES) {
             throw invalidArgument(FILE_LIMIT_MESSAGE);
           }
           await request(
-            () => inst.client.post(`${SANDBOXES}/${inst.id}/files`, { path, content }),
+            () => inst.client.post(`${SANDBOXES}/${inst.id}/files`, body),
             false,
           );
         },
@@ -572,6 +577,16 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
     },
   },
 });
+
+function outcomeUnknown(key: string): PlatformClientError {
+  const err = new PlatformClientError(
+    'create_outcome_unknown',
+    `Sandbox create outcome unknown after 6 minutes (idempotencyKey: ${key}). ` +
+      'Check the org dashboard before retrying — the sandbox may still be creating.',
+  );
+  err.fallback = false;
+  return err;
+}
 
 function enoent(path: string): Error {
   const error = new Error(`ENOENT: no such file or directory, open '${path}'`);
