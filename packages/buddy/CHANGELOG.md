@@ -1,5 +1,11 @@
 # @computesdk/buddy
 
+## 1.0.18
+
+### Patch Changes
+
+- 3c04273: Run timed, streaming and background commands through Buddy's `execs` resource (`@buddy-works/sandbox-sdk` 0.3.0), which replaces the removed `commands` endpoints. The execs log does not separate stdout from stderr, so that output now arrives on `stdout` / `onStdout` only. Buddy's concurrency limit (HTTP 409) surfaces as an error that says what to do.
+
 ## 1.0.17
 
 ### Patch Changes
