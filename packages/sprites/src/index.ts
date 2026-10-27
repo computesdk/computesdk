@@ -53,11 +53,27 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           if (envs && Object.keys(envs).length > 0) body.env_vars = envs;
           if (metadata && typeof metadata === 'object') body.metadata = metadata;
 
-          const res = await fetch(`${baseUrl}/sprites`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
+          // Creation is rate-limited per account (payg: 10/min); a 429 body
+          // carries retry_after_seconds, so retry within a bounded window
+          // instead of surfacing a transient throttle as a create failure.
+          const retryDeadline = Date.now() + 180_000;
+          let res: Response;
+          for (;;) {
+            res = await fetch(`${baseUrl}/sprites`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            if (res.status !== 429 || Date.now() >= retryDeadline) break;
+            let waitMs = 10_000;
+            try {
+              const errBody = await res.clone().json() as { retry_after_seconds?: number };
+              if (typeof errBody.retry_after_seconds === 'number') {
+                waitMs = Math.min((errBody.retry_after_seconds + 1) * 1000, 65_000);
+              }
+            } catch { /* non-JSON 429 body — use the default wait */ }
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+          }
 
           if (!res.ok) { const text = await res.text(); throw new Error(`Sprites API error (${res.status}): ${text}`); }
 
