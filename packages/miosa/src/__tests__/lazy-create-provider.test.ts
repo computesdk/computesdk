@@ -53,6 +53,25 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+/** The SSE text /exec/stream sends for a buffered-exec-shaped reply. */
+function execSse(scripted: RunnerReply): string {
+  const body = (scripted.body ?? {}) as {
+    stdout?: string;
+    stderr?: string;
+    exit_code?: number;
+  };
+  const events = [
+    ...(body.stdout ? [{ type: "stdout", line: body.stdout }] : []),
+    ...(body.stderr ? [{ type: "stderr", line: body.stderr }] : []),
+    { type: "exit", exit_code: body.exit_code ?? 0 },
+  ];
+  return events.map((event) => `data: ${JSON.stringify(event)}\n`).join("");
+}
+
+async function* singleChunk(text: string): AsyncIterableIterator<string> {
+  yield text;
+}
+
 interface RunnerCall {
   addressIndex: number;
   method: string;
@@ -131,8 +150,35 @@ describe("lazy create", () => {
             scripted.body === undefined ? "" : JSON.stringify(scripted.body),
         };
       },
-      streamRequest: async () => {
-        throw new Error("streamRequest is not scripted");
+      streamRequest: async (
+        _hostname: string,
+        addressIndex: number,
+        _authority: string,
+        path: string,
+        init: { method: string; body?: unknown }
+      ) => {
+        const call: RunnerCall = {
+          addressIndex,
+          method: init.method,
+          path,
+          body:
+            init.body === undefined
+              ? undefined
+              : (JSON.parse(String(init.body)) as Record<string, unknown>),
+        };
+        runnerCalls.push(call);
+        const scripted = await reply(call);
+        // >=400 answers the way sendToSandboxStream expects: the raw error
+        // body as chunks. 2xx is SSE `data:` lines of exec events.
+        return {
+          status: scripted.status,
+          headers: scripted.headers ?? {},
+          chunks: singleChunk(
+            scripted.status >= 400
+              ? JSON.stringify(scripted.body ?? {})
+              : execSse(scripted)
+          ),
+        };
       },
       close: async () => undefined,
     } as unknown as ScriptedTransport;
@@ -373,7 +419,7 @@ describe("lazy create", () => {
 
       expect(runnerPaths()).toEqual([
         "POST /api/v1/sandboxes",
-        `POST /api/v1/sandboxes/${REAL_ID}/exec`,
+        `POST /api/v1/sandboxes/${REAL_ID}/exec/stream`,
       ]);
       expect(second.stdout).toBe("from-exec\n");
       expect(creates()).toHaveLength(1);
@@ -388,7 +434,7 @@ describe("lazy create", () => {
 
       expect(runnerPaths()).toEqual([
         "POST /api/v1/sandboxes",
-        `POST /api/v1/sandboxes/${REAL_ID}/exec`,
+        `POST /api/v1/sandboxes/${REAL_ID}/exec/stream`,
       ]);
       expect(creates()).toHaveLength(1);
       expect(result.stdout).toBe("from-exec\n");
@@ -409,7 +455,7 @@ describe("lazy create", () => {
         expect(creates()).toHaveLength(1);
         expect(creates()[0]?.body).not.toHaveProperty("run");
         expect(runnerPaths()).toContain(
-          `POST /api/v1/sandboxes/${REAL_ID}/exec`
+          `POST /api/v1/sandboxes/${REAL_ID}/exec/stream`
         );
         expect(result.stdout).toBe("from-exec\n");
       }
