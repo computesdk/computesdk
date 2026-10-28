@@ -57,6 +57,11 @@ export interface CreateBrowserSessionOptions {
   region?: string;
   /** Custom user metadata */
   userMetadata?: Record<string, string>;
+  /**
+   * Persist files downloaded during the session so they are retrievable via
+   * the provider's downloads API. Ignored by providers without such an API.
+   */
+  saveDownloads?: boolean;
 }
 
 /**
