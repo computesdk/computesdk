@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/platform",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Hosted ComputeSDK platform provider - sandboxes on your org's providers or the compute market, with market placement, credits, quotes and one bill",
   "author": "ComputeSDK",
   "license": "MIT",

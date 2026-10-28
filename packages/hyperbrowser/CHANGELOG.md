@@ -1,5 +1,15 @@
 # @computesdk/hyperbrowser
 
+## 0.2.23
+
+### Patch Changes
+
+- 2bd2e7d: Add `saveDownloads` to `CreateBrowserSessionOptions` and forward it to Hyperbrowser's create-session params. Previously the option was silently dropped by `mapSessionOptions`, so sessions were always created with downloads disabled and the session downloads API reported `not_enabled`.
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
 ## 0.2.22
 
 ### Patch Changes

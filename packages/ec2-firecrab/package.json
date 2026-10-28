@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/ec2-firecrab",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Firecracker microVMs on self-hosted EC2 as a ComputeSDK sandbox provider",
   "author": "ComputeSDK",
   "license": "MIT",

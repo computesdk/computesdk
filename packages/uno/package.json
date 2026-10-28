@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/uno",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Uno for ComputeSDK - full Linux microVMs (Firecracker) for AI agents and builds, with a US High-end region",
   "author": "Uno",
   "license": "MIT",
