@@ -14,6 +14,7 @@ import type {
   RunCommandOptions,
 } from '@computesdk/provider';
 import {
+  MARKET_CODES,
   PlatformApiError,
   PlatformClient,
   PlatformClientError,
@@ -337,10 +338,13 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
                 current = null;
               } else if (
                 isNetworkError(error) ||
-                (error instanceof PlatformApiError && (error.retryable || error.status >= 500))
+                (error instanceof PlatformApiError &&
+                  (error.retryable || (error.status >= 500 && !MARKET_CODES.has(error.code))))
               ) {
-                // Transient — keep polling until the deadline.
-                await sleep(CREATE_POLL_MS);
+                // Transient — keep polling until the deadline, honoring
+                // Retry-After on rate limits.
+                const retryAfter = error instanceof PlatformApiError ? (error.retryAfterMs ?? 0) : 0;
+                await sleep(Math.max(CREATE_POLL_MS, retryAfter));
                 continue;
               } else {
                 // A `creating` row exists and its fate is now unknown; it may

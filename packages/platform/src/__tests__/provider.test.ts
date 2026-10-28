@@ -259,6 +259,23 @@ describe('create', () => {
     expect(err.fallback).toBe(false);
   });
 
+  it('surfaces a market failure mid-poll instead of retrying to the deadline', async () => {
+    const { fetchImpl } = mockFetch((call) =>
+      call.method === 'POST'
+        ? json({ sandbox: detail({ status: 'creating' }) }, 200)
+        : json({ error: 'No capacity', code: 'no_market_capacity' }, 503),
+    );
+    const provider = platform(config(fetchImpl));
+    const err = await provider.sandbox.create({}).then(
+      () => {
+        throw new Error('expected create to fail');
+      },
+      (e: unknown) => e as { code?: string; fallback?: boolean },
+    );
+    expect(err.code).toBe('no_market_capacity');
+    expect(err.fallback).toBe(false);
+  });
+
   it('does not replay a normal API error', async () => {
     const { fetchImpl, calls } = mockFetch(() =>
       json({ error: 'No capacity', code: 'no_market_capacity' }, 503),
