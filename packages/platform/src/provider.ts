@@ -14,6 +14,7 @@ import type {
   RunCommandOptions,
 } from '@computesdk/provider';
 import {
+  MARKET_CODES,
   PlatformApiError,
   PlatformClient,
   PlatformClientError,
@@ -335,10 +336,22 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
               if (signal?.aborted) throw signal.reason ?? error;
               if (error instanceof PlatformApiError && error.status === 404) {
                 current = null;
-              } else if (isNetworkError(error)) {
-                await sleep(CREATE_POLL_MS);
+              } else if (
+                isNetworkError(error) ||
+                (error instanceof PlatformApiError &&
+                  (error.retryable || (error.status >= 500 && !MARKET_CODES.has(error.code))))
+              ) {
+                // Transient — keep polling until the deadline, honoring
+                // Retry-After on rate limits.
+                const retryAfter = error instanceof PlatformApiError ? (error.retryAfterMs ?? 0) : 0;
+                await sleep(Math.max(CREATE_POLL_MS, retryAfter));
                 continue;
               } else {
+                // A `creating` row exists and its fate is now unknown; it may
+                // still land and bill. Whatever this error is, escaping
+                // without fallback: false would let createWithFallback boot
+                // the same sandbox on the next provider.
+                (error as { fallback?: boolean }).fallback = false;
                 throw error;
               }
             }
