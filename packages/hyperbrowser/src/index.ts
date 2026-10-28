@@ -100,6 +100,7 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions): CreateSession
   if (options.logging !== undefined) params.enableLogCapture = options.logging;
   if (options.extensionIds && options.extensionIds.length > 0) params.extensionIds = options.extensionIds;
   if (options.region) params.region = options.region as CreateSessionParams['region'];
+  if (options.saveDownloads !== undefined) params.saveDownloads = options.saveDownloads;
   if (options.profileId) {
     params.profile = { id: options.profileId, persistChanges: true };
   }
