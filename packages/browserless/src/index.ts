@@ -78,6 +78,18 @@ function warnOnce(field: string, reason: string) {
 }
 
 /**
+ * Create options by sessionId, so getConnectUrl/getById can rebuild the same
+ * URL the session was created with. Same-process only — a URL rebuilt in a
+ * fresh process carries no launch options. Entries are dropped on destroy.
+ */
+const sessionOptions = new Map<string, CreateBrowserSessionOptions>();
+
+/** Strip the API token from provider error bodies before throwing. */
+function redact(body: string, apiKey: string): string {
+  return body.split(apiKey).join('***');
+}
+
+/**
  * Build the CDP connect URL for a session. The token authenticates the
  * websocket; `trackingId` is the session handle used by list/destroy.
  * `launch` query params are only meaningful if they land before the client
@@ -106,6 +118,24 @@ function buildConnectUrl(baseUrl: string, apiKey: string, trackingId: string, op
   if (options.recording === false) {
     warnOnce('recording', 'Session recording is managed server-side; no per-session toggle on the connect URL.');
   }
+  if (options.logging === false) {
+    warnOnce('logging', 'Session logging is managed server-side; no per-session toggle on the connect URL.');
+  }
+  if (options.timeout !== undefined) {
+    warnOnce('timeout', 'Session TTL is a fleet-level setting on Browserless; no per-session timeout param.');
+  }
+  if (options.profileId !== undefined) {
+    warnOnce('profileId', 'Browserless has no persistent-profile concept on the connect URL.');
+  }
+  if (options.extensionIds && options.extensionIds.length > 0) {
+    warnOnce('extensionIds', 'Extensions must be baked into the Browserless fleet image; no per-session IDs.');
+  }
+  if (options.region !== undefined) {
+    warnOnce('region', 'Region is selected by the baseUrl host (e.g. production-sfo|lon|ams), not a connect param.');
+  }
+  if (options.saveDownloads === true) {
+    warnOnce('saveDownloads', 'Browserless has no server-side download retrieval API.');
+  }
   if (options.userMetadata && Object.keys(options.userMetadata).length > 0) {
     warnOnce('userMetadata', 'Browserless does not support arbitrary user metadata on sessions.');
   }
@@ -118,7 +148,7 @@ function buildConnectUrl(baseUrl: string, apiKey: string, trackingId: string, op
 
 async function listSessions(baseUrl: string, apiKey: string): Promise<BrowserlessSession[]> {
   const r = await fetch(`${baseUrl}/sessions?token=${enc(apiKey)}`);
-  if (!r.ok) throw new Error(`browserless /sessions ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw new Error(`browserless /sessions ${r.status}: ${redact(await r.text(), apiKey)}`);
   return (await r.json()) as BrowserlessSession[];
 }
 
@@ -159,8 +189,11 @@ export const browserless = defineBrowserProvider<BrowserlessSession, Browserless
         // No REST create call — the trackingId becomes the session identity
         // and the browser allocates when the client connects to the URL.
         const trackingId = randomUUID();
+        if (options) sessionOptions.set(trackingId, options);
+        // Nothing exists server-side yet — running stays false until the
+        // client opens the websocket and Browserless allocates the browser.
         return {
-          session: { browserId: trackingId, trackingId, running: true, startedOn: Date.now() },
+          session: { browserId: trackingId, trackingId, running: false, startedOn: Date.now() },
           sessionId: trackingId,
           connectUrl: buildConnectUrl(baseUrl, apiKey, trackingId, options),
           status: 'created',
@@ -173,7 +206,8 @@ export const browserless = defineBrowserProvider<BrowserlessSession, Browserless
           (s) => s.trackingId === sessionId || s.browserId === sessionId,
         );
         if (!found) return null;
-        return { ...toEntry(found), connectUrl: buildConnectUrl(baseUrl, apiKey, found.trackingId ?? sessionId) };
+        const trackingId = found.trackingId ?? sessionId;
+        return { ...toEntry(found), connectUrl: buildConnectUrl(baseUrl, apiKey, trackingId, sessionOptions.get(trackingId)) };
       },
 
       list: async (config: BrowserlessConfig) => {
@@ -185,14 +219,15 @@ export const browserless = defineBrowserProvider<BrowserlessSession, Browserless
         const { apiKey, baseUrl } = resolveConfig(config);
         // /kill accepts a browserId or trackingId; a missing session is a no-op.
         const r = await fetch(`${baseUrl}/kill/${enc(sessionId)}?token=${enc(apiKey)}`);
+        sessionOptions.delete(sessionId);
         if (!r.ok && r.status !== 404) {
-          throw new Error(`browserless destroy ${r.status}: ${await r.text()}`);
+          throw new Error(`browserless destroy ${r.status}: ${redact(await r.text(), apiKey)}`);
         }
       },
 
       getConnectUrl: async (config: BrowserlessConfig, sessionId: string) => {
         const { apiKey, baseUrl } = resolveConfig(config);
-        return buildConnectUrl(baseUrl, apiKey, sessionId);
+        return buildConnectUrl(baseUrl, apiKey, sessionId, sessionOptions.get(sessionId));
       },
     },
   },

@@ -41,6 +41,20 @@ describe('browserless connect URL', () => {
     expect(url.searchParams.get('proxy')).toBe('residential');
   });
 
+  it('replays create options on getConnectUrl for the same session', async () => {
+    const session = await bl.session.create({ stealth: true });
+    const rebuilt = new URL(await bl.getConnectUrl(session.sessionId));
+    expect(rebuilt.searchParams.get('stealth')).toBe('true');
+    expect(rebuilt.searchParams.get('trackingId')).toBe(session.sessionId);
+    await bl.session.destroy(session.sessionId).catch(() => {});
+  });
+
+  it('reports the new session as not yet running', async () => {
+    const session = await bl.session.create();
+    expect(session.getInstance().running).toBe(false);
+    expect(session.status).toBe('created');
+  });
+
   it('honors baseUrl config and BROWSERLESS_URL env', async () => {
     const custom = browserless({ apiKey: 't', baseUrl: 'https://chrome-us-east.browserless.io' });
     const session = await custom.session.create();
