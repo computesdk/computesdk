@@ -91,6 +91,14 @@ export interface MosaicSnapshot {
 export interface MosaicTemplateOptions extends CreateTemplateOptions {
   /** Registry reference, e.g. `python:3.12-slim`. linux/amd64, must have /bin/sh. */
   image?: string;
+  /**
+   * Guest memory (MiB) captured in the environment. Shapes are fixed at
+   * build time and validated against the pairs `GET /v1/limits` publishes —
+   * e.g. 16384 is the build shape a 16 GiB / 8 vCPU sandbox restores at.
+   */
+  memoryMb?: number;
+  /** vCPU count captured in the environment; must form a supported shape with memoryMb. */
+  vcpu?: number;
   /** Delete the environment this long after it is built. */
   retentionSeconds?: number;
   /** Used for this one pull and never stored. */
@@ -675,6 +683,8 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
           body: JSON.stringify({
             image: options.image,
             name: options.name,
+            ...(options.memoryMb ? { memory_mb: options.memoryMb } : {}),
+            ...(options.vcpu ? { vcpu: options.vcpu } : {}),
             ...(options.retentionSeconds ? { retention_seconds: options.retentionSeconds } : {}),
             ...(options.registryUsername ? { registry_username: options.registryUsername } : {}),
             ...(options.registryPassword ? { registry_password: options.registryPassword } : {}),
