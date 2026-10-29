@@ -52,6 +52,8 @@ interface Agent37Config {
   apiKey?: string;
   /** API base URL - defaults to AGENT37_BASE_URL, then https://api.agent37.com */
   baseUrl?: string;
+  /** Exec base URL - defaults to AGENT37_EXEC_URL, then https://sandbox.agent37.app */
+  execUrl?: string;
   /** Run commands as root (default true). Set false to run as the image's own user. */
   runAsRoot?: boolean;
 }

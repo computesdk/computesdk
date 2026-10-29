@@ -17,6 +17,8 @@ export interface Agent37Config {
   apiKey?: string;
   /** API base URL - if not provided, will fallback to AGENT37_BASE_URL, then https://api.agent37.com */
   baseUrl?: string;
+  /** Exec base URL - if not provided, will fallback to AGENT37_EXEC_URL, then https://sandbox.agent37.app */
+  execUrl?: string;
   /** Run commands as root (default true). Set false to run as the image's default user. */
   runAsRoot?: boolean;
 }
@@ -39,6 +41,7 @@ export interface Agent37Sandbox {
   data: Agent37InstanceData;
   apiKey: string;
   baseUrl: string;
+  execUrl: string;
   runAsRoot: boolean;
 }
 
@@ -61,7 +64,8 @@ function resolveConfig(config: Agent37Config) {
     );
   }
   const baseUrl = (config.baseUrl || env?.AGENT37_BASE_URL || 'https://api.agent37.com').replace(/\/+$/, '');
-  return { apiKey, baseUrl, runAsRoot: config.runAsRoot !== false };
+  const execUrl = (config.execUrl || env?.AGENT37_EXEC_URL || 'https://sandbox.agent37.app').replace(/\/+$/, '');
+  return { apiKey, baseUrl, execUrl, runAsRoot: config.runAsRoot !== false };
 }
 
 async function request<T>(
@@ -70,10 +74,14 @@ async function request<T>(
   path: string,
   body?: unknown,
   timeoutMs?: number,
+  keyHeader = false,
 ): Promise<{ status: number; data: T | null }> {
   const res = await fetch(`${auth.baseUrl}${path}`, {
     method,
-    headers: { Authorization: `Bearer ${auth.apiKey}`, 'Content-Type': 'application/json' },
+    headers: {
+      ...(keyHeader ? { 'X-Agent37-Key': auth.apiKey } : { Authorization: `Bearer ${auth.apiKey}` }),
+      'Content-Type': 'application/json',
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
   });
@@ -83,7 +91,7 @@ async function request<T>(
   return { status: res.status, data: (text ? JSON.parse(text) : null) as T };
 }
 
-function toSandbox(auth: { apiKey: string; baseUrl: string; runAsRoot: boolean }, data: Agent37InstanceData): Agent37Sandbox {
+function toSandbox(auth: { apiKey: string; baseUrl: string; execUrl: string; runAsRoot: boolean }, data: Agent37InstanceData): Agent37Sandbox {
   return { id: data.id, data, ...auth };
 }
 
@@ -132,13 +140,15 @@ function shellPath(path: string): string {
   return `"${escapeShellArg(path.startsWith('-') ? `./${path}` : path)}"`;
 }
 
+// Exec is answered by the machine the instance runs on, at execUrl, which takes the key as X-Agent37-Key.
 async function exec(sandbox: Agent37Sandbox, command: string, timeoutMs?: number): Promise<ExecResponse> {
   const { data } = await request<ExecResponse>(
-    sandbox,
+    { apiKey: sandbox.apiKey, baseUrl: sandbox.execUrl },
     'POST',
     `/v1/instances/${encodeURIComponent(sandbox.id)}/exec`,
     { command, ...(sandbox.runAsRoot ? { user: 'root' } : {}) },
     timeoutMs,
+    true,
   );
   if (!data) throw new Error(`Agent37 instance ${sandbox.id} not found`);
   return data;
