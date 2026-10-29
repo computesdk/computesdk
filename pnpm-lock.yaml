@@ -272,7 +272,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.49(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.67)(@computesdk/modal@1.9.24)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.68)(@computesdk/modal@1.9.25)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -510,6 +510,46 @@ importers:
       vitest:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/browserless:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      dotenv:
+        specifier: ^16.0.0
+        version: 16.6.1
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      playwright-core:
+        specifier: ^1.40.0
+        version: 1.60.0
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
   packages/browseruse:
     dependencies:
@@ -3476,17 +3516,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.49':
-    resolution: {integrity: sha512-Zg0CXMGeaYbsr2Bgh9SR9jwK9yvVZsdWBgYq45vRLkj+icFTlyhq61NjzzWIlTbNEDs4OLfiCTyksbEL5IWZqg==}
+  '@computesdk/daytona@1.7.50':
+    resolution: {integrity: sha512-BTnM1SFugx+iqb3KwBQppvPnQmsY92cvkx/UyaJzeruiQ4k9Njsso5YWD2/7NsOgjD6YibA8EaNBESrv3n6cjg==}
 
-  '@computesdk/e2b@1.7.67':
-    resolution: {integrity: sha512-aT8rUj0I0EorBoVvaPL6+ZH+KoReC5OCP4pyWhIdsbL629OH8QwT4a1veIG1enH7x0kLCWDRb6hRbPIKXZE+RQ==}
+  '@computesdk/e2b@1.7.68':
+    resolution: {integrity: sha512-44HwFGDmn9MFOnskgGHDTBf3wl9e/KCwrN58lE+jij2Qqr9wvQ5pHi3w7ooBYr6wODlLgWkXC0m3tiY6mGL9yA==}
 
-  '@computesdk/modal@1.9.24':
-    resolution: {integrity: sha512-scOvDU6PQeka4e8pCIUUy3iBWKIhj9CyoAvJ6iGGG4CYBqvUO6lPydkgSPVQaCptLqnGf9UXuy4HRbEfP8a/aQ==}
+  '@computesdk/modal@1.9.25':
+    resolution: {integrity: sha512-BhNZY71+UP/rXvjLNjHClscjyActSZv4yZ68NJ32Sf7pWjHUO0pCjn+tw6dJUoTGGzyKVBtyf0PwlWsBVBFAGQ==}
 
-  '@computesdk/provider@2.1.19':
-    resolution: {integrity: sha512-U/KnutpV7BLecGXgrYqdt58KRjiG6opHCtBC67Y8DXh+Jg0I698UTxCQ0jXUrHIOWjHytyM6KbRJ2J2HG83nHw==}
+  '@computesdk/provider@2.1.20':
+    resolution: {integrity: sha512-BlvIouuwrxMeAyxQ1vaDiqHxSguJFlAFRtLTpLZ1kfWZa6VKsEDxvAqUqdsxKzLmjwZl9noqVMgFoCHam87yCw==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -4951,6 +4991,7 @@ packages:
   '@opentelemetry/propagator-jaeger@2.11.0':
     resolution: {integrity: sha512-RUOqgoIqXOPQTOhpBrs07Y8sBlxVoLY5Fka6ueZ0prW+k6fWQsba/nHDY4gm+gmfuwtRqbX5Y9YKhDvktjbIqQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -5033,48 +5074,56 @@ packages:
   '@opentelemetry/sdk-trace-base@1.30.1':
     resolution: {integrity: sha512-jVPgBbH1gCy2Lb7X0AVQ8XAfgg0pJ4nvl8/IiQA6nxOsPvS+0zMJaFSs2ltXe0J6C8dqjcnpyqINDJmU30+uOg==}
     engines: {node: '>=14'}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.11.0':
     resolution: {integrity: sha512-H19x/TX/LZdqiYOjM7fqtSxwlplC5pgelavqbQdHbhdq0q/AI/TGkM2dfGuuynTXmJPeF2HoZVoPDu+TGoW78A==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.12.0':
     resolution: {integrity: sha512-JOERgZCxRM06FEJ5kEWxlSRChah6MmXDx3KwCruqEv/iEyLkTokCSemf2y1w8oIHtfrr8EVTpzebq/31vn2Cpg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.6.1':
     resolution: {integrity: sha512-r86ut4T1e8vNwB35CqCcKd45yzqH6/6Wzvpk2/cZB8PsPLlZFTvrh8yfOS3CYZYcUmAx4hHTZJ8AO8Dj8nrdhw==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.7.1':
     resolution: {integrity: sha512-NAYIlsF8MPUsKqJMiDQJTMPOmlbawC1Iz/omMLygZ1C9am8fTKYjTaI+OZM+WTY3t3Glo0wnOg/6/pac6RGPPw==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.8.0':
     resolution: {integrity: sha512-mhU4jp+vW0mGbFRd+GeXHvmfA4aDqWjBjLC3pE5XMpLs0IE2ryYb019Ts2AQrOq67gaTF25D91+fgvEHDZEnuQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.11.0':
     resolution: {integrity: sha512-CuvCMJmZxswhNLlM2LfuLOW3h3fZujA4hsG4B+Sz4dX2zvaXO8Ng74cnDHWD64gLszTlhiG3c0iNUjj4g+0/sA==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.7.1':
     resolution: {integrity: sha512-pCpQxU68lV+I9s9svqMyVu5iHdDDUnqUpSxqwyCU8A9ejEsSnMPCbearwsUO4yk08ZJzAIUCFuReMdVQvHrdvg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -6370,8 +6419,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.13:
-    resolution: {integrity: sha512-VuZqkFE89B7Ey3LmFa3YG9mU25Sk8atMa6u8bOZFk0NK15zow94eUBgHO+PqSBBW77ELOtMpFAZXz4tB9cVBAQ==}
+  computesdk@4.1.14:
+    resolution: {integrity: sha512-87WwccvpbsfuiN6IxoUhNhLzm0RvwVcai3bPleG1x2EgLRLfd5O96EZSnSQGfdVBkkGBPt5hpvMwR8v7VOCsEg==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -9690,15 +9739,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.49(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.67)(@computesdk/modal@1.9.24)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.68)(@computesdk/modal@1.9.25)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.49(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      '@computesdk/e2b': 1.7.67
-      '@computesdk/modal': 1.9.24
+      '@computesdk/daytona': 1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@computesdk/e2b': 1.7.68
+      '@computesdk/modal': 1.9.25
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10485,11 +10534,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.49(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      '@computesdk/provider': 2.1.19
+      '@computesdk/provider': 2.1.20
       '@daytonaio/sdk': 0.224.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      computesdk: 4.1.13
+      computesdk: 4.1.14
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -10497,24 +10546,24 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@computesdk/e2b@1.7.67':
+  '@computesdk/e2b@1.7.68':
     dependencies:
-      '@computesdk/provider': 2.1.19
-      computesdk: 4.1.13
+      '@computesdk/provider': 2.1.20
+      computesdk: 4.1.14
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.24':
+  '@computesdk/modal@1.9.25':
     dependencies:
-      '@computesdk/provider': 2.1.19
-      computesdk: 4.1.13
+      '@computesdk/provider': 2.1.20
+      computesdk: 4.1.14
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.19':
+  '@computesdk/provider@2.1.20':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.13
+      computesdk: 4.1.14
       daemond: 0.1.8
     optional: true
 
@@ -11663,7 +11712,7 @@ snapshots:
       '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.28.0
       forwarded-parse: 2.1.2
-      semver: 7.7.2
+      semver: 7.8.5
     transitivePeerDependencies:
       - supports-color
     optional: true
@@ -11811,7 +11860,7 @@ snapshots:
       '@types/shimmer': 1.2.0
       import-in-the-middle: 1.14.2
       require-in-the-middle: 7.5.2
-      semver: 7.7.2
+      semver: 7.8.5
       shimmer: 1.2.1
     transitivePeerDependencies:
       - supports-color
@@ -12606,7 +12655,7 @@ snapshots:
 
   '@types/dotenv@8.2.3':
     dependencies:
-      dotenv: 17.2.1
+      dotenv: 16.6.1
 
   '@types/estree@1.0.8': {}
 
@@ -13605,7 +13654,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.13:
+  computesdk@4.1.14:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.8
