@@ -18,10 +18,16 @@ export interface BrowserProviderTestConfig {
   timeout?: number;
   /** Skip tests that require real API calls */
   skipIntegration?: boolean;
+  /**
+   * Skip the tests that read sessions back via getById/list — for providers
+   * whose sessions materialize on client connect (nothing exists server-side
+   * to look up before then) or that have no sessions API at all.
+   */
+  skipSessionReads?: boolean;
 }
 
 export function runBrowserProviderTestSuite(config: BrowserProviderTestConfig) {
-  const { provider, name, timeout = 60000, skipIntegration = false } = config;
+  const { provider, name, timeout = 60000, skipIntegration = false, skipSessionReads = false } = config;
 
   describe(`${name} Browser Provider`, () => {
     let session: ProviderBrowserSession;
@@ -52,7 +58,7 @@ export function runBrowserProviderTestSuite(config: BrowserProviderTestConfig) {
     });
 
     it('should retrieve a session by ID', async () => {
-      if (skipIntegration) return;
+      if (skipIntegration || skipSessionReads) return;
 
       const retrieved = await provider.session.getById(session.sessionId);
       expect(retrieved).not.toBeNull();
@@ -60,14 +66,14 @@ export function runBrowserProviderTestSuite(config: BrowserProviderTestConfig) {
     }, timeout);
 
     it('should return null for nonexistent session', async () => {
-      if (skipIntegration) return;
+      if (skipIntegration || skipSessionReads) return;
 
       const result = await provider.session.getById('nonexistent-session-id-12345');
       expect(result).toBeNull();
     }, timeout);
 
     it('should list sessions including the created one', async () => {
-      if (skipIntegration) return;
+      if (skipIntegration || skipSessionReads) return;
 
       const sessions = await provider.session.list();
       expect(Array.isArray(sessions)).toBe(true);
