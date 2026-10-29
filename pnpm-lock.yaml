@@ -529,9 +529,15 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^1.0.0
         version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      dotenv:
+        specifier: ^16.0.0
+        version: 16.6.1
       eslint:
         specifier: ^8.37.0
         version: 8.57.1
+      playwright-core:
+        specifier: ^1.40.0
+        version: 1.60.0
       rimraf:
         specifier: ^5.0.0
         version: 5.0.10
@@ -12649,7 +12655,7 @@ snapshots:
 
   '@types/dotenv@8.2.3':
     dependencies:
-      dotenv: 17.2.1
+      dotenv: 16.6.1
 
   '@types/estree@1.0.8': {}
 
