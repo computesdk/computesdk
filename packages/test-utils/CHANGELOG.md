@@ -1,5 +1,11 @@
 # @computesdk/test-utils
 
+## 2.0.5
+
+### Patch Changes
+
+- 5b47ddd: Add `skipSessionReads` to `runBrowserProviderTestSuite` for providers whose sessions materialize on client connect (or lack a sessions API); use it in the browserless suite.
+
 ## 2.0.4
 
 ### Patch Changes
