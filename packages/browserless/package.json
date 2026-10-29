@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/browserless",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browserless browser provider for ComputeSDK - cloud browser sessions via Browserless",
   "license": "MIT",
   "type": "module",
