@@ -1325,20 +1325,28 @@ async function fsOnRunner<T>(
 ): Promise<T> {
   const client = await getRunnerClient(sandbox);
   try {
+    // Same gate execOnRunner applies: a create-then-write sequence reaches
+    // here while the sandbox is still launching, and the fs routes 404
+    // until the runner has attached it.
+    await waitForRunnerReady(client, sandbox.record.id, RUNNER_READY_WAIT_MS);
     return await run(client);
   } catch (error) {
     // A handle from getById/list for a sandbox created elsewhere carries no
-    // recorded origin and defaults to the runner; a not-found there means the
-    // account API owns it. Learn the origin so later calls skip the runner.
+    // recorded origin and defaults to the runner; a not-found there means
+    // that endpoint does not own the sandbox, so the account API can take
+    // the op. As with exec: only the account API answering proves
+    // ownership - a regional sandbox still attaching 404s on both
+    // endpoints - so "account" is learned only when that call succeeds.
     if (
       !isNotFoundError(error) ||
       sandboxTransport.get(sandbox.record.id) === "regional"
     ) {
       throw error;
     }
+    const result = await account();
     sandboxTransport.set(sandbox.record.id, "account");
     sandbox.runner = undefined;
-    return account();
+    return result;
   }
 }
 
