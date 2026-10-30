@@ -1,5 +1,14 @@
 # @computesdk/workbench
 
+## 33.0.26
+
+### Patch Changes
+
+- Updated dependencies [d4424cd]
+  - @computesdk/isorun@0.1.19
+  - @computesdk/microsandbox@0.1.23
+  - @computesdk/modal@1.9.26
+
 ## 33.0.25
 
 ### Patch Changes

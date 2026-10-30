@@ -1,5 +1,11 @@
 # @computesdk/sandbox0
 
+## 1.0.20
+
+### Patch Changes
+
+- d4424cd: runCommand: capture output via guest files instead of streamed exec output. Provider exec transports can drop a contiguous chunk mid-stream (observed across all five providers during a CPU-bound quiet stretch) while still reporting success, silently corrupting captured stdout/stderr. Commands now redirect output to files inside the sandbox and the adapter reads them back with short-lived commands, verified against byte counts the command writes alongside. Microsandbox additionally records byte counts and re-reads through the alternate transport on a mismatch.
+
 ## 1.0.19
 
 ### Patch Changes
