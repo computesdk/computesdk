@@ -208,6 +208,9 @@ async function runSandboxCli(
     const child = spawn(getBinary(config), args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       signal: controller.signal,
+      // A full inherited env can exceed the kernel's argv+env limit (E2BIG);
+      // the CLI receives sandbox env via --env args, not the process env.
+      env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', HOME: process.env.HOME ?? '/root' },
     })
     let stdout = ''
     let stderr = ''
