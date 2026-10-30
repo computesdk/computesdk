@@ -747,16 +747,21 @@ describe("lazy create", () => {
       expect(found?.sandboxId).toBe(REAL_ID);
     });
 
-    it("should create the sandbox before snapshotting it by its placeholder id", async () => {
+    it("should create the sandbox before resolving its placeholder id for a snapshot", async () => {
+      // A runner-created sandbox cannot be snapshotted - snapshots are
+      // account-API only - but the create must still have run so the real id
+      // is what the refusal names.
       useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
       const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
       const sandbox = await provider.sandbox.create();
 
-      await provider.snapshot?.create(sandbox.sandboxId, { name: "s" });
+      await expect(
+        provider.snapshot!.create(sandbox.sandboxId, { name: "s" }),
+      ).rejects.toThrow("does not own it");
 
       expect(creates()).toHaveLength(1);
-      expect(accountApiCalls()).toContain(
-        `POST /sandboxes/${REAL_ID}/snapshots`
+      expect(accountApiCalls().filter((c) => c.includes("/snapshots"))).toEqual(
+        [],
       );
     });
 
