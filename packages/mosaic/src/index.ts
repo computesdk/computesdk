@@ -683,8 +683,8 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
           body: JSON.stringify({
             image: options.image,
             name: options.name,
-            ...(options.memoryMb ? { memory_mb: options.memoryMb } : {}),
-            ...(options.vcpu ? { vcpu: options.vcpu } : {}),
+            ...(options.memoryMb !== undefined ? { memory_mb: options.memoryMb } : {}),
+            ...(options.vcpu !== undefined ? { vcpu: options.vcpu } : {}),
             ...(options.retentionSeconds ? { retention_seconds: options.retentionSeconds } : {}),
             ...(options.registryUsername ? { registry_username: options.registryUsername } : {}),
             ...(options.registryPassword ? { registry_password: options.registryPassword } : {}),
