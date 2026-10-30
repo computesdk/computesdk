@@ -1389,6 +1389,22 @@ function regionalAuth(config: MiosaConfig, auth: MiosaAuth): MiosaAuth {
   };
 }
 
+/**
+ * Snapshots live on the account API alone: the regional endpoint exposes no
+ * snapshot routes, and the account API does not own the id of a sandbox it
+ * did not create. A snapshot call aimed at a regional sandbox is dead on
+ * arrival, so name the cause and the remedy instead of surfacing the bare
+ * 404.
+ */
+function regionalSnapshotError(sandboxId: string): Error {
+  return new Error(
+    `MIOSA cannot snapshot sandbox ${sandboxId}: the account API does not ` +
+      `own it. Snapshots live on the account API and are unavailable to ` +
+      `sandboxes created on the regional endpoint — recreate the sandbox ` +
+      `with runnerMode: false (or MIOSA_RUNNER_MODE=0) to snapshot it.`,
+  );
+}
+
 async function miosaRequest<T>(
   auth: { apiKey: string; baseUrl: string },
   method: "GET" | "POST" | "PATCH" | "DELETE",
@@ -2302,6 +2318,11 @@ const createMiosaProvider = defineProvider<
       },
     },
 
+    // Snapshots are account-API only: the regional endpoint exposes no
+    // snapshot routes, and the account API does not know the id of a sandbox
+    // it did not create, so POST /sandboxes/:id/snapshots 404s for a
+    // regionally-created sandbox. A recorded-regional id fails before the
+    // request; an unrecorded id's 404 maps onto the same message.
     snapshot: {
       // Native Firecracker checkpoints: POST /sandboxes/:id/snapshots
       create: async (
@@ -2311,11 +2332,19 @@ const createMiosaProvider = defineProvider<
       ): Promise<MiosaSnapshotRecord> => {
         const auth = resolveAuth(config);
         sandboxId = await resolveSandboxId(auth.apiKey, sandboxId);
+        if (sandboxTransport.get(sandboxId) === "regional")
+          throw regionalSnapshotError(sandboxId);
         const body: Record<string, unknown> = {};
         if (options?.name !== undefined) body.comment = options.name;
-        const response = await miosaRequest<
-          { data?: MiosaSnapshotRecord } & MiosaSnapshotRecord
-        >(auth, "POST", `/sandboxes/${sandboxId}/snapshots`, body);
+        let response: { data?: MiosaSnapshotRecord } & MiosaSnapshotRecord;
+        try {
+          response = await miosaRequest<
+            { data?: MiosaSnapshotRecord } & MiosaSnapshotRecord
+          >(auth, "POST", `/sandboxes/${sandboxId}/snapshots`, body);
+        } catch (error) {
+          if (isNotFoundError(error)) throw regionalSnapshotError(sandboxId);
+          throw error;
+        }
         const record = response.data ?? response;
         if (record?.id)
           snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), sandboxId);
@@ -2333,11 +2362,19 @@ const createMiosaProvider = defineProvider<
           );
         }
         const ownerId = await resolveSandboxId(auth.apiKey, options.sandboxId);
-        const response = await miosaRequest<{ data: MiosaSnapshotRecord[] }>(
-          auth,
-          "GET",
-          `/sandboxes/${ownerId}/snapshots`,
-        );
+        if (sandboxTransport.get(ownerId) === "regional")
+          throw regionalSnapshotError(ownerId);
+        let response: { data: MiosaSnapshotRecord[] };
+        try {
+          response = await miosaRequest<{ data: MiosaSnapshotRecord[] }>(
+            auth,
+            "GET",
+            `/sandboxes/${ownerId}/snapshots`,
+          );
+        } catch (error) {
+          if (isNotFoundError(error)) throw regionalSnapshotError(ownerId);
+          throw error;
+        }
         const records = response.data ?? [];
         for (const record of records) {
           // The listing is already scoped to this sandbox, so that is the

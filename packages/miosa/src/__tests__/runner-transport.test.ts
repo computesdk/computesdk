@@ -1673,4 +1673,61 @@ describe("regional sandbox endpoint", () => {
       expect(runnerSpies.destroySandbox).toHaveBeenCalledWith(id);
     });
   });
+
+  describe("snapshots on regional sandboxes", () => {
+    // Snapshots are account-API only: the regional endpoint exposes no
+    // snapshot routes and the account API does not know a regional sandbox's
+    // id, so a snapshot call must fail with the remedy spelled out rather
+    // than a bare 404.
+    it("should refuse snapshot.create for a regional sandbox without calling the account API", async () => {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      await expect(
+        provider.snapshot!.create(sandbox.sandboxId, { name: "s" }),
+      ).rejects.toThrow("does not own it");
+
+      expect(
+        fetchMock.mock.calls.filter(([url]) =>
+          String(url).includes("/snapshots"),
+        ),
+      ).toHaveLength(0);
+    });
+
+    it("should refuse snapshot.list for a regional sandbox", async () => {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      await expect(
+        provider.snapshot!.list({ sandboxId: sandbox.sandboxId }),
+      ).rejects.toThrow("does not own it");
+    });
+
+    it("should translate a /snapshots 404 into the regional-endpoint guidance", async () => {
+      // A handle whose origin this process never recorded still gets the
+      // actionable error: its account-API POST 404s because that endpoint
+      // does not own the id.
+      const id = "b1000000-0000-0000-0000-000000000020";
+      fetchMock.mockImplementation(async (url: string) =>
+        url.includes("/snapshots")
+          ? jsonResponse({ error: { code: "NOT_FOUND" } }, 404)
+          : jsonResponse(sandboxRecord({ id })),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+
+      await expect(
+        provider.snapshot!.create(id, { name: "s" }),
+      ).rejects.toThrow("runnerMode: false");
+    });
+  });
 });
