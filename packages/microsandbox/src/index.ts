@@ -615,19 +615,22 @@ async function runCommand(
     await new Promise((resolve) => setTimeout(resolve, Math.min(2_000, Math.max(remaining, 1))));
   }
 
-  const [stdout, stderr, codeText] = await Promise.all([
-    readGuestFileChecked(native, paths.out, paths.outLen),
-    readGuestFileChecked(native, paths.err, paths.errLen),
-    readGuestFile(native, paths.code),
-  ]);
-  await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
-  const exitCode = Number.parseInt(codeText.trim(), 10);
-  return {
-    stdout,
-    stderr,
-    exitCode: Number.isNaN(exitCode) ? 1 : exitCode,
-    durationMs: performance.now() - startedAt,
-  };
+  try {
+    const [stdout, stderr, codeText] = await Promise.all([
+      readGuestFileChecked(native, paths.out, paths.outLen),
+      readGuestFileChecked(native, paths.err, paths.errLen),
+      readGuestFile(native, paths.code),
+    ]);
+    const exitCode = Number.parseInt(codeText.trim(), 10);
+    return {
+      stdout,
+      stderr,
+      exitCode: Number.isNaN(exitCode) ? 1 : exitCode,
+      durationMs: performance.now() - startedAt,
+    };
+  } finally {
+    await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
+  }
 }
 
 async function streamCommand(
