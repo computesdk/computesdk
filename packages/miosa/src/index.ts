@@ -1350,6 +1350,40 @@ async function fsOnRunner<T>(
   }
 }
 
+/**
+ * How long an account-created sandbox's fs calls replay a 404. The control
+ * plane's create returns before the VM has finished booting — the same lag
+ * exec absorbs by sending `wait` on every request — and `/fs/*` answers 404
+ * until the sandbox attaches. A 404 past this window means a genuinely
+ * missing sandbox and surfaces immediately.
+ */
+const ACCOUNT_FS_BOOT_WINDOW_MS = 120_000;
+const ACCOUNT_FS_POLL_MS = 2_000;
+
+/** Runs one account-API fs op, replaying 404s through the sandbox's boot window. */
+async function accountFs<T>(
+  sandbox: MiosaSandbox,
+  account: () => Promise<T>,
+): Promise<T> {
+  const createdAt = Date.parse(sandbox.record.created_at ?? "");
+  const deadline = Number.isNaN(createdAt)
+    ? Date.now()
+    : createdAt + ACCOUNT_FS_BOOT_WINDOW_MS;
+  for (;;) {
+    try {
+      return await account();
+    } catch (error) {
+      if (!isNotFoundError(error) || Date.now() >= deadline) throw error;
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          Math.min(ACCOUNT_FS_POLL_MS, deadline - Date.now()),
+        ),
+      );
+    }
+  }
+}
+
 /** Runs one filesystem op on the right endpoint (see fsOnRunner). */
 function miosaFs<T>(
   sandbox: MiosaSandbox,
@@ -1357,7 +1391,7 @@ function miosaFs<T>(
   account: () => Promise<T>,
 ): Promise<T> {
   if (sandbox.runner) return fsOnRunner(sandbox, runner, account);
-  return account();
+  return accountFs(sandbox, account);
 }
 
 /**
