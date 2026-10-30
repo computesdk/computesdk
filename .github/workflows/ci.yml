@@ -164,7 +164,7 @@ jobs:
       env:
         ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
         ARCHIL_REGION: ${{ secrets.ARCHIL_REGION }}
-        ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID_CI }}
+        ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID }}
       run: |
          if [ -n "$ARCHIL_API_KEY" ] && [ -n "$ARCHIL_REGION" ] && [ -n "$ARCHIL_DISK_ID" ]; then
            echo "Running Archil integration tests with real API..."
@@ -230,7 +230,7 @@ jobs:
         MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
         ARCHIL_REGION: ${{ secrets.ARCHIL_REGION }}
-        ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID_CI }}
+        ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID }}
         BL_API_KEY: ${{ secrets.BL_API_KEY }}
         BL_WORKSPACE: ${{ secrets.BL_WORKSPACE }}
         COMPUTE_PLATFORM_TEST_API_KEY: ${{ secrets.COMPUTE_PLATFORM_TEST_API_KEY }}
