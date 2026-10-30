@@ -13,6 +13,8 @@ const SANDBOX_BINARY = process.env.CLOUD_RUN_SANDBOX_BINARY ?? '/usr/local/gcp/b
 // A full inherited env can exceed the kernel's argv+env limit (E2BIG); the CLI
 // receives sandbox env via -e args, not the process env.
 const SPAWN_ENV = { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', HOME: process.env.HOME ?? '/root' }
+/** Base64 chars per write command; keeps each `/bin/sh -c` argument under Linux's 128 KiB MAX_ARG_STRLEN. */
+const WRITE_CHUNK_CHARS = 64_000
 const SANDBOX_SECRET = process.env.SANDBOX_SECRET ?? process.env.CLOUD_RUN_SANDBOX_SECRET
 const DEFAULT_TIMEOUT_MS = 300_000
 
@@ -171,8 +173,23 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
     if (body.content === undefined) throw new Error('Missing required field: content')
     const path = shellEscape(String(body.path))
     const b64 = Buffer.from(String(body.content), 'utf8').toString('base64')
-    const result = await fsCommand(sandboxId, `mkdir -p "$(dirname "${path}")" && printf '%s' '${b64}' | base64 -d > "${path}"`, body)
-    if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
+    // The b64 payload rides inside the `/bin/sh -c` argument, which the kernel
+    // caps at MAX_ARG_STRLEN (128 KiB) — write it to a staging file in
+    // bounded chunks, then move it into place. Cleans up on failure.
+    const staging = `${path}.computesdk-tmp.${randomUUID().slice(0, 8)}`
+    try {
+      let result = await fsCommand(sandboxId, `mkdir -p "$(dirname "${path}")" && : > "${staging}"`, body)
+      if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
+      for (let i = 0; i < b64.length; i += WRITE_CHUNK_CHARS) {
+        result = await fsCommand(sandboxId, `printf '%s' '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' | base64 -d >> "${staging}"`, body)
+        if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
+      }
+      result = await fsCommand(sandboxId, `cat < "${staging}" > "${path}" && rm -f "${staging}"`, body)
+      if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
+    } catch (error) {
+      await fsCommand(sandboxId, `rm -f "${staging}"`, body).catch(() => {})
+      throw error
+    }
     return { success: true }
   }
 
