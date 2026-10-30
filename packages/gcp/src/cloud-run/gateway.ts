@@ -10,6 +10,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { randomUUID } from 'node:crypto'
 
 const SANDBOX_BINARY = process.env.CLOUD_RUN_SANDBOX_BINARY ?? '/usr/local/gcp/bin/sandbox'
+// A full inherited env can exceed the kernel's argv+env limit (E2BIG); the CLI
+// receives sandbox env via -e args, not the process env.
+const SPAWN_ENV = { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', HOME: process.env.HOME ?? '/root' }
 const SANDBOX_SECRET = process.env.SANDBOX_SECRET ?? process.env.CLOUD_RUN_SANDBOX_SECRET
 const DEFAULT_TIMEOUT_MS = 300_000
 
@@ -50,7 +53,11 @@ async function runSandbox(args: string[], timeout = DEFAULT_TIMEOUT_MS): Promise
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
   return new Promise((resolve, reject) => {
-    const child = spawn(SANDBOX_BINARY, args, { stdio: ['ignore', 'pipe', 'pipe'], signal: controller.signal })
+    const child = spawn(SANDBOX_BINARY, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      signal: controller.signal,
+      env: SPAWN_ENV,
+    })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', chunk => { stdout += chunk.toString('utf8') })
@@ -138,6 +145,7 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
     const child = spawn(SANDBOX_BINARY, ['delete', sandboxId, '--force', '--stdin=false', '--stdout=false', '--stderr=false'], {
       stdio: 'ignore',
       detached: true,
+      env: SPAWN_ENV,
     })
     child.unref()
     return { success: true }
