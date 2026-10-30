@@ -417,9 +417,9 @@ describe("miosa provider", () => {
       });
     });
 
-    it("mkdir should replay fs 404s through the sandbox's boot window", async () => {
+    it("mkdir should wait out a fresh sandbox's boot via exec's readiness wait", async () => {
       // The control plane's create returns before the VM finishes booting and
-      // fs routes 404 until it attaches. A fresh sandbox's calls retry.
+      // fs routes 404 until it attaches; exec's `wait` is the readiness wait.
       fetchMock.mockResolvedValueOnce(
         jsonResponse(
           sandboxRecord({ created_at: new Date().toISOString() }),
@@ -430,15 +430,34 @@ describe("miosa provider", () => {
       const sandbox = await provider.sandbox.create();
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ error: "not found" }, 404))
-        .mockResolvedValueOnce(jsonResponse({ error: "not found" }, 404))
+        .mockResolvedValueOnce(jsonResponse({ exit_code: 0 }))
         .mockResolvedValueOnce(jsonResponse({ data: {} }, 201));
 
       await sandbox.filesystem.mkdir("/workspace/deep/dir");
-      const mkdirCalls = fetchMock.mock.calls.filter(([url]) =>
-        String(url).includes("/fs/mkdir"),
-      );
-      expect(mkdirCalls).toHaveLength(3);
+      const urls = fetchMock.mock.calls.map(([url]) => String(url));
+      expect(urls.filter((u) => u.endsWith("/exec"))).toHaveLength(1);
+      expect(urls.filter((u) => u.includes("/fs/mkdir"))).toHaveLength(2);
     });
+
+    it("mkdir should surface a missing path within the attach grace on a fresh sandbox", async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse(
+          sandboxRecord({ created_at: new Date().toISOString() }),
+          201,
+        ),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+      fetchMock.mockImplementation(async (url: string) =>
+        String(url).endsWith("/exec")
+          ? jsonResponse({ exit_code: 0 })
+          : jsonResponse({ error: "not found" }, 404),
+      );
+
+      await expect(
+        sandbox.filesystem.mkdir("/workspace/deep/dir"),
+      ).rejects.toThrow("404");
+    }, 15_000);
 
     it("mkdir should surface a 404 at once for a long-lived sandbox", async () => {
       // sandboxRecord's created_at is months old, so a 404 means the sandbox
