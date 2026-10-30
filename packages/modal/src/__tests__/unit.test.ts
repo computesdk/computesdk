@@ -50,7 +50,7 @@ class FakeSandbox {
       for (const p of command.slice(2)) files.delete(p);
       return empty;
     }
-    const wrapped = command[2]?.match(/^\( (.*) \) > (\S+)\.out /s);
+    const wrapped = command[2]?.match(/^\( ([\s\S]*?)\n?\) > (\S+)\.out /);
     const inner = wrapped ? wrapped[1] : command[2];
     if (inner === 'pwd' && pwdFails) {
       return {

@@ -247,8 +247,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           // losing, then read them back with short execs and verify byte
           // counts (same pattern as the microsandbox adapter).
           const base = `/tmp/.modal-exec-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+          // The closing paren sits on its own line: a command ending in a
+          // comment or heredoc would otherwise swallow `) > ...` into itself.
           const wrapped =
-            `( ${fullCommand} ) > ${base}.out 2> ${base}.err;` +
+            `( ${fullCommand}\n) > ${base}.out 2> ${base}.err;` +
             ` C=$?;` +
             ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
             ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
@@ -257,25 +259,28 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           const proc = await modalSandbox.instance.exec(['sh', '-c', wrapped], { stdout: 'pipe', stderr: 'pipe', timeoutMs: options?.timeout });
           const exitCode = await proc.wait();
 
-          const readFile = async (path: string): Promise<string> => {
-            const p = await modalSandbox.instance.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-            return (await p.stdout.readText()) || '';
-          };
-          const readVerified = async (path: string, lenPath: string): Promise<string> => {
-            const expected = Number.parseInt((await readFile(lenPath)).trim(), 10);
-            const first = await readFile(path);
-            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
-            const second = await readFile(path);
-            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
-          };
+          try {
+            const readFile = async (path: string): Promise<string> => {
+              const p = await modalSandbox.instance.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
+              return (await p.stdout.readText()) || '';
+            };
+            const readVerified = async (path: string, lenPath: string): Promise<string> => {
+              const expected = Number.parseInt((await readFile(lenPath)).trim(), 10);
+              const first = await readFile(path);
+              if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
+              const second = await readFile(path);
+              return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+            };
 
-          const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
-          const stderr = await readVerified(`${base}.err`, `${base}.errlen`);
-          const codeText = await readFile(`${base}.code`).catch(() => '');
-          void modalSandbox.instance.exec(['rm', '-f', `${base}.out`, `${base}.err`, `${base}.outlen`, `${base}.errlen`, `${base}.code`]).then((p) => p.wait()).catch(() => undefined);
+            const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
+            const stderr = await readVerified(`${base}.err`, `${base}.errlen`);
+            const codeText = await readFile(`${base}.code`).catch(() => '');
 
-          const fileExit = Number.parseInt(codeText.trim(), 10);
-          return { stdout, stderr, exitCode: Number.isInteger(fileExit) ? fileExit : (exitCode || 0), durationMs: Date.now() - startTime };
+            const fileExit = Number.parseInt(codeText.trim(), 10);
+            return { stdout, stderr, exitCode: Number.isInteger(fileExit) ? fileExit : (exitCode || 0), durationMs: Date.now() - startTime };
+          } finally {
+            void modalSandbox.instance.exec(['rm', '-f', `${base}.out`, `${base}.err`, `${base}.outlen`, `${base}.errlen`, `${base}.code`]).then((p) => p.wait()).catch(() => undefined);
+          }
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }

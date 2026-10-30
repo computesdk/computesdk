@@ -479,14 +479,19 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
         // output. Redirect to guest files so the command's output never
         // depends on stream fidelity, then read the files back through
         // short-lived commands with byte-count verification (same pattern
-        // as the microsandbox adapter).
+        // as the microsandbox adapter). Background commands skip the
+        // redirect — their output would accumulate in the files forever
+        // (and nothing reads them back anyway).
         const base = `/tmp/.sandbox0-exec-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
-        const wrapped =
-          `( ${command} ) > ${base}.out 2> ${base}.err;` +
-          ` C=$?;` +
-          ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
-          ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
-          ` printf '%s' "$C" > ${base}.code`;
+        // The closing paren sits on its own line: a command ending in a
+        // comment or heredoc would otherwise swallow `) > ...` into itself.
+        const wrapped = options?.background
+          ? command
+          : `( ${command}\n) > ${base}.out 2> ${base}.err;` +
+            ` C=$?;` +
+            ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
+            ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
+            ` printf '%s' "$C" > ${base}.code`;
 
         let started: Awaited<ReturnType<Sandbox0Sandbox['cmd']>>;
         for (let attempt = 0; ; attempt += 1) {
@@ -562,12 +567,18 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
             return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
           };
 
-          const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
-          const stderr = await readVerified(`${base}.err`, `${base}.errlen`);
-          const codeText = await readViaCommand(`cat ${base}.code 2>/dev/null`).catch(() => '');
-          await readViaCommand(
-            `rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`,
-          ).catch(() => undefined);
+          let stdout: string;
+          let stderr: string;
+          let codeText: string;
+          try {
+            stdout = await readVerified(`${base}.out`, `${base}.outlen`);
+            stderr = await readVerified(`${base}.err`, `${base}.errlen`);
+            codeText = await readViaCommand(`cat ${base}.code 2>/dev/null`).catch(() => '');
+          } finally {
+            await readViaCommand(
+              `rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`,
+            ).catch(() => undefined);
+          }
 
           const fileExit = Number.parseInt(codeText.trim(), 10);
           return {

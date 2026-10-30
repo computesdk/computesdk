@@ -73,7 +73,7 @@ function makeSandbox() {
     cmd: vi.fn().mockImplementation(async (script: string) => {
       const contextId = `ctx_${++ctxSeq}`;
       ctxScripts.set(contextId, script);
-      const wrapped = script.match(/^\( .* \) > (\S+)\.out /s);
+      const wrapped = script.match(/^\( [\s\S]*?\n?\) > (\S+)\.out /);
       if (wrapped) {
         const base = wrapped[1];
         guestFiles.set(`${base}.out`, canned.out);
