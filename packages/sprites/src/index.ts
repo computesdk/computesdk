@@ -2,6 +2,8 @@
  * Sprites Provider - Factory-based Implementation
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -45,7 +47,9 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           } = options || {};
 
           const body: Record<string, any> = {
-            name: name || optSandboxId || `sprite-${Date.now()}`,
+            // Date.now() alone collides for concurrent creates (burst
+            // benchmarks), so a uuid suffix keeps every default unique.
+            name: name || optSandboxId || `sprite-${Date.now()}-${randomUUID().slice(0, 8)}`,
             url_settings: { auth: 'public' },
             ...providerOptions,
           };
