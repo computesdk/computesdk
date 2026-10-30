@@ -509,8 +509,10 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         // exec carries nothing worth losing, then read them back with short
         // execs and verify byte counts (same pattern as microsandbox).
         const base = `/tmp/.createos-exec-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+        // The closing paren sits on its own line: a command ending in a
+        // comment or heredoc would otherwise swallow `) > ...` into itself.
         const wrapped =
-          `( ${buildScript(command, options)} ) > ${base}.out 2> ${base}.err;` +
+          `( ${buildScript(command, options)}\n) > ${base}.out 2> ${base}.err;` +
           ` C=$?;` +
           ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
           ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
@@ -518,38 +520,41 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const execOpts = options?.timeout ? { timeoutMs: options.timeout } : undefined;
         const { result, exec_ms } = await sandbox.runCommand("sh", ["-c", wrapped], execOpts);
 
-        const readFile = async (path: string): Promise<string> => {
-          const r = await sandbox.runCommand("cat", [path]);
-          return r.result.stdout;
-        };
-        const readVerified = async (path: string, lenPath: string): Promise<string> => {
-          const expected = Number.parseInt((await readFile(lenPath)).trim(), 10);
-          const first = await readFile(path);
-          if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
-          const second = await readFile(path);
-          return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
-        };
+        try {
+          const readFile = async (path: string): Promise<string> => {
+            const r = await sandbox.runCommand("cat", [path]);
+            return r.result.stdout;
+          };
+          const readVerified = async (path: string, lenPath: string): Promise<string> => {
+            const expected = Number.parseInt((await readFile(lenPath)).trim(), 10);
+            const first = await readFile(path);
+            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
+            const second = await readFile(path);
+            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+          };
 
-        const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
-        const capturedStderr = await readVerified(`${base}.err`, `${base}.errlen`);
-        const codeText = await readFile(`${base}.code`).catch(() => "");
-        void sandbox.runCommand("rm", [
-          "-f",
-          `${base}.out`,
-          `${base}.err`,
-          `${base}.outlen`,
-          `${base}.errlen`,
-          `${base}.code`,
-        ]).catch(() => undefined);
+          const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
+          const capturedStderr = await readVerified(`${base}.err`, `${base}.errlen`);
+          const codeText = await readFile(`${base}.code`).catch(() => "");
 
-        const fileExit = Number.parseInt(codeText.trim(), 10);
-        const stderr = result.error ? `${capturedStderr}${result.error}` : capturedStderr;
-        return {
-          stdout,
-          stderr,
-          exitCode: Number.isInteger(fileExit) ? fileExit : result.exit_code,
-          durationMs: exec_ms,
-        };
+          const fileExit = Number.parseInt(codeText.trim(), 10);
+          const stderr = result.error ? `${capturedStderr}${result.error}` : capturedStderr;
+          return {
+            stdout,
+            stderr,
+            exitCode: Number.isInteger(fileExit) ? fileExit : result.exit_code,
+            durationMs: exec_ms,
+          };
+        } finally {
+          void sandbox.runCommand("rm", [
+            "-f",
+            `${base}.out`,
+            `${base}.err`,
+            `${base}.outlen`,
+            `${base}.errlen`,
+            `${base}.code`,
+          ]).catch(() => undefined);
+        }
       },
 
       getInfo: async (sandbox: Sandbox): Promise<InstanceInfo> => {

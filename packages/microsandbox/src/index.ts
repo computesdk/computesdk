@@ -434,7 +434,9 @@ function detachedPaths(id: string): DetachedPaths {
 function detachedLaunchScript(command: string, paths: DetachedPaths): string {
   const inner =
     `( set -C; echo $$ > ${paths.pid} 2>/dev/null ) || exit 0;` +
-    ` ( ${command} ) > ${paths.out} 2> ${paths.err};` +
+    // The closing paren sits on its own line: a command ending in a
+    // comment or heredoc would otherwise swallow `) > ...` into itself.
+    ` ( ${command}\n) > ${paths.out} 2> ${paths.err};` +
     // Byte counts land BEFORE the exit sentinel so a poll that sees .code
     // already has the lengths the readers verify against.
     ` C=$?;` +
@@ -613,19 +615,22 @@ async function runCommand(
     await new Promise((resolve) => setTimeout(resolve, Math.min(2_000, Math.max(remaining, 1))));
   }
 
-  const [stdout, stderr, codeText] = await Promise.all([
-    readGuestFileChecked(native, paths.out, paths.outLen),
-    readGuestFileChecked(native, paths.err, paths.errLen),
-    readGuestFile(native, paths.code),
-  ]);
-  await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
-  const exitCode = Number.parseInt(codeText.trim(), 10);
-  return {
-    stdout,
-    stderr,
-    exitCode: Number.isNaN(exitCode) ? 1 : exitCode,
-    durationMs: performance.now() - startedAt,
-  };
+  try {
+    const [stdout, stderr, codeText] = await Promise.all([
+      readGuestFileChecked(native, paths.out, paths.outLen),
+      readGuestFileChecked(native, paths.err, paths.errLen),
+      readGuestFile(native, paths.code),
+    ]);
+    const exitCode = Number.parseInt(codeText.trim(), 10);
+    return {
+      stdout,
+      stderr,
+      exitCode: Number.isNaN(exitCode) ? 1 : exitCode,
+      durationMs: performance.now() - startedAt,
+    };
+  } finally {
+    await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
+  }
 }
 
 async function streamCommand(

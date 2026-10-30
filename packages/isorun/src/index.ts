@@ -135,8 +135,10 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         // with short execs and verify byte counts the same way microsandbox
         // does.
         const base = `/tmp/.isorun-exec-${randomUUID().replace(/-/g, '').slice(0, 12)}`
+        // The closing paren sits on its own line: a command ending in a
+        // comment or heredoc would otherwise swallow `) > ...` into itself.
         const wrapped =
-          `( ${fullCommand} ) > ${base}.out 2> ${base}.err;` +
+          `( ${fullCommand}\n) > ${base}.out 2> ${base}.err;` +
           ` C=$?;` +
           ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
           ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
@@ -145,26 +147,29 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         const timeoutSec = Math.max(1, Math.ceil((options?.timeout ?? DEFAULT_TIMEOUT_MS) / 1000))
         const result = await sandbox.exec(wrapped, timeoutSec)
 
-        const readVerified = async (path: string, lenPath: string): Promise<string> => {
-          const lenR = await sandbox.exec(`cat ${lenPath} 2>/dev/null`, 60).catch(() => null)
-          const expected = lenR ? Number.parseInt(lenR.stdout.trim(), 10) : Number.NaN
-          const first = (await sandbox.exec(`cat ${path}`, 60)).stdout
-          if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first
-          const second = (await sandbox.exec(`cat ${path}`, 60)).stdout
-          return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first
-        }
+        try {
+          const readVerified = async (path: string, lenPath: string): Promise<string> => {
+            const lenR = await sandbox.exec(`cat ${lenPath} 2>/dev/null`, 60).catch(() => null)
+            const expected = lenR ? Number.parseInt(lenR.stdout.trim(), 10) : Number.NaN
+            const first = (await sandbox.exec(`cat ${path}`, 60)).stdout
+            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first
+            const second = (await sandbox.exec(`cat ${path}`, 60)).stdout
+            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first
+          }
 
-        const stdout = await readVerified(`${base}.out`, `${base}.outlen`)
-        const stderr = await readVerified(`${base}.err`, `${base}.errlen`)
-        const codeText = await sandbox.exec(`cat ${base}.code 2>/dev/null`, 60).then((r) => r.stdout).catch(() => '')
-        void sandbox.exec(`rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`, 60).catch(() => undefined)
+          const stdout = await readVerified(`${base}.out`, `${base}.outlen`)
+          const stderr = await readVerified(`${base}.err`, `${base}.errlen`)
+          const codeText = await sandbox.exec(`cat ${base}.code 2>/dev/null`, 60).then((r) => r.stdout).catch(() => '')
 
-        const fileExit = Number.parseInt(codeText.trim(), 10)
-        return {
-          stdout,
-          stderr,
-          exitCode: Number.isInteger(fileExit) ? fileExit : result.exitCode,
-          durationMs: Date.now() - startTime,
+          const fileExit = Number.parseInt(codeText.trim(), 10)
+          return {
+            stdout,
+            stderr,
+            exitCode: Number.isInteger(fileExit) ? fileExit : result.exitCode,
+            durationMs: Date.now() - startTime,
+          }
+        } finally {
+          void sandbox.exec(`rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`, 60).catch(() => undefined)
         }
       },
 
