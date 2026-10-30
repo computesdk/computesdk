@@ -1,5 +1,12 @@
 # @computesdk/cloud-run
 
+## 0.1.24
+
+### Patch Changes
+
+- Updated dependencies [9a96346]
+  - @computesdk/gcp@0.1.8
+
 ## 0.1.23
 
 ### Patch Changes
