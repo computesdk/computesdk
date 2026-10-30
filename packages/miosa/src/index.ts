@@ -1351,34 +1351,76 @@ async function fsOnRunner<T>(
 }
 
 /**
- * How long an account-created sandbox's fs calls replay a 404. The control
- * plane's create returns before the VM has finished booting — the same lag
- * exec absorbs by sending `wait` on every request — and `/fs/*` answers 404
- * until the sandbox attaches. A 404 past this window means a genuinely
- * missing sandbox and surfaces immediately.
+ * A fs 404 on a young sandbox can mean a still-booting VM or a missing
+ * sandbox - `/fs/*` answers 404 for both while the control plane's create
+ * returns before the VM has finished booting. `wait` on exec is the API's
+ * own readiness wait: it blocks until the VM has attached, which is what
+ * the fs routes need to serve. A 404 that survives it names a missing path
+ * (or a gone sandbox), so only a brief post-attach grace is replayed before
+ * the miss surfaces.
  */
 const ACCOUNT_FS_BOOT_WINDOW_MS = 120_000;
-const ACCOUNT_FS_POLL_MS = 2_000;
+const ACCOUNT_FS_POST_ATTACH_GRACE_MS = 10_000;
+const ACCOUNT_FS_POLL_MS = 1_000;
 
-/** Runs one account-API fs op, replaying 404s through the sandbox's boot window. */
+/** Waits for an account-API sandbox to attach by exercising exec's `wait`. */
+async function waitForAccountAttach(
+  sandbox: MiosaSandbox,
+  budgetMs: number,
+): Promise<void> {
+  await miosaRequest<unknown>(sandbox, "POST", `/sandboxes/${sandbox.record.id}/exec`, {
+    command: "true",
+    wait: true,
+    wait_timeout_ms: Math.max(0, Math.ceil(budgetMs)),
+  });
+}
+
+/** Runs one account-API fs op, waiting out a young sandbox's boot on a 404. */
 async function accountFs<T>(
   sandbox: MiosaSandbox,
   account: () => Promise<T>,
 ): Promise<T> {
   const createdAt = Date.parse(sandbox.record.created_at ?? "");
-  const deadline = Number.isNaN(createdAt)
+  const windowEnd = Number.isNaN(createdAt)
     ? Date.now()
     : createdAt + ACCOUNT_FS_BOOT_WINDOW_MS;
   for (;;) {
     try {
       return await account();
     } catch (error) {
-      if (!isNotFoundError(error) || Date.now() >= deadline) throw error;
+      if (!isNotFoundError(error)) throw error;
+      const remaining = windowEnd - Date.now();
+      // No boot window left to wait out: the miss is genuine.
+      if (remaining <= 0) throw error;
+      const attached = await waitForAccountAttach(sandbox, remaining).then(
+        () => true,
+        (waitError: unknown) =>
+          // exec 404s on a sandbox that is gone rather than booting; the
+          // caller's fs error describes that best. Anything else is
+          // transient and the loop waits out the rest of the window.
+          isNotFoundError(waitError) ? undefined : false,
+      );
+      if (attached === undefined) throw error;
+      if (attached) {
+        // Attached: replay a fading attach-lag 404 briefly, then surface it.
+        const deadline = Date.now() + ACCOUNT_FS_POST_ATTACH_GRACE_MS;
+        for (;;) {
+          try {
+            return await account();
+          } catch (retryError) {
+            if (!isNotFoundError(retryError) || Date.now() >= deadline)
+              throw retryError;
+            await new Promise((resolve) =>
+              setTimeout(
+                resolve,
+                Math.min(ACCOUNT_FS_POLL_MS, deadline - Date.now()),
+              ),
+            );
+          }
+        }
+      }
       await new Promise((resolve) =>
-        setTimeout(
-          resolve,
-          Math.min(ACCOUNT_FS_POLL_MS, deadline - Date.now()),
-        ),
+        setTimeout(resolve, Math.min(ACCOUNT_FS_POLL_MS, remaining)),
       );
     }
   }
