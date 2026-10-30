@@ -1,5 +1,13 @@
 # @computesdk/miosa
 
+## 1.2.6
+
+### Patch Changes
+
+- 946f4dc: Account-API filesystem calls (read/write/mkdir/readdir/remove) now replay 404s through a fresh sandbox's boot window instead of racing it. The control plane's `wait: true` create can still return before the VM finishes booting and `/sandboxes/:id/fs/*` answers 404 until the sandbox attaches; a 404 on a sandbox past the window still surfaces immediately as a genuine miss.
+- 936ba64: Account-API fs 404s on a young sandbox now wait out the boot via exec's `wait` readiness hold plus a 10s post-attach grace, instead of replaying 404s for the whole window — a missing file on a fresh sandbox surfaces within ~10s rather than stalling for two minutes.
+- 428423f: Snapshot calls on regionally-created sandboxes now fail with an actionable error naming the cause and remedy (snapshots are account-API only; recreate the sandbox with `runnerMode: false` or `MIOSA_RUNNER_MODE=0`) instead of a bare `404 NOT_FOUND` from `POST /sandboxes/:id/snapshots`.
+
 ## 1.2.5
 
 ### Patch Changes
