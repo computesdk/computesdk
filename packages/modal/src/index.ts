@@ -6,6 +6,8 @@ import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
+import { randomUUID } from 'node:crypto';
+
 import { ModalClient, SandboxFilesystemNotFoundError } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
 
@@ -238,9 +240,42 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
           
-          const process = await modalSandbox.instance.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe', timeoutMs: options?.timeout });
-          const [stdout, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          return { stdout: stdout || '', stderr: stderr || '', exitCode: exitCode || 0, durationMs: Date.now() - startTime };
+          // Modal's exec pipes stream output — a transport hiccup during a
+          // quiet stretch drops a contiguous chunk and the read still
+          // resolves, which is indistinguishable from real output. Redirect
+          // to guest files so the long-lived process carries nothing worth
+          // losing, then read them back with short execs and verify byte
+          // counts (same pattern as the microsandbox adapter).
+          const base = `/tmp/.modal-exec-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+          const wrapped =
+            `( ${fullCommand} ) > ${base}.out 2> ${base}.err;` +
+            ` C=$?;` +
+            ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
+            ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
+            ` printf '%s' "$C" > ${base}.code`;
+
+          const proc = await modalSandbox.instance.exec(['sh', '-c', wrapped], { stdout: 'pipe', stderr: 'pipe', timeoutMs: options?.timeout });
+          const exitCode = await proc.wait();
+
+          const readFile = async (path: string): Promise<string> => {
+            const p = await modalSandbox.instance.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
+            return (await p.stdout.readText()) || '';
+          };
+          const readVerified = async (path: string, lenPath: string): Promise<string> => {
+            const expected = Number.parseInt((await readFile(lenPath)).trim(), 10);
+            const first = await readFile(path);
+            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
+            const second = await readFile(path);
+            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+          };
+
+          const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
+          const stderr = await readVerified(`${base}.err`, `${base}.errlen`);
+          const codeText = await readFile(`${base}.code`).catch(() => '');
+          void modalSandbox.instance.exec(['rm', '-f', `${base}.out`, `${base}.err`, `${base}.outlen`, `${base}.errlen`, `${base}.code`]).then((p) => p.wait()).catch(() => undefined);
+
+          const fileExit = Number.parseInt(codeText.trim(), 10);
+          return { stdout, stderr, exitCode: Number.isInteger(fileExit) ? fileExit : (exitCode || 0), durationMs: Date.now() - startTime };
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }

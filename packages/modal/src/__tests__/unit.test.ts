@@ -39,14 +39,36 @@ class FakeSandbox {
   };
   async exec(command: string[]) {
     execCalls.push(command);
-    if (command[2] === 'pwd' && pwdFails) {
+    const empty = { stdout: { readText: async () => '' }, stderr: { readText: async () => '' }, wait: async () => 0 };
+    // runCommand redirects output to guest files and reads them back with
+    // cat execs — simulate the redirect by materialising the files.
+    if (command[0] === 'cat') {
+      const content = files.get(command[1]) ?? '';
+      return { ...empty, stdout: { readText: async () => content }, wait: async () => (files.has(command[1]) ? 0 : 1) };
+    }
+    if (command[0] === 'rm') {
+      for (const p of command.slice(2)) files.delete(p);
+      return empty;
+    }
+    const wrapped = command[2]?.match(/^\( (.*) \) > (\S+)\.out /s);
+    const inner = wrapped ? wrapped[1] : command[2];
+    if (inner === 'pwd' && pwdFails) {
       return {
         stdout: { readText: async () => '' },
         stderr: { readText: async () => 'boom' },
         wait: async () => 1,
       };
     }
-    const content = command[2] === 'pwd' ? '/root\n' : (files.get(command[1]) ?? '');
+    const content = inner === 'pwd' ? '/root\n' : (files.get(command[1]) ?? '');
+    if (wrapped) {
+      const base = wrapped[2];
+      files.set(`${base}.out`, content);
+      files.set(`${base}.outlen`, String(Buffer.byteLength(content)));
+      files.set(`${base}.err`, '');
+      files.set(`${base}.errlen`, '0');
+      files.set(`${base}.code`, '0');
+      return empty;
+    }
     return {
       stdout: { readText: async () => content },
       stderr: { readText: async () => '' },
@@ -165,7 +187,7 @@ describe('modal filesystem read/write', () => {
     expect(files.get('/root/a/../b.txt')).toBe('y');
 
     // The workdir is probed once (`pwd`) and cached across operations.
-    expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(1);
+    expect(execCalls.filter((c) => c[0] === 'sh' && c[2]?.includes('pwd'))).toHaveLength(1);
   });
 
   it('does not cache a failed workdir probe', async () => {
@@ -180,7 +202,7 @@ describe('modal filesystem read/write', () => {
     pwdFails = false;
     await sandbox.filesystem.writeFile('y.txt', 'y');
     expect(files.get('/root/y.txt')).toBe('y');
-    expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(2);
+    expect(execCalls.filter((c) => c[0] === 'sh' && c[2]?.includes('pwd'))).toHaveLength(2);
   });
 
   it('rejects ambiguous paths in remove', async () => {
