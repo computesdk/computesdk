@@ -1,5 +1,11 @@
 # @computesdk/miosa
 
+## 1.2.5
+
+### Patch Changes
+
+- b1b52ea: Fix two sandbox-fidelity failures: novita `snapshot.create` now accepts (and drops) `name`/`metadata` instead of throwing — the API takes no label, so callers that always name snapshots no longer fail. Miosa filesystem ops (`readFile`, `writeFile`, `mkdir`, `readdir`, `remove`) now route to the regional runner's own `filesystem.*` routes for regionally-created sandboxes — the account API does not own those ids and answered 404.
+
 ## 1.2.4
 
 ### Patch Changes
