@@ -251,9 +251,10 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
     },
     snapshot: {
       create: async (config, sandboxId, options) => {
-        if (options?.name !== undefined || options?.metadata !== undefined) {
-          throw new Error('Novita snapshots do not support name or metadata.');
-        }
+        // The API takes no label: name/metadata are caller-side tags, so they
+        // are accepted and dropped rather than rejected (a caller that always
+        // names its snapshots — e.g. the fidelity bench — must not fail).
+        void options;
         return snapshotInfo(await client(config).sandbox.createSnapshot(sandboxId));
       },
       list: async (config, options) => {

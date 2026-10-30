@@ -157,6 +157,30 @@ describe("lazy create", () => {
             }),
           };
         }
+        // The runner's own filesystem routes are adapter plumbing here too:
+        // a regional sandbox's fs ops ride /filesystem/<op> in soma-api's
+        // envelope (the account API does not own the id), so answer them
+        // the way the readiness poll is answered.
+        const fsOp = /^\/api\/v1\/sandboxes\/[^/]+\/filesystem\/(\w+)$/.exec(
+          call.path,
+        );
+        if (call.method === "POST" && fsOp) {
+          return {
+            status: 200,
+            headers: {},
+            body: JSON.stringify({
+              schema: "soma.api.v1",
+              operation: `filesystem.${fsOp[1]}`,
+              status: "ok",
+              result: {
+                instance_id: REAL_ID.replaceAll("-", ""),
+                operation: fsOp[1],
+              },
+              error: null,
+              receipt: null,
+            }),
+          };
+        }
         const scripted = await reply(call);
         return {
           status: scripted.status,
@@ -657,7 +681,10 @@ describe("lazy create", () => {
       expect(command.exitCode).toBe(127);
       expect(creates()).toHaveLength(2);
       expect(creates()[1]?.body).not.toHaveProperty("run");
-      expect(accountApiCalls()).toEqual([`POST /sandboxes/${REAL_ID}/fs/write`]);
+      expect(runnerPaths()).toContain(
+        `POST /api/v1/sandboxes/${REAL_ID}/filesystem/write`,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should still send a create the runner does not serve to the account API without the run field", async () => {
@@ -692,9 +719,10 @@ describe("lazy create", () => {
 
       expect(creates()).toHaveLength(1);
       expect(creates()[0]?.body).not.toHaveProperty("run");
-      expect(accountApiCalls()).toEqual([
-        `POST /sandboxes/${REAL_ID}/fs/write`,
-      ]);
+      expect(runnerPaths()).toContain(
+        `POST /api/v1/sandboxes/${REAL_ID}/filesystem/write`,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should create the sandbox before reporting its info", async () => {
@@ -756,9 +784,10 @@ describe("lazy create", () => {
 
       expect(creates()).toHaveLength(1);
       expect(command.stdout).toBe("v22.1.0\n");
-      expect(accountApiCalls()).toEqual([
-        `POST /sandboxes/${REAL_ID}/fs/write`,
-      ]);
+      expect(runnerPaths()).toContain(
+        `POST /api/v1/sandboxes/${REAL_ID}/filesystem/write`,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should give two commands started together one create and one ordinary exec", async () => {

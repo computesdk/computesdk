@@ -244,7 +244,11 @@ describe('Novita provider', () => {
     api.listSnapshots.mockReturnValue(paginator);
     expect((await snapshots.list({ limit: 1 })).map(s => s.id)).toEqual(['one']);
     expect(paginator.nextItems).toHaveBeenCalledOnce();
-    await expect(snapshots.create('sbx-1', { name: 'unsupported' })).rejects.toThrow('do not support');
+    // name/metadata are accepted and dropped (the API takes no label): a
+    // caller that always names snapshots must not be refused.
+    api.createSnapshot.mockResolvedValue({ snapshotId: 'snap-named' });
+    expect(await snapshots.create('sbx-1', { name: 'snap-x' })).toEqual({ id: 'snap-named', snapshotId: 'snap-named', provider: 'novita' });
+    expect(api.createSnapshot).toHaveBeenCalledWith('sbx-1');
     await expect(snapshots.list({ limit: -1 })).rejects.toThrow('non-negative');
   });
 

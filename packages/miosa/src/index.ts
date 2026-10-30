@@ -832,10 +832,12 @@ async function sendMiosaRequest(
 // off per provider with `runnerMode: false`, or per process with
 // MIOSA_RUNNER_MODE=0.
 //
-// Every other operation (list, getById, getInfo, getUrl/expose, filesystem,
-// snapshots) keeps using the account API above: the regional endpoint does
-// not expose those routes, and expose/snapshots stay on the account API
-// regardless.
+// Control-plane operations (list, getById, getInfo, getUrl/expose, snapshots)
+// keep using the account API above: the regional endpoint does not expose
+// them, and expose/snapshots stay on the account API regardless. Filesystem
+// is the exception — the account API 404s the id of a sandbox it did not
+// create, so a regional sandbox's fs ops ride the runner's own
+// `filesystem.*` routes instead (see miosaFs).
 //
 // A create the regional endpoint does not serve - templates, images,
 // snapshots, and shapes above the standard sandbox size - is handed to the
@@ -1305,6 +1307,65 @@ function handleAuthFor(
   if (known === "account") return { apiKey: auth.apiKey, baseUrl: auth.baseUrl };
   if (known === "regional") return regionalAuth(config, auth);
   return auth;
+}
+
+/**
+ * Sends one filesystem operation to the endpoint that owns this sandbox —
+ * the runner for a regional sandbox (the account API does not serve the id
+ * of a sandbox it did not create, so `/sandboxes/:id/fs/*` there answers
+ * 404), the account API otherwise. Mirrors execInSandbox's routing: a
+ * handle whose origin was never recorded defaults to the runner and learns
+ * "account" from a not-found there. A refusal inside a runner result is an
+ * fs-level answer to surface, not a routing signal.
+ */
+async function fsOnRunner<T>(
+  sandbox: MiosaSandbox,
+  run: (client: MiosaRunnerClient) => Promise<T>,
+  account: () => Promise<T>,
+): Promise<T> {
+  const client = await getRunnerClient(sandbox);
+  try {
+    return await run(client);
+  } catch (error) {
+    // A handle from getById/list for a sandbox created elsewhere carries no
+    // recorded origin and defaults to the runner; a not-found there means the
+    // account API owns it. Learn the origin so later calls skip the runner.
+    if (
+      !isNotFoundError(error) ||
+      sandboxTransport.get(sandbox.record.id) === "regional"
+    ) {
+      throw error;
+    }
+    sandboxTransport.set(sandbox.record.id, "account");
+    sandbox.runner = undefined;
+    return account();
+  }
+}
+
+/** Runs one filesystem op on the right endpoint (see fsOnRunner). */
+function miosaFs<T>(
+  sandbox: MiosaSandbox,
+  runner: (client: MiosaRunnerClient) => Promise<T>,
+  account: () => Promise<T>,
+): Promise<T> {
+  if (sandbox.runner) return fsOnRunner(sandbox, runner, account);
+  return account();
+}
+
+/**
+ * A runner filesystem op answers with a `refusal` field rather than an HTTP
+ * error — map it to a thrown error so callers see the same contract the
+ * account-API path produces.
+ */
+function runnerFsCheck(
+  op: string,
+  path: string,
+  result: { refusal?: string },
+): void {
+  if (!result.refusal) return;
+  throw new Error(
+    `MIOSA runner fs.${op} ${path} refused: ${result.refusal}`,
+  );
 }
 
 /**
@@ -2063,17 +2124,31 @@ const createMiosaProvider = defineProvider<
 
       filesystem: {
         // Native: GET /sandboxes/:id/fs/read?path=…  → { path, content }
+        // On a regional sandbox the account API does not own the id and 404s —
+        // the runner's own filesystem route serves it instead.
         readFile: async (
           sandbox: MiosaSandbox,
           path: string,
         ): Promise<string> => {
           await ensureCreated(sandbox);
-          const response = await miosaRequest<{ content: string }>(
+          return miosaFs(
             sandbox,
-            "GET",
-            `/sandboxes/${sandbox.record.id}/fs/read?path=${encodeURIComponent(path)}`,
+            async (client) => {
+              const r = await client.filesystem.read(sandbox.record.id, path);
+              runnerFsCheck("read", path, r);
+              return new TextDecoder().decode(
+                client.filesystem.decode(r.content!),
+              );
+            },
+            async () => {
+              const response = await miosaRequest<{ content: string }>(
+                sandbox,
+                "GET",
+                `/sandboxes/${sandbox.record.id}/fs/read?path=${encodeURIComponent(path)}`,
+              );
+              return response.content;
+            },
           );
-          return response.content;
         },
 
         // Native: POST /sandboxes/:id/fs/write  { path, content }
@@ -2083,13 +2158,26 @@ const createMiosaProvider = defineProvider<
           content: string,
         ): Promise<void> => {
           await ensureCreated(sandbox);
-          await miosaRequest<unknown>(
+          await miosaFs(
             sandbox,
-            "POST",
-            `/sandboxes/${sandbox.record.id}/fs/write`,
-            {
-              path,
-              content,
+            async (client) => {
+              const r = await client.filesystem.write(
+                sandbox.record.id,
+                path,
+                content,
+              );
+              runnerFsCheck("write", path, r);
+            },
+            async () => {
+              await miosaRequest<unknown>(
+                sandbox,
+                "POST",
+                `/sandboxes/${sandbox.record.id}/fs/write`,
+                {
+                  path,
+                  content,
+                },
+              );
             },
           );
         },
@@ -2097,13 +2185,22 @@ const createMiosaProvider = defineProvider<
         // Native: POST /sandboxes/:id/fs/mkdir  { path, recursive }
         mkdir: async (sandbox: MiosaSandbox, path: string): Promise<void> => {
           await ensureCreated(sandbox);
-          await miosaRequest<unknown>(
+          await miosaFs(
             sandbox,
-            "POST",
-            `/sandboxes/${sandbox.record.id}/fs/mkdir`,
-            {
-              path,
-              recursive: true,
+            async (client) => {
+              const r = await client.filesystem.mkdir(sandbox.record.id, path);
+              runnerFsCheck("mkdir", path, r);
+            },
+            async () => {
+              await miosaRequest<unknown>(
+                sandbox,
+                "POST",
+                `/sandboxes/${sandbox.record.id}/fs/mkdir`,
+                {
+                  path,
+                  recursive: true,
+                },
+              );
             },
           );
         },
@@ -2114,22 +2211,44 @@ const createMiosaProvider = defineProvider<
           path: string,
         ): Promise<FileEntry[]> => {
           await ensureCreated(sandbox);
-          const response = await miosaRequest<{ files: MiosaFileListEntry[] }>(
+          return miosaFs(
             sandbox,
-            "GET",
-            `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
+            async (client) => {
+              const r = await client.filesystem.list(sandbox.record.id, path);
+              runnerFsCheck("list", path, r);
+              return (r.entries ?? []).map((entry) => ({
+                name: new TextDecoder().decode(
+                  client.filesystem.decode(entry.name),
+                ),
+                type:
+                  entry.kind === "directory"
+                    ? ("directory" as const)
+                    : ("file" as const),
+                // The runner's list entry carries name+kind only — no
+                // size/mtime — so those surface as zero like a short stat.
+                size: 0,
+                modified: new Date(0),
+              }));
+            },
+            async () => {
+              const response = await miosaRequest<{ files: MiosaFileListEntry[] }>(
+                sandbox,
+                "GET",
+                `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
+              );
+              return (response.files ?? []).map((entry) => ({
+                name: entry.name,
+                type:
+                  entry.type === "directory"
+                    ? ("directory" as const)
+                    : ("file" as const),
+                size: entry.size_bytes ?? 0,
+                modified: entry.modified_at
+                  ? new Date(entry.modified_at)
+                  : new Date(0),
+              }));
+            },
           );
-          return (response.files ?? []).map((entry) => ({
-            name: entry.name,
-            type:
-              entry.type === "directory"
-                ? ("directory" as const)
-                : ("file" as const),
-            size: entry.size_bytes ?? 0,
-            modified: entry.modified_at
-              ? new Date(entry.modified_at)
-              : new Date(0),
-          }));
         },
 
         // Composed from exec: MIOSA has no boolean exists endpoint (fs/stat
@@ -2153,10 +2272,23 @@ const createMiosaProvider = defineProvider<
         // Native: DELETE /sandboxes/:id/fs?path=…  (recursive on the server side)
         remove: async (sandbox: MiosaSandbox, path: string): Promise<void> => {
           await ensureCreated(sandbox);
-          await miosaRequest<unknown>(
+          await miosaFs(
             sandbox,
-            "DELETE",
-            `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
+            async (client) => {
+              const r = await client.filesystem.remove(
+                sandbox.record.id,
+                path,
+                true,
+              );
+              runnerFsCheck("remove", path, r);
+            },
+            async () => {
+              await miosaRequest<unknown>(
+                sandbox,
+                "DELETE",
+                `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
+              );
+            },
           );
         },
       },
