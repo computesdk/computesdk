@@ -1,5 +1,13 @@
 # @computesdk/workbench
 
+## 33.0.25
+
+### Patch Changes
+
+- Updated dependencies [9a96346]
+  - @computesdk/gcp@0.1.8
+  - @computesdk/cloud-run@0.1.24
+
 ## 33.0.24
 
 ### Patch Changes
