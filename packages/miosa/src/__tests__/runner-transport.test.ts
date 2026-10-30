@@ -1713,10 +1713,10 @@ describe("regional sandbox endpoint", () => {
       ).rejects.toThrow("does not own it");
     });
 
-    it("should translate a /snapshots 404 into the regional-endpoint guidance", async () => {
-      // A handle whose origin this process never recorded still gets the
-      // actionable error: its account-API POST 404s because that endpoint
-      // does not own the id.
+    it("should keep the 404 status while appending regional guidance", async () => {
+      // A handle whose origin this process never recorded gets a real
+      // NOT_FOUND (the sandbox may simply be missing) with the regional
+      // remedy appended as context.
       const id = "b1000000-0000-0000-0000-000000000020";
       fetchMock.mockImplementation(async (url: string) =>
         url.includes("/snapshots")
@@ -1725,9 +1725,12 @@ describe("regional sandbox endpoint", () => {
       );
       const provider = miosa({ apiKey: API_KEY });
 
-      await expect(
-        provider.snapshot!.create(id, { name: "s" }),
-      ).rejects.toThrow("runnerMode: false");
+      const error = await provider
+        .snapshot!.create(id, { name: "s" })
+        .catch((e) => e);
+      expect(error.message).toContain("runnerMode: false");
+      expect(error.status).toBe(404);
+      expect(error.code).toBe("NOT_FOUND");
     });
   });
 });
