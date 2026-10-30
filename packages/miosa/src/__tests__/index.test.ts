@@ -417,6 +417,44 @@ describe("miosa provider", () => {
       });
     });
 
+    it("mkdir should replay fs 404s through the sandbox's boot window", async () => {
+      // The control plane's create returns before the VM finishes booting and
+      // fs routes 404 until it attaches. A fresh sandbox's calls retry.
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse(
+          sandboxRecord({ created_at: new Date().toISOString() }),
+          201,
+        ),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ error: "not found" }, 404))
+        .mockResolvedValueOnce(jsonResponse({ error: "not found" }, 404))
+        .mockResolvedValueOnce(jsonResponse({ data: {} }, 201));
+
+      await sandbox.filesystem.mkdir("/workspace/deep/dir");
+      const mkdirCalls = fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/fs/mkdir"),
+      );
+      expect(mkdirCalls).toHaveLength(3);
+    });
+
+    it("mkdir should surface a 404 at once for a long-lived sandbox", async () => {
+      // sandboxRecord's created_at is months old, so a 404 means the sandbox
+      // is genuinely missing - no boot window to wait out.
+      const sandbox = await createSandbox();
+      fetchMock.mockResolvedValueOnce(jsonResponse({ error: "nope" }, 404));
+
+      await expect(
+        sandbox.filesystem.mkdir("/workspace/deep/dir"),
+      ).rejects.toThrow("404");
+      const mkdirCalls = fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/fs/mkdir"),
+      );
+      expect(mkdirCalls).toHaveLength(1);
+    });
+
     it("readdir should GET /fs and map file entries", async () => {
       const sandbox = await createSandbox();
       fetchMock.mockResolvedValueOnce(
