@@ -1611,7 +1611,10 @@ describe("regional sandbox endpoint", () => {
         runnerUrl: "https://b.run-us.miosa.ai",
         data: sandboxRecord({ id }),
       });
-      runnerSpies.execStream.mockReturnValue(
+      // A fresh stream per call: getById's egress-pointer probe composes an
+      // fs read over exec for a recorded-regional sandbox, so it consumes a
+      // stream of its own before runCommand's.
+      runnerSpies.execStream.mockImplementation(() =>
         execStreamEvents({ stdout: "from-runner\n" }),
       );
       runnerSpies.destroySandbox.mockResolvedValue({});
@@ -1658,6 +1661,140 @@ describe("regional sandbox endpoint", () => {
       // "account" record.
       await provider.sandbox.destroy(id);
       expect(runnerSpies.destroySandbox).toHaveBeenCalledWith(id);
+    });
+  });
+
+  describe("filesystem over exec for regional sandboxes", () => {
+    // Regionally-created sandboxes are unknown to the account API (its
+    // /sandboxes/:id/fs routes answer 404) and the regional endpoint exposes
+    // no fs routes, so every filesystem method composes over exec.
+    async function createRegionalSandbox() {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY });
+      return provider.sandbox.create();
+    }
+
+    it("mkdir should run mkdir -p over exec", async () => {
+      const sandbox = await createRegionalSandbox();
+      runnerSpies.execStream.mockReturnValueOnce(execStreamEvents({}));
+
+      await sandbox.filesystem.mkdir("/workspace/deep/dir");
+
+      expect(runnerSpies.execStream).toHaveBeenCalledWith(
+        sandbox.sandboxId,
+        'mkdir -p "/workspace/deep/dir"',
+        expect.any(Object),
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("writeFile should base64 the content over exec", async () => {
+      const sandbox = await createRegionalSandbox();
+      runnerSpies.execStream.mockReturnValueOnce(execStreamEvents({}));
+
+      await sandbox.filesystem.writeFile("/workspace/app.js", "console.log(1)");
+
+      const b64 = Buffer.from("console.log(1)", "utf8").toString("base64");
+      expect(runnerSpies.execStream).toHaveBeenCalledWith(
+        sandbox.sandboxId,
+        `printf '%s' "${b64}" | base64 -d > "/workspace/app.js"`,
+        expect.any(Object),
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("readFile should cat over exec and return stdout", async () => {
+      const sandbox = await createRegionalSandbox();
+      runnerSpies.execStream.mockReturnValueOnce(
+        execStreamEvents({ stdout: "file contents\n" }),
+      );
+
+      const content = await sandbox.filesystem.readFile("/a b.txt");
+
+      expect(runnerSpies.execStream).toHaveBeenCalledWith(
+        sandbox.sandboxId,
+        'cat "/a b.txt"',
+        expect.any(Object),
+      );
+      expect(content).toBe("file contents\n");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("readdir should parse ls -la over exec", async () => {
+      const sandbox = await createRegionalSandbox();
+      runnerSpies.execStream.mockReturnValueOnce(
+        execStreamEvents({
+          stdout:
+            "total 8\n" +
+            "drwxr-xr-x 3 root root 4096 Oct 29 12:00 .\n" +
+            "drwxr-xr-x 2 root root 4096 Oct 29 11:00 ..\n" +
+            "-rw-r--r-- 1 root root  123 Oct 29 12:30 app.js\n" +
+            "drwxr-xr-x 2 root root 4096 Oct 29 12:00 src\n",
+        }),
+      );
+
+      const entries = await sandbox.filesystem.readdir("/workspace");
+
+      expect(entries).toEqual([
+        expect.objectContaining({ name: "app.js", type: "file", size: 123 }),
+        expect.objectContaining({ name: "src", type: "directory" }),
+      ]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("remove should run rm -rf over exec", async () => {
+      const sandbox = await createRegionalSandbox();
+      runnerSpies.execStream.mockReturnValueOnce(execStreamEvents({}));
+
+      await sandbox.filesystem.remove("/workspace/dir");
+
+      expect(runnerSpies.execStream).toHaveBeenCalledWith(
+        sandbox.sandboxId,
+        'rm -rf "/workspace/dir"',
+        expect.any(Object),
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("should surface exec failures as errors", async () => {
+      const sandbox = await createRegionalSandbox();
+      runnerSpies.execStream.mockReturnValueOnce(
+        execStreamEvents({ stderr: "permission denied", exit_code: 1 }),
+      );
+
+      await expect(
+        sandbox.filesystem.mkdir("/root/nope"),
+      ).rejects.toThrow("MIOSA mkdir failed for /root/nope: permission denied");
+    });
+
+    it("should fall back to exec when the account API does not own the sandbox", async () => {
+      // A reattached regional sandbox whose origin was never recorded:
+      // the account API answers the fs route with 404, so the read composes
+      // over exec instead.
+      const id = "b1000000-0000-0000-0000-000000000010";
+      fetchMock.mockImplementation(async (url: string) =>
+        url.includes("/fs/read")
+          ? jsonResponse({ error: { code: "NOT_FOUND" } }, 404)
+          : jsonResponse(sandboxRecord({ id })),
+      );
+      runnerSpies.execStream.mockImplementation(() =>
+        execStreamEvents({ stdout: "from-runner\n" }),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.getById(id);
+
+      const content = await sandbox!.filesystem.readFile("/work/a.txt");
+
+      expect(content).toBe("from-runner\n");
+      expect(runnerSpies.execStream).toHaveBeenCalledWith(
+        id,
+        'cat "/work/a.txt"',
+        expect.any(Object),
+      );
     });
   });
 });

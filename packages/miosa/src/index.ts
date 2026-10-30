@@ -1320,6 +1320,20 @@ function regionalAuth(config: MiosaConfig, auth: MiosaAuth): MiosaAuth {
   };
 }
 
+/**
+ * True when this sandbox is recorded as living on the regional endpoint.
+ * Regionally-created sandboxes are unknown to the account API - it answers
+ * 404 for their /sandboxes/:id/fs routes - and the regional endpoint exposes
+ * no fs routes, so filesystem methods must be composed over exec, the same
+ * reason `exists` is `test -e` rather than an API round-trip. A handle whose
+ * origin was never recorded tries the account API first - cheaper than an
+ * exec round-trip for the account-owned case - and falls back to exec on a
+ * 404 (a reattached regional sandbox), mirroring exec's own origin learning.
+ */
+function usesRegionalTransport(sandbox: MiosaSandbox): boolean {
+  return sandboxTransport.get(sandbox.record.id) === "regional";
+}
+
 async function miosaRequest<T>(
   auth: { apiKey: string; baseUrl: string },
   method: "GET" | "POST" | "PATCH" | "DELETE",
@@ -2063,17 +2077,45 @@ const createMiosaProvider = defineProvider<
 
       filesystem: {
         // Native: GET /sandboxes/:id/fs/read?path=…  → { path, content }
+        // Regional sandboxes go over exec instead: the account API answers
+        // 404 for their /sandboxes/:id/fs routes and the regional endpoint
+        // exposes no fs routes at all.
         readFile: async (
           sandbox: MiosaSandbox,
           path: string,
+          runCommand: (
+            sandbox: MiosaSandbox,
+            command: string,
+            options?: RunCommandOptions,
+          ) => Promise<CommandResult>,
         ): Promise<string> => {
           await ensureCreated(sandbox);
-          const response = await miosaRequest<{ content: string }>(
-            sandbox,
-            "GET",
-            `/sandboxes/${sandbox.record.id}/fs/read?path=${encodeURIComponent(path)}`,
-          );
-          return response.content;
+          const overExec = async (): Promise<string> => {
+            const result = await runCommand(
+              sandbox,
+              `cat "${escapeShellArg(path)}"`,
+            );
+            if (result.exitCode !== 0)
+              throw new Error(
+                `MIOSA readFile failed for ${path}: ${result.stderr || `exit ${result.exitCode}`}`,
+              );
+            return result.stdout;
+          };
+          if (usesRegionalTransport(sandbox)) return overExec();
+          try {
+            const response = await miosaRequest<{ content: string }>(
+              sandbox,
+              "GET",
+              `/sandboxes/${sandbox.record.id}/fs/read?path=${encodeURIComponent(path)}`,
+            );
+            return response.content;
+          } catch (error) {
+            // A handle for a sandbox the account API does not own - a
+            // regional sandbox reattached with no recorded origin - 404s
+            // here; serve the read over exec instead.
+            if (isNotFoundError(error)) return overExec();
+            throw error;
+          }
         },
 
         // Native: POST /sandboxes/:id/fs/write  { path, content }
@@ -2081,55 +2123,152 @@ const createMiosaProvider = defineProvider<
           sandbox: MiosaSandbox,
           path: string,
           content: string,
+          runCommand: (
+            sandbox: MiosaSandbox,
+            command: string,
+            options?: RunCommandOptions,
+          ) => Promise<CommandResult>,
         ): Promise<void> => {
           await ensureCreated(sandbox);
-          await miosaRequest<unknown>(
-            sandbox,
-            "POST",
-            `/sandboxes/${sandbox.record.id}/fs/write`,
-            {
-              path,
-              content,
-            },
-          );
+          const overExec = async (): Promise<void> => {
+            // base64 round-trip so arbitrary content needs no shell escaping.
+            const b64 = Buffer.from(content, "utf8").toString("base64");
+            const result = await runCommand(
+              sandbox,
+              `printf '%s' "${b64}" | base64 -d > "${escapeShellArg(path)}"`,
+            );
+            if (result.exitCode !== 0)
+              throw new Error(
+                `MIOSA writeFile failed for ${path}: ${result.stderr || `exit ${result.exitCode}`}`,
+              );
+          };
+          if (usesRegionalTransport(sandbox)) return overExec();
+          try {
+            await miosaRequest<unknown>(
+              sandbox,
+              "POST",
+              `/sandboxes/${sandbox.record.id}/fs/write`,
+              {
+                path,
+                content,
+              },
+            );
+          } catch (error) {
+            if (isNotFoundError(error)) return overExec();
+            throw error;
+          }
         },
 
         // Native: POST /sandboxes/:id/fs/mkdir  { path, recursive }
-        mkdir: async (sandbox: MiosaSandbox, path: string): Promise<void> => {
+        mkdir: async (
+          sandbox: MiosaSandbox,
+          path: string,
+          runCommand: (
+            sandbox: MiosaSandbox,
+            command: string,
+            options?: RunCommandOptions,
+          ) => Promise<CommandResult>,
+        ): Promise<void> => {
           await ensureCreated(sandbox);
-          await miosaRequest<unknown>(
-            sandbox,
-            "POST",
-            `/sandboxes/${sandbox.record.id}/fs/mkdir`,
-            {
-              path,
-              recursive: true,
-            },
-          );
+          const overExec = async (): Promise<void> => {
+            const result = await runCommand(
+              sandbox,
+              `mkdir -p "${escapeShellArg(path)}"`,
+            );
+            if (result.exitCode !== 0)
+              throw new Error(
+                `MIOSA mkdir failed for ${path}: ${result.stderr || `exit ${result.exitCode}`}`,
+              );
+          };
+          if (usesRegionalTransport(sandbox)) return overExec();
+          try {
+            await miosaRequest<unknown>(
+              sandbox,
+              "POST",
+              `/sandboxes/${sandbox.record.id}/fs/mkdir`,
+              {
+                path,
+                recursive: true,
+              },
+            );
+          } catch (error) {
+            if (isNotFoundError(error)) return overExec();
+            throw error;
+          }
         },
 
         // Native: GET /sandboxes/:id/fs?path=…  → { files: [{name, type, size_bytes, modified_at}] }
         readdir: async (
           sandbox: MiosaSandbox,
           path: string,
+          runCommand: (
+            sandbox: MiosaSandbox,
+            command: string,
+            options?: RunCommandOptions,
+          ) => Promise<CommandResult>,
         ): Promise<FileEntry[]> => {
           await ensureCreated(sandbox);
-          const response = await miosaRequest<{ files: MiosaFileListEntry[] }>(
-            sandbox,
-            "GET",
-            `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
-          );
-          return (response.files ?? []).map((entry) => ({
-            name: entry.name,
-            type:
-              entry.type === "directory"
-                ? ("directory" as const)
-                : ("file" as const),
-            size: entry.size_bytes ?? 0,
-            modified: entry.modified_at
-              ? new Date(entry.modified_at)
-              : new Date(0),
-          }));
+          const overExec = async (): Promise<FileEntry[]> => {
+            const result = await runCommand(
+              sandbox,
+              `ls -la "${escapeShellArg(path)}"`,
+            );
+            if (result.exitCode !== 0)
+              throw new Error(
+                `MIOSA readdir failed for ${path}: ${result.stderr || `exit ${result.exitCode}`}`,
+              );
+            const entries: FileEntry[] = [];
+            for (const line of result.stdout.split("\n")) {
+              const parts = line.trim().split(/\s+/);
+              // Skip the "total" line, malformed rows, and . / ..
+              if (parts.length < 9 || !/^[-dl]/.test(parts[0])) continue;
+              let name = parts.slice(8).join(" ");
+              if (parts[0].startsWith("l")) name = name.split(" -> ")[0];
+              if (name === "." || name === "..") continue;
+              // ls prints "Mmm dd HH:MM" for recent files (no year) and
+              // "Mmm dd YYYY" otherwise.
+              const [month, day, timeOrYear] = parts.slice(5, 8);
+              const dateStr = timeOrYear.includes(":")
+                ? `${month} ${day} ${new Date().getFullYear()} ${timeOrYear}`
+                : `${month} ${day} ${timeOrYear}`;
+              const modified = new Date(dateStr);
+              entries.push({
+                name,
+                type: parts[0].startsWith("d")
+                  ? ("directory" as const)
+                  : ("file" as const),
+                size: Number(parts[4]) || 0,
+                modified: isNaN(modified.getTime())
+                  ? new Date(0)
+                  : modified,
+              });
+            }
+            return entries;
+          };
+          if (usesRegionalTransport(sandbox)) return overExec();
+          try {
+            const response = await miosaRequest<{
+              files: MiosaFileListEntry[];
+            }>(
+              sandbox,
+              "GET",
+              `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
+            );
+            return (response.files ?? []).map((entry) => ({
+              name: entry.name,
+              type:
+                entry.type === "directory"
+                  ? ("directory" as const)
+                  : ("file" as const),
+              size: entry.size_bytes ?? 0,
+              modified: entry.modified_at
+                ? new Date(entry.modified_at)
+                : new Date(0),
+            }));
+          } catch (error) {
+            if (isNotFoundError(error)) return overExec();
+            throw error;
+          }
         },
 
         // Composed from exec: MIOSA has no boolean exists endpoint (fs/stat
@@ -2151,13 +2290,37 @@ const createMiosaProvider = defineProvider<
         },
 
         // Native: DELETE /sandboxes/:id/fs?path=…  (recursive on the server side)
-        remove: async (sandbox: MiosaSandbox, path: string): Promise<void> => {
+        remove: async (
+          sandbox: MiosaSandbox,
+          path: string,
+          runCommand: (
+            sandbox: MiosaSandbox,
+            command: string,
+            options?: RunCommandOptions,
+          ) => Promise<CommandResult>,
+        ): Promise<void> => {
           await ensureCreated(sandbox);
-          await miosaRequest<unknown>(
-            sandbox,
-            "DELETE",
-            `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
-          );
+          const overExec = async (): Promise<void> => {
+            const result = await runCommand(
+              sandbox,
+              `rm -rf "${escapeShellArg(path)}"`,
+            );
+            if (result.exitCode !== 0)
+              throw new Error(
+                `MIOSA remove failed for ${path}: ${result.stderr || `exit ${result.exitCode}`}`,
+              );
+          };
+          if (usesRegionalTransport(sandbox)) return overExec();
+          try {
+            await miosaRequest<unknown>(
+              sandbox,
+              "DELETE",
+              `/sandboxes/${sandbox.record.id}/fs?path=${encodeURIComponent(path)}`,
+            );
+          } catch (error) {
+            if (isNotFoundError(error)) return overExec();
+            throw error;
+          }
         },
       },
     },

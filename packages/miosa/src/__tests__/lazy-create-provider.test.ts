@@ -657,7 +657,17 @@ describe("lazy create", () => {
       expect(command.exitCode).toBe(127);
       expect(creates()).toHaveLength(2);
       expect(creates()[1]?.body).not.toHaveProperty("run");
-      expect(accountApiCalls()).toEqual([`POST /sandboxes/${REAL_ID}/fs/write`]);
+      // A runner-created sandbox's filesystem calls compose over exec - the
+      // regional endpoint exposes no fs routes and the account API answers
+      // 404 for sandboxes it never created.
+      expect(
+        runnerCalls.some(
+          (call) =>
+            call.path === `/api/v1/sandboxes/${REAL_ID}/exec/stream` &&
+            String(call.body?.command ?? "").includes("base64 -d"),
+        ),
+      ).toBe(true);
+      expect(accountApiCalls().filter((c) => c.includes("/fs/"))).toEqual([]);
     });
 
     it("should still send a create the runner does not serve to the account API without the run field", async () => {
@@ -692,9 +702,13 @@ describe("lazy create", () => {
 
       expect(creates()).toHaveLength(1);
       expect(creates()[0]?.body).not.toHaveProperty("run");
-      expect(accountApiCalls()).toEqual([
-        `POST /sandboxes/${REAL_ID}/fs/write`,
-      ]);
+      expect(
+        runnerCalls.some(
+          (call) =>
+            call.path === `/api/v1/sandboxes/${REAL_ID}/exec/stream` &&
+            String(call.body?.command ?? "").includes("base64 -d"),
+        ),
+      ).toBe(true);
     });
 
     it("should create the sandbox before reporting its info", async () => {
@@ -756,9 +770,13 @@ describe("lazy create", () => {
 
       expect(creates()).toHaveLength(1);
       expect(command.stdout).toBe("v22.1.0\n");
-      expect(accountApiCalls()).toEqual([
-        `POST /sandboxes/${REAL_ID}/fs/write`,
-      ]);
+      expect(
+        runnerCalls.some(
+          (call) =>
+            call.path === `/api/v1/sandboxes/${REAL_ID}/exec/stream` &&
+            String(call.body?.command ?? "").includes("base64 -d"),
+        ),
+      ).toBe(true);
     });
 
     it("should give two commands started together one create and one ordinary exec", async () => {
