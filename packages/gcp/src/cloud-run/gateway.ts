@@ -177,14 +177,23 @@ async function handle(pathname: string, body: Json): Promise<unknown> {
     // caps at MAX_ARG_STRLEN (128 KiB) — write it to a staging file in
     // bounded chunks, then move it into place. Cleans up on failure.
     const staging = `${path}.computesdk-tmp.${randomUUID().slice(0, 8)}`
-    try {
-      let result = await fsCommand(sandboxId, `mkdir -p "$(dirname "${path}")" && : > "${staging}"`, body)
+    let result = await fsCommand(sandboxId, `mkdir -p "$(dirname "${path}")" && : > "${staging}"`, body)
+    if (result.exitCode !== 0) {
+      // The directory may forbid new files while the destination itself is
+      // still writable; a payload that fits one command can write directly.
+      if (b64.length > WRITE_CHUNK_CHARS) throw new Error(result.stderr || `Failed to write: ${body.path}`)
+      result = await fsCommand(sandboxId, `printf '%s' '${b64}' | base64 -d > "${path}"`, body)
       if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
+      return { success: true }
+    }
+    try {
       for (let i = 0; i < b64.length; i += WRITE_CHUNK_CHARS) {
         result = await fsCommand(sandboxId, `printf '%s' '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' | base64 -d >> "${staging}"`, body)
         if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
       }
-      result = await fsCommand(sandboxId, `cat < "${staging}" > "${path}" && rm -f "${staging}"`, body)
+      // Same-directory mv is a rename: atomic, no second copy of the data,
+      // and no partial destination if the disk fills.
+      result = await fsCommand(sandboxId, `mv "${staging}" "${path}"`, body)
       if (result.exitCode !== 0) throw new Error(result.stderr || `Failed to write: ${body.path}`)
     } catch (error) {
       await fsCommand(sandboxId, `rm -f "${staging}"`, body).catch(() => {})
