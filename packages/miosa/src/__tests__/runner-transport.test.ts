@@ -1494,10 +1494,15 @@ describe("regional sandbox endpoint", () => {
       );
       runnerSpies.get.mockReset().mockRejectedValue(notFound());
       const provider = miosa({ apiKey: API_KEY });
-      const sandbox = await provider.sandbox.getById(id);
 
       vi.useFakeTimers();
       try {
+        // getById reads the sandbox's egress state file, and fs calls now
+        // cross the same attach grace - advance through it too.
+        const getById = provider.sandbox.getById(id);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const sandbox = await getById;
+
         const first = sandbox!.runCommand("echo ok");
         await vi.advanceTimersByTimeAsync(60_000);
         vi.useRealTimers();
@@ -1530,14 +1535,22 @@ describe("regional sandbox endpoint", () => {
                 data: { stdout: "from-account-api\n", stderr: "", exit_code: 0 },
               });
         }
+        // A sandbox the account API does not own 404s its fs routes too -
+        // the /fs/* calls getById and the adapter make must see that.
+        if (url.includes("/fs")) {
+          return jsonResponse({ error: { code: "NOT_FOUND", message: "no sandbox" } }, 404);
+        }
         return jsonResponse(sandboxRecord({ id }));
       });
       runnerSpies.get.mockReset().mockRejectedValue(notFound());
       const provider = miosa({ apiKey: API_KEY });
-      const sandbox = await provider.sandbox.getById(id);
 
       vi.useFakeTimers();
       try {
+        const getById = provider.sandbox.getById(id);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const sandbox = await getById;
+
         const first = sandbox!.runCommand("echo ok");
         await vi.advanceTimersByTimeAsync(60_000);
         const firstResult = await first;

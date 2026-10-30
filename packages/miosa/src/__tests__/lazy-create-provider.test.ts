@@ -173,7 +173,7 @@ describe("lazy create", () => {
               operation: `filesystem.${fsOp[1]}`,
               status: "ok",
               result: {
-                instance_id: REAL_ID.replaceAll("-", ""),
+                instance_id: REAL_ID.replace(/-/g, ""),
                 operation: fsOp[1],
               },
               error: null,
