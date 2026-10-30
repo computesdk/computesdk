@@ -408,12 +408,21 @@ interface DetachedPaths {
   pid: string;
   out: string;
   err: string;
+  outLen: string;
+  errLen: string;
   code: string;
 }
 
 function detachedPaths(id: string): DetachedPaths {
   const base = `/tmp/.csdk-exec-${id}`;
-  return { pid: `${base}.pid`, out: `${base}.out`, err: `${base}.err`, code: `${base}.code` };
+  return {
+    pid: `${base}.pid`,
+    out: `${base}.out`,
+    err: `${base}.err`,
+    outLen: `${base}.outlen`,
+    errLen: `${base}.errlen`,
+    code: `${base}.code`,
+  };
 }
 
 /** Worker: claim the run by recording its pid, run the command capturing
@@ -426,7 +435,12 @@ function detachedLaunchScript(command: string, paths: DetachedPaths): string {
   const inner =
     `( set -C; echo $$ > ${paths.pid} 2>/dev/null ) || exit 0;` +
     ` ( ${command} ) > ${paths.out} 2> ${paths.err};` +
-    ` printf '%s' "$?" > ${paths.code}`;
+    // Byte counts land BEFORE the exit sentinel so a poll that sees .code
+    // already has the lengths the readers verify against.
+    ` C=$?;` +
+    ` wc -c < ${paths.out} > ${paths.outLen} 2>/dev/null;` +
+    ` wc -c < ${paths.err} > ${paths.errLen} 2>/dev/null;` +
+    ` printf '%s' "$C" > ${paths.code}`;
   return `setsid /bin/sh -c ${shellSingleQuote(inner)} </dev/null >/dev/null 2>&1 &`;
 }
 
@@ -462,7 +476,7 @@ function detachedKillScript(paths: DetachedPaths): string {
 }
 
 function detachedCleanupScript(paths: DetachedPaths): string {
-  return `rm -f ${paths.pid} ${paths.out} ${paths.err} ${paths.code}`;
+  return `rm -f ${paths.pid} ${paths.out} ${paths.err} ${paths.outLen} ${paths.errLen} ${paths.code}`;
 }
 
 async function execShort(native: NativeSandbox, script: string) {
@@ -476,6 +490,27 @@ async function readGuestFile(native: NativeSandbox, path: string): Promise<strin
     const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
     return output.stdout();
   }
+}
+
+/** The relay can drop a chunk mid-read on either path (fs API and exec
+ *  stdout alike) — a truncated read returns successfully and is
+ *  indistinguishable from real output. The worker records the byte count
+ *  next to each output file, so compare and retry once through the other
+ *  transport before trusting the result. */
+async function readGuestFileChecked(
+  native: NativeSandbox,
+  path: string,
+  lenPath: string,
+): Promise<string> {
+  const lenText = await readGuestFile(native, lenPath).catch(() => '');
+  const expected = Number.parseInt(lenText.trim(), 10);
+  const first = await readGuestFile(native, path);
+  if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
+  const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
+  const second = output.stdout();
+  // A second bad read is still better than dropping the whole result —
+  // return whichever capture got more bytes.
+  return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
 }
 
 async function runCommand(
@@ -564,8 +599,8 @@ async function runCommand(
     if (remaining <= 0) {
       await execShort(native, detachedKillScript(paths)).catch(() => undefined);
       const [stdout, stderr] = await Promise.all([
-        readGuestFile(native, paths.out).catch(() => ''),
-        readGuestFile(native, paths.err).catch(() => ''),
+        readGuestFileChecked(native, paths.out, paths.outLen).catch(() => ''),
+        readGuestFileChecked(native, paths.err, paths.errLen).catch(() => ''),
       ]);
       await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
       return {
@@ -579,8 +614,8 @@ async function runCommand(
   }
 
   const [stdout, stderr, codeText] = await Promise.all([
-    readGuestFile(native, paths.out),
-    readGuestFile(native, paths.err),
+    readGuestFileChecked(native, paths.out, paths.outLen),
+    readGuestFileChecked(native, paths.err, paths.errLen),
     readGuestFile(native, paths.code),
   ]);
   await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);

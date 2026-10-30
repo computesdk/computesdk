@@ -57,25 +57,48 @@ function makeSandbox() {
     }),
     close: vi.fn(),
   };
+  // runCommand redirects output to guest files and reads them back through
+  // follow-up commands — simulate the guest filesystem.
+  const guestFiles = new Map<string, string>();
+  const ctxScripts = new Map<string, string>();
+  const canned = { out: 'ok\n', err: '', code: '0' };
+  let ctxSeq = 122;
   return {
     id: 'sb_123',
     status: 'running',
     template: 'default',
     clusterId: 'cluster_1',
-    cmd: vi.fn().mockResolvedValue({
-      contextId: 'ctx_123',
-      stdout: 'ok\n',
-      stderr: '',
-      exitCode: undefined,
+    canned,
+    guestFiles,
+    cmd: vi.fn().mockImplementation(async (script: string) => {
+      const contextId = `ctx_${++ctxSeq}`;
+      ctxScripts.set(contextId, script);
+      const wrapped = script.match(/^\( .* \) > (\S+)\.out /s);
+      if (wrapped) {
+        const base = wrapped[1];
+        guestFiles.set(`${base}.out`, canned.out);
+        guestFiles.set(`${base}.outlen`, String(Buffer.byteLength(canned.out)));
+        guestFiles.set(`${base}.err`, canned.err);
+        guestFiles.set(`${base}.errlen`, String(Buffer.byteLength(canned.err)));
+        guestFiles.set(`${base}.code`, canned.code);
+      }
+      if (script.startsWith('rm -f ')) {
+        for (const p of script.slice(6).trim().split(/\s+/)) guestFiles.delete(p);
+      }
+      return { contextId, stdout: 'ok\n', stderr: '', exitCode: undefined };
     }),
     connectWsContext: vi.fn().mockResolvedValue(contextStream),
-    getContext: vi.fn().mockResolvedValue({
-      id: 'ctx_123',
-      running: false,
-      stdout: 'ok\n',
-      stderr: '',
-      exitCode: 0,
-      state: 'exited',
+    getContext: vi.fn().mockImplementation(async (contextId: string) => {
+      const script = ctxScripts.get(contextId) ?? '';
+      const cat = script.match(/^cat (\S+)/);
+      return {
+        id: contextId,
+        running: false,
+        stdout: cat ? (guestFiles.get(cat[1]) ?? '') : '',
+        stderr: '',
+        exitCode: 0,
+        state: 'exited',
+      };
     }),
     deleteContext: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn().mockResolvedValue(new TextEncoder().encode('file-content')),
@@ -217,8 +240,8 @@ describe('sandbox0 provider', () => {
       env: { VALUE: 'hello' },
     });
 
-    expect(nativeSandbox.cmd).toHaveBeenCalledWith('printf "$VALUE"', {
-      command: ['sh', '-lc', 'printf "$VALUE"'],
+    expect(nativeSandbox.cmd).toHaveBeenCalledWith(expect.stringContaining('printf "$VALUE"'), {
+      command: ['sh', '-lc', expect.stringContaining('printf "$VALUE"')],
       wait: false,
       cwd: '/workspace',
       envVars: { VALUE: 'hello' },
@@ -230,7 +253,7 @@ describe('sandbox0 provider', () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('uses the streamed result if the final Context lookup fails', async () => {
+  it('still completes when the final Context lookup fails', async () => {
     nativeSandbox.connectWsContext.mockResolvedValueOnce({
       id: 'ctx_123',
       outputs: vi.fn(async function* () {
@@ -247,6 +270,9 @@ describe('sandbox0 provider', () => {
     nativeSandbox.getContext.mockRejectedValueOnce(
       new APIError({ statusCode: 503, message: 'unavailable' }),
     );
+    nativeSandbox.canned.out = 'out\n';
+    nativeSandbox.canned.err = 'err\n';
+    nativeSandbox.canned.code = '7';
     const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
 
     const result = await sandbox.runCommand('echo out; echo err >&2; exit 7');
@@ -257,7 +283,9 @@ describe('sandbox0 provider', () => {
       exitCode: 7,
     });
     expect(nativeSandbox.getContext).toHaveBeenCalledWith('ctx_123');
-    expect(nativeSandbox.deleteContext).not.toHaveBeenCalled();
+    expect(
+      nativeSandbox.deleteContext.mock.calls.map((c) => c[0]),
+    ).not.toContain('ctx_123');
   });
 
   it('polls the Context API if the WebSocket closes before a terminal event', async () => {
@@ -281,6 +309,7 @@ describe('sandbox0 provider', () => {
         });
       const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
 
+      nativeSandbox.canned.out = 'done\n';
       const pending = sandbox.runCommand('sleep 1; echo done', { timeout: 1_000 });
       await vi.advanceTimersByTimeAsync(100);
 
@@ -288,7 +317,11 @@ describe('sandbox0 provider', () => {
         stdout: 'done\n',
         exitCode: 0,
       });
-      expect(nativeSandbox.getContext).toHaveBeenCalledTimes(2);
+      // The main command's Context is polled twice; read-back commands poll
+      // their own Contexts.
+      expect(
+        nativeSandbox.getContext.mock.calls.filter((c) => c[0] === 'ctx_123'),
+      ).toHaveLength(2);
     } finally {
       vi.useRealTimers();
     }
@@ -334,7 +367,7 @@ describe('sandbox0 provider', () => {
     });
 
     expect(nativeSandbox.cmd).toHaveBeenCalledWith(
-      'node server.js',
+      expect.stringContaining('node server.js'),
       expect.objectContaining({ wait: false, ttlSec: 2 }),
     );
     expect(result.exitCode).toBe(0);

@@ -5,6 +5,8 @@
  * official `sandbox0` JavaScript SDK.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { APIError, Client } from 'sandbox0';
 import type { Sandbox as Sandbox0Sandbox } from 'sandbox0';
 import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
@@ -471,11 +473,26 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
         const deadline = timeout !== undefined && timeout > 0
           ? startedAt + timeout
           : undefined;
+        // The WebSocket output stream can drop a contiguous chunk mid-run
+        // while still delivering the exit event — and when the Context
+        // snapshot is unavailable that partial capture is returned as real
+        // output. Redirect to guest files so the command's output never
+        // depends on stream fidelity, then read the files back through
+        // short-lived commands with byte-count verification (same pattern
+        // as the microsandbox adapter).
+        const base = `/tmp/.sandbox0-exec-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+        const wrapped =
+          `( ${command} ) > ${base}.out 2> ${base}.err;` +
+          ` C=$?;` +
+          ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
+          ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
+          ` printf '%s' "$C" > ${base}.code`;
+
         let started: Awaited<ReturnType<Sandbox0Sandbox['cmd']>>;
         for (let attempt = 0; ; attempt += 1) {
           try {
-            started = await sandbox.cmd(command, {
-              command: ['sh', '-lc', command],
+            started = await sandbox.cmd(wrapped, {
+              command: ['sh', '-lc', wrapped],
               wait: false,
               cwd: options?.cwd,
               envVars: options?.env,
@@ -515,10 +532,50 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
             deadline,
             timeout,
           );
+
+          const readViaCommand = async (script: string): Promise<string> => {
+            const s = await sandbox.cmd(script, {
+              command: ['sh', '-lc', script],
+              wait: false,
+              ttlSec: 60,
+            });
+            try {
+              const done = await observeCommandCompletion(
+                sandbox,
+                s.contextId,
+                Date.now() + 60_000,
+                60_000,
+              );
+              return done.context?.stdout ?? done.output.stdout;
+            } finally {
+              deleteContextBestEffort(sandbox, s.contextId);
+            }
+          };
+          const readVerified = async (path: string, lenPath: string): Promise<string> => {
+            const expected = Number.parseInt(
+              (await readViaCommand(`cat ${lenPath} 2>/dev/null`)).trim(),
+              10,
+            );
+            const first = await readViaCommand(`cat ${path}`);
+            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
+            const second = await readViaCommand(`cat ${path}`);
+            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+          };
+
+          const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
+          const stderr = await readVerified(`${base}.err`, `${base}.errlen`);
+          const codeText = await readViaCommand(`cat ${base}.code 2>/dev/null`).catch(() => '');
+          await readViaCommand(
+            `rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`,
+          ).catch(() => undefined);
+
+          const fileExit = Number.parseInt(codeText.trim(), 10);
           return {
-            stdout: completed.context?.stdout ?? completed.output.stdout,
-            stderr: completed.context?.stderr ?? completed.output.stderr,
-            exitCode: completed.context?.exitCode ?? completed.terminal?.exitCode ?? 1,
+            stdout,
+            stderr,
+            exitCode: Number.isInteger(fileExit)
+              ? fileExit
+              : (completed.context?.exitCode ?? completed.terminal?.exitCode ?? 1),
             durationMs: Date.now() - startedAt,
           };
         } catch (error) {
