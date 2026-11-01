@@ -289,13 +289,17 @@ describe('sandock provider', () => {
     it('lists a directory with types, sizes and times', async () => {
       const sandbox = await createSandbox();
       sdk.sandbox.shell.mockImplementationOnce(async (_id: string, opts: { cmd: string }) =>
-        shellResult({ stdout: 'f\t12\t1700000000\tfile1.txt\nd\t4096\t1700000001\tsub dir\n' }, opts.cmd)
+        shellResult(
+          { stdout: 'f\x0012\x001700000000\x00file1.txt\x00d\x004096\x001700000001\x00sub dir\x00f\x000\x001700000002\x00a\nb\x00' },
+          opts.cmd
+        )
       );
       const entries = await sandbox.filesystem.readdir('/tmp/my dir');
       expect(sdk.sandbox.shell.mock.calls[0][1].cmd).toContain('cd "/tmp/my dir"');
       expect(entries).toEqual([
         { name: 'file1.txt', type: 'file', size: 12, modified: new Date(1_700_000_000_000) },
         { name: 'sub dir', type: 'directory', size: 4096, modified: new Date(1_700_000_001_000) },
+        { name: 'a\nb', type: 'file', size: 0, modified: new Date(1_700_000_002_000) },
       ]);
     });
 

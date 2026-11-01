@@ -143,6 +143,8 @@ function toInstance(config: SandockConfig, item: SandboxItem, known?: Partial<Sa
     status: item.status,
     createdAt:
       createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : (known?.createdAt ?? new Date(0)),
+    // Sandock's lookup (`GET /sandbox/{id}`, list) returns no lifetime, so a handle rebuilt from it
+    // reports the configured default, not a per-call `create({ timeout })` override.
     timeout: known?.timeout ?? config.timeout ?? DEFAULT_LIFETIME_MS,
     image: item.image ?? known?.image,
   };
@@ -325,6 +327,8 @@ export const sandock = defineProvider<SandockInstance, SandockConfig>({
         const res = await withRetry(() => inst.client.sandbox.getSignedPreviewUrl(inst.id, { port: options.port }));
         const url = res.data.url;
         const protocol = options.protocol?.replace(/:$/, '');
+        // Previews are served over TLS (plain http redirects to https, which a WebSocket
+        // handshake does not follow), so an https URL maps to wss even when `ws` is asked for.
         if (protocol === 'ws' || protocol === 'wss') return url.replace(/^http/, 'ws');
         return url;
       },
@@ -356,22 +360,23 @@ export const sandock = defineProvider<SandockInstance, SandockConfig>({
             `cd "${q}" && for f in * .[!.]* ..?*; do ` +
               `{ [ -e "$f" ] || [ -L "$f" ]; } || continue; ` +
               `if [ -d "$f" ]; then t=d; else t=f; fi; ` +
-              `printf '%s\\t%s\\t%s\\t%s\\n' "$t" "$(stat -c %s "$f" 2>/dev/null || echo 0)" "$(stat -c %Y "$f" 2>/dev/null || echo 0)" "$f"; ` +
+              `printf '%s\\000%s\\000%s\\000%s\\000' "$t" "$(stat -c %s "$f" 2>/dev/null || echo 0)" "$(stat -c %Y "$f" 2>/dev/null || echo 0)" "$f"; ` +
               `done`,
             `listing of ${path}`
           );
-          return r.stdout
-            .split('\n')
-            .filter(Boolean)
-            .map((line) => {
-              const [kind, size, mtime, ...rest] = line.split('\t');
-              return {
-                name: rest.join('\t'),
-                type: kind === 'd' ? 'directory' : 'file',
-                size: Number.parseInt(size, 10) || 0,
-                modified: new Date((Number.parseInt(mtime, 10) || 0) * 1000),
-              } satisfies FileEntry;
+          // NUL-separated fields: a filename may contain tabs or newlines, never NUL.
+          const fields = r.stdout.split('\0');
+          const entries: FileEntry[] = [];
+          for (let i = 0; i + 3 < fields.length; i += 4) {
+            const [kind, size, mtime, name] = fields.slice(i, i + 4);
+            entries.push({
+              name,
+              type: kind === 'd' ? 'directory' : 'file',
+              size: Number.parseInt(size, 10) || 0,
+              modified: new Date((Number.parseInt(mtime, 10) || 0) * 1000),
             });
+          }
+          return entries;
         },
 
         exists: async (inst: SandockInstance, path: string, run: FsRunCommand): Promise<boolean> => {
