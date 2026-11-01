@@ -134,6 +134,12 @@ async function findSandbox(config: SandockConfig, id: string): Promise<SandboxIt
   return withRetry(() => clientFor(config).sandbox.getById(id));
 }
 
+/** `activeDeadlineSeconds` from a lookup, in ms; older Sandock servers don't send it. */
+function lifetimeFromItem(item: SandboxItem): number | undefined {
+  const seconds = (item as SandboxItem & { activeDeadlineSeconds?: unknown }).activeDeadlineSeconds;
+  return typeof seconds === 'number' && seconds > 0 ? seconds * 1000 : undefined;
+}
+
 function toInstance(config: SandockConfig, item: SandboxItem, known?: Partial<SandockInstance>): SandockInstance {
   const createdAt = item.createdAt ? new Date(item.createdAt) : undefined;
   return {
@@ -143,9 +149,9 @@ function toInstance(config: SandockConfig, item: SandboxItem, known?: Partial<Sa
     status: item.status,
     createdAt:
       createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : (known?.createdAt ?? new Date(0)),
-    // Sandock's lookup (`GET /sandbox/{id}`, list) returns no lifetime, so a handle rebuilt from it
-    // reports the configured default, not a per-call `create({ timeout })` override.
-    timeout: known?.timeout ?? config.timeout ?? DEFAULT_LIFETIME_MS,
+    // Sandock reports the create-time lifetime on lookup; older servers omit it, so fall back.
+    timeout:
+      lifetimeFromItem(item) ?? known?.timeout ?? config.timeout ?? DEFAULT_LIFETIME_MS,
     image: item.image ?? known?.image,
   };
 }

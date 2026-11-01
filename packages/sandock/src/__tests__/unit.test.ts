@@ -164,6 +164,14 @@ describe('sandock provider', () => {
       expect(info.createdAt.toISOString()).toBe('2026-01-01T00:00:00.000Z');
     });
 
+    it('reports the lifetime Sandock returns on lookup, else the configured default', async () => {
+      sdk.sandbox.getById.mockResolvedValueOnce({ id: 'sdb_1', status: 'RUNNING', activeDeadlineSeconds: 600 });
+      const withLifetime = await sandock({ apiKey: 'key', timeout: 1_800_000 }).instances.getById('sdb_1');
+      expect((await withLifetime!.getInfo()).timeout).toBe(600_000);
+      const older = await sandock({ apiKey: 'key', timeout: 1_800_000 }).instances.getById('sdb_1');
+      expect((await older!.getInfo()).timeout).toBe(1_800_000);
+    });
+
     it('treats destroying an already-deleted sandbox as done', async () => {
       sdk.sandbox.delete.mockRejectedValueOnce(new Error('Failed to delete sandbox: {"code":500}'));
       await expect(sandock({ apiKey: 'key' }).instances.destroy('gone')).resolves.toBeUndefined();
