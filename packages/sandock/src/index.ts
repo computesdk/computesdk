@@ -270,7 +270,7 @@ export const sandock = defineProvider<SandockInstance, SandockConfig>({
         try {
           await withRetry(() => client.sandbox.delete(instanceId));
         } catch (error) {
-          // Sandock answers a delete of an unknown id with a 500; already gone is what destroy asks for.
+          // Older Sandock servers answer a delete of an unknown id with a 500; already gone is what destroy asks for.
           if (!(await findSandbox(config, instanceId))) return;
           throw error;
         }
