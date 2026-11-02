@@ -63,8 +63,10 @@ describe('namespace snapshot manager', () => {
     );
   });
 
-  it('lists snapshots across persistent volumes', async () => {
-    mockFetch((url, body) => {
+  // The records listing is workspace-wide whatever the request body — the
+  // record's `id` is the VOLUME id, `completedSnapshot` the generation.
+  it('lists snapshots joined to their volumes', async () => {
+    mockFetch((url) => {
       if (url.includes('ListPersistentVolumes')) {
         return {
           volumes: [
@@ -75,21 +77,19 @@ describe('namespace snapshot manager', () => {
       }
       if (url.includes('ListPersistentVolumeSnapshots')) {
         return {
-          snapshots:
-            body.id === 'vol_1'
-              ? [
-                  {
-                    id: 'snap_1',
-                    created_at: '2026-01-02T00:00:00Z',
-                    attached_instance_id: 'inst-123',
-                  },
-                ]
-              : [
-                  {
-                    id: 'snap_2',
-                    created_at: '2026-01-01T00:00:00Z',
-                  },
-                ],
+          snapshots: [
+            {
+              id: 'vol_1',
+              completedSnapshot: 'gen_1',
+              createdAt: '2026-01-02T00:00:00Z',
+              attachedInstanceId: 'inst-123',
+            },
+            {
+              id: 'vol_2',
+              completedSnapshot: 'gen_2',
+              createdAt: '2026-01-01T00:00:00Z',
+            },
+          ],
         };
       }
       return createdInstance;
@@ -98,9 +98,13 @@ describe('namespace snapshot manager', () => {
     const provider = namespace({ token: 'ns_test' });
     const snapshots = await provider.snapshot!.list();
 
-    expect(snapshots.map((s: any) => s.id)).toEqual(['snap_1', 'snap_2']);
+    expect(snapshots.map((s: any) => s.id)).toEqual([
+      'computesdk-aa/gen_1',
+      'other/gen_2',
+    ]);
     expect(snapshots[0].metadata).toMatchObject({
       volumeId: 'vol_1',
+      generationId: 'gen_1',
       volumeTag: 'computesdk-aa',
       sourceInstance: 'inst-123',
     });
@@ -114,8 +118,8 @@ describe('namespace snapshot manager', () => {
       if (url.includes('ListPersistentVolumeSnapshots')) {
         return {
           snapshots: [
-            { id: 'snap_1', attached_instance_id: 'inst-123' },
-            { id: 'snap_2', attached_instance_id: 'inst-999' },
+            { id: 'vol_1', completedSnapshot: 'gen_1', attachedInstanceId: 'inst-123' },
+            { id: 'vol_2', completedSnapshot: 'gen_2', attachedInstanceId: 'inst-999' },
           ],
         };
       }
@@ -124,17 +128,27 @@ describe('namespace snapshot manager', () => {
 
     const provider = namespace({ token: 'ns_test' });
     const snapshots = await provider.snapshot!.list({ sandboxId: 'inst-123' });
-    expect(snapshots.map((s: any) => s.id)).toEqual(['snap_1']);
+    expect(snapshots.map((s: any) => s.id)).toEqual(['gen_1']);
   });
 
-  it('abandons a snapshot via DestroyPersistentVolumeSnapshot', async () => {
-    const calls = mockFetch(() => ({ snapshot: { id: 'snap_1' } }));
+  it('abandons a snapshot by its volume id + tag', async () => {
+    const calls = mockFetch((url) => {
+      if (url.includes('ListPersistentVolumes')) {
+        return { volumes: [{ id: 'vol_1', tag: 'computesdk-aa' }] };
+      }
+      if (url.includes('ListPersistentVolumeSnapshots')) {
+        return {
+          snapshots: [{ id: 'vol_1', completedSnapshot: 'gen_1' }],
+        };
+      }
+      return {};
+    });
     const provider = namespace({ token: 'ns_test' });
-    await provider.snapshot!.delete('snap_1');
+    await provider.snapshot!.delete('computesdk-aa/gen_1');
 
-    expect(calls[0].url).toContain(
-      'StorageService/DestroyPersistentVolumeSnapshot',
+    const destroy = calls.find((c) =>
+      c.url.includes('StorageService/DestroyPersistentVolumeSnapshot'),
     );
-    expect(calls[0].body.id).toBe('snap_1');
+    expect(destroy?.body).toEqual({ id: 'vol_1', tag: 'computesdk-aa' });
   });
 });

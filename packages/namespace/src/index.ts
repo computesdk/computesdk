@@ -119,6 +119,56 @@ const STORAGE_SERVICE = {
   DESTROY_PERSISTENT_VOLUME_SNAPSHOT: '/namespace.cloud.compute.v1beta.StorageService/DestroyPersistentVolumeSnapshot',
 };
 
+interface WireVolume {
+  id: string;
+  tag?: string;
+  site?: string;
+}
+
+/** A snapshot record — the API answers JSON in camelCase (snake accepted too). */
+interface WireSnapshotRecord {
+  /** The VOLUME id the snapshot belongs to — not the generation. */
+  id?: string;
+  completedSnapshot?: string;
+  completed_snapshot?: string;
+  attachedInstanceId?: string;
+  attached_instance_id?: string;
+  createdAt?: string;
+  created_at?: string;
+  abandonedAt?: string;
+  abandoned_at?: string;
+}
+
+function snapshotGeneration(snap: WireSnapshotRecord): string | undefined {
+  return snap.completedSnapshot || snap.completed_snapshot || undefined;
+}
+
+function snapshotAttachedInstance(snap: WireSnapshotRecord): string | undefined {
+  return snap.attachedInstanceId || snap.attached_instance_id || undefined;
+}
+
+async function listPersistentVolumes(token: string): Promise<WireVolume[]> {
+  const volumes: WireVolume[] = [];
+  let cursor: string | undefined;
+  do {
+    const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+      method: 'POST',
+      body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
+    });
+    volumes.push(...(response.volumes || []));
+    cursor = response.pagination_cursor || undefined;
+  } while (cursor);
+  return volumes;
+}
+
+async function listVolumeSnapshotRecords(token: string): Promise<WireSnapshotRecord[]> {
+  const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS, {
+    method: 'POST',
+    body: JSON.stringify({})
+  });
+  return response.snapshots || [];
+}
+
 /**
  * Mountpoint for the persistent volume attached when `create({ snapshotId })`
  * restores a sandbox — this is where the snapshotted filesystem state lands.
@@ -652,43 +702,43 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const { token } = await getAndValidateCredentials(config);
 
         try {
-          // Instance -> volume mapping is not exposed, so snapshots are
-          // collected across all persistent volumes in the workspace.
-          interface WireVolume { id: string; tag?: string; site?: string }
-          const volumes: WireVolume[] = [];
-          let cursor: string | undefined;
-          do {
-            const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
-              method: 'POST',
-              body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
-            });
-            volumes.push(...(response.volumes || []));
-            cursor = response.pagination_cursor || undefined;
-          } while (cursor);
+          // Snapshot records come back workspace-wide whatever the request
+          // body — the `id` field is not a filter — so one call lists
+          // everything; each record's `id` is the VOLUME id it belongs to
+          // (not the generation) and joins it to the volume's metadata.
+          const volumes = await listPersistentVolumes(token);
+          const volumeById = new Map(volumes.map((v) => [v.id, v]));
+          const records = await listVolumeSnapshotRecords(token);
 
           const snapshots = [];
-          for (const volume of volumes) {
-            const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS, {
-              method: 'POST',
-              body: JSON.stringify({ id: volume.id })
+          for (const snap of records) {
+            const generationId = snapshotGeneration(snap);
+            const sourceInstance = snapshotAttachedInstance(snap);
+            // attachedInstanceId links a snapshot back to the instance
+            // whose volume produced it.
+            if (options?.sandboxId && sourceInstance !== options.sandboxId) continue;
+            const volume = snap.id ? volumeById.get(snap.id) : undefined;
+            snapshots.push({
+              // `tag/<gen>` is what `create({ snapshotId })` restores via
+              // `from_snapshot_id`, so listed snapshots feed straight back in.
+              id: volume?.tag && generationId
+                ? `${volume.tag}/${generationId}`
+                : generationId ?? snap.id ?? '',
+              provider: 'namespace',
+              createdAt: snap.createdAt
+                ? new Date(snap.createdAt)
+                : snap.created_at
+                  ? new Date(snap.created_at)
+                  : new Date(0),
+              metadata: {
+                ...(snap.id && { volumeId: snap.id }),
+                ...(generationId && { generationId }),
+                ...(volume?.tag && { volumeTag: volume.tag }),
+                ...(volume?.site && { site: volume.site }),
+                ...(sourceInstance && { sourceInstance }),
+                ...(snap.abandonedAt || snap.abandoned_at ? { abandoned: 'true' } : {}),
+              },
             });
-            for (const snap of response.snapshots || []) {
-              // attached_instance_id links a snapshot back to the instance
-              // whose volume produced it.
-              if (options?.sandboxId && snap.attached_instance_id !== options.sandboxId) continue;
-              snapshots.push({
-                id: snap.id,
-                provider: 'namespace',
-                createdAt: snap.created_at ? new Date(snap.created_at) : new Date(0),
-                metadata: {
-                  volumeId: volume.id,
-                  ...(volume.tag && { volumeTag: volume.tag }),
-                  ...(volume.site && { site: volume.site }),
-                  ...(snap.attached_instance_id && { sourceInstance: snap.attached_instance_id }),
-                  ...(snap.abandoned_at && { abandoned: 'true' }),
-                },
-              });
-            }
           }
 
           snapshots.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -704,9 +754,44 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const { token } = await getAndValidateCredentials(config);
 
         try {
+          // DestroyPersistentVolumeSnapshot addresses the artifact by its
+          // volume — {id: volumeId, tag} — never by the generation, so the
+          // `tag/<gen>` id resolves the tag to a volume first. A bare
+          // generation resolves through the workspace-wide snapshot records.
+          const slash = snapshotId.indexOf('/');
+          let volume: WireVolume | undefined;
+          let generationId: string | undefined;
+          if (slash !== -1) {
+            const tag = snapshotId.slice(0, slash);
+            generationId = snapshotId.slice(slash + 1);
+            const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+              method: 'POST',
+              body: JSON.stringify({ tag }),
+            });
+            volume = (response.volumes || [])[0];
+          } else {
+            generationId = snapshotId;
+            const records = await listVolumeSnapshotRecords(token);
+            const record = records.find((r) => snapshotGeneration(r) === generationId);
+            if (record?.id) {
+              volume = (await listPersistentVolumes(token)).find((v) => v.id === record.id);
+            }
+          }
+
+          // Volume gone (or untagged) → the generation is unreachable;
+          // nothing left to abandon.
+          if (volume === undefined || volume.tag === undefined) return;
+
+          // The volume's records name a different generation → ours is
+          // superseded history the RPC cannot reach either — already done.
+          const records = await listVolumeSnapshotRecords(token);
+          if (!records.some((r) => r.id === volume.id && snapshotGeneration(r) === generationId)) {
+            return;
+          }
+
           await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUME_SNAPSHOT, {
             method: 'POST',
-            body: JSON.stringify({ id: snapshotId })
+            body: JSON.stringify({ id: volume.id, tag: volume.tag })
           });
         } catch (error) {
           throw new Error(
