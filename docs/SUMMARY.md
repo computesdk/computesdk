@@ -23,7 +23,6 @@
   * [Collimate](providers/collimate.md)
   * [CreateOS](providers/createos-sandbox.md)
   * [Daytona](providers/daytona.md)
-  * [Declaw](providers/declaw.md)
   * [Docker](providers/docker.md)
   * [E2B](providers/e2b.md)
   * [EC2 Firecrab](providers/ec2-firecrab.md)

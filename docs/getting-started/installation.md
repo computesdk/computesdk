@@ -12,7 +12,6 @@ npm install @computesdk/buddy
 npm install @computesdk/cloudflare
 npm install @computesdk/codesandbox
 npm install @computesdk/daytona
-npm install @computesdk/declaw
 npm install @computesdk/e2b
 npm install @computesdk/hopx
 npm install @computesdk/modal
@@ -66,11 +65,6 @@ CSB_API_KEY=your_codesandbox_api_key
 
 ```bash
 DAYTONA_API_KEY=your_daytona_api_key
-```
-
-### Declaw
-```bash
-DECLAW_API_KEY=your_declaw_api_key
 ```
 
 ### E2B
