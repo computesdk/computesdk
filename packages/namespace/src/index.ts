@@ -755,39 +755,30 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
         try {
           // DestroyPersistentVolumeSnapshot addresses the artifact by its
-          // volume — {id: volumeId, tag} — never by the generation, so the
-          // `tag/<gen>` id resolves the tag to a volume first. A bare
-          // generation resolves through the workspace-wide snapshot records.
-          const slash = snapshotId.indexOf('/');
-          let volume: WireVolume | undefined;
-          let generationId: string | undefined;
-          if (slash !== -1) {
-            const tag = snapshotId.slice(0, slash);
-            generationId = snapshotId.slice(slash + 1);
-            const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
-              method: 'POST',
-              body: JSON.stringify({ tag }),
-            });
-            volume = (response.volumes || [])[0];
-          } else {
-            generationId = snapshotId;
-            const records = await listVolumeSnapshotRecords(token);
-            const record = records.find((r) => snapshotGeneration(r) === generationId);
-            if (record?.id) {
-              volume = (await listPersistentVolumes(token)).find((v) => v.id === record.id);
-            }
-          }
-
-          // Volume gone (or untagged) → the generation is unreachable;
+          // volume — {id: volumeId, tag} — never by the generation. The match
+          // is the volume (bearing the tag, when the id names one) whose
+          // records actually hold the generation — tags are not unique, and
+          // when no volume holds it the artifact is unreachable and there is
           // nothing left to abandon.
-          if (volume === undefined || volume.tag === undefined) return;
+          const slash = snapshotId.indexOf('/');
+          const tag = slash === -1 ? undefined : snapshotId.slice(0, slash);
+          const generationId = slash === -1 ? snapshotId : snapshotId.slice(slash + 1);
 
-          // The volume's records name a different generation → ours is
-          // superseded history the RPC cannot reach either — already done.
           const records = await listVolumeSnapshotRecords(token);
-          if (!records.some((r) => r.id === volume.id && snapshotGeneration(r) === generationId)) {
-            return;
-          }
+          const holding = new Set(
+            records
+              .filter((r) => snapshotGeneration(r) === generationId && r.id !== undefined)
+              .map((r) => r.id as string),
+          );
+          const volumes: WireVolume[] =
+            tag === undefined
+              ? await listPersistentVolumes(token)
+              : ((await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+                  method: 'POST',
+                  body: JSON.stringify({ tag }),
+                })).volumes || []);
+          const volume = volumes.find((v) => holding.has(v.id) && v.tag !== undefined);
+          if (volume === undefined) return;
 
           await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUME_SNAPSHOT, {
             method: 'POST',
@@ -809,9 +800,11 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       create: async (_config: NamespaceConfig, options) => ({ id: options.name, name: options.name }),
       get: async (config: NamespaceConfig, tag: string) => {
         const { token } = await getAndValidateCredentials(config);
+        // The tag filter on List is a plain string, not a matcher object —
+        // the object form is rejected with invalid_argument.
         const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
           method: 'POST',
-          body: JSON.stringify({ tag: { values: [tag], op: 1 } })
+          body: JSON.stringify({ tag })
         });
         const volume = (response.volumes || [])[0];
         return volume ? { id: volume.tag ?? tag, name: volume.tag ?? tag, native: volume } : null;
