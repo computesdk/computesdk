@@ -25,6 +25,7 @@
   * [Daytona](providers/daytona.md)
   * [Declaw](providers/declaw.md)
   * [Docker](providers/docker.md)
+  * [Docker Sandboxes](providers/docker-sandboxes.md)
   * [E2B](providers/e2b.md)
   * [EC2 Firecrab](providers/ec2-firecrab.md)
   * [Freestyle](providers/freestyle.md)

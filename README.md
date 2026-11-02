@@ -92,6 +92,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **CreateOS** | `CREATEOS_SANDBOX_API_KEY`, `CREATEOS_SANDBOX_BASE_URL` | VM sandboxes with pause/resume/fork snapshots |
 | **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
 | **Declaw** | `DECLAW_API_KEY` | Isolated cloud sandboxes |
+| **Docker Sandboxes** | `DOCKER_SANDBOXES_USERNAME`, `DOCKER_SANDBOXES_TOKEN` | Cloud microVM sandboxes from snapshot templates |
 | **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
 | **EC2 Firecrab** | `EC2_FIRECRAB_MICRO_NETWORK_ID` (+ `EC2_FIRECRAB_API_URL`, `EC2_FIRECRAB_TEMPLATE`, `EC2_FIRECRAB_SSH_PROXY_COMMAND`) | Self-hosted Firecracker microVMs on EC2 |
 | **Freestyle** | `FREESTYLE_API_KEY` | Full Linux VMs for long-running agent tasks, with snapshots and persistence |
@@ -314,6 +315,7 @@ npm install @computesdk/codesandbox      # CodeSandbox provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/daytona          # Daytona provider
 npm install @computesdk/declaw           # Declaw provider
+npm install @computesdk/docker-sandboxes # Docker Sandboxes provider
 npm install @computesdk/e2b              # E2B provider
 npm install @computesdk/ec2-firecrab     # Firecracker microVMs on self-hosted EC2
 npm install @computesdk/freestyle        # Freestyle provider
@@ -365,6 +367,7 @@ See individual provider READMEs for details:
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/declaw](./packages/declaw)** - Isolated cloud sandboxes
+- **[@computesdk/docker-sandboxes](./packages/docker-sandboxes)** - Cloud microVM sandboxes from snapshot templates
 - **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
 - **[@computesdk/freestyle](./packages/freestyle)** - Full Linux VMs for long-running agent tasks, with snapshots and persistence
 - **[@computesdk/givemeanode](./packages/givemeanode)** - Very fast microVM sandboxes, from any container image
