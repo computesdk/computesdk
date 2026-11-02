@@ -151,14 +151,6 @@ const providerDefinitions: Record<string, ProviderDefinition> = {
     config: () => envConfig({ apiKey: env('DAYTONA_API_KEY') }),
     isConfigured: () => Boolean(env('DAYTONA_API_KEY')),
   },
-  declaw: {
-    config: () =>
-      envConfig({
-        apiKey: env('DECLAW_API_KEY'),
-        domain: env('DECLAW_DOMAIN'),
-      }),
-    isConfigured: () => Boolean(env('DECLAW_API_KEY')),
-  },
   docker: {
     config: () => ({
       runtime: 'node',
@@ -458,7 +450,6 @@ async function loadProviderFactory(
     codesandbox: 'codesandbox',
     'createos-sandbox': 'createosSandbox',
     daytona: 'daytona',
-    declaw: 'declaw',
     docker: 'docker',
     e2b: 'e2b',
     freestyle: 'freestyle',
