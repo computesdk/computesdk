@@ -31,6 +31,10 @@ function makeSandbox(
 	streamImpl?: (pid: string, opts: StreamOptions) => { close: () => void; wait: () => Promise<void> }
 ): SandboxInstance {
 	return {
+		// @blaxel/core 0.3.21 get() queries a Sandbox model whose
+		// metadata.name is required; the old process-only fake was invalid.
+		// Match the owned lookup ID used by runEcho below.
+		metadata: { name: 'test-sandbox' },
 		process: {
 			exec: vi.fn(execImpl),
 			logs: vi.fn(logsImpl ?? (async () => '')),

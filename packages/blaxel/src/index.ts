@@ -19,6 +19,40 @@ class CommandResultProtocolError extends Error {
 	}
 }
 
+class LifecycleProtocolError extends Error {
+	readonly code = 'SDK_LIFECYCLE_PROTOCOL_ERROR';
+	readonly provider = 'blaxel';
+	constructor(
+		readonly operation: 'getById' | 'destroy',
+		readonly reason: 'invalid_identity',
+	) {
+		super('Blaxel lifecycle response violated the native contract');
+		this.name = 'LifecycleProtocolError';
+	}
+}
+
+function assertBlaxelIdentity(
+	result: unknown,
+	sandboxId: string,
+	operation: 'getById' | 'destroy',
+): void {
+	// Both the GET and DELETE control-plane responses require Sandbox.metadata.name.
+	const name = (result as { metadata?: { name?: unknown } } | null | undefined)?.metadata?.name;
+	if (!result || typeof result !== 'object' || name !== sandboxId) {
+		throw new LifecycleProtocolError(operation, 'invalid_identity');
+	}
+}
+
+function isBlaxelLookupAbsence(error: unknown): boolean {
+	// get() calls getSandbox({throwOnError:true}); the installed fetch client
+	// throws the parsed API body. GetSandboxErrors documents 404 as absence,
+	// and _Error requires `error: string`, with numeric HTTP status in `code`.
+	// Do not classify messages, class names, arbitrary status fields, or strings.
+	if (!error || typeof error !== 'object') return false;
+	const body = error as { code?: unknown; error?: unknown };
+	return body.code === 404 && typeof body.error === 'string';
+}
+
 /**
  * Blaxel rejects sandboxes with a ttl under 5 minutes
  * (`ttl 120s is too short: the minimum is 5m`). Any timeout below the floor
@@ -253,21 +287,17 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 			getById: async (config: BlaxelConfig, sandboxId: string) =>
 				withBlaxelConfig(config, async () => {
+					let sandbox: SandboxInstance;
 					try {
-						const sandbox = await SandboxInstance.get(sandboxId);
-
-						if (!sandbox) {
-							return null;
-						}
-
-						return {
-							sandbox: blaxelStamp.stamp(sandbox, config),
-							sandboxId,
-						};
+						// This public method queries control-plane metadata before
+						// constructing the handle; it is not a local-only attach.
+						sandbox = await SandboxInstance.get(sandboxId);
 					} catch (error) {
-						// Sandbox doesn't exist or can't be accessed
-						return null;
+						if (isBlaxelLookupAbsence(error)) return null;
+						throw error;
 					}
+					assertBlaxelIdentity(sandbox, sandboxId, 'getById');
+					return { instance: blaxelStamp.stamp(sandbox, config), instanceId: sandbox.metadata.name };
 				}),
 
 			list: async (config: BlaxelConfig) =>
@@ -279,11 +309,11 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 			destroy: async (config: BlaxelConfig, sandboxId: string) =>
 				withBlaxelConfig(config, async () => {
-					try {
-						await SandboxInstance.delete(sandboxId);
-					} catch (error) {
-						// Sandbox might already be destroyed or doesn't exist
-					}
+					const deleted = await SandboxInstance.delete(sandboxId);
+					// DELETE's documented success returns Sandbox, not void.
+					// It need not carry a particular lifecycle status label:
+					// acknowledgement and subsequent absence are separate facts.
+					assertBlaxelIdentity(deleted, sandboxId, 'destroy');
 				}),
 
 			// Instance operations (map to individual Sandbox methods)
