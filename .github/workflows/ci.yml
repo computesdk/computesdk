@@ -58,6 +58,10 @@ jobs:
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm test:provider-contracts
 
+    - name: Check compute Actions coverage and acceptance gates (no provider calls)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm check:compute-conformance
+
     - name: Run all tests (mock mode)
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm test

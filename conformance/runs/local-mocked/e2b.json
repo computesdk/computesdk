@@ -2,29 +2,36 @@
   "provider": "@computesdk/e2b",
   "status": "adapter-mocked",
   "result": "passed",
-  "command": "pnpm --filter @computesdk/e2b --fail-if-no-match exec vitest run src/__tests__/snapshot-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "command": "pnpm --filter @computesdk/e2b --fail-if-no-match exec vitest run src/__tests__/snapshot-contract.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
   "tests": [
     {
       "file": "packages/e2b/src/__tests__/snapshot-contract.test.ts",
       "contains": "describe('E2B snapshot list/delete native contract"
+    },
+    {
+      "file": "packages/e2b/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('E2B native instance destruction contract"
     }
   ],
   "claims": [
     "Named native-boundary-mocked tests cover snapshot pagination, source filtering, total limits, configuration precedence, and propagation of native failures.",
     "Named tests reject malformed inventory pages/IDs and nonboolean deletion results; native true/false deletion is handled according to the inspected 2.30.1 contract.",
     "Real-core/provider/native-only-mocked roundtrip preserves absent snapshot creation time and deletes the exact returned native ID with configured credentials.",
-    "Existing template operations fail explicitly when legacy hooks are absent; controlled legacy shims test forwarding/error behavior only, not installed native support."
+    "Existing template operations fail explicitly when legacy hooks are absent; controlled legacy shims test forwarding/error behavior only, not installed native support.",
+    "Native-only-mocked instance lookup validates exact metadata identity; only the real native sandbox-not-found class from metadata lookup establishes absence, and connection failures propagate.",
+    "Native-only-mocked instance deletion calls static kill without reconnecting, propagates service failures, and validates native true/false completion."
   ],
   "limitations": [
     "Only named local lifecycle regressions are covered; live native behavior, snapshot create/restore, retention, authorization isolation and other contracts remain unverified.",
     "Native contract inspection targets installed e2b 2.30.1, not consumer 2.57 or every version allowed by the declared dependency range.",
     "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
     "Legacy template shim cases are synthetic compatibility tests; those hooks are absent from the inspected native SDK and no builder or snapshot/template alias is added.",
-    "Native service errors propagate with their original details; only locally generated malformed-response/unsupported diagnostics are fixed messages."
+    "Native service errors propagate with their original details; only locally generated malformed-response/unsupported diagnostics are fixed messages.",
+    "Positive lookup retains public native connect side effects (resume/timeout renewal); inventory list behavior remains unchanged and unverified."
   ],
-  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
-  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
-  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "revision": "3f05eda6acc54e2d7520e5c22067e21774a17ab1",
+  "recordedAt": "2026-11-03T17:45:36.558321+00:00",
+  "executionFinishedAt": "2026-11-03T17:30:28.585854+00:00",
   "executionGroup": "pnpm test:provider-contracts",
   "environment": {
     "COMPUTESDK_API_KEY": "",
@@ -47,13 +54,14 @@
     "BEAM_TOKEN": "",
     "BEAM_WORKSPACE_ID": "",
     "BL_API_KEY": "",
-    "BL_WORKSPACE": ""
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0"
   },
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
   },
-  "passedTests": 67,
+  "passedTests": 118,
   "liveProviderVerification": false,
   "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
   "inputHashes": [
@@ -66,12 +74,16 @@
       "sha256": "0b78efec3b46521353b53cc98cfc035728a6660e3c8f0dd7a57961a08cea15a5"
     },
     {
+      "file": "packages/e2b/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "1f18c18c4ce6082d2016ee030b78beac4b228130603dae55f2539fe43c48da5b"
+    },
+    {
       "file": "packages/e2b/src/__tests__/snapshot-contract.test.ts",
       "sha256": "78e74f65b06fc45e14376d1e9550e2ee085e23e52d957194eea98be6730bb05a"
     },
     {
       "file": "packages/e2b/src/index.ts",
-      "sha256": "880c06401b0512197077613d749cfbb244aaaaf5cbc1288bf27b6167e041f9e9"
+      "sha256": "541b4050988c3f801eefe6c91e3bd269e69b864cac7d5e38b3300606ce1ca120"
     },
     {
       "file": "packages/provider/src/factory.ts",
@@ -94,6 +106,10 @@
     {
       "file": "packages/computesdk/dist/index.mjs",
       "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/e2b/dist/index.mjs",
+      "sha256": "34fa9dfb146350fdeea6c21cb9022210296f7cc954d1192013fa9441808b0f55"
     }
   ],
   "installedNativeDependency": {

@@ -7,9 +7,10 @@ import { fileURLToPath } from 'node:url';
 // helper/core unit checks. Do not replace it with package scripts or globs;
 // those can include credential-gated, paid integration tests.
 const suites = [
+  ['@computesdk/test-utils', 'provider-crud.test.ts', 'provider-lifecycle.test.ts', 'provider-suite-boundaries.test.ts', 'provider-suite-attempt.test.ts'],
   ['@computesdk/provider', 'command-output.test.ts'],
   ['computesdk', 'snapshot-metadata.test.ts', 'snapshot-affinity.test.ts'],
-  ['@computesdk/e2b', 'snapshot-contract.test.ts'],
+  ['@computesdk/e2b', 'snapshot-contract.test.ts', 'lifecycle-contract.test.ts'],
   ['@computesdk/modal', 'command-output.test.ts', 'unit.test.ts', 'timeout-contract.test.ts'],
   ['@computesdk/isorun', 'command-integrity.test.ts'],
   ['@computesdk/createos-sandbox', 'command-integrity.test.ts'],
@@ -27,6 +28,7 @@ const env = {
   ...process.env,
   SKIP_INTEGRATION: 'true',
   COMPUTESDK_INTEGRATION: '0',
+  COMPUTESDK_CONFORMANCE_NATIVE: '0',
   COMPUTESDK_API_KEY: '',
   E2B_API_KEY: '',
   MODAL_TOKEN_ID: '',

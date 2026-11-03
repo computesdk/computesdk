@@ -1,0 +1,2269 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "@computesdk/agentuity",
+      "packageDirectory": "packages/agentuity",
+      "exportSubpath": ".",
+      "symbol": "agentuity",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Existing caller supplies the restricted filesystem base. URL coverage is deliberately unselected: adapter getUrl can synthesize a best-guess hostname instead of proving a native preview URL.",
+      "requiredEnvironment": [
+        "AGENTUITY_SDK_KEY"
+      ],
+      "optionalEnvironment": [
+        "AGENTUITY_REGION",
+        "AGENTUITY_SANDBOX_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "AGENTUITY_SDK_KEY",
+        "region": "AGENTUITY_REGION",
+        "baseURL": "AGENTUITY_SANDBOX_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/home/agentuity"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({"
+        },
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "agentuityFetch(handle, 'POST', '/sandbox', body)"
+        },
+        {
+          "file": "packages/agentuity/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "AGENTUITY_SDK_KEY"
+        },
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "destroy: async (config: AgentuityConfig, sandboxId: string): Promise<void> => {"
+        },
+        {
+          "file": "packages/agentuity/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/agentuity/src/__tests__/index.test.ts",
+          "contains": "filesystemBasePath: '/home/agentuity',"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/archil",
+      "packageDirectory": "packages/archil",
+      "exportSubpath": ".",
+      "symbol": "archil",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: BLOCKED until an owned persistent-sandbox profile and its cleanup are reviewed. Existing core/package integration uses exec on ARCHIL_DISK_ID, an externally existing disk; generic filesystem/command tests must not mutate that disk or mistake its handle for an isolated owned sandbox. All suite flags are unselected, not unsupported; no native pass or dispatch authorization.",
+      "requiredEnvironment": [
+        "ARCHIL_API_KEY",
+        "ARCHIL_REGION",
+        "ARCHIL_DISK_ID"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "ARCHIL_API_KEY",
+        "region": "ARCHIL_REGION"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/archil/src/index.ts",
+          "contains": "const _provider = defineProvider<ArchilSandbox, ArchilConfig>({"
+        },
+        {
+          "file": "packages/archil/src/index.ts",
+          "contains": "execution?: ArchilExecutionMode"
+        },
+        {
+          "file": "packages/archil/src/__tests__/index.test.ts",
+          "contains": "diskId: configuredDiskId"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "diskId: requireEnv('ARCHIL_DISK_ID')"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/arker",
+      "packageDirectory": "packages/arker",
+      "exportSubpath": ".",
+      "symbol": "arker",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/arker/src/index.ts",
+          "contains": "export const arker = defineProvider<VM, ArkerConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/aws/agentcore",
+      "packageDirectory": "packages/aws",
+      "exportSubpath": "./agentcore",
+      "symbol": "agentcore",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/aws/src/agentcore/index.ts",
+          "contains": "const _provider = defineProvider<AgentCoreSandbox, AgentCoreConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/aws/ec2",
+      "packageDirectory": "packages/aws",
+      "exportSubpath": "./ec2",
+      "symbol": "ec2",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/aws/src/ec2/index.ts",
+          "contains": "export const ec2 = defineProvider<Ec2Sandbox, Ec2Config>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/beam",
+      "packageDirectory": "packages/beam",
+      "exportSubpath": ".",
+      "symbol": "beam",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. The adapter caches sandbox definitions, not permission to reuse arbitrary live instances. Cleanup must verify absence of the container ID returned by this create.",
+      "requiredEnvironment": [
+        "BEAM_TOKEN",
+        "BEAM_WORKSPACE_ID"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "token": "BEAM_TOKEN",
+        "workspaceId": "BEAM_WORKSPACE_ID"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "export const beam = defineProvider<SandboxInstance, BeamConfig>({"
+        },
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "sandbox.create({ waitForReady: false })"
+        },
+        {
+          "file": "packages/beam/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "BEAM_TOKEN"
+        },
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "BEAM_WORKSPACE_ID"
+        },
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "destroy: async (config: BeamConfig, sandboxId: string) =>"
+        },
+        {
+          "file": "packages/beam/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/blaxel",
+      "packageDirectory": "packages/blaxel",
+      "exportSubpath": ".",
+      "symbol": "blaxel",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Use unnamed fresh creation; never attach via sandboxId or reuse a caller-chosen persistent name. Native adapter enforces its minimum TTL. Also an existing compute-core integration target.",
+      "requiredEnvironment": [
+        "BL_API_KEY",
+        "BL_WORKSPACE"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "BL_API_KEY",
+        "workspace": "BL_WORKSPACE"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "SandboxInstance.createIfNotExists({"
+        },
+        {
+          "file": "packages/blaxel/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "BL_API_KEY"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "BL_WORKSPACE"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "blaxel: 'blaxel'"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "destroy: async (config: BlaxelConfig, sandboxId: string) =>"
+        },
+        {
+          "file": "packages/blaxel/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,   // Blaxel supports filesystem operations via fs API"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/brezel",
+      "packageDirectory": "packages/brezel",
+      "exportSubpath": ".",
+      "symbol": "brezel",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/brezel/src/index.ts",
+          "contains": "export const brezel = defineProvider<Sandbox, ConfigWithClient>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/buddy",
+      "packageDirectory": "packages/buddy",
+      "exportSubpath": ".",
+      "symbol": "buddy",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/buddy/src/index.ts",
+          "contains": "export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapshot>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/cloudflare",
+      "packageDirectory": "packages/cloudflare",
+      "exportSubpath": ".",
+      "symbol": "cloudflare",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/cloudflare/src/index.ts",
+          "contains": "export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/codesandbox",
+      "packageDirectory": "packages/codesandbox",
+      "exportSubpath": ".",
+      "symbol": "codesandbox",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh default creation, not resume/snapshot reuse. Native List is explicitly unavailable; this profile does not opt into universal List/CRUD assertions. URL unselected: current adapter synthesizes a URL differing from the native preview generator; syntax checks cannot prove a valid preview.",
+      "requiredEnvironment": [
+        "CSB_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "CSB_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({"
+        },
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "await sdk.sandboxes.create(createOptions)"
+        },
+        {
+          "file": "packages/codesandbox/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "CSB_API_KEY"
+        },
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "destroy: async (config: CodesandboxConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/codesandbox/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,  // CodeSandbox supports filesystem operations"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/collimate",
+      "packageDirectory": "packages/collimate",
+      "exportSubpath": ".",
+      "symbol": "collimate",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/collimate/src/index.ts",
+          "contains": "export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/createos-sandbox",
+      "packageDirectory": "packages/createos-sandbox",
+      "exportSubpath": ".",
+      "symbol": "createosSandbox",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Cold create with adapter-resolved shape/rootfs; URL coverage is deliberately unselected because ingress defaults off. No snapshot, existing disk, ingress or SSH configuration is supplied.",
+      "requiredEnvironment": [
+        "CREATEOS_SANDBOX_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "CREATEOS_SANDBOX_BASE_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "CREATEOS_SANDBOX_API_KEY",
+        "baseUrl": "CREATEOS_SANDBOX_BASE_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "timeout": 120000
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "await client.createSandbox(toCreateRequest(opts, shape, rootfs))"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "CREATEOS_SANDBOX_API_KEY"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "ingress_enabled: opts.ingressEnabled !== undefined ? Boolean(opts.ingressEnabled) : false"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "destroy: async (config: CreateosConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "supportsGetUrl: true,"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "ports: [3000, 8080],"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "timeout: 120_000,"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Typed native not-found only; other GET/DELETE errors propagate."
+      }
+    },
+    {
+      "id": "@computesdk/daytona",
+      "packageDirectory": "packages/daytona",
+      "exportSubpath": ".",
+      "symbol": "daytona",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory and fresh-sandbox lifecycle; the existing compute-core integration supports Daytona even though the package index suite is disabled. Native filesystem and preview methods are selected from adapter source, not claimed as verified. Background remains unselected pending behavior verification, not unsupported. Native transport, SSH, authentication and cleanup failures must fail; no mock fallback or dispatch authorization is implied.",
+      "requiredEnvironment": [
+        "DAYTONA_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "DAYTONA_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "DAYTONA_API_KEY"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "await daytona.create(createParams as any, createOptions)"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "filesystem: {"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "await sandbox.getPreviewLink(options.port)"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "daytona: 'daytona'"
+        },
+        {
+          "file": "packages/daytona/src/__tests__/index.test.ts",
+          "contains": "describe.skip('daytona'"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "destroy: async (config: DaytonaConfig, sandboxId: string) => {"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/declaw",
+      "packageDirectory": "packages/declaw",
+      "exportSubpath": ".",
+      "symbol": "declaw",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh default node-template sandbox. Provider lookup/delete can mask native failures, so owned-ID absence checks must not be replaced with a delete acknowledgement.",
+      "requiredEnvironment": [
+        "DECLAW_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "DECLAW_DOMAIN"
+      ],
+      "configEnvironment": {
+        "apiKey": "DECLAW_API_KEY",
+        "domain": "DECLAW_DOMAIN"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({"
+        },
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "await DeclawSandbox.create({"
+        },
+        {
+          "file": "packages/declaw/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "DECLAW_API_KEY"
+        },
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "destroy: async (config: DeclawConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/declaw/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/docker",
+      "packageDirectory": "packages/docker",
+      "exportSubpath": ".",
+      "symbol": "docker",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/docker/src/index.ts",
+          "contains": "export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/e2b",
+      "packageDirectory": "packages/e2b",
+      "exportSubpath": ".",
+      "symbol": "e2b",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Also an existing compute-core integration target. Use newly created sandboxes, not a live sandbox or snapshot ID.",
+      "requiredEnvironment": [
+        "E2B_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "E2B_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "export const e2b = defineProvider<E2BSandbox, E2BConfig>({"
+        },
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "E2BSandbox.create(createOpts)"
+        },
+        {
+          "file": "packages/e2b/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "E2B_API_KEY"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "e2b: 'e2b'"
+        },
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "destroy: async (config: E2BConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/e2b/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,  // E2B supports filesystem operations"
+        },
+        {
+          "file": "packages/e2b/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]  // Enable getUrl tests"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Typed static getInfo404 only; static kill boolean contract; positive connect retains existing resume/timeout effects. List remains unreviewed."
+      }
+    },
+    {
+      "id": "@computesdk/ec2-firecrab",
+      "packageDirectory": "packages/ec2-firecrab",
+      "exportSubpath": ".",
+      "symbol": "ec2Firecrab",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/ec2-firecrab/src/index.ts",
+          "contains": "const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, never, never>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/freestyle",
+      "packageDirectory": "packages/freestyle",
+      "exportSubpath": ".",
+      "symbol": "freestyle",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/freestyle/src/index.ts",
+          "contains": "export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleSnapshot>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/givemeanode",
+      "packageDirectory": "packages/givemeanode",
+      "exportSubpath": ".",
+      "symbol": "givemeanode",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/givemeanode/src/index.ts",
+          "contains": "const provider = defineProvider<"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/gravixlayer",
+      "packageDirectory": "packages/gravixlayer",
+      "exportSubpath": ".",
+      "symbol": "gravixlayer",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "const createGravixLayerProvider = defineProvider<"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/hopx",
+      "packageDirectory": "packages/hopx",
+      "exportSubpath": ".",
+      "symbol": "hopx",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Uses the adapter default template for a fresh sandbox; no existing sandbox or volume is selected.",
+      "requiredEnvironment": [
+        "HOPX_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "HOPX_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "export const hopx = defineProvider<HopxSandbox, HopxConfig>({"
+        },
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "HopxSandbox.create(createOptions)"
+        },
+        {
+          "file": "packages/hopx/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "HOPX_API_KEY"
+        },
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "destroy: async (config: HopxConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/hopx/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/isorun",
+      "packageDirectory": "packages/isorun",
+      "exportSubpath": ".",
+      "symbol": "isorun",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Cold create only: no snapshot restore, externally supplied live ID or mounted persistent volume.",
+      "requiredEnvironment": [
+        "ISORUN_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "ISORUN_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({"
+        },
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "await client.create({"
+        },
+        {
+          "file": "packages/isorun/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "ISORUN_API_KEY"
+        },
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "destroy: async (config: ConfigWithClient, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/isorun/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/isorun/src/__tests__/index.test.ts",
+          "contains": "supportsGetUrl: true,"
+        },
+        {
+          "file": "packages/isorun/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080],"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Pinned isorun 1.0.0 GET returns null only on native status404; DELETE errors propagate."
+      }
+    },
+    {
+      "id": "@computesdk/just-bash",
+      "packageDirectory": "packages/just-bash",
+      "exportSubpath": ".",
+      "symbol": "justBash",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/just-bash/src/index.ts",
+          "contains": "const _provider = defineProvider<JustBashSandbox, JustBashConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/k8s",
+      "packageDirectory": "packages/k8s",
+      "exportSubpath": ".",
+      "symbol": "k8s",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/k8s/src/index.ts",
+          "contains": "const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/leap0",
+      "packageDirectory": "packages/leap0",
+      "exportSubpath": ".",
+      "symbol": "leap0",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh adapter-default creation. Existing catch-all lookup/delete behavior is not proof of native absence or a completed native certification.",
+      "requiredEnvironment": [
+        "LEAP0_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "LEAP0_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "const _provider = defineProvider<Leap0Sandbox, Leap0Config>({"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "await client.sandboxes.create({"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "LEAP0_API_KEY"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "destroy: async (_config: Leap0Config, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080],"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/lelantos",
+      "packageDirectory": "packages/lelantos",
+      "exportSubpath": ".",
+      "symbol": "lelantos",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Require a provider-specific key rather than inheriting E2B_API_KEY. Endpoint overrides belong to this profile; do not run against an unrelated E2B account.",
+      "requiredEnvironment": [
+        "LELANTOS_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "LELANTOS_DOMAIN",
+        "LELANTOS_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "LELANTOS_API_KEY",
+        "domain": "LELANTOS_DOMAIN",
+        "apiUrl": "LELANTOS_API_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({"
+        },
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "await E2BSandbox.create("
+        },
+        {
+          "file": "packages/lelantos/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "LELANTOS_API_KEY"
+        },
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "destroy: async (config: LelantosConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/lelantos/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,  // Lelantos supports filesystem operations"
+        },
+        {
+          "file": "packages/lelantos/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]  // Enable getUrl tests"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/lightning",
+      "packageDirectory": "packages/lightning",
+      "exportSubpath": ".",
+      "symbol": "lightning",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/lightning/src/index.ts",
+          "contains": "export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/lizard",
+      "packageDirectory": "packages/lizard",
+      "exportSubpath": ".",
+      "symbol": "lizard",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "const createLizard = defineProvider<Sandbox, LizardConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/microsandbox",
+      "packageDirectory": "packages/microsandbox",
+      "exportSubpath": ".",
+      "symbol": "microsandbox",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Explicit cloud credentials/backend with ephemeral deletion, using the documented cloud image. The existing integration caller is local-only; cloud wiring is source/README-reviewed, not cloud-tested. Cloud published ports/snapshots are not selected. Never fall back to local runtime or convert native SSH/runtime failures into guest exits or successful mocks.",
+      "requiredEnvironment": [
+        "MSB_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "MSB_API_KEY"
+      },
+      "config": {
+        "backend": "cloud",
+        "ephemeral": true,
+        "image": "node:22"
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "timeout": 120000
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "const _microsandbox = defineProvider<"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "native = await builder.create()"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "MSB_API_KEY"
+        },
+        {
+          "file": "packages/microsandbox/README.md",
+          "contains": "image: 'node:22'"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "requireLocal(sandbox.backendKind, 'published ports')"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "builder = builder.ephemeral(options?.ephemeral ?? config.ephemeral ?? true)"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "destroy: async (config, sandboxId) => withBackend(selectBackend(config), async ({ Sandbox }) => {"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "provider: microsandbox({ backend: 'local', ports: [3000, 8080] }),"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "supportsGetUrl: true,"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "ports: [3000, 8080],"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "timeout: 120_000,"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/miosa",
+      "packageDirectory": "packages/miosa",
+      "exportSubpath": ".",
+      "symbol": "miosa",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "const createMiosaProvider = defineProvider<"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/modal",
+      "packageDirectory": "packages/modal",
+      "exportSubpath": ".",
+      "symbol": "modal",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Existing app/image bootstrap is provider infrastructure; cleanup must target only sandboxes returned by this attempt. Also an existing compute-core integration target.",
+      "requiredEnvironment": [
+        "MODAL_TOKEN_ID",
+        "MODAL_TOKEN_SECRET"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "tokenId": "MODAL_TOKEN_ID",
+        "tokenSecret": "MODAL_TOKEN_SECRET"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "client.sandboxes.create(app, image, sandboxOptions)"
+        },
+        {
+          "file": "packages/modal/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "MODAL_TOKEN_ID"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "MODAL_TOKEN_SECRET"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "modal: 'modal'"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "destroy: async (config: ModalInternalConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/modal/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,  // Modal supports filesystem operations"
+        },
+        {
+          "file": "packages/modal/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]  // Enable getUrl tests"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/mosaic",
+      "packageDirectory": "packages/mosaic",
+      "exportSubpath": ".",
+      "symbol": "mosaic",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/mosaic/src/index.ts",
+          "contains": "export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot, MosaicSnapshot>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/namespace",
+      "packageDirectory": "packages/namespace",
+      "exportSubpath": ".",
+      "symbol": "namespace",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/namespace/src/index.ts",
+          "contains": "export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/neevcloud",
+      "packageDirectory": "packages/neevcloud",
+      "exportSubpath": ".",
+      "symbol": "neevcloud",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Require explicit org/project as well as the API key; the key-only gate in the old caller is insufficient. Cold sandbox creation, no snapshot or persistent mount.",
+      "requiredEnvironment": [
+        "NEEV_API_KEY",
+        "NEEV_ORG_ID",
+        "NEEV_PROJECT_ID"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "NEEV_API_KEY",
+        "orgId": "NEEV_ORG_ID",
+        "projectId": "NEEV_PROJECT_ID"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "export const neevcloud = defineProvider<Sandbox, NeevCloudConfig, SandboxTemplate, NeevCloudSnapshot>({"
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "await clientFor(config).sandboxes.create(toCreateParams(options))"
+        },
+        {
+          "file": "packages/neevcloud/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "NEEV_API_KEY"
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "NEEV_ORG_ID"
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "NEEV_PROJECT_ID"
+        },
+        {
+          "file": "packages/neevcloud/README.md",
+          "contains": "export NEEV_ORG_ID=org-..."
+        },
+        {
+          "file": "packages/neevcloud/README.md",
+          "contains": "export NEEV_PROJECT_ID=prj-..."
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "destroy: async (config, sandboxId) => {"
+        },
+        {
+          "file": "packages/neevcloud/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true, // NeevCloud supports filesystem operations"
+        },
+        {
+          "file": "packages/neevcloud/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080], // Enable getUrl tests"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Typed NotFoundError only; DELETE errors propagate."
+      }
+    },
+    {
+      "id": "@computesdk/northflank",
+      "packageDirectory": "packages/northflank",
+      "exportSubpath": ".",
+      "symbol": "northflank",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/northflank/src/index.ts",
+          "contains": "const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, NorthflankConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/novita",
+      "packageDirectory": "packages/novita",
+      "exportSubpath": ".",
+      "symbol": "novita",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaTemplate, NovitaSnapshot>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/opencomputer",
+      "packageDirectory": "packages/opencomputer",
+      "exportSubpath": ".",
+      "symbol": "opencomputer",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "const _provider = defineProvider<OpenComputerNativeSandbox, OpenComputerConfig, any, OpenComputerSnapshot>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/platform",
+      "packageDirectory": "packages/platform",
+      "exportSubpath": ".",
+      "symbol": "platform",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: BLOCKED until the dedicated test organization, sandbox access, own provider key and pinned providerOrder are confirmed. COMPUTE_PLATFORM_TEST_API_KEY must not silently select a default organization or market-backed spend. The existing core integration documents these prerequisites; key presence alone is insufficient. All suite flags are unselected, not unsupported; no native pass or dispatch authorization.",
+      "requiredEnvironment": [
+        "COMPUTE_PLATFORM_TEST_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "COMPUTE_PLATFORM_TEST_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/platform/src/provider.ts",
+          "contains": "export const platform = defineProvider<PlatformInstance, PlatformConfig>({"
+        },
+        {
+          "file": "packages/platform/src/provider.ts",
+          "contains": "export interface PlatformConfig"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "COMPUTE_PLATFORM_TEST_API_KEY"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "own provider key and providerOrder pinned to that provider"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/promigence",
+      "packageDirectory": "packages/promigence",
+      "exportSubpath": ".",
+      "symbol": "promigence",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/promigence/src/index.ts",
+          "contains": "export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/quilt",
+      "packageDirectory": "packages/quilt",
+      "exportSubpath": ".",
+      "symbol": "quilt",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/quilt/src/index.ts",
+          "contains": "export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snapshot>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/railway",
+      "packageDirectory": "packages/railway",
+      "exportSubpath": ".",
+      "symbol": "railway",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/railway/src/index.ts",
+          "contains": "export const railway = defineProvider<RailwaySandbox, RailwayConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/run-cloud",
+      "packageDirectory": "packages/run-cloud",
+      "exportSubpath": ".",
+      "symbol": "runCloud",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "const _provider = defineProvider<"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/runloop",
+      "packageDirectory": "packages/runloop",
+      "exportSubpath": ".",
+      "symbol": "runloop",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "export const runloop = defineProvider<"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/runtime",
+      "packageDirectory": "packages/runtime",
+      "exportSubpath": ".",
+      "symbol": "runtime",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, RuntimeSnapshot>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/sail",
+      "packageDirectory": "packages/sail",
+      "exportSubpath": ".",
+      "symbol": "sail",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/sail/src/index.ts",
+          "contains": "export const sail = defineProvider<Sailbox, SailConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/sandbox0",
+      "packageDirectory": "packages/sandbox0",
+      "exportSubpath": ".",
+      "symbol": "sandbox0",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Uses the existing caller hardTtl and template-based claim; only the returned sandbox ID is owned. Team ID is needed when the supplied credential is an access token rather than a team API key. No public-port coverage is selected.",
+      "requiredEnvironment": [
+        "SANDBOX0_TOKEN"
+      ],
+      "optionalEnvironment": [
+        "SANDBOX0_TEAM_ID",
+        "SANDBOX0_BASE_URL",
+        "SANDBOX0_TEMPLATE"
+      ],
+      "configEnvironment": {
+        "token": "SANDBOX0_TOKEN",
+        "teamId": "SANDBOX0_TEAM_ID",
+        "baseUrl": "SANDBOX0_BASE_URL",
+        "templateId": "SANDBOX0_TEMPLATE"
+      },
+      "config": {
+        "hardTtl": 600
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp",
+        "timeout": 60000
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({"
+        },
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "await client.sandboxes.claim(template, claimOptions)"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "SANDBOX0_TOKEN"
+        },
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "destroy: async (config, sandboxId) => {"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "hardTtl: 600,"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "supportsGetUrl: false,"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "filesystemBasePath: '/tmp',"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "timeout: 60_000,"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Numeric native404 only; terminal GET/delete retry failures propagate."
+      }
+    },
+    {
+      "id": "@computesdk/secure-exec",
+      "packageDirectory": "packages/secure-exec",
+      "exportSubpath": ".",
+      "symbol": "secureExec",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/sprites",
+      "packageDirectory": "packages/sprites",
+      "exportSubpath": ".",
+      "symbol": "sprites",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh generated sprite only. Native create rate limits and failed-delete/absence checks remain failures, not permission to reuse a persistent sprite.",
+      "requiredEnvironment": [
+        "SPRITES_TOKEN"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "SPRITES_TOKEN"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({"
+        },
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "name: name || optSandboxId || `sprite-${Date.now()}`"
+        },
+        {
+          "file": "packages/sprites/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "SPRITES_TOKEN"
+        },
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "destroy: async (config: SpritesConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/sprites/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/sprites/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/superserve",
+      "packageDirectory": "packages/superserve",
+      "exportSubpath": ".",
+      "symbol": "superserve",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/tenki",
+      "packageDirectory": "packages/tenki",
+      "exportSubpath": ".",
+      "symbol": "tenki",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "export const tenki = defineProvider<Session, TenkiConfig>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/tensorlake",
+      "packageDirectory": "packages/tensorlake",
+      "exportSubpath": ".",
+      "symbol": "tensorlake",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Cold sandbox creation only. Selected preview coverage exposes the requested port publicly through the native API; run only in an approved isolated test account.",
+      "requiredEnvironment": [
+        "TENSORLAKE_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "TENSORLAKE_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "TENSORLAKE_API_KEY",
+        "apiUrl": "TENSORLAKE_API_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "export const tensorlake = defineProvider<"
+        },
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "await Sandbox.create(params)"
+        },
+        {
+          "file": "packages/tensorlake/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "TENSORLAKE_API_KEY"
+        },
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "allowUnauthenticatedAccess: true"
+        },
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "destroy: async (config: TensorlakeConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/tensorlake/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/tensorlake/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080],"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/uno",
+      "packageDirectory": "packages/uno",
+      "exportSubpath": ".",
+      "symbol": "uno",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: No reviewed isolated live configuration is selected. Empty config and false suite flags mean not selected, not unsupported. Catalog metadata is not native verification or authorization to dispatch.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/uno/src/index.ts",
+          "contains": "export const uno = defineProvider<UnoSandbox, ConfigWithClient>({"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/upstash",
+      "packageDirectory": "packages/upstash",
+      "exportSubpath": ".",
+      "symbol": "upstash",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Only the default full Box profile is selected. Do not pass ephemeral:true: lightweight ephemeral boxes have a different lifecycle/URL surface, and no ephemeral certification is implied. Filesystem base explicitly matches native cwd; do not assume a nested tmp directory exists.",
+      "requiredEnvironment": [
+        "UPSTASH_BOX_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "UPSTASH_BOX_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ],
+        "filesystemBasePath": "/workspace/home"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "await Box.create({"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "UPSTASH_BOX_API_KEY"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "destroy: async (config: UpstashConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/vercel",
+      "packageDirectory": "packages/vercel",
+      "exportSubpath": ".",
+      "symbol": "vercel",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Token/team/project authentication is selected, not OIDC fallback. Filesystem coverage is not selected by the existing caller. No assumption that ephemeral Vercel sandboxes support List.",
+      "requiredEnvironment": [
+        "VERCEL_TOKEN",
+        "VERCEL_TEAM_ID",
+        "VERCEL_PROJECT_ID"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "token": "VERCEL_TOKEN",
+        "teamId": "VERCEL_TEAM_ID",
+        "projectId": "VERCEL_PROJECT_ID"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8000
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "export const vercel = defineProvider<VercelSandbox, VercelConfig>({"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "VercelSandbox.create(params)"
+        },
+        {
+          "file": "packages/vercel/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "VERCEL_TOKEN"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "VERCEL_TEAM_ID"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "VERCEL_PROJECT_ID"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "vercel: 'vercel'"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "destroy: async (config: VercelConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/vercel/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: false,   // Vercel sandboxes don't support filesystem operations"
+        },
+        {
+          "file": "packages/vercel/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8000],"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    }
+  ]
+}

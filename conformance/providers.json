@@ -724,7 +724,8 @@
         "Native contract inspection targets installed e2b 2.30.1, not consumer 2.57 or every version allowed by the declared dependency range.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Legacy template shim cases are synthetic compatibility tests; those hooks are absent from the inspected native SDK and no builder or snapshot/template alias is added.",
-        "Native service errors propagate with their original details; only locally generated malformed-response/unsupported diagnostics are fixed messages."
+        "Native service errors propagate with their original details; only locally generated malformed-response/unsupported diagnostics are fixed messages.",
+        "Positive lookup retains public native connect side effects (resume/timeout renewal); inventory list behavior remains unchanged and unverified."
       ],
       "claims": [
         "Named native-boundary-mocked tests cover snapshot pagination, source filtering, total limits, configuration precedence, and propagation of native failures.",
@@ -734,7 +735,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/e2b.json",
-        "sha256": "182d459635962d7fd7a06067bce9c4d9f64c6eaa9df4a5673abe37835d918f91"
+        "sha256": "801358ffe467f34df34ceb25ca8aebe276a77b4922a2df974d3a3d485081df20"
       }
     },
     {

@@ -56,6 +56,10 @@ not promote a status.
 This series hardens existing SDK behavior. It does not introduce build, image,
 artifact-registry, or new provider primitives.
 
+For the compute-only live Actions loop and its separate configuration/cleanup
+gates, see [Compute conformance](./compute-conformance.md). The local counts
+below are not live Actions results.
+
 After the normal full workspace build, run:
 
 ```sh
@@ -71,9 +75,10 @@ bash/sh command-string fixtures. Neither calls a live provider.
 
 | Scope | Passing checks |
 | --- | ---: |
+| Shared suite ownership, deadlines, cleanup and concurrency regressions | 60 |
 | Shared byte-count/child-status helper | 49 |
 | Shared snapshot metadata/affinity core units | 42 |
-| E2B snapshot/template regressions, including real-core coupling | 67 |
+| E2B snapshot/template and instance lookup/delete regressions | 118 |
 | Modal native-mocked unit/regression files | 76 |
 | Isorun command-capture regressions | 80 |
 | CreateOS command-capture regressions | 85 |
@@ -85,12 +90,21 @@ bash/sh command-string fixtures. Neither calls a live provider.
 | HopX command completion regressions | 45 |
 | Beam command completion regressions | 22 |
 | Blaxel command completion/stream regressions | 84 |
-| **Total selected checks** | **826** |
+| **Total selected checks** | **937** |
 
-These totals include existing unit checks; they are not 826 new tests or
-826 native executions. Recorded adapter evidence is under
-`conformance/runs/local-mocked/`, against production/test revision
-`1a472184`. The helper and core units do not count as adapters.
+These totals include existing unit checks; they are not 937 new tests or
+937 native executions. Recorded adapter evidence is under
+`conformance/runs/local-mocked/`: the E2B record now targets production/test
+revision `3f05eda6`, while the other adapter records retain `1a472184`.
+The helper, harness and core units do not count as adapters.
+
+The compute-loop batch removes canned native-success substitution and caller-
+scope hooks, fences per-attempt ownership/deadlines and fails cleanup errors.
+Native Actions supplies positive SDK lookup and post-destroy SDK-absence
+callbacks; ordinary consumers without those callbacks still establish only
+destroy acknowledgement. E2B instance lookup/delete now propagate service
+failures rather than invent absence/success. Its existing positive connect
+side effects and separate list gaps remain explicit.
 
 The second reliability batch closes these specific gaps:
 
