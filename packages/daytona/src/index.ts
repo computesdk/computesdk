@@ -20,6 +20,19 @@ export interface DaytonaConfig {
   timeout?: number;
 }
 
+/** The wrapper did not supply trustworthy child completion metadata. */
+export class DaytonaCommandProtocolError extends Error {
+  readonly code = 'DAYTONA_COMMAND_PROTOCOL_ERROR';
+  readonly provider = 'daytona';
+
+  constructor(readonly reason: 'missing-completion' | 'invalid-completion') {
+    super(reason === 'invalid-completion'
+      ? 'Daytona command completion status is invalid.'
+      : 'Daytona command response did not contain a valid completion record.');
+    this.name = 'DaytonaCommandProtocolError';
+  }
+}
+
 /**
  * Resolve a volume by id OR name — `d.volume.get()` looks up by name only,
  * so an id falls back to a list scan. Returns null when nothing matches
@@ -235,17 +248,27 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           const delimIdx = merged.lastIndexOf(delim);
           let stdout = merged;
           let stderr = '';
-          let exitCode = response.exitCode ?? 0;
+          let exitCode: number;
           if (delimIdx !== -1) {
             const after = merged.substring(delimIdx + delim.length);
             const newlineIdx = after.indexOf('\n');
             const status = newlineIdx === -1 ? '' : after.substring(0, newlineIdx);
             if (!/^\d{1,3}$/.test(status) || Number(status) > 255) {
-              throw new Error('Daytona command completion status is invalid.');
+              throw new DaytonaCommandProtocolError('invalid-completion');
             }
             stdout = merged.substring(0, delimIdx);
             exitCode = Number(status);
             stderr = after.substring(newlineIdx + 1);
+          } else {
+            // A native wrapper failure is useful failure information. Its
+            // success, however, may only be the cleanup's status—not proof that
+            // the child completed or its in-band status reached the caller.
+            const nativeCode = response.exitCode;
+            if (typeof nativeCode !== 'number' || !Number.isInteger(nativeCode)
+              || nativeCode < 1 || nativeCode > 255) {
+              throw new DaytonaCommandProtocolError('missing-completion');
+            }
+            exitCode = nativeCode;
           }
           return {
             stdout,
@@ -254,6 +277,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             durationMs: Date.now() - startTime
           };
         } catch (error) {
+          if (error instanceof DaytonaCommandProtocolError) throw error;
           throw new Error(`Daytona command execution failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       },

@@ -11,7 +11,7 @@ vi.mock('@daytonaio/sdk', () => ({
   },
   DaytonaNotFoundError: class extends Error {},
 }));
-import { daytona } from '../index';
+import { daytona, DaytonaCommandProtocolError } from '../index';
 
 const roots: string[] = [];
 const stderrFiles: string[] = [];
@@ -69,6 +69,59 @@ describe.each(['/bin/bash', '/bin/sh'])('Daytona real-adapter command contract (
     expect(result).toMatchObject({ stdout: 'native failure\n', stderr: '', exitCode: 23 });
   });
 
+  it.each([undefined, null, 0, -1, 0.5, 256, '23', NaN, Infinity])(
+    'rejects absent completion with successful or invalid native status %j',
+    async (exitCode) => {
+      native.executeCommand.mockResolvedValueOnce({
+        result: 'secret-output-without-child-completion',
+        exitCode,
+      });
+      const operation = (await instance()).runCommand('true');
+      await expect(operation).rejects.toBeInstanceOf(DaytonaCommandProtocolError);
+      await expect(operation).rejects.toMatchObject({
+        code: 'DAYTONA_COMMAND_PROTOCOL_ERROR',
+        provider: 'daytona',
+        reason: 'missing-completion',
+      });
+      await expect(operation).rejects.not.toThrow('secret-output');
+    },
+  );
+
+  it.each([1, 23, 255])('preserves an explicit native failure %i without a delimiter', async (exitCode) => {
+    native.executeCommand.mockResolvedValueOnce({ result: 'native failure\n', exitCode });
+    await expect((await instance()).runCommand('true')).resolves.toMatchObject({
+      stdout: 'native failure\n', stderr: '', exitCode,
+    });
+  });
+
+  it.each([
+    { status: 0, nativeCode: undefined },
+    { status: 0, nativeCode: null },
+    { status: 0, nativeCode: 23 },
+    { status: 255, nativeCode: 0 },
+    { status: 3, nativeCode: 'invalid' },
+  ])('trusts valid child status $status independently of native $nativeCode', async ({ status, nativeCode }) => {
+    native.executeCommand.mockImplementationOnce(async (script: string) => {
+      const delimiter = script.match(/__COMPUTESDK_STDERR_[A-Za-z0-9_]+__/)?.[0];
+      expect(delimiter).toBeTruthy();
+      return { result: `out\n${delimiter}${status}\nerr\n`, exitCode: nativeCode };
+    });
+    await expect((await instance()).runCommand('true')).resolves.toMatchObject({
+      stdout: 'out\n', stderr: 'err\n', exitCode: status,
+    });
+  });
+
+  it.each(['not-a-status\n', '0'])('rejects invalid or unterminated child status %j despite native failure', async status => {
+    native.executeCommand.mockImplementationOnce(async (script: string) => {
+      const delimiter = script.match(/__COMPUTESDK_STDERR_[A-Za-z0-9_]+__/)?.[0];
+      expect(delimiter).toBeTruthy();
+      return { result: `secret-output${delimiter}${status}`, exitCode: 23 };
+    });
+    await expect((await instance()).runCommand('true')).rejects.toMatchObject({
+      code: 'DAYTONA_COMMAND_PROTOCOL_ERROR', reason: 'invalid-completion',
+    });
+  });
+
   it('background startup groups and redirects the entire short command list', async () => {
     // Only immediate shell builtins are launched; no long-lived child/server.
     const result = await (await instance()).runCommand(
@@ -107,10 +160,15 @@ describe.each(['/bin/bash', '/bin/sh'])('Daytona real-adapter command contract (
       });
       let caught: unknown;
       try { await (await instance()).runCommand('true'); } catch (error) { caught = error; }
-      expect(caught).toBeInstanceOf(Error);
+      expect(caught).toBeInstanceOf(DaytonaCommandProtocolError);
+      expect(caught).toMatchObject({
+        code: 'DAYTONA_COMMAND_PROTOCOL_ERROR', provider: 'daytona', reason: 'invalid-completion',
+      });
       expect(String(caught)).toContain('Daytona command completion status is invalid');
       expect(String(caught)).not.toContain('secret-output');
       expect(String(caught)).not.toContain('secret-stderr');
+      expect(JSON.stringify(caught)).not.toContain('secret-output');
+      expect(JSON.stringify(caught)).not.toContain('secret-stderr');
     },
   );
 
