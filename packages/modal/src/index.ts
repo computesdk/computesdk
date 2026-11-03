@@ -314,11 +314,16 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
 
       getInfo: async (modalSandbox: ModalSandbox): Promise<InstanceInfo> => {
-        let status: 'running' | 'stopped' | 'error' = 'running';
-        try {
-          const pollResult = await modalSandbox.instance.poll();
-          if (pollResult !== null) status = pollResult === 0 ? 'stopped' : 'error';
-        } catch { status = 'running'; }
+        if (modalSandbox.instance.sandboxId !== modalSandbox.instanceId) throw new Error('Modal sandbox identity mismatch');
+        // Public Sandbox.poll() queries this Sandbox's main process, not an
+        // exec child. A numeric result is terminal execution evidence for this
+        // ID, not backend absence; restoring a snapshot creates a new Sandbox.
+        // Never turn poll errors into a fabricated running/terminal result.
+        const pollResult = await modalSandbox.instance.poll();
+        if (pollResult !== null && (typeof pollResult !== 'number' || !Number.isSafeInteger(pollResult))) {
+          throw new Error('Modal sandbox poll returned an invalid exit code');
+        }
+        const status = pollResult === null ? 'running' : pollResult === 0 ? 'stopped' : 'error';
 
         return {
           id: modalSandbox.instanceId,
@@ -326,7 +331,12 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           status,
           createdAt: new Date(),
           timeout: 300000,
-          metadata: { modalSandboxId: modalSandbox.instanceId, realModalImplementation: true, runtime: 'node' }
+          metadata: {
+            modalSandboxId: modalSandbox.instanceId, realModalImplementation: true, runtime: 'node',
+            // Reserved native evidence, set after labels and only for a fresh
+            // numeric result. Retained Sandbox handles remain retrievable.
+            ...(pollResult === null ? {} : { modalExitCode: pollResult }),
+          }
         };
       },
 
