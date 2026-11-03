@@ -207,14 +207,11 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const startTime = Date.now();
         try {
           let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
+          if (options?.background) {
+            // Group the whole payload in the native-selected shell (which can
+            // be zsh/bash/sh), ignore hangup, and detach its standard streams.
+            fullCommand = `(\ntrap '' HUP\n${command}\n) </dev/null >/dev/null 2>&1 &`;
           }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 
           // executeCommand returns one merged `result` — separate stderr by
           // redirecting it to a file and cat'ing it back behind a delimiter.
@@ -222,25 +219,33 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           const delim = `__COMPUTESDK_STDERR_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
           // Capture the real exit code in-band — the wrapper's own exit code is
           // always the cleanup's (0), not the command's.
-          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __dy_ec=$?; echo "${delim}$__dy_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+          // Isolate `exit`, and place boundaries on their own lines so a
+          // trailing comment, heredoc or & cannot swallow/break the wrapper.
+          // Native env applies to this wrapper too; a custom PATH must not
+          // prevent stderr capture or cleanup from using standard utilities.
+          const wrapped = `(\n${fullCommand}\n) 2>"${escapeShellArg(errFile)}"\n__dy_ec=$?\nprintf '%s%s\\n' "${delim}" "$__dy_ec"\ncommand -p cat "${escapeShellArg(errFile)}" 2>/dev/null\ncommand -p rm -f "${escapeShellArg(errFile)}"`;
 
           const response = await sandbox.process.executeCommand(
             wrapped,
-            undefined,
-            undefined,
+            options?.cwd,
+            options?.env,
             options?.timeout !== undefined ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined,
           );
           const merged = response.result || '';
           const delimIdx = merged.lastIndexOf(delim);
           let stdout = merged;
           let stderr = '';
-          let exitCode = response.exitCode || 0;
+          let exitCode = response.exitCode ?? 0;
           if (delimIdx !== -1) {
-            stdout = merged.substring(0, delimIdx).replace(/\n$/, '');
             const after = merged.substring(delimIdx + delim.length);
             const newlineIdx = after.indexOf('\n');
-            exitCode = parseInt(newlineIdx === -1 ? after : after.substring(0, newlineIdx), 10) || 0;
-            stderr = newlineIdx === -1 ? '' : after.substring(newlineIdx + 1);
+            const status = newlineIdx === -1 ? '' : after.substring(0, newlineIdx);
+            if (!/^\d{1,3}$/.test(status) || Number(status) > 255) {
+              throw new Error('Daytona command completion status is invalid.');
+            }
+            stdout = merged.substring(0, delimIdx);
+            exitCode = Number(status);
+            stderr = after.substring(newlineIdx + 1);
           }
           return {
             stdout,

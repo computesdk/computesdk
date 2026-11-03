@@ -21,9 +21,16 @@ export interface SpritesConfig {
   timeout?: number;
 }
 
-function stripControlChars(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/[\x00-\x08\x0e-\x1f]/g, '');
+/** The exec stream ended without trustworthy child completion metadata. */
+export class SpritesCommandProtocolError extends Error {
+  readonly code = 'SPRITES_COMMAND_PROTOCOL_ERROR';
+  readonly provider = 'sprites';
+
+  constructor(readonly reason: 'missing-completion' | 'invalid-completion') {
+    // Do not include command output: it may contain credentials or other secrets.
+    super('Sprites command response did not contain a valid completion record.');
+    this.name = 'SpritesCommandProtocolError';
+  }
 }
 
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
@@ -123,25 +130,31 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         const name = sandbox.name;
         const startTime = Date.now();
 
-        const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
-        const errDelimiter = `__COMPUTESDK_STDERR_${Date.now()}__`;
+        const commandId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const delimiter = `__COMPUTESDK_EXIT_${commandId}__`;
+        const errDelimiter = `__COMPUTESDK_STDERR_${commandId}__`;
         let shellCmd = command;
 
-        if (options?.cwd) shellCmd = `cd ${escapeShellArg(options.cwd)} && ${shellCmd}`;
+        if (options?.cwd) shellCmd = `cd "${escapeShellArg(options.cwd)}" || exit $?\n${shellCmd}`;
         if (options?.env) {
           const safeKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
           const envPrefix = Object.entries(options.env).map(([k, v]) => {
             if (!safeKeyPattern.test(k)) throw new Error(`Invalid environment variable name: ${k}`);
-            return `${k}=${escapeShellArg(v)}`;
-          }).join(' ');
-          shellCmd = `${envPrefix} ${shellCmd}`;
+            return `export ${k}="${escapeShellArg(v)}"`;
+          }).join('\n');
+          shellCmd = `${envPrefix}\n${shellCmd}`;
         }
 
         // The exec endpoint returns one combined stream — keep stdout/stderr
         // separated by redirecting stderr to a file and cat'ing it behind a
-        // delimiter, then the exit-code delimiter.
-        const errFile = `/tmp/.computesdk-stderr-${Date.now()}`;
-        shellCmd = `{ ${shellCmd} ; } 2>${escapeShellArg(errFile)}; __sp_ec=$?; echo "${delimiter}$__sp_ec"; echo "${errDelimiter}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+        // delimiter. Newlines preserve comments/heredocs/trailing &, and the
+        // subshell keeps a user `exit` from skipping completion and cleanup.
+        // This framing does not implement remote timeout/cancellation.
+        const errFile = `/tmp/.computesdk-stderr-${commandId}`;
+        // Bash receives this source on stdin. Parse the entire outer compound
+        // before executing: stdin readers must see EOF, not consume the
+        // completion/cleanup source after the command's inner subshell.
+        shellCmd = `{\n(\n${shellCmd}\n) 2>"${escapeShellArg(errFile)}"\n__sp_ec=$?\nprintf '%s%s\\n' "${delimiter}" "$__sp_ec"\nprintf '%s\\n' "${errDelimiter}"\ncat "${escapeShellArg(errFile)}" 2>/dev/null\nrm -f "${escapeShellArg(errFile)}"\n}\n`;
 
         const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/exec`);
         url.searchParams.set('cmd', 'bash');
@@ -159,20 +172,22 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
 
           const delimIdx = raw.lastIndexOf(delimiter);
           if (delimIdx === -1) {
-            return { stdout: stripControlChars(raw), stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
+            throw new SpritesCommandProtocolError('missing-completion');
           }
-          const stdout = stripControlChars(raw.substring(0, delimIdx));
+          const stdout = raw.substring(0, delimIdx);
           const after = raw.substring(delimIdx + delimiter.length);
           const nlIdx = after.indexOf('\n');
-          const exitCode = parseInt((nlIdx === -1 ? after : after.substring(0, nlIdx)).trim(), 10) || 0;
-          let stderr = '';
-          if (nlIdx !== -1) {
-            const rest = after.substring(nlIdx + 1);
-            const errIdx = rest.lastIndexOf(errDelimiter);
-            if (errIdx !== -1) stderr = stripControlChars(rest.substring(errIdx + errDelimiter.length)).replace(/^\n/, '');
+          const status = nlIdx === -1 ? '' : after.substring(0, nlIdx);
+          const rest = nlIdx === -1 ? '' : after.substring(nlIdx + 1);
+          const stderrHeader = `${errDelimiter}\n`;
+          if (!/^\d{1,3}$/.test(status) || Number(status) > 255 || !rest.startsWith(stderrHeader)) {
+            throw new SpritesCommandProtocolError('invalid-completion');
           }
+          const exitCode = Number(status);
+          const stderr = rest.substring(stderrHeader.length);
           return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
+          if (error instanceof SpritesCommandProtocolError) throw error;
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
       },
