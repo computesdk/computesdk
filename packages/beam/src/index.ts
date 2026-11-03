@@ -18,6 +18,14 @@ import type {
 
 type RunCommandFn = (sandbox: SandboxInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
 
+class CommandResultProtocolError extends Error {
+  readonly code = 'COMMAND_RESULT_PROTOCOL_ERROR';
+  constructor() {
+    super('Beam command did not return a valid completed exit code');
+    this.name = 'CommandResultProtocolError';
+  }
+}
+
 export interface BeamConfig {
   token?: string;
   workspaceId?: string;
@@ -318,18 +326,32 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             ? new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), options.timeout); })
             : undefined;
           let timedOut = false;
+          let completedExitCode: unknown;
           let proc: Awaited<ReturnType<SandboxInstance['exec']>>;
           try {
             proc = await sandbox.exec(
               ['sh', '-c', fullCommand],
               { wait: options?.timeout === undefined } as Parameters<SandboxInstance['exec']>[1],
             );
+            const completion = proc.wait().then((code) => {
+              // beam-js 1.0.22 documents wait(): Promise<number>. Its running
+              // flag is not refreshed by wait(), so it is not completion proof.
+              // The handle's exitCode may still be startup state: only the
+              // required wait result supplies the completed numeric outcome.
+              completedExitCode = code;
+              return 'done' as const;
+            });
             const outcome = deadline
-              ? await Promise.race([proc.wait().then(() => 'done' as const), deadline])
-              : (await proc.wait(), 'done' as const);
+              ? await Promise.race([completion, deadline])
+              : await completion;
             if (outcome === 'timeout') {
               timedOut = true;
               await proc.kill().catch(() => {});
+            } else if (typeof completedExitCode !== 'number' ||
+              !Number.isSafeInteger(completedExitCode) || completedExitCode < 0) {
+              // In this native SDK negative codes are the running sentinel;
+              // wait() itself polls while exitCode < 0. Do not cap at 255.
+              throw new CommandResultProtocolError();
             }
           } finally {
             clearTimeout(timer);
@@ -339,8 +361,9 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           const stderr = timedOut
             ? `Command timed out after ${options?.timeout}ms` + (stderrStr ? `\n${stderrStr}` : '')
             : stderrStr || '';
-          return { stdout: stdoutStr || '', stderr, exitCode: timedOut ? 124 : (proc.exitCode || 0), durationMs: Date.now() - startTime };
+          return { stdout: stdoutStr || '', stderr, exitCode: timedOut ? 124 : completedExitCode as number, durationMs: Date.now() - startTime };
         } catch (error) {
+          if (error instanceof CommandResultProtocolError) throw error;
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
         }),

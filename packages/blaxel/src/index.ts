@@ -11,6 +11,14 @@ import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, re
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
+class CommandResultProtocolError extends Error {
+	readonly code = 'COMMAND_RESULT_PROTOCOL_ERROR';
+	constructor() {
+		super('Blaxel command did not return a valid terminal result');
+		this.name = 'CommandResultProtocolError';
+	}
+}
+
 /**
  * Blaxel rejects sandboxes with a ttl under 5 minutes
  * (`ttl 120s is too short: the minimum is 5m`). Any timeout below the floor
@@ -314,6 +322,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					durationMs: Date.now() - startTime
 				};
 			} catch (error) {
+				if (error instanceof CommandResultProtocolError) throw error;
 				return {
 					stdout: '',
 					stderr: error instanceof Error ? error.message : String(error),
@@ -696,6 +705,9 @@ async function executeWithStreaming(
 		status?: string;
 	};
 
+	if (!processResult || typeof processResult !== 'object') {
+		throw new CommandResultProtocolError();
+	}
 	let result = processResult as ExecResult;
 
 	// On current Blaxel infra, waitForCompletion is not honored server-side:
@@ -719,12 +731,12 @@ async function executeWithStreaming(
 			// @blaxel/core's wait() breaks its poll loop on a mid-poll error and
 			// returns the last (possibly still 'running') response, so a resolved
 			// promise doesn't guarantee a terminal state.
-			if (!finished.status || !TERMINAL_PROCESS_STATUSES.has(finished.status)) {
-				throw new Error(
-					`Process ${pid} did not reach a terminal state (status: ${finished.status ?? 'unknown'})`
-				);
+			if (!finished?.status || !TERMINAL_PROCESS_STATUSES.has(finished.status)) {
+				throw new CommandResultProtocolError();
 			}
-			result = { ...result, ...finished, pid };
+			// A startup response can contain exitCode: 0 while still running.
+			// Only the final response may supply the completed exit code.
+			result = { ...result, ...finished, exitCode: finished.exitCode, pid };
 		} catch (error) {
 			// Best-effort: don't leave the process running past its deadline.
 			try {
@@ -737,13 +749,16 @@ async function executeWithStreaming(
 			// The status poll and the log stream are separate requests — a
 			// terminal status can arrive before the stream's final bytes. Give
 			// the stream a bounded window to drain, then abort it.
+			let drainTimer: ReturnType<typeof setTimeout> | undefined;
 			try {
 				await Promise.race([
 					logStream.wait(),
-					new Promise((resolve) => setTimeout(resolve, STREAM_DRAIN_MS)),
+					new Promise((resolve) => { drainTimer = setTimeout(resolve, STREAM_DRAIN_MS); }),
 				]);
 			} catch {
 				// Fall through to abort
+			} finally {
+				clearTimeout(drainTimer);
 			}
 			logStream.close();
 			try {
@@ -752,6 +767,21 @@ async function executeWithStreaming(
 				// Stream teardown is best-effort; chunks already captured stand
 			}
 		}
+	}
+
+	// A resolved exec(), log-stream EOF, and a resolved wait() are not
+	// independently proof of completion in @blaxel/core 0.3.21.
+	if (!result.status || !TERMINAL_PROCESS_STATUSES.has(result.status)) {
+		throw new CommandResultProtocolError();
+	}
+	// ProcessResponse.exitCode is required by @blaxel/core 0.3.21. A
+	// terminal status proves completion, not the numeric outcome: do not
+	// infer zero (or a generic failure code) from a label. Negative native
+	// codes are preserved; unlike Beam, this SDK defines no running sentinel.
+	const exitCode = result.exitCode;
+	if (typeof exitCode !== 'number' || !Number.isSafeInteger(exitCode) ||
+		(result.status === 'failed' && exitCode === 0)) {
+		throw new CommandResultProtocolError();
 	}
 
 	// Streamed callbacks receive arbitrary chunks, not lines — concatenate
@@ -787,11 +817,6 @@ async function executeWithStreaming(
 	// otherwise it would duplicate stderr content into stdout.
 	if (!stdout && !stderr && result.logs) {
 		stdout = result.logs;
-	}
-
-	let exitCode = result.exitCode ?? 0;
-	if (result.status === 'failed' && exitCode === 0) {
-		exitCode = 1;
 	}
 
 	return { stdout, stderr, exitCode };

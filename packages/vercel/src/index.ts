@@ -69,6 +69,28 @@ function getUtf8Sink() {
   return { sink, value: () => chunks.join("") };
 }
 
+/** The native SDK did not supply a valid command completion/launch status. */
+export class VercelCommandProtocolError extends Error {
+  readonly code = 'VERCEL_COMMAND_PROTOCOL_ERROR';
+  readonly provider = 'vercel';
+
+  constructor() {
+    super('Vercel command completion status is invalid.');
+    this.name = 'VercelCommandProtocolError';
+  }
+}
+
+function commandExitCode(result: unknown, background?: boolean): number {
+  if (typeof result !== 'object' || result === null) throw new VercelCommandProtocolError();
+  const status = (result as { exitCode?: unknown }).exitCode;
+  // @vercel/sandbox's detached Command uses null while it is still running.
+  // Zero here acknowledges launch, not successful completion of that command.
+  if (background && status === null) return 0;
+  // Native types impose no unsigned byte range; retain negative signal statuses.
+  if (typeof status !== 'number' || !Number.isInteger(status)) throw new VercelCommandProtocolError();
+  return status;
+}
+
 export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
   methods: {
@@ -191,8 +213,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
             stdout: stdout?.sink, stderr: stderr?.sink,
             timeoutMs: options?.timeout,
           });
-          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
+          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: commandExitCode(result, options?.background), durationMs: Date.now() - startTime };
         } catch (error) {
+          if (error instanceof VercelCommandProtocolError) throw error;
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
       },
