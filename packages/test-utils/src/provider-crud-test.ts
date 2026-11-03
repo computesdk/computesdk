@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
+import { waitForSandboxAbsence, withDeadline } from './provider-lifecycle';
 // @ts-ignore - workspace reference
 import type { Provider } from '@computesdk/provider';
 
@@ -17,13 +18,25 @@ export interface ProviderCrudTestConfig {
   timeout?: number;
   /** Skip tests that require real API calls */
   skipIntegration?: boolean;
+  /**
+   * Execute the existing CRUD tests, not capability certification. Undefined
+   * preserves the legacy allowlist; true explicitly opts this provider in;
+   * false forces a skip. This never overrides skipIntegration.
+   */
+  enabled?: boolean;
+  /** Budget for SDK-reported absence (default: 10000ms, capped below the test timeout). */
+  verificationTimeout?: number;
+  /** Delay between successful, non-null absence queries (default: 250ms). */
+  verificationPollInterval?: number;
 }
 
 /**
  * Centralized whitelist of providers that should run CRUD tests
  * 
- * Only providers in this list will execute CRUD tests (create, read, list, destroy).
- * Providers not in this list will automatically skip CRUD tests with a clear message.
+ * By default only providers in this list execute CRUD tests. A caller may
+ * explicitly opt a selected provider in with enabled: true, after separately
+ * approving remote execution and checking credentials. The list itself is
+ * unchanged; undefined preserves the legacy automatic execution policy.
  * 
  * This approach:
  * - Prevents CRUD test failures for providers with limited implementations
@@ -31,7 +44,7 @@ export interface ProviderCrudTestConfig {
  * - Makes it explicit which providers are ready for full CRUD testing
  * - Simplifies CI by avoiding complex environment variable logic
  * 
- * To enable CRUD tests for a provider: add the provider name to this array
+ * This guard decides execution, not provider capability certification.
  */
 const CRUD_ENABLED_PROVIDERS = [
   'railway',  // Has working CRUD operations with stable sandbox lifecycle
@@ -49,11 +62,25 @@ const CRUD_ENABLED_PROVIDERS = [
 ];
 
 export function runProviderCrudTest(config: ProviderCrudTestConfig) {
-  const { provider, name, timeout = 30000, skipIntegration = false } = config;
+  const {
+    provider, name, timeout = 30000, skipIntegration = false, enabled,
+    verificationTimeout = 10000, verificationPollInterval = 250,
+  } = config;
+  const crudEnabled = enabled === undefined
+    ? CRUD_ENABLED_PROVIDERS.includes(name)
+    : enabled === true;
 
-  describe(`${name} Provider CRUD Operations`, () => {
+  // A native invocation must not turn an unconfigured/disabled suite into a
+  // successful all-skipped run. Collection fails before any provider call.
+  if (process.env.COMPUTESDK_CONFORMANCE_NATIVE === '1' && (skipIntegration || !crudEnabled)) {
+    throw new Error(`[CRUD ${name}] Native conformance cannot skip CRUD: enable the selected suite and provide its required configuration`);
+  }
+
+  // These five cases deliberately share one lifecycle. An enclosing suite or
+  // global --sequence.concurrent must not destroy/read before create completes.
+  describe.sequential(`${name} Provider CRUD Operations`, () => {
     // Check if this provider should run CRUD tests
-    if (!CRUD_ENABLED_PROVIDERS.includes(name)) {
+    if (!crudEnabled) {
       it.skip(`CRUD tests not enabled for ${name} provider`, () => {
         console.log(`Skipping CRUD tests for ${name} - not in enabled providers list`);
         console.log(`Enabled providers: ${CRUD_ENABLED_PROVIDERS.join(', ')}`);
@@ -66,44 +93,131 @@ export function runProviderCrudTest(config: ProviderCrudTestConfig) {
       return;
     }
 
-    let createdSandboxId: string;
-    let sandboxDestroyed = false;
+    for (const duration of [timeout, verificationTimeout, verificationPollInterval]) {
+      if (!Number.isFinite(duration) || duration <= 0) {
+        throw new Error(`[CRUD ${name}] Timeouts and poll intervals must be finite positive milliseconds`);
+      }
+    }
 
-    // Safety net: ensure sandbox is always cleaned up even if tests fail or abort
-    afterAll(async () => {
-      if (createdSandboxId && !sandboxDestroyed) {
+    let createdSandboxId: string | undefined;
+    // A destroy acknowledgement does not establish absence. Retain every
+    // allocated ID (including retry attempts) until getById actually says null.
+    const ownedSandboxIds = new Set<string>();
+    const pendingAllocations = new Set<Promise<void>>();
+    const activeCleanups = new Map<string, Promise<void>>();
+    let cleanupStarted = false;
+    let lateCleanupFailed = false;
+    const verifyAbsence = async (id: string, timeoutMs = Math.min(verificationTimeout, timeout / 2)) => {
+      await waitForSandboxAbsence(() => provider.sandbox.getById(id), {
+        timeoutMs,
+        pollIntervalMs: verificationPollInterval,
+        failureMessage: `[CRUD ${name}] SDK-reported absence was not verified before the deadline`,
+      });
+      ownedSandboxIds.delete(id);
+    };
+
+    const cleanupOwnedId = (id: string): Promise<void> => {
+      const active = activeCleanups.get(id);
+      if (active) return active;
+      const cleanup = (async () => {
+        const deadline = Date.now() + 10000;
         try {
-          console.log(`[CRUD cleanup] Destroying leaked ${name} sandbox: ${createdSandboxId}`);
-          await Promise.race([
-            provider.sandbox.destroy(createdSandboxId),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Cleanup destroy timeout')), 10000)
-            ),
-          ]);
-          console.log(`[CRUD cleanup] Successfully destroyed leaked ${name} sandbox: ${createdSandboxId}`);
-        } catch (error) {
-          console.error(`[CRUD cleanup] Failed to destroy ${name} sandbox ${createdSandboxId}:`, error);
+          await withDeadline(
+            () => provider.sandbox.destroy(id), deadline - Date.now(),
+            `[CRUD cleanup ${name}] Destroy failed or exceeded its deadline`,
+          );
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) throw new Error('Cleanup deadline');
+          await verifyAbsence(id, Math.min(verificationTimeout, timeout / 2, remaining));
+        } catch {
+          // Do not print or attach native errors: they can contain credentials.
+          throw new Error(`[CRUD cleanup ${name}] Failed to verify cleanup of an owned sandbox`);
         }
+      })();
+      activeCleanups.set(id, cleanup);
+      // Observe both branches; later cleanup can retry a failed attempt, but
+      // overlapping cleanup of the same returned ID is never duplicated.
+      void cleanup.then(
+        () => { activeCleanups.delete(id); },
+        () => { activeCleanups.delete(id); },
+      );
+      return cleanup;
+    };
+
+    // Separate hook failures preserve the original test failure. Only the IDs
+    // returned by this suite's create calls are eligible for cleanup.
+    afterAll(async () => {
+      cleanupStarted = true;
+      let allocationUnresolved = false;
+      if (pendingAllocations.size > 0) {
+        try {
+          await withDeadline(
+            () => Promise.all([...pendingAllocations]), Math.min(timeout / 2, 4000),
+            `[CRUD cleanup ${name}] Allocation remained unresolved during cleanup`,
+          );
+        } catch {
+          allocationUnresolved = true;
+        }
+      }
+      const results = await Promise.allSettled([...ownedSandboxIds].map(cleanupOwnedId));
+      if (allocationUnresolved) {
+        // Native creation cannot be cancelled by a promise deadline. Its
+        // observer remains attached and will clean only its returned late ID.
+        throw new Error(`[CRUD cleanup ${name}] Allocation remained unresolved during cleanup`);
+      }
+      if (lateCleanupFailed || results.some((result) => result.status === 'rejected')) {
+        throw new Error(`[CRUD cleanup ${name}] Failed to verify cleanup of an owned sandbox`);
       }
     }, 15000);
 
     it('should create a sandbox', async () => {
-      const result = await provider.sandbox.create();
-      
-      expect(result).toBeDefined();
-      expect(result.sandboxId).toBeDefined();
-      expect(typeof result.sandboxId).toBe('string');
-      expect(result.sandboxId.length).toBeGreaterThan(0);
-      
-      createdSandboxId = result.sandboxId;
-      
-      console.log(`✓ Created ${name} sandbox: ${createdSandboxId}`);
+      createdSandboxId = undefined;
+      let attemptExpired = false;
+      // Register ownership observation before awaiting the allocation. A
+      // deadline observes creation; it does not cancel a native allocation.
+      const allocation = Promise.resolve().then(() => provider.sandbox.create());
+      const observed = allocation.then(async (result) => {
+        const id = result?.sandboxId;
+        if (typeof id === 'string' && id.length > 0) {
+          ownedSandboxIds.add(id);
+          if (attemptExpired || cleanupStarted) {
+            try {
+              await cleanupOwnedId(id);
+            } catch {
+              lateCleanupFailed = true;
+              throw new Error(`[CRUD cleanup ${name}] Failed to verify cleanup of a late allocation`);
+            }
+          }
+        }
+        return { result, id };
+      });
+      // Do not let a late native rejection become an unhandled rejection.
+      const settled = observed.then(() => {}, () => {});
+      pendingAllocations.add(settled);
+      void settled.then(() => { pendingAllocations.delete(settled); });
+
+      try {
+        const { result, id } = await withDeadline(
+          () => observed, timeout / 2,
+          `[CRUD ${name}] Create failed or exceeded its deadline`,
+        );
+        // An expired attempt never publishes its ID into another test/retry.
+        createdSandboxId = id;
+        expect(result).toBeDefined();
+        expect(result.sandboxId).toBeDefined();
+        expect(typeof result.sandboxId).toBe('string');
+        expect(result.sandboxId.length).toBeGreaterThan(0);
+
+        console.log(`✓ Created ${name} sandbox: ${createdSandboxId}`);
+      } finally {
+        attemptExpired = true;
+      }
     }, timeout);
 
     it('should get sandbox by ID', async () => {
       expect(createdSandboxId).toBeDefined();
       
-      const result = await provider.sandbox.getById(createdSandboxId);
+      const result = await provider.sandbox.getById(createdSandboxId!);
       
       expect(result).toBeDefined();
       expect(result?.sandboxId).toBe(createdSandboxId);
@@ -129,32 +243,19 @@ export function runProviderCrudTest(config: ProviderCrudTestConfig) {
     it('should destroy the sandbox', async () => {
       expect(createdSandboxId).toBeDefined();
 
-      // Wait for 15 seconds before destroying
-      await new Promise(resolve => setTimeout(resolve, 15000));
-      
-      // Destroy should not throw an error
-      await expect(provider.sandbox.destroy(createdSandboxId)).resolves.not.toThrow();
-      sandboxDestroyed = true;
-      
-      console.log(`✓ Destroyed ${name} sandbox: ${createdSandboxId}`);
+      await withDeadline(
+        () => provider.sandbox.destroy(createdSandboxId!), Math.min(timeout / 2, 10000),
+        `[CRUD ${name}] Destroy failed or exceeded its deadline`,
+      );
+
+      console.log(`✓ ${name} acknowledged sandbox destruction`);
     }, timeout);
 
-    it('should not find sandbox after destruction (or verify it was marked for deletion)', async () => {
+    it('should report sandbox absence after destruction', async () => {
       expect(createdSandboxId).toBeDefined();
-      
-      // After destruction, getById should return null or the sandbox might still exist but be marked for deletion
-      const result = await provider.sandbox.getById(createdSandboxId);
-      
-      if (result === null) {
-        console.log(`✓ Verified ${name} sandbox was completely removed: ${createdSandboxId}`);
-      } else {
-        // Some providers may not immediately delete the sandbox but mark it for deletion
-        console.log(`✓ ${name} sandbox still exists but was marked for destruction: ${createdSandboxId}`);
-        console.log('Note: Some providers have delayed deletion - this is expected behavior');
-      }
-      
-      // At minimum, we should not fail if the sandbox still exists after destroy
-      // The important thing is that the destroy call completed without throwing
+      await verifyAbsence(createdSandboxId!);
+      // This proves only the SDK's reported absence, not native physical deletion.
+      console.log(`✓ ${name} SDK reports the destroyed sandbox absent`);
     }, timeout);
   });
 }

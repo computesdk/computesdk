@@ -7,6 +7,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createProviderSuiteAttempt } from './provider-suite-attempt';
+import { withDeadline } from './provider-lifecycle';
 // @ts-ignore - workspace reference
 import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOptions, InstanceInfo } from '@computesdk/provider';
 
@@ -19,8 +21,25 @@ export interface ProviderTestConfig {
   supportsFilesystem?: boolean;
   /** Custom test timeout in milliseconds */
   timeout?: number;
-  /** Skip tests that require real API calls */
+  /** Skip native tests without substituting a mock (for example, missing credentials). */
   skipIntegration?: boolean;
+  /**
+   * Framework mocks only self-test this suite's assertions, never an adapter.
+   * Native is the default; runUnitTests explicitly selects framework-mocked.
+   */
+  executionMode?: 'native' | 'framework-mocked';
+  /** Whether to test background commands (default: true). */
+  supportsBackground?: boolean;
+  /**
+   * Optional native-only setup verification, bounded to 10 seconds. For
+   * example, require SDK-reported presence of this exact sandbox ID.
+   */
+  verifySandbox?: (sandbox: ProviderInstance) => Promise<void>;
+  /**
+   * Optional native-only verification after destroy, within its 10-second
+   * cleanup budget. SDK-reported absence is not physical deletion proof.
+   */
+  verifyCleanup?: (sandbox: ProviderInstance) => Promise<void>;
   /** Ports to expose when creating sandboxes (needed for getUrl tests on some providers) */
   ports?: number[];
   /** Whether this provider should run getUrl coverage tests */
@@ -53,6 +72,10 @@ export function defineProviderTests(config: ProviderTestConfig) {
     supportsFilesystem = false,
     timeout = 60000,
     skipIntegration = false,
+    executionMode = 'native',
+    supportsBackground = true,
+    verifySandbox,
+    verifyCleanup,
     ports,
     supportsGetUrl = true,
     filesystemBasePath = '/tmp',
@@ -61,279 +84,299 @@ export function defineProviderTests(config: ProviderTestConfig) {
   } = config;
 
   return () => {
-    let sandbox: ProviderInstance;
+    const frameworkMocked = executionMode === 'framework-mocked';
+    if (process.env.COMPUTESDK_CONFORMANCE_NATIVE === '1' && (skipIntegration || frameworkMocked)) {
+      throw new Error(
+        `COMPUTESDK_CONFORMANCE_NATIVE requires enabled native coverage for ${name}; skipped or framework-mocked coverage is not conformance`,
+      );
+    }
+    // Hooks belong to this invocation, not the caller's describe scope. These
+    // tests share one current attempt, so override caller/global concurrency.
+    const suite = skipIntegration && !frameworkMocked ? describe.sequential.skip : describe.sequential;
+    suite(`${name} [${executionMode}]${frameworkMocked ? ' framework self-tests (not adapter coverage)' : ''}`, () => {
+      let sandbox: ProviderInstance;
+      let attempt: ReturnType<typeof createProviderSuiteAttempt<ProviderInstance>> | undefined;
 
-    const createSandbox = async () => {
-      if (skipIntegration) {
-        return createMockSandbox(config);
-      }
-      const createOptions: any = {};
-      if (ports && ports.length > 0) {
-        createOptions.ports = ports;
-      }
-      return await provider.sandbox.create(createOptions);
-    };
-
-    const cleanupSandbox = async (sb: ProviderInstance) => {
-      if (sb && !skipIntegration) {
-        try {
-          await Promise.race([
-            sb.destroy(),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Destroy timeout')), 10000)
-            )
-          ]);
-        } catch {
-          // Ignore cleanup errors (including timeouts)
+      const createSandbox = async () => {
+        if (frameworkMocked) {
+          return createMockSandbox(config);
         }
-      }
-    };
+        const createOptions: any = {};
+        if (ports && ports.length > 0) {
+          createOptions.ports = ports;
+        }
+        return await provider.sandbox.create(createOptions);
+      };
 
-    beforeEach(async () => {
-      sandbox = await createSandbox();
-    }, 90000);
+      beforeEach(async () => {
+        // Reset before creation: a failed setup must not re-destroy the previous
+        // test's sandbox. A local attempt also fences late setup completion.
+        sandbox = undefined!;
+        const ownedAttempt = createProviderSuiteAttempt(
+          createSandbox, undefined, undefined, frameworkMocked ? undefined : verifyCleanup,
+        );
+        attempt = ownedAttempt;
+        const created = await ownedAttempt.ready;
+        if (attempt === ownedAttempt) {
+          // Establish ownership before verification: even a failed presence
+          // check must still destroy this allocation in afterEach.
+          sandbox = created;
+          if (!frameworkMocked && verifySandbox) {
+            await withDeadline(
+              () => verifySandbox(created), 10_000, 'Sandbox verification failed or timed out',
+            );
+          }
+        }
+      }, 90000);
 
-    afterEach(async () => {
-      await cleanupSandbox(sandbox);
-    }, 30000);
+      afterEach(async () => {
+        const ownedAttempt = attempt;
+        attempt = undefined;
+        sandbox = undefined!;
+        await ownedAttempt?.cleanup();
+      }, 30000);
 
-    it('should create a sandbox with valid ID', () => {
-      expect(sandbox).toBeDefined();
-      expect(sandbox.sandboxId).toBeDefined();
-      expect(typeof sandbox.sandboxId).toBe('string');
-      expect(sandbox.provider).toBe(name.toLowerCase());
-    });
-
-    it('should execute shell commands', async () => {
-      const result = await sandbox.runCommand('echo "Hello from command"');
-
-      expect(result).toBeDefined();
-      expect(result.stdout).toContain('Hello from command');
-      expect(result.exitCode).toBe(0);
-    }, timeout);
-
-    it('should execute background commands', async () => {
-      const result = await sandbox.runCommand('sleep 1', { background: true });
-
-      expect(result).toBeDefined();
-      expect(result.exitCode).toBe(0);
-    }, timeout);
-
-    it('should get sandbox info', async () => {
-      const info = await sandbox.getInfo();
-
-      expect(info).toBeDefined();
-      expect(info.id).toBeDefined();
-      expect(info.provider).toBe(name.toLowerCase());
-      expect(info.status).toBeDefined();
-    });
-
-    if (supportsGetUrl) {
-      const primaryPort = (ports && ports.length > 0) ? ports[0] : 3000;
-
-      it('should get sandbox URL for a port', async () => {
-        const url = await sandbox.getUrl({ port: primaryPort });
-
-        expect(url).toBeDefined();
-        expect(typeof url).toBe('string');
-        expect(url.length).toBeGreaterThan(0);
-        expect(url).toMatch(/^(https?|wss?):\/\/.+/);
+      it('should create a sandbox with valid ID', () => {
+        expect(sandbox).toBeDefined();
+        expect(sandbox.sandboxId).toBeDefined();
+        expect(typeof sandbox.sandboxId).toBe('string');
+        expect(sandbox.provider).toBe(name.toLowerCase());
       });
 
-      if (ports && ports.length > 1) {
-        it('should get sandbox URL with custom protocol', async () => {
-          const url = await sandbox.getUrl({ port: ports[1], protocol: 'wss' });
+      it('should execute shell commands', async () => {
+        const result = await sandbox.runCommand('echo "Hello from command"');
+
+        expect(result).toBeDefined();
+        expect(result.stdout).toContain('Hello from command');
+        expect(result.exitCode).toBe(0);
+      }, timeout);
+
+      if (supportsBackground) {
+        it('should execute background commands', async () => {
+          const result = await sandbox.runCommand('sleep 1', { background: true });
+
+          expect(result).toBeDefined();
+          expect(result.exitCode).toBe(0);
+        }, timeout);
+      }
+
+      it('should get sandbox info', async () => {
+        const info = await sandbox.getInfo();
+
+        expect(info).toBeDefined();
+        expect(info.id).toBeDefined();
+        expect(info.provider).toBe(name.toLowerCase());
+        expect(info.status).toBeDefined();
+      });
+
+      if (supportsGetUrl) {
+        const primaryPort = (ports && ports.length > 0) ? ports[0] : 3000;
+
+        it('should get sandbox URL for a port', async () => {
+          const url = await sandbox.getUrl({ port: primaryPort });
 
           expect(url).toBeDefined();
           expect(typeof url).toBe('string');
+          expect(url.length).toBeGreaterThan(0);
           expect(url).toMatch(/^(https?|wss?):\/\/.+/);
         });
-      }
-    }
 
-    it('should handle invalid commands gracefully', async () => {
-      const result = await sandbox.runCommand('nonexistent-command-12345');
-      expect(result.exitCode).not.toBe(0);
-    });
+        if (ports && ports.length > 1) {
+          it('should get sandbox URL with custom protocol', async () => {
+            const url = await sandbox.getUrl({ port: ports[1], protocol: 'wss' });
 
-    if (supportsFilesystem) {
-      describe('Filesystem Operations', () => {
-        const testFilePath = `${filesystemBasePath}/test-file.txt`;
-        const testDirPath = `${filesystemBasePath}/test-dir`;
-        const testContent = 'Hello, ComputeSDK filesystem!';
-
-        it('should write and read files', async () => {
-          await sandbox.filesystem.writeFile(testFilePath, testContent);
-          const content = await sandbox.filesystem.readFile(testFilePath);
-
-          expect(content).toBe(testContent);
-        }, timeout);
-
-        it('should check file existence', async () => {
-          await sandbox.filesystem.writeFile(testFilePath, testContent);
-          const exists = await sandbox.filesystem.exists(testFilePath);
-
-          expect(exists).toBe(true);
-        }, timeout);
-
-        it('should create directories', async () => {
-          await sandbox.filesystem.mkdir(testDirPath);
-          const exists = await sandbox.filesystem.exists(testDirPath);
-
-          expect(exists).toBe(true);
-        }, timeout);
-
-        it('should list directory contents', async () => {
-          await sandbox.filesystem.mkdir(testDirPath);
-          await sandbox.filesystem.writeFile(`${testDirPath}/file1.txt`, 'content1');
-          await sandbox.filesystem.writeFile(`${testDirPath}/file2.txt`, 'content2');
-
-          const entries = await sandbox.filesystem.readdir(testDirPath);
-
-          expect(entries).toBeDefined();
-          expect(Array.isArray(entries)).toBe(true);
-          expect(entries.length).toBeGreaterThanOrEqual(2);
-
-          const fileNames = entries.map((entry: FileEntry) => entry.name);
-          expect(fileNames).toContain('file1.txt');
-          expect(fileNames).toContain('file2.txt');
-        }, timeout);
-
-        it('should remove files and directories', async () => {
-          await sandbox.filesystem.writeFile(testFilePath, testContent);
-          await sandbox.filesystem.remove(testFilePath);
-
-          const exists = await sandbox.filesystem.exists(testFilePath);
-          expect(exists).toBe(false);
-        }, timeout);
-
-        it('should handle file not found errors', async () => {
-          await expect(async () => {
-            await sandbox.filesystem.readFile('/nonexistent/file.txt');
-          }).rejects.toThrow();
-        });
-      });
-    }
-
-    if (supportsStreaming) {
-      describe('Live Command Output', () => {
-        it('should deliver output while the command is still running', async () => {
-          // The point of streaming is *when* output arrives, so the assertion is
-          // about ordering against the command's own completion rather than
-          // about the final text.
-          const chunks: string[] = [];
-          const startedAt = Date.now();
-          let firstChunkAt: number | undefined;
-
-          const result = await sandbox.runCommand(
-            `sh -c 'for i in 1 2 3 4 5; do echo tick $i; sleep 1; done'`,
-            {
-              onStdout: (text: string) => {
-                firstChunkAt ??= Date.now();
-                chunks.push(text);
-              }
-            }
-          );
-
-          expect(result.exitCode).toBe(0);
-          expect(firstChunkAt).toBeDefined();
-          // The first tick is printed immediately and the last four seconds are
-          // spent sleeping, so a first chunk that arrives in the first half of
-          // the command's life could not have been buffered until exit.
-          expect((firstChunkAt as number) - startedAt).toBeLessThan(
-            result.durationMs / 2
-          );
-          // Everything streamed is exactly what the command produced: no chunk
-          // dropped, and none delivered twice.
-          expect(chunks.join('')).toBe(result.stdout);
-          for (let i = 1; i <= 5; i += 1) {
-            expect(result.stdout).toContain(`tick ${i}`);
-          }
-        }, timeout);
-
-        it('should stream stderr separately and report a non-zero exit', async () => {
-          const out: string[] = [];
-          const err: string[] = [];
-
-          const result = await sandbox.runCommand(
-            `sh -c 'echo out; echo err 1>&2; exit 3'`,
-            {
-              onStdout: (text: string) => out.push(text),
-              onStderr: (text: string) => err.push(text)
-            }
-          );
-
-          expect(result.exitCode).toBe(3);
-          expect(out.join('')).toContain('out');
-          expect(err.join('')).toContain('err');
-          expect(out.join('')).not.toContain('err');
-        }, timeout);
-
-        it('should stop a streaming command that outruns its timeout', async () => {
-          const result = await sandbox.runCommand(
-            `sh -c 'echo starting; sleep 60'`,
-            { timeout: 5000, onStdout: () => {} }
-          );
-
-          // What matters is that it came back at the deadline rather than after
-          // the full sleep, and that it is not reported as a success.
-          expect(result.exitCode).not.toBe(0);
-          expect(result.durationMs).toBeLessThan(30000);
-        }, timeout);
-      });
-    }
-
-    if (supportsProcesses && !skipIntegration) {
-      describe('Interactive Processes', () => {
-        it('should write to a process stdin and collect echoed output', async () => {
-          const chunks: string[] = [];
-          const proc = await sandbox.startProcess('cat', {
-            stdin: true,
-            onStdout: (c) => chunks.push(c),
+            expect(url).toBeDefined();
+            expect(typeof url).toBe('string');
+            expect(url).toMatch(/^(https?|wss?):\/\/.+/);
           });
+        }
+      }
 
-          await proc.write('hello\n');
-          await proc.write('world\n');
-          await proc.closeStdin();
+      it('should handle invalid commands gracefully', async () => {
+        const result = await sandbox.runCommand('nonexistent-command-12345');
+        expect(Number.isInteger(result.exitCode)).toBe(true);
+        expect(result.exitCode).not.toBe(0);
+      });
 
-          const result = await proc.wait({ timeout: 30000 });
+      if (supportsFilesystem) {
+        describe('Filesystem Operations', () => {
+          const testFilePath = `${filesystemBasePath}/test-file.txt`;
+          const testDirPath = `${filesystemBasePath}/test-dir`;
+          const testContent = 'Hello, ComputeSDK filesystem!';
+
+          it('should write and read files', async () => {
+            await sandbox.filesystem.writeFile(testFilePath, testContent);
+            const content = await sandbox.filesystem.readFile(testFilePath);
+
+            expect(content).toBe(testContent);
+          }, timeout);
+
+          it('should check file existence', async () => {
+            await sandbox.filesystem.writeFile(testFilePath, testContent);
+            const exists = await sandbox.filesystem.exists(testFilePath);
+
+            expect(exists).toBe(true);
+          }, timeout);
+
+          it('should create directories', async () => {
+            await sandbox.filesystem.mkdir(testDirPath);
+            const exists = await sandbox.filesystem.exists(testDirPath);
+
+            expect(exists).toBe(true);
+          }, timeout);
+
+          it('should list directory contents', async () => {
+            await sandbox.filesystem.mkdir(testDirPath);
+            await sandbox.filesystem.writeFile(`${testDirPath}/file1.txt`, 'content1');
+            await sandbox.filesystem.writeFile(`${testDirPath}/file2.txt`, 'content2');
+
+            const entries = await sandbox.filesystem.readdir(testDirPath);
+
+            expect(entries).toBeDefined();
+            expect(Array.isArray(entries)).toBe(true);
+            expect(entries.length).toBeGreaterThanOrEqual(2);
+
+            const fileNames = entries.map((entry: FileEntry) => entry.name);
+            expect(fileNames).toContain('file1.txt');
+            expect(fileNames).toContain('file2.txt');
+          }, timeout);
+
+          it('should remove files and directories', async () => {
+            await sandbox.filesystem.writeFile(testFilePath, testContent);
+            await sandbox.filesystem.remove(testFilePath);
+
+            const exists = await sandbox.filesystem.exists(testFilePath);
+            expect(exists).toBe(false);
+          }, timeout);
+
+          it('should handle file not found errors', async () => {
+            await expect(async () => {
+              await sandbox.filesystem.readFile('/nonexistent/file.txt');
+            }).rejects.toThrow();
+          });
+        });
+      }
+
+      if (supportsStreaming) {
+        describe('Live Command Output', () => {
+          it('should deliver output while the command is still running', async () => {
+            // The point of streaming is *when* output arrives, so the assertion is
+            // about ordering against the command's own completion rather than
+            // about the final text.
+            const chunks: string[] = [];
+            const startedAt = Date.now();
+            let firstChunkAt: number | undefined;
+
+            const result = await sandbox.runCommand(
+              `sh -c 'for i in 1 2 3 4 5; do echo tick $i; sleep 1; done'`,
+              {
+                onStdout: (text: string) => {
+                  firstChunkAt ??= Date.now();
+                  chunks.push(text);
+                }
+              }
+            );
+
+            expect(result.exitCode).toBe(0);
+            expect(firstChunkAt).toBeDefined();
+            // The first tick is printed immediately and the last four seconds are
+            // spent sleeping, so a first chunk that arrives in the first half of
+            // the command's life could not have been buffered until exit.
+            expect((firstChunkAt as number) - startedAt).toBeLessThan(
+              result.durationMs / 2
+            );
+            // Everything streamed is exactly what the command produced: no chunk
+            // dropped, and none delivered twice.
+            expect(chunks.join('')).toBe(result.stdout);
+            for (let i = 1; i <= 5; i += 1) {
+              expect(result.stdout).toContain(`tick ${i}`);
+            }
+          }, timeout);
+
+          it('should stream stderr separately and report a non-zero exit', async () => {
+            const out: string[] = [];
+            const err: string[] = [];
+
+            const result = await sandbox.runCommand(
+              `sh -c 'echo out; echo err 1>&2; exit 3'`,
+              {
+                onStdout: (text: string) => out.push(text),
+                onStderr: (text: string) => err.push(text)
+              }
+            );
+
+            expect(result.exitCode).toBe(3);
+            expect(out.join('')).toContain('out');
+            expect(err.join('')).toContain('err');
+            expect(out.join('')).not.toContain('err');
+          }, timeout);
+
+          it('should stop a streaming command that outruns its timeout', async () => {
+            const result = await sandbox.runCommand(
+              `sh -c 'echo starting; sleep 60'`,
+              { timeout: 5000, onStdout: () => {} }
+            );
+
+            // What matters is that it came back at the deadline rather than after
+            // the full sleep, and that it is not reported as a success.
+            expect(result.exitCode).not.toBe(0);
+            expect(result.durationMs).toBeLessThan(30000);
+          }, timeout);
+        });
+      }
+
+      if (supportsProcesses && !frameworkMocked) {
+        describe('Interactive Processes', () => {
+          it('should write to a process stdin and collect echoed output', async () => {
+            const chunks: string[] = [];
+            const proc = await sandbox.startProcess('cat', {
+              stdin: true,
+              onStdout: (c) => chunks.push(c),
+            });
+
+            await proc.write('hello\n');
+            await proc.write('world\n');
+            await proc.closeStdin();
+
+            const result = await proc.wait({ timeout: 30000 });
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe('hello\nworld\n');
+            expect(chunks.join('')).toBe(result.stdout);
+          }, timeout);
+
+          it('should kill a running process and report its signal', async () => {
+            const proc = await sandbox.startProcess('sleep 60');
+            await proc.kill();
+            const result = await proc.wait({ timeout: 15000 });
+
+            expect(result.exitCode).not.toBe(0);
+            expect(result.signal).toBeTruthy();
+          }, timeout);
+        });
+      }
+
+      describe('Shell Command Argument Quoting', () => {
+        it('should properly quote arguments with spaces', async () => {
+          const result = await sandbox.runCommand('sh -c \'echo "hello world"\'');
+
           expect(result.exitCode).toBe(0);
-          expect(result.stdout).toBe('hello\nworld\n');
-          expect(chunks.join('')).toBe(result.stdout);
+          expect(result.stdout.trim()).toBe('hello world');
         }, timeout);
 
-        it('should kill a running process and report its signal', async () => {
-          const proc = await sandbox.startProcess('sleep 60');
-          await proc.kill();
-          const result = await proc.wait({ timeout: 15000 });
+        it('should properly quote arguments with special characters', async () => {
+          const result = await sandbox.runCommand('sh -c \'echo "$HOME"\'');
 
-          expect(result.exitCode).not.toBe(0);
-          expect(result.signal).toBeTruthy();
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout.trim()).toBeTruthy();
+        }, timeout);
+
+        it('should handle complex shell commands with pipes', async () => {
+          const result = await sandbox.runCommand('sh -c \'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt\'');
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout.trim()).toBe('test content');
         }, timeout);
       });
-    }
-
-    describe('Shell Command Argument Quoting', () => {
-      it('should properly quote arguments with spaces', async () => {
-        const result = await sandbox.runCommand('sh -c \'echo "hello world"\'');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout.trim()).toBe('hello world');
-      }, timeout);
-
-      it('should properly quote arguments with special characters', async () => {
-        const result = await sandbox.runCommand('sh -c \'echo "$HOME"\'');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout.trim()).toBeTruthy();
-      }, timeout);
-
-      it('should handle complex shell commands with pipes', async () => {
-        const result = await sandbox.runCommand('sh -c \'echo "test content" > /tmp/test-quoting.txt && cat /tmp/test-quoting.txt\'');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout.trim()).toBe('test content');
-      }, timeout);
     });
   };
 }
@@ -473,12 +516,12 @@ function createMockSandbox(config: ProviderTestConfig): ProviderInstance {
  * Utility function to run integration tests with real API calls
  */
 export function runIntegrationTests(config: ProviderTestConfig) {
-  return runProviderTestSuite({ ...config, skipIntegration: false });
+  return runProviderTestSuite({ ...config, skipIntegration: false, executionMode: 'native' });
 }
 
 /**
- * Utility function to run unit tests with mocked implementations
+ * Framework self-tests with canned mocks; these do not test the supplied adapter.
  */
 export function runUnitTests(config: ProviderTestConfig) {
-  return runProviderTestSuite({ ...config, skipIntegration: true });
+  return runProviderTestSuite({ ...config, skipIntegration: true, executionMode: 'framework-mocked' });
 }
