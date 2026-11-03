@@ -34,10 +34,10 @@ machine-readable roster. Current checked counts:
 | Omitted discovered adapter entries | 0 |
 | Cloud Run entries explicitly excluded from compatibility review | 2 |
 | Entries included in compatibility review | 68 |
-| Included entries without a scoped adapter-mocked/native run (**uncovered**) | **56** |
-| Included entries without native verification | 68 |
-| Roster entries currently `unknown` | 58 |
-| `declared` / `adapter-mocked` / `native-verified` entries | 0 / 12 / 0 |
+| Included entries without a scoped adapter-mocked/native run (**uncovered**) | **50** |
+| Included entries without whole-provider native certification | 68 |
+| Roster entries currently `unknown` | 52 |
+| `declared` / `adapter-mocked` / `native-verified` entries | 0 / 18 / 0 |
 
 These are public entry counts, not independent backend counts: deprecated
 `@computesdk/agentcore` forwards to `@computesdk/aws/agentcore`.
@@ -45,7 +45,7 @@ Both `@computesdk/gcp/cloud-run` and deprecated `@computesdk/cloud-run` are
 accounted for, but **explicitly excluded from this compatibility review**.
 Their presence makes no claim of Cloud Run support.
 
-Twelve entries have explicitly recorded **limited, mocked reliability regressions**;
+Eighteen entries have explicitly recorded **limited, mocked reliability regressions**;
 all other entries remain `unknown`. No native provider has been certified.
 Inventory checks do not execute these adapter regressions. An adapter test
 file's presence, a generic factory mock, a build, or a source fix alone does
@@ -90,14 +90,24 @@ bash/sh command-string fixtures. Neither calls a live provider.
 | HopX command completion and lifecycle regressions | 103 |
 | Beam command completion and lifecycle regressions | 54 |
 | Blaxel command completion/stream and lifecycle regressions | 118 |
-| **Total selected checks** | **1,222** |
+| Agentuity HTTP lifecycle/protocol regressions | 89 |
+| Declaw native-boundary lifecycle regressions | 90 |
+| Tensorlake lifecycle and existing streaming checks | 315 |
+| Leap0 HTTP lifecycle regressions | 109 |
+| Lelantos lifecycle and existing forwarding/env checks | 136 |
+| Upstash full Box HTTP lifecycle regressions | 120 |
+| **Total selected checks** | **2,081** |
 
-These totals include existing unit checks; they are not 1,222 new tests or
-1,222 native executions. Recorded adapter evidence is under
+These totals include existing unit checks; they are not 2,081 new tests or
+2,081 native executions. Recorded adapter evidence is under
 `conformance/runs/local-mocked/`: eight lifecycle-expanded records target
 production/test revision `ea98a93a`; E2B retains `3f05eda6`, and Isorun,
-CreateOS and Sandbox0 retain `1a472184`.
-The helper, harness and core units do not count as adapters.
+CreateOS and Sandbox0 retain `1a472184`. The six additional lifecycle records
+target component/test revision `61c9176a`; they include exact mock-boundary
+limits and known vendor information erasure.
+The helper, harness and core units do not count as adapters. Separately, the
+compute Actions gate runs 38 pure Node checks and 66 local cleanup-probe
+self-tests. Those are not native-provider executions either.
 
 The lifecycle batch adds 285 named regressions across eight existing adapters.
 It propagates previously masked lookup/delete failures, validates native
@@ -114,8 +124,10 @@ cessation.
 
 The compute-loop batch removes canned native-success substitution and caller-
 scope hooks, fences per-attempt ownership/deadlines and fails cleanup errors.
-Native Actions supplies positive SDK lookup and post-destroy SDK-absence
-callbacks; ordinary consumers without those callbacks still establish only
+Native Actions supplies positive SDK lookup and reviewed post-destroy
+observations: SDK absence, or explicitly scoped fresh CreateOS `destroyed`
+metadata. Those outcomes are separately journaled and never equated with
+physical/billing cleanup. Ordinary consumers without those callbacks establish only
 destroy acknowledgement. E2B instance lookup/delete now propagate service
 failures rather than invent absence/success. Its existing positive connect
 side effects and separate list gaps remain explicit.

@@ -1,0 +1,105 @@
+{
+  "provider": "@computesdk/tensorlake",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/tensorlake/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Tensorlake lifecycle contract', () => {"
+    }
+  ],
+  "claims": [
+    "Named cases perform actual-existence info after lazy connect, preserve canonical name identity, reject route-normalizing references, and propagate nonmissing lookup/termination failures.",
+    "Identity hydration errors after a successful native create cannot enter the pre-existing quota retry path; native void termination remains acknowledgement only."
+  ],
+  "limitations": [
+    "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+    "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+    "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+    "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+    "Native metadata can retain terminated/archive states; SDK-null cleanup eligibility remains unapproved. An unchanged existing workdir retry unit assertion still fails on the baseline."
+  ],
+  "command": "pnpm --filter @computesdk/tensorlake --fail-if-no-match exec vitest run src/__tests__/lifecycle-contract.test.ts src/__tests__/streaming.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "61c9176a5b19f5302dbabf3845ad0f96e75b9f42",
+  "recordedAt": "2026-11-03T20:38:42.093210+00:00",
+  "executionFinishedAt": "2026-11-03T20:26:48.165913+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "SKIP_INTEGRATION": "true",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "COMPUTESDK_INTEGRATION": "0",
+    "COMPUTESDK_API_KEY": "",
+    "AGENTUITY_SDK_KEY": "",
+    "DECLAW_API_KEY": "",
+    "TENSORLAKE_API_KEY": "",
+    "LEAP0_API_KEY": "",
+    "LELANTOS_API_KEY": "",
+    "E2B_API_KEY": "",
+    "UPSTASH_BOX_API_KEY": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 315,
+  "liveProviderVerification": false,
+  "mockBoundary": "Real factory with public vendor-method spies and genuine exported errors.",
+  "scope": "Historical component-input-specific local regression evidence, not all-capability, live-provider or future-tree certification.",
+  "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "26497777d51296d2606cd09e53a19292340962457b28de12ee7e52f31e234d98"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "packages/tensorlake/package.json",
+      "sha256": "445d8de51066c88df3f77b44b103c0bbf50430ff718024b510642e420c686369"
+    },
+    {
+      "file": "packages/tensorlake/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "f40be197379556423e67f727dc49540868a348a91f298a45b59e6aeb10b474b2"
+    },
+    {
+      "file": "packages/tensorlake/src/__tests__/streaming.test.ts",
+      "sha256": "5bbc332c06ac7e2dc837db46456a5c92c00948b1d973a2cc07faf55863afcf86"
+    },
+    {
+      "file": "packages/tensorlake/src/index.ts",
+      "sha256": "92cb150db035bd181fea6b1c9ce5b07cf13f2b7c77828c4c13fcbe5d60932ab0"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/tensorlake/dist/index.mjs",
+      "sha256": "68fcb864d76f82ea8e0b21751865aec82b96b2276a6dc4af72c43638221af462"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "tensorlake",
+    "version": "0.5.158",
+    "manifestSha256": "cc7206c0372dfc2070d157b5bcd480e688e27a0a74ac6da404a83121951c8ef9"
+  }
+}

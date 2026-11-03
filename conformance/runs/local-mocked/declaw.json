@@ -1,0 +1,101 @@
+{
+  "provider": "@computesdk/declaw",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/declaw/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Declaw lifecycle contract', () => {"
+    }
+  ],
+  "claims": [
+    "Named vendor-boundary cases validate route-safe native identities, use scoped native NotFoundError only, and propagate other lookup/delete/create failures.",
+    "Native kill true/false are accepted only as the documented boolean acknowledgement, not observed absence."
+  ],
+  "limitations": [
+    "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+    "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+    "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+    "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+    "Native kill queues cleanup and normalizes some wire acknowledgement data; typed boolean acceptance does not establish raw wire validity or resource absence."
+  ],
+  "command": "pnpm --filter @computesdk/declaw --fail-if-no-match exec vitest run src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "61c9176a5b19f5302dbabf3845ad0f96e75b9f42",
+  "recordedAt": "2026-11-03T20:38:41.857498+00:00",
+  "executionFinishedAt": "2026-11-03T20:26:48.165913+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "SKIP_INTEGRATION": "true",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "COMPUTESDK_INTEGRATION": "0",
+    "COMPUTESDK_API_KEY": "",
+    "AGENTUITY_SDK_KEY": "",
+    "DECLAW_API_KEY": "",
+    "TENSORLAKE_API_KEY": "",
+    "LEAP0_API_KEY": "",
+    "LELANTOS_API_KEY": "",
+    "E2B_API_KEY": "",
+    "UPSTASH_BOX_API_KEY": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 90,
+  "liveProviderVerification": false,
+  "mockBoundary": "Real factory with public vendor-method spies and genuine exported errors.",
+  "scope": "Historical component-input-specific local regression evidence, not all-capability, live-provider or future-tree certification.",
+  "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "26497777d51296d2606cd09e53a19292340962457b28de12ee7e52f31e234d98"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/declaw/package.json",
+      "sha256": "f35dd2e2aed58a55573c683e690f8b8a402dc0da1cd2be67f8ebee6d9713d07b"
+    },
+    {
+      "file": "packages/declaw/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "026bfa9212dd2e35603f784c12508f3fd91b3704c6934e2d76553fc6c298acad"
+    },
+    {
+      "file": "packages/declaw/src/index.ts",
+      "sha256": "132c05636c9679b527d4feb3ba34a32a434ba870f8cb8a305b827e4f8f3fcbfb"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/declaw/dist/index.mjs",
+      "sha256": "4fc9f99c33ad15285842b4a11781d3012d47981e8827a16c54624bb985d63b19"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "@declaw/sdk",
+    "version": "1.2.3",
+    "manifestSha256": "ba0ffa879251774afa4f51969996d834859ea53f4c7fcd6061d0d6015fd6d4cf"
+  }
+}

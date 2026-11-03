@@ -41,10 +41,10 @@
       },
       "entrypoint": "packages/agentuity/src/index.ts",
       "symbol": "agentuity",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local lifecycle contracts have recorded adapter-mocked evidence, not native certification."
       },
       "evidence": [
         {
@@ -54,10 +54,20 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+        "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+        "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+        "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+        "Native resource metadata may remain after destruction; its cleanup oracle still needs separate review. Other pre-existing JSON parsers are not newly sanitized."
       ],
-      "claims": []
+      "claims": [
+        "Named HTTP-boundary cases query the supported sandbox resource endpoint, validate canonical identity, classify only resource404 as missing and preserve other lookup/delete failures.",
+        "Named cases validate native JSON/empty deletion acknowledgements and sanitize newly introduced malformed lifecycle JSON errors without retaining their parser snippets."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/agentuity.json",
+        "sha256": "333ba21b1a5a67dd20cd18e5508ee635b4183e85524fac6e0eac61391f111516"
+      }
     },
     {
       "id": "@computesdk/anchorbrowser",
@@ -642,10 +652,10 @@
       },
       "entrypoint": "packages/declaw/src/index.ts",
       "symbol": "declaw",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local lifecycle contracts have recorded adapter-mocked evidence, not native certification."
       },
       "evidence": [
         {
@@ -655,10 +665,20 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+        "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+        "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+        "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+        "Native kill queues cleanup and normalizes some wire acknowledgement data; typed boolean acceptance does not establish raw wire validity or resource absence."
       ],
-      "claims": []
+      "claims": [
+        "Named vendor-boundary cases validate route-safe native identities, use scoped native NotFoundError only, and propagate other lookup/delete/create failures.",
+        "Native kill true/false are accepted only as the documented boolean acknowledgement, not observed absence."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/declaw.json",
+        "sha256": "fcb13bf734901304b7ca9ecb6beac45ad412355b1781a77834db9beb39657cc4"
+      }
     },
     {
       "id": "@computesdk/docker",
@@ -1086,10 +1106,10 @@
       },
       "entrypoint": "packages/leap0/src/index.ts",
       "symbol": "leap0",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local lifecycle contracts have recorded adapter-mocked evidence, not native certification."
       },
       "evidence": [
         {
@@ -1099,10 +1119,20 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+        "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+        "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+        "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+        "The pre-existing ID-keyed client cache is not proven isolated across accounts/configurations. List may drop failed item hydration."
       ],
-      "claims": []
+      "claims": [
+        "Named HTTP-boundary cases preserve canonical IDs and client mappings after failed deletion, propagate nonmissing failures and honor native void deletion acknowledgements.",
+        "Caller and returned references reject ambiguous route syntax while preserving tested safe name aliases."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/leap0.json",
+        "sha256": "dd70e2e48db67b9520e0d9370b3c92415cd197f6f8c3a1089b1765fa34721b94"
+      }
     },
     {
       "id": "@computesdk/lelantos",
@@ -1114,10 +1144,10 @@
       },
       "entrypoint": "packages/lelantos/src/index.ts",
       "symbol": "lelantos",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local lifecycle contracts have recorded adapter-mocked evidence, not native certification."
       },
       "evidence": [
         {
@@ -1127,10 +1157,22 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+        "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+        "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+        "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+        "Installed e2b2.30.1 can convert body code404 to typed missing before checking actual HTTP status; actual HTTP auth/error provenance is not guaranteed.",
+        "Public native connect stamps the requested ID instead of validating returned wire identity and can resume/renew. Vendor-method spies do not prove wire behavior; dynamic undici is not intercepted by a global fetch stub.",
+        "Existing ambient domain/endpoint behavior and list catchalls are unchanged; retained terminal metadata may not be connectable."
       ],
-      "claims": []
+      "claims": [
+        "Named vendor-boundary cases use metadata getInfo before public connect and direct boolean kill for deletion, preserving post-positive failures and existing domain/config forwarding.",
+        "Caller and returned reference guards reject routing ambiguity; method-spy identity checks do not establish returned HTTP wire identity."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/lelantos.json",
+        "sha256": "e7e742f87e99360e4a9755a54d7e9c1ba78028c7281ba71d7ff21748bfd69a0a"
+      }
     },
     {
       "id": "@computesdk/lightning",
@@ -1996,10 +2038,10 @@
       },
       "entrypoint": "packages/tensorlake/src/index.ts",
       "symbol": "tensorlake",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local lifecycle contracts have recorded adapter-mocked evidence, not native certification."
       },
       "evidence": [
         {
@@ -2009,10 +2051,20 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+        "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+        "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+        "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+        "Native metadata can retain terminated/archive states; SDK-null cleanup eligibility remains unapproved. An unchanged existing workdir retry unit assertion still fails on the baseline."
       ],
-      "claims": []
+      "claims": [
+        "Named cases perform actual-existence info after lazy connect, preserve canonical name identity, reject route-normalizing references, and propagate nonmissing lookup/termination failures.",
+        "Identity hydration errors after a successful native create cannot enter the pre-existing quota retry path; native void termination remains acknowledgement only."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/tensorlake.json",
+        "sha256": "73b847f1e5aaca8fc2462e37ecb239a2f7f0557d24bdfa8c56c65f6edc07df97"
+      }
     },
     {
       "id": "@computesdk/tigris",
@@ -2108,10 +2160,10 @@
       },
       "entrypoint": "packages/upstash/src/index.ts",
       "symbol": "upstash",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local lifecycle contracts have recorded adapter-mocked evidence, not native certification."
       },
       "evidence": [
         {
@@ -2136,10 +2188,20 @@
         }
       ],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+        "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+        "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+        "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+        "Native create may accept an ID before polling fails. List catchalls and retained terminal metadata remain outside this proof."
       ],
-      "claims": []
+      "claims": [
+        "Named HTTP-boundary cases preserve supported name aliases and canonical IDs, classify missing only around initial Box.get and propagate every post-positive delete failure.",
+        "Route guards reject ambiguous paths and raw trailing-space normalization; native void delete is acknowledgement only."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/upstash.json",
+        "sha256": "c8f34428d74cbf923cec151bc4e0f3ebd5c89c3466a9179e6e4ab80dc4d7dd92"
+      }
     },
     {
       "id": "@computesdk/vercel",

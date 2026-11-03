@@ -1,0 +1,96 @@
+{
+  "provider": "@computesdk/agentuity",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/agentuity/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Agentuity lifecycle contract', () => {"
+    }
+  ],
+  "claims": [
+    "Named HTTP-boundary cases query the supported sandbox resource endpoint, validate canonical identity, classify only resource404 as missing and preserve other lookup/delete failures.",
+    "Named cases validate native JSON/empty deletion acknowledgements and sanitize newly introduced malformed lifecycle JSON errors without retaining their parser snippets."
+  ],
+  "limitations": [
+    "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+    "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+    "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+    "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+    "Native resource metadata may remain after destruction; its cleanup oracle still needs separate review. Other pre-existing JSON parsers are not newly sanitized."
+  ],
+  "command": "pnpm --filter @computesdk/agentuity --fail-if-no-match exec vitest run src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "61c9176a5b19f5302dbabf3845ad0f96e75b9f42",
+  "recordedAt": "2026-11-03T20:38:41.624799+00:00",
+  "executionFinishedAt": "2026-11-03T20:26:48.165913+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "SKIP_INTEGRATION": "true",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "COMPUTESDK_INTEGRATION": "0",
+    "COMPUTESDK_API_KEY": "",
+    "AGENTUITY_SDK_KEY": "",
+    "DECLAW_API_KEY": "",
+    "TENSORLAKE_API_KEY": "",
+    "LEAP0_API_KEY": "",
+    "LELANTOS_API_KEY": "",
+    "E2B_API_KEY": "",
+    "UPSTASH_BOX_API_KEY": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 89,
+  "liveProviderVerification": false,
+  "mockBoundary": "Real factory with controlled HTTP fetch responses.",
+  "scope": "Historical component-input-specific local regression evidence, not all-capability, live-provider or future-tree certification.",
+  "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "26497777d51296d2606cd09e53a19292340962457b28de12ee7e52f31e234d98"
+    },
+    {
+      "file": "packages/agentuity/package.json",
+      "sha256": "9fa3ef24729b8dd8d770721923df0b9abfbdcb6d0748c0fcc6d6d3a9a2846c09"
+    },
+    {
+      "file": "packages/agentuity/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "d8a80ca196ef7c8fa8a4996ceb193b7ee67b37242820fb00a12a8ce1119a9993"
+    },
+    {
+      "file": "packages/agentuity/src/index.ts",
+      "sha256": "e86c33b3644744d480ffe4ad0dd66109a1f27703a772d0c550465b95b8d247d9"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/agentuity/dist/index.mjs",
+      "sha256": "e2072fe986e866d0e7c61957c97a5b767562d0eda8d88c71b2437471e38ea6ca"
+    }
+  ]
+}
