@@ -19,6 +19,32 @@ export interface CodesandboxConfig {
   timeout?: number;
 }
 
+function validateSandboxId(sandboxId: string): void {
+  if (typeof sandboxId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(sandboxId)) {
+    throw new Error('Invalid CodeSandbox sandbox ID.');
+  }
+}
+
+// SDK 2.4.2's handleResponse discards HTTP status when it throws. Observe the
+// response through its public fetch option, never infer absence from error text
+// or a status-shaped thrown object. Each client observes one exact operation.
+function lifecycleSdk(apiKey: string, method: 'GET' | 'DELETE', path: string) {
+  let status: number | undefined;
+  const sdk = new CodeSandbox(apiKey, {
+    fetch: async (input, init) => {
+      // A 307/308 must not replay this operation against a different resource.
+      // Set policy before sending, not merely after observing response.redirected.
+      const request = new Request(input, { ...init, redirect: 'manual' });
+      const matches = request.method === method && new URL(request.url).pathname.endsWith(path);
+      if (matches) status = undefined;
+      const response = await fetch(request);
+      if (matches && !response.redirected) status = response.status;
+      return response;
+    },
+  });
+  return { sdk, isNotFound: () => status === 404 };
+}
+
 export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({
   name: 'codesandbox',
   methods: {
@@ -63,13 +89,26 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
       },
 
       getById: async (config: CodesandboxConfig, sandboxId: string) => {
+        validateSandboxId(sandboxId);
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
         if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
-        const sdk = new CodeSandbox(apiKey);
+        const { sdk, isNotFound } = lifecycleSdk(apiKey, 'GET', `/sandbox/${sandboxId}`);
+        let metadata;
+        try {
+          metadata = await sdk.sandboxes.get(sandboxId);
+        } catch {
+          if (isNotFound()) return null;
+          throw new Error('Failed to get CodeSandbox sandbox.');
+        }
+        if (metadata.id !== sandboxId) throw new Error('Failed to get CodeSandbox sandbox.');
         try {
           const sandbox = await sdk.sandboxes.resume(sandboxId);
           return { instance: sandbox, instanceId: sandboxId };
-        } catch { return null; }
+        } catch {
+          // Resume starts a VM; a failure here (even HTTP 404) is not a
+          // metadata absence observation and must never become null.
+          throw new Error('Failed to get CodeSandbox sandbox.');
+        }
       },
 
       list: async (_config: CodesandboxConfig) => {
@@ -77,17 +116,16 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
       },
 
       destroy: async (config: CodesandboxConfig, sandboxId: string) => {
+        validateSandboxId(sandboxId);
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
         if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
-        const sdk = new CodeSandbox(apiKey);
-        try { await sdk.sandboxes.shutdown(sandboxId); } catch { /* ignore */ }
+        const { sdk, isNotFound } = lifecycleSdk(apiKey, 'DELETE', `/vm/${sandboxId}`);
         try {
+          // Public permanent deletion includes this sandbox's data. Shutdown
+          // only stops the VM and adds retries that can exhaust cleanup budgets.
           await sdk.sandboxes.delete(sandboxId);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (!message.includes('not found') && !message.includes('404')) {
-            throw new Error(`Failed to delete CodeSandbox sandbox "${sandboxId}": ${message}`);
-          }
+        } catch {
+          if (!isNotFound()) throw new Error('Failed to delete CodeSandbox sandbox.');
         }
       },
 
