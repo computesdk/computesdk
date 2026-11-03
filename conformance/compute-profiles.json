@@ -2162,11 +2162,16 @@
         {
           "file": "packages/modal/src/__tests__/index.test.ts",
           "contains": "ports: [3000, 8080]  // Enable getUrl tests"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "modalExitCode"
         }
       ],
       "cleanup": {
-        "status": "needs-review",
-        "reason": "Lookup now polls and propagates errors; installed 0.11.0 poll exposes raw RPC failures without an authoritative public nullable-absence discriminator. Termination acknowledgement is not absence. Remains blocked; do not guess gRPC codes."
+        "status": "source-reviewed-native-terminal",
+        "oracle": "modal-finished-exitcode",
+        "reason": "Fresh SDK lookup and getInfo must both match the owned ID; reserved modalSandboxId must match too. SDK null remains absence. Otherwise only a fresh safe-integer metadata.modalExitCode from public Modal 0.11.0 Sandbox.poll (SandboxWait/V2 for the original sandbox main process) is native terminal execution evidence. Null poll is running and omitted, errors propagate, retained handles stay present, and snapshots restore a new sandbox ID. This is not SDK absence, physical deletion or cessation of billing. Source qualification is not a live-suite pass; the existing owned-resource incident must be resolved before a new live attempt."
       }
     },
     {
@@ -3708,11 +3713,16 @@
         {
           "file": "packages/upstash/src/__tests__/lifecycle-contract.test.ts",
           "contains": "it('deletes using canonical native identity and accepts void acknowledgement', async () => {"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "upstashStatus"
         }
       ],
       "cleanup": {
-        "status": "source-reviewed-sdk-absence",
-        "reason": "Installed @upstash/box 0.5.5 public Box.get performs a fresh exact-reference resource GET and constructs a local full Box without resume, polling, hydration or terminal filtering. Only its actual HTTP BoxError.statusCode===404 at this lookup becomes SDK null; authentication, transport and other status errors propagate. Native instance delete returns void acknowledgement only; every post-positive delete failure propagates, including 404. Existing shared cleanup must freshly poll public SDK getById for the SDK-owned canonical ID until null within its deadline; retained metadata (including deleted/paused/error or unknown status) remains present and must fail strict absence. Qualification is conditional source/controlled-fetch evidence, not a native pass, dispatch approval, physical deletion or billing certification."
+        "status": "source-reviewed-native-terminal",
+        "oracle": "upstash-deleted-metadata",
+        "reason": "Fresh SDK lookup and getInfo must both match the owned ID; reserved upstashBoxId must match too. SDK null remains absence. Otherwise only metadata.upstashStatus exactly deleted from public Box 0.5.5 getStatus (fresh GET /v2/box/id/status) is the reviewed irreversible original-box terminal observation. Official Box lifecycle documentation distinguishes irreversible deleted from resumable paused; snapshots can remain. Paused, error, broad SDK stopped and unknown values are never terminal evidence. Retained metadata stays present. No physical deletion or billing claim; the existing owned-resource incident must be resolved before a new live attempt."
       }
     },
     {

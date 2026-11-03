@@ -41,10 +41,10 @@ compute entrypoints in this checkout**. These are not 55 independent companies.
 
 * **35 configuration-wired** profiles have reviewed factory/credential mappings.
 * **20 configuration-blocked** profiles require reviewed setup first.
-* Of the 35, **10 shared-suite candidates** have source-reviewed observations:
-  SDK absence for E2B, Isorun, Leap0, NeevCloud, Sandbox0, Sprites, Upstash and
-  Vercel; exact fresh native terminal metadata for CreateOS and Blaxel.
-  The other 25 remain cleanup-blocked by default. An explicit diagnostic opt-in
+* Of the 35, **11 shared-suite candidates** have source-reviewed observations:
+  SDK absence for E2B, Isorun, Leap0, NeevCloud, Sandbox0, Sprites and Vercel;
+  exact fresh native terminal metadata for CreateOS, Blaxel, Modal and Upstash.
+  The other 24 remain cleanup-blocked by default. An explicit diagnostic opt-in
   can attempt their existing contracts without claiming source certification.
   These are current development-tree reviews; a frozen older
   candidate retains its own smaller catalog and fingerprint.
@@ -112,6 +112,18 @@ exact `blaxel-terminated-metadata` oracle requiring a fresh owned lookup and
 `getInfo().metadata.blaxelStatus === 'TERMINATED'`; normalized `stopped`,
 `STANDBY`, label values and other statuses do not qualify. Other profiles cannot
 opt into either oracle.
+
+Modal's `modal-finished-exitcode` oracle requires fresh owned SDK info and
+`metadata.modalSandboxId` matching the owned ID. Only a safe-integer
+`metadata.modalExitCode` establishes that the original sandbox's main process
+finished; null/running is omitted by the adapter. A restored snapshot creates a
+new sandbox ID. Upstash's `upstash-deleted-metadata` oracle likewise requires
+matching owned SDK/native IDs and a fresh public status read returning exactly
+`deleted`. `paused`, `error`, unknown statuses and normalized `stopped` never
+qualify; deletion does not remove existing snapshots. These observations remain
+distinct from SDK absence and never imply physical deletion or billing cleanup.
+Source qualification does not resolve an existing owned-resource incident or
+count as a live-suite pass.
 
 ### Recorded first live wave: November 3, 2026
 
@@ -280,7 +292,8 @@ Retry is zero; missing credentials and blocked configuration are not passes.
 
 Shared-suite verification requires a positive SDK lookup matching the newly
 owned ID before testing, then bounded reviewed observations after destruction:
-exact `getById(id) === null`, or only CreateOS's fresh owned `destroyed` metadata.
+exact `getById(id) === null`, or the explicitly reviewed, identity-bound native
+terminal observations described above.
 These are separately journaled as SDK absence and native-reported terminal,
 respectively. Authentication/network errors must propagate in eligible lookup
 implementations. Generic consumers without these verification callbacks still

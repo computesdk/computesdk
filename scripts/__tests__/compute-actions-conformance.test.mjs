@@ -35,7 +35,7 @@ test('blocked profiles and missing configuration cannot become native pass', () 
   assert.equal(blockedReason(beam, { BEAM_TOKEN: 'unit-value', BEAM_WORKSPACE_ID: 'unit-value' }), 'needs-reviewed-cleanup-contract');
   assert.deepEqual(profiles.filter(p => p.cleanup.status === 'source-reviewed-sdk-absence').map(p => p.id).sort(), [
     '@computesdk/e2b', '@computesdk/isorun', '@computesdk/leap0',
-    '@computesdk/neevcloud', '@computesdk/sandbox0', '@computesdk/sprites', '@computesdk/upstash', '@computesdk/vercel',
+    '@computesdk/neevcloud', '@computesdk/sandbox0', '@computesdk/sprites', '@computesdk/vercel',
   ]);
   const createos = profiles.find(p => p.id === '@computesdk/createos-sandbox');
   assert.equal(createos.cleanup.status, 'source-reviewed-native-terminal');
@@ -47,9 +47,21 @@ test('blocked profiles and missing configuration cannot become native pass', () 
   assert.equal(reviewedCleanup(blaxel), true);
   assert.equal(blaxel.cleanup.oracle, 'blaxel-terminated-metadata');
   assert.deepEqual(profiles.filter(p => p.cleanup.status === 'source-reviewed-native-terminal').map(p => p.id).sort(),
-    ['@computesdk/blaxel', '@computesdk/createos-sandbox']);
+    ['@computesdk/blaxel', '@computesdk/createos-sandbox', '@computesdk/modal', '@computesdk/upstash']);
   for (const [profile, cleanup] of [[blaxel, createos.cleanup], [createos, blaxel.cleanup]]) {
     assert.equal(reviewedCleanup({ ...profile, cleanup }), false);
+  }
+});
+test('reviewed native terminal profiles remain provider-specific and require credentials', () => {
+  const terminal = profiles.filter(p => p.cleanup.status === 'source-reviewed-native-terminal');
+  for (const profile of terminal) {
+    assert.equal(reviewedCleanup(profile), true);
+    const env = Object.fromEntries(profile.requiredEnvironment.map(name => [name, 'unit-value']));
+    assert.equal(blockedReason(profile, env), null);
+    assert.match(blockedReason(profile, {}), /^missing configuration:/);
+    for (const other of terminal.filter(p => p.id !== profile.id)) {
+      assert.equal(reviewedCleanup({ ...profile, cleanup: other.cleanup }), false);
+    }
   }
 });
 test('vault selection contains only missing names for the selected provider, never values', () => {
@@ -380,6 +392,13 @@ test('unreviewed terminal provider, oracle or state cannot produce cleanup evide
       ['@computesdk/blaxel', 'blaxel-terminated-metadata', 'terminated'],
       ['@computesdk/blaxel', 'blaxel-terminated-metadata', 'stopped'],
       ['@computesdk/blaxel', 'unreviewed', 'TERMINATED'],
+      ['@computesdk/upstash', 'upstash-deleted-metadata', 'paused'],
+      ['@computesdk/upstash', 'upstash-deleted-metadata', 'error'],
+      ['@computesdk/upstash', 'upstash-deleted-metadata', 'deleted '],
+      ['@computesdk/upstash', 'modal-finished-exitcode', 0],
+      ['@computesdk/modal', 'upstash-deleted-metadata', 'deleted'],
+      ...[null, undefined, '0', false, NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1]
+        .map(value => ['@computesdk/modal', 'modal-finished-exitcode', value]),
     ]) {
       const file = join(dir, 'resources.json');
       const journal = createResourceJournal(file, provider, '1'.repeat(64));
@@ -387,6 +406,29 @@ test('unreviewed terminal provider, oracle or state cannot produce cleanup evide
       journal.nativeTerminal('owned-unit-id', oracle, status);
       assert.throws(() => journal.assertHealthy(), /journal is incomplete/);
       assert.equal(JSON.parse(readFileSync(file, 'utf8')).attempts[0].state, 'returned');
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('Modal numeric completion and Upstash deletion remain terminal observations, never absence', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
+  try {
+    for (const [provider, oracle, statuses] of [
+      ['@computesdk/modal', 'modal-finished-exitcode', [0, 1, -9, 124, 137]],
+      ['@computesdk/upstash', 'upstash-deleted-metadata', ['deleted']],
+    ]) {
+      for (const status of statuses) {
+        const file = join(dir, 'resources.json');
+        const journal = createResourceJournal(file, provider, '1'.repeat(64));
+        journal.requested(1); journal.returned(1, { sandboxId: 'owned-unit-id' });
+        journal.cleanupObserved('owned-unit-id', 'destroy-acknowledged');
+        journal.nativeTerminal('owned-unit-id', oracle, status);
+        journal.assertHealthy();
+        const attempt = JSON.parse(readFileSync(file, 'utf8')).attempts[0];
+        assert.equal(attempt.state, 'native-reported-terminal');
+        assert.equal(attempt.absenceAt, undefined);
+        assert.ok(attempt.cleanup.destroyAcknowledgedAt);
+        assert.deepEqual(attempt.terminalObservation, { oracle, status });
+      }
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

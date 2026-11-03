@@ -12,6 +12,8 @@ const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const nativeRules = new Map([
   ['@computesdk/createos-sandbox', { oracle: 'createos-destroyed-metadata', status: 'destroyed' }],
   ['@computesdk/blaxel', { oracle: 'blaxel-terminated-metadata', status: 'TERMINATED' }],
+  ['@computesdk/modal', { oracle: 'modal-finished-exitcode', validStatus: Number.isSafeInteger }],
+  ['@computesdk/upstash', { oracle: 'upstash-deleted-metadata', status: 'deleted' }],
 ]);
 export const reportPath = (id, root = ROOT) =>
   resolve(root, 'conformance-results', `${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
@@ -76,7 +78,8 @@ export function createResourceJournal(file, provider, fingerprint) {
     nativeTerminal(id, oracle, status) {
       observe(() => {
         const rule = nativeRules.get(provider);
-        if (!rule || oracle !== rule.oracle || status !== rule.status) {
+        if (!rule || oracle !== rule.oracle ||
+            (rule.validStatus ? !rule.validStatus(status) : status !== rule.status)) {
           throw new Error('Unreviewed native cleanup oracle');
         }
         const owned = attempts.filter(a => a.sandboxId === id);

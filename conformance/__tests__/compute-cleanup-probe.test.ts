@@ -19,6 +19,14 @@ const blaxel = {
   profileId: '@computesdk/blaxel',
   oracle: 'blaxel-terminated-metadata',
 } as const satisfies CleanupProbeOptions;
+const modal = {
+  profileId: '@computesdk/modal',
+  oracle: 'modal-finished-exitcode',
+} as const satisfies CleanupProbeOptions;
+const upstash = {
+  profileId: '@computesdk/upstash',
+  oracle: 'upstash-deleted-metadata',
+} as const satisfies CleanupProbeOptions;
 
 function fixture(info: unknown = { id: ownedId, metadata: { createosStatus: 'destroyed' } }) {
   const getInfo = vi.fn(async () => info);
@@ -308,4 +316,208 @@ describe('Blaxel terminal probe (local harness self-test, not native evidence)',
     expect(await probeCleanup(f.manager, ownedId, blaxel)).toEqual({ kind: 'sdk-absent' });
     expect(f.getInfo).not.toHaveBeenCalled();
   });
+});
+
+describe.each([
+  { options: modal, nativeId: 'modalSandboxId', field: 'modalExitCode', terminal: 0 },
+  { options: upstash, nativeId: 'upstashBoxId', field: 'upstashStatus', terminal: 'deleted' },
+])('$options.oracle (local mocks only, NOT native evidence)', ({ options, nativeId, field, terminal }) => {
+  const metadata = { [nativeId]: ownedId, [field]: terminal };
+  const invalidMetadata = 'Cleanup info did not return valid owned SDK metadata';
+
+  it('accepts exact terminal metadata only after one owned lookup and fresh public info read', async () => {
+    const f = fixture({ id: ownedId, status: 'stopped', metadata });
+    expect(await probeCleanup(f.manager, ownedId, options)).toEqual({
+      kind: 'native-terminal', oracle: options.oracle, status: terminal,
+    });
+    expect(f.getById).toHaveBeenCalledOnce();
+    expect(f.getById).toHaveBeenCalledWith(ownedId);
+    expect(f.getInfo).toHaveBeenCalledOnce();
+  });
+
+  it('retains exact SDK-null absence without an info read', async () => {
+    const f = fixture();
+    f.getById.mockResolvedValue(null);
+    expect(await probeCleanup(f.manager, ownedId, options)).toEqual({ kind: 'sdk-absent' });
+    expect(f.getById).toHaveBeenCalledOnce();
+    expect(f.getById).toHaveBeenCalledWith(ownedId);
+    expect(f.getInfo).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    undefined, {}, { profileId: options.profileId }, { oracle: options.oracle },
+    { profileId: '@computesdk/other', oracle: options.oracle },
+    { profileId: `${options.profileId}/alias`, oracle: options.oracle },
+    { profileId: options.profileId, oracle: 'sdk-absence' as const },
+    { profileId: createos.profileId, oracle: options.oracle },
+    { profileId: blaxel.profileId, oracle: options.oracle },
+    { profileId: options.profileId, oracle: createos.oracle },
+    { profileId: options.profileId, oracle: blaxel.oracle },
+    { profileId: modal.profileId, oracle: upstash.oracle },
+    { profileId: upstash.profileId, oracle: modal.oracle },
+  ])('ignores terminal metadata outside the exact reviewed pair (%j)', async wrongOptions => {
+    const f = fixture({ id: ownedId, metadata });
+    expect(await probeCleanup(f.manager, ownedId, wrongOptions)).toEqual({ kind: 'present' });
+    expect(f.getInfo).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, null, false, 0, '', [], {}, 'not-owned', `${ownedId} `])(
+    'rejects missing, malformed, or unowned native metadata ID %j',
+    async id => {
+      const f = fixture({ id: ownedId, metadata: { ...metadata, [nativeId]: id } });
+      const error = await probeCleanup(f.manager, ownedId, options).catch(error => error);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe(invalidMetadata);
+      expect(error.cause).toBeUndefined();
+      expect(f.getById).toHaveBeenCalledOnce();
+      expect(f.getInfo).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    null, undefined, false, 'private-body', 7, [], {},
+    { id: 'not-owned', metadata }, { id: 7, metadata },
+    { id: ownedId }, { id: ownedId, metadata: {} },
+    { id: ownedId, metadata: null }, { id: ownedId, metadata: [] },
+    { id: ownedId, metadata: 'private-body' },
+  ])('rejects malformed or unowned fresh public info (%j)', async info => {
+    const f = fixture();
+    f.getInfo.mockResolvedValue(info);
+    await expect(probeCleanup(f.manager, ownedId, options)).rejects.toThrow(invalidMetadata);
+    expect(f.getById).toHaveBeenCalledOnce();
+    expect(f.getInfo).toHaveBeenCalledOnce();
+  });
+
+  it('checks the public lookup ID before reading terminal metadata', async () => {
+    const f = fixture({ id: ownedId, metadata });
+    f.getById.mockResolvedValue({ sandboxId: 'not-owned', getInfo: f.getInfo });
+    await expect(probeCleanup(f.manager, ownedId, options))
+      .rejects.toThrow('Cleanup lookup did not return the owned SDK ID');
+    expect(f.getInfo).not.toHaveBeenCalled();
+  });
+
+  it('requires a public SDK info method without native fallback', async () => {
+    const f = fixture();
+    f.getById.mockResolvedValue({ sandboxId: ownedId } as CleanupSandbox);
+    await expect(probeCleanup(f.manager, ownedId, options))
+      .rejects.toThrow('Cleanup lookup did not return a public SDK info method');
+    expect(f.getById).toHaveBeenCalledOnce();
+  });
+
+  it('checks the fresh public info ID before accessing metadata', async () => {
+    const readMetadata = vi.fn(() => { throw new Error('must not inspect unowned metadata'); });
+    const f = fixture({ id: 'not-owned', get metadata() { return readMetadata(); } });
+    await expect(probeCleanup(f.manager, ownedId, options)).rejects.toThrow(invalidMetadata);
+    expect(readMetadata).not.toHaveBeenCalled();
+  });
+
+  it.each(['stopped', 'destroyed', 'TERMINATED', 'deleted', 'finished'])(
+    'ignores normalized SDK status %j and other providers or generic fields',
+    async status => {
+      const f = fixture({ id: ownedId, status, metadata: {
+        [nativeId]: ownedId, status: terminal, exitCode: 0,
+        createosStatus: 'destroyed', blaxelStatus: 'TERMINATED',
+        ...(options === modal ? { upstashStatus: 'deleted' } : { modalExitCode: 0 }),
+      } });
+      expect(await probeCleanup(f.manager, ownedId, options)).toEqual({ kind: 'present' });
+    },
+  );
+
+  it('reads the current lookup info without caching a preceding terminal observation', async () => {
+    const f = fixture({ id: ownedId, metadata });
+    expect(await probeCleanup(f.manager, ownedId, options)).toMatchObject({ kind: 'native-terminal' });
+    const currentInfo = vi.fn(async () => ({ id: ownedId, metadata: { [nativeId]: ownedId } }));
+    f.getById.mockResolvedValue({ sandboxId: ownedId, getInfo: currentInfo });
+    expect(await probeCleanup(f.manager, ownedId, options)).toEqual({ kind: 'present' });
+    expect(f.getById).toHaveBeenCalledTimes(2);
+    expect(f.getInfo).toHaveBeenCalledOnce();
+    expect(currentInfo).toHaveBeenCalledOnce();
+  });
+
+  it.each(['lookup rejection', 'lookup throw', 'info rejection', 'info throw'])(
+    'propagates %s by identity to the bounded sanitizing caller',
+    async operation => {
+      const f = fixture({ id: ownedId, metadata });
+      const error = new Error('local sensitive error sentinel');
+      if (operation === 'lookup rejection') f.getById.mockRejectedValue(error);
+      if (operation === 'lookup throw') f.getById.mockImplementation(() => { throw error; });
+      if (operation === 'info rejection') f.getInfo.mockRejectedValue(error);
+      if (operation === 'info throw') f.getInfo.mockImplementation(() => { throw error; });
+      await expect(probeCleanup(f.manager, ownedId, options)).rejects.toBe(error);
+      expect(f.getById).toHaveBeenCalledOnce();
+      expect(f.getInfo).toHaveBeenCalledTimes(operation.startsWith('info') ? 1 : 0);
+    },
+  );
+
+  it('does not mutate or expose public SDK metadata or inspect private/native accessors', async () => {
+    const payload = Object.freeze({ secret: 'local-sensitive-payload' });
+    const info = Object.freeze({ id: ownedId, metadata: Object.freeze({ ...metadata, payload }) });
+    const f = fixture(info);
+    const native = vi.fn(() => { throw new Error('Unexpected private/native access'); });
+    f.getById.mockResolvedValue(Object.freeze({
+      sandboxId: ownedId, getInfo: f.getInfo,
+      get native() { return native(); },
+      get instance() { return native(); },
+      get _sandbox() { return native(); },
+    }));
+    const before = JSON.stringify(info);
+    const observation = await probeCleanup(f.manager, ownedId, options);
+    expect(observation).toEqual({ kind: 'native-terminal', oracle: options.oracle, status: terminal });
+    expect(JSON.stringify(info)).toBe(before);
+    expect(JSON.stringify(observation)).not.toContain(ownedId);
+    expect(JSON.stringify(observation)).not.toContain(payload.secret);
+    expect(native).not.toHaveBeenCalled();
+  });
+});
+
+describe('Modal exit-code scalar contract (local mocks only)', () => {
+  it.each([0, 1, -1, 137, -127, Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER])(
+    'reports the actual safe integer Finished main-process exit code %j',
+    async modalExitCode => {
+      const f = fixture({ id: ownedId, metadata: { modalSandboxId: ownedId, modalExitCode } });
+      expect(await probeCleanup(f.manager, ownedId, modal)).toEqual({
+        kind: 'native-terminal', oracle: modal.oracle, status: modalExitCode,
+      });
+    },
+  );
+  it('keeps omitted/undefined running exit code present', async () => {
+    for (const metadata of [{ modalSandboxId: ownedId }, { modalSandboxId: ownedId, modalExitCode: undefined }]) {
+      const f = fixture({ id: ownedId, metadata });
+      expect(await probeCleanup(f.manager, ownedId, modal)).toEqual({ kind: 'present' });
+    }
+  });
+  it.each([
+    null, '0', 'finished', 'stopped', 'deleted', true, false, 0.5, -0.5,
+    NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, Number.MIN_SAFE_INTEGER - 1,
+    [], {}, new Number(0), 0n,
+  ])('rejects invalid exit-code metadata %s with a fixed safe diagnostic', async modalExitCode => {
+    const f = fixture({ id: ownedId, metadata: { modalSandboxId: ownedId, modalExitCode } });
+    const error = await probeCleanup(f.manager, ownedId, modal).catch(error => error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe('Cleanup info did not return valid owned SDK metadata');
+    expect(error.cause).toBeUndefined();
+  });
+});
+
+describe('Upstash exact deleted scalar contract (local mocks only)', () => {
+  it.each([
+    undefined, '', 'paused', 'error', 'running', 'creating', 'idle', 'unknown',
+    'STopped', 'stopped', 'Deleted', 'DELETED', 'deleted ', ' deleted', 'deleted\n',
+    'destroyed', 'TERMINATED',
+  ])('keeps nonterminal/nonexact status %j present', async upstashStatus => {
+    const f = fixture({ id: ownedId, status: 'stopped', metadata: { upstashBoxId: ownedId, upstashStatus } });
+    expect(await probeCleanup(f.manager, ownedId, upstash)).toEqual({ kind: 'present' });
+    expect(f.getById).toHaveBeenCalledOnce();
+    expect(f.getInfo).toHaveBeenCalledOnce();
+  });
+  it.each([null, true, false, 0, 1, 0.5, NaN, Infinity, [], {}, new String('deleted'), 0n])(
+    'rejects wrongly typed status %s with a fixed safe diagnostic',
+    async upstashStatus => {
+      const f = fixture({ id: ownedId, metadata: { upstashBoxId: ownedId, upstashStatus } });
+      const error = await probeCleanup(f.manager, ownedId, upstash).catch(error => error);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe('Cleanup info did not return valid owned SDK metadata');
+      expect(error.cause).toBeUndefined();
+    },
+  );
 });
