@@ -13,6 +13,16 @@ import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
 
+/** Configuration unsupported by the pinned native exec API, not a child exit. */
+export class ModalCommandTimeoutError extends Error {
+  readonly code = 'MODAL_COMMAND_TIMEOUT_UNSUPPORTED';
+  readonly provider = 'modal';
+
+  constructor() {
+    super('Modal command timeout must be a positive whole multiple of 1000 milliseconds; omit it to use the native default.');
+    this.name = 'ModalCommandTimeoutError';
+  }
+}
 
 const DEFAULT_IMAGE = 'node:20';
 const DEFAULT_APP_NAME = 'computesdk-modal';
@@ -230,6 +240,14 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
 
       runCommand: async (modalSandbox: ModalSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+        const timeout = options?.timeout;
+        // modal@0.11.0 accepts positive whole seconds expressed as milliseconds.
+        // Reject unsupported configuration before exec, not as guest exit127.
+        // Do not silently round deadlines or invent a universal zero policy.
+        if (timeout !== undefined && (typeof timeout !== 'number' ||
+            !Number.isFinite(timeout) || timeout <= 0 || timeout % 1000 !== 0)) {
+          throw new ModalCommandTimeoutError();
+        }
         const startTime = Date.now();
         try {
           let fullCommand = command;

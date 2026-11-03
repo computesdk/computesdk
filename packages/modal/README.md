@@ -8,7 +8,18 @@ Modal provider for ComputeSDK — execute code in serverless Modal sandboxes wit
 npm install @computesdk/modal
 ```
 
-This package uses the official [Modal JS SDK](https://www.npmjs.com/package/modal) (v0.7).
+This package pins the official [Modal JS SDK](https://www.npmjs.com/package/modal) to `0.11.0`.
+
+### Command timeout precision
+
+For provider-backed Modal `sandbox.runCommand(command, { timeout })`, the pinned native SDK accepts
+positive whole multiples of **1000 milliseconds**, such as `1000` or `2000`.
+Omit `timeout` to use its native default. Explicit zero, fractional-second
+timeouts such as `1500`, and invalid numeric values reject before native command
+execution with `MODAL_COMMAND_TIMEOUT_UNSUPPORTED`, not a synthetic guest exit
+code. Deadlines are not silently rounded. This does not define a shared zero
+policy, validate independent daemon/job execution routes, or guarantee remote
+process-tree cleanup.
 
 ## Setup
 
