@@ -2,7 +2,7 @@
  * Vercel Provider - Factory-based Implementation
  */
 
-import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive } from '@vercel/sandbox';
+import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive, APIError as VercelAPIError } from '@vercel/sandbox';
 import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import { Writable } from 'node:stream';
 
@@ -56,6 +56,30 @@ function validateCredentials(creds: ResolvedCredentials): void {
   }
   if (!creds.teamId) throw new Error(`Missing Vercel team ID. Provide 'teamId' in config or set VERCEL_TEAM_ID.`);
   if (!creds.projectId) throw new Error(`Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID.`);
+}
+
+function isMissingSandbox(error: unknown): boolean {
+  // Match the installed SDK's own authoritative sandbox-not-found check.
+  return error instanceof VercelAPIError && error.response.status === 404;
+}
+
+async function lookupSandbox(config: VercelConfig, sandboxId: string): Promise<VercelSandbox | null> {
+  const creds = resolveCredentials(config);
+  validateCredentials(creds);
+  let sandbox: VercelSandbox;
+  try {
+    // Native get performs a metadata request and retains its resume behavior.
+    sandbox = creds.useOidc
+      ? await VercelSandbox.get({ name: sandboxId })
+      : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
+  } catch (error) {
+    if (isMissingSandbox(error)) return null;
+    throw error;
+  }
+  if (!sandbox || typeof sandbox.name !== 'string' || !sandbox.name || sandbox.name !== sandboxId) {
+    throw new Error('Vercel sandbox lookup returned an invalid identity.');
+  }
+  return sandbox;
 }
 
 function getUtf8Sink() {
@@ -174,13 +198,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
       },
 
       getById: async (config: VercelConfig, sandboxId: string) => {
-        const creds = resolveCredentials(config);
-        try {
-          const sandbox = creds.useOidc
-            ? await VercelSandbox.get({ name: sandboxId })
-            : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          return { instance: sandbox, instanceId: sandboxId };
-        } catch { return null; }
+        const sandbox = await lookupSandbox(config, sandboxId);
+        return sandbox ? { instance: sandbox, instanceId: sandboxId } : null;
       },
 
       list: async (_config: VercelConfig) => {
@@ -188,13 +207,16 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
       },
 
       destroy: async (config: VercelConfig, sandboxId: string) => {
-        const creds = resolveCredentials(config);
+        const sandbox = await lookupSandbox(config, sandboxId);
+        if (!sandbox) return;
         try {
-          const sandbox = creds.useOidc
-            ? await VercelSandbox.get({ name: sandboxId })
-            : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          await sandbox.stop();
-        } catch { /* already destroyed or doesn't exist */ }
+          // stop only ends a resumable session. Permanently delete this sandbox,
+          // without extending teardown to snapshots or separately owned drives.
+          // Native delete awaits its request and returns void.
+          await sandbox.delete({ deleteOrphanSnapshots: false });
+        } catch (error) {
+          if (!isMissingSandbox(error)) throw error;
+        }
       },
 
       runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {

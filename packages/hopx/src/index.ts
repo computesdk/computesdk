@@ -11,7 +11,7 @@
  * - Preview URLs for accessing sandbox services
  */
 
-import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
+import { Sandbox as HopxSandbox, APIError as HopxAPIError, ErrorCode } from '@hopx-ai/sdk';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
@@ -33,6 +33,34 @@ export interface HopxConfig {
   template?: string;
   /** Base API URL for custom/staging environments */
   baseURL?: string;
+}
+
+function isMissingSandbox(error: unknown): boolean {
+  // Generic NotFound/FileNotFound/Expired errors do not identify authoritative
+  // sandbox absence. Require the native HTTP status AND sandbox-specific code.
+  return error instanceof HopxAPIError
+    && error.statusCode === 404
+    && error.code === ErrorCode.SANDBOX_NOT_FOUND;
+}
+
+async function lookupSandbox(config: HopxConfig, sandboxId: string): Promise<HopxSandbox | null> {
+  const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
+  if (!apiKey) {
+    throw new Error(`Missing HopX API key. Provide 'apiKey' in config or set HOPX_API_KEY environment variable.`);
+  }
+  let sandbox: HopxSandbox;
+  try {
+    // Native connect already performs getInfo, resumes paused VMs and refreshes
+    // JWT credentials. Preserve those effects rather than creating a bare handle.
+    sandbox = await HopxSandbox.connect(sandboxId, apiKey, config.baseURL);
+  } catch (error) {
+    if (isMissingSandbox(error)) return null;
+    throw error;
+  }
+  if (!sandbox || typeof sandbox.sandboxId !== 'string' || !sandbox.sandboxId || sandbox.sandboxId !== sandboxId) {
+    throw new Error('HopX sandbox lookup returned an invalid identity.');
+  }
+  return sandbox;
 }
 
 /** Invalid native completion data, without command/output/cause disclosure. */
@@ -167,24 +195,11 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * Connect to an existing HopX sandbox by ID
        * 
        * Uses Sandbox.connect() to reconnect to a running sandbox.
-       * Returns null if sandbox doesn't exist or can't be accessed.
+       * Returns null only for authoritative native sandbox absence.
        */
       getById: async (config: HopxConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
-
-        if (!apiKey) {
-          return null;
-        }
-
-        try {
-          // Connect to existing sandbox using Sandbox.connect()
-          const sandbox = await HopxSandbox.connect(sandboxId, apiKey, config.baseURL);
-
-          return { instance: sandbox, instanceId: sandboxId };
-        } catch (error) {
-          // Sandbox doesn't exist or can't be accessed
-          return null;
-        }
+        const sandbox = await lookupSandbox(config, sandboxId);
+        return sandbox ? { instance: sandbox, instanceId: sandboxId } : null;
       },
 
       /**
@@ -220,19 +235,13 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * Uses sandbox.kill() to terminate and clean up the sandbox.
        */
       destroy: async (config: HopxConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
-
-        if (!apiKey) {
-          return;
-        }
-
+        const sandbox = await lookupSandbox(config, sandboxId);
+        if (!sandbox) return;
         try {
-          // Connect to sandbox and kill it
-          const sandbox = await HopxSandbox.connect(sandboxId, apiKey, config.baseURL);
+          // Native kill awaits DELETE and returns void, with no status payload.
           await sandbox.kill();
         } catch (error) {
-          // Sandbox might already be destroyed or doesn't exist
-          // This is acceptable for destroy operations
+          if (!isMissingSandbox(error)) throw error;
         }
       },
 
