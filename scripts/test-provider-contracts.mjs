@@ -8,15 +8,19 @@ import { fileURLToPath } from 'node:url';
 // those can include credential-gated, paid integration tests.
 const suites = [
   ['@computesdk/provider', 'command-output.test.ts'],
-  ['computesdk', 'snapshot-metadata.test.ts'],
+  ['computesdk', 'snapshot-metadata.test.ts', 'snapshot-affinity.test.ts'],
   ['@computesdk/e2b', 'snapshot-contract.test.ts'],
-  ['@computesdk/modal', 'command-output.test.ts', 'unit.test.ts'],
+  ['@computesdk/modal', 'command-output.test.ts', 'unit.test.ts', 'timeout-contract.test.ts'],
   ['@computesdk/isorun', 'command-integrity.test.ts'],
   ['@computesdk/createos-sandbox', 'command-integrity.test.ts'],
   ['@computesdk/sandbox0', 'unit.test.ts'],
   ['@computesdk/microsandbox', 'index.test.ts'],
   ['@computesdk/sprites', 'command-contract.test.ts'],
   ['@computesdk/daytona', 'command-contract.test.ts'],
+  ['@computesdk/vercel', 'command-contract.test.ts'],
+  ['@computesdk/hopx', 'command-contract.test.ts'],
+  ['@computesdk/beam', 'command-contract.test.ts'],
+  ['@computesdk/blaxel', 'command-contract.test.ts', 'run-command.test.ts'],
 ];
 
 const env = {
@@ -35,6 +39,13 @@ const env = {
   DAYTONA_API_KEY: '',
   SPRITES_API_KEY: '',
   SPRITES_TOKEN: '',
+  VERCEL_TOKEN: '',
+  VERCEL_OIDC_TOKEN: '',
+  HOPX_API_KEY: '',
+  BEAM_TOKEN: '',
+  BEAM_WORKSPACE_ID: '',
+  BL_API_KEY: '',
+  BL_WORKSPACE: '',
 };
 const cwd = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 

@@ -1,0 +1,103 @@
+{
+  "provider": "@computesdk/hopx",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/hopx/src/__tests__/command-contract.test.ts",
+      "contains": "describe('HopX real-adapter command contract"
+    }
+  ],
+  "claims": [
+    "Named native-only-mocked tests validate required stdout/stderr strings and integer native exit_code, preserving valid nonzero/negative statuses and completed zero.",
+    "Named tests reject caught compatibility result zero and malformed metadata; complete nonzero error.result compatibility remains supported without claiming native SDK authority for that synthetic path."
+  ],
+  "limitations": [
+    "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+    "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
+    "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
+    "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
+    "The inspected native SDK has no error.result contract; those tests cover legacy compatibility only and cannot establish a completed successful command after an exception.",
+    "Shell env/cwd quoting, timeout policy, lifecycle/cleanup and broader capability contracts remain outside these tests."
+  ],
+  "command": "pnpm --filter @computesdk/hopx --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
+  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
+  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0",
+    "VERCEL_TOKEN": "",
+    "VERCEL_OIDC_TOKEN": "",
+    "HOPX_API_KEY": "",
+    "BEAM_TOKEN": "",
+    "BEAM_WORKSPACE_ID": "",
+    "BL_API_KEY": "",
+    "BL_WORKSPACE": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 45,
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "inputHashes": [
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/hopx/package.json",
+      "sha256": "94587a0191d3d6cccbc732b3330feea361e46ca41b60726d604128de903d6006"
+    },
+    {
+      "file": "packages/hopx/src/__tests__/command-contract.test.ts",
+      "sha256": "6b7f08182b20e7f0d57de6c4b7b2c4290976fe785e72558a6bb48e8a5834e8bb"
+    },
+    {
+      "file": "packages/hopx/src/index.ts",
+      "sha256": "f0314267ae611e6069a9d85f6a54c3c81ffd3dcfa4b875a211896985534a05c1"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "@hopx-ai/sdk",
+    "version": "0.5.1",
+    "manifestSha256": "5f4efafc20a275430e1a8b322db08f126b6a85146a4f3039aa223bdd2f301d82"
+  }
+}

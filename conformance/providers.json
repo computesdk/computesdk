@@ -209,10 +209,10 @@
       },
       "entrypoint": "packages/beam/src/index.ts",
       "symbol": "beam",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -222,10 +222,21 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+        "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
+        "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
+        "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
+        "The native process constructor may normalize missing completed wire status to zero before the adapter sees it; these checks are not raw-wire validation.",
+        "Launch, output reads and best-effort remote kill are not proven to fit a hard elapsed-time bound; remote termination and reaping remain unverified."
       ],
-      "claims": []
+      "claims": [
+        "Named native-only-mocked tests require the numeric wait() result, reject missing/invalid/negative running-sentinel returns even when a stale handle contains zero, and preserve valid nonnegative native statuses without an unsigned-byte cap.",
+        "Named tests preserve existing timeout124 and native-error127 behavior without command replay."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/beam.json",
+        "sha256": "63af54e1075dc86584dce4ee49d5a6788d40206bcb91dfec5f31a88536184c09"
+      }
     },
     {
       "id": "@computesdk/blaxel",
@@ -237,10 +248,10 @@
       },
       "entrypoint": "packages/blaxel/src/index.ts",
       "symbol": "blaxel",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -250,10 +261,22 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+        "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
+        "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
+        "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
+        "Terminal status labels alone do not prove numeric success or failure; no output checksum or raw transport integrity is established.",
+        "The bounded log-drain timer is not an overall timeout guarantee: final stream wait, kill and logs operations still depend on native settlement."
       ],
-      "claims": []
+      "claims": [
+        "Named native-only-mocked tests require terminal state plus an explicit valid final numeric exit code, rejecting missing/invalid fields, still-running results and contradictory failed-plus-zero instead of inferring zero or one.",
+        "Named tests prevent startup-code inheritance, preserve valid native nonzero/negative statuses and exercise late log delivery, bounded drain and timer cleanup.",
+        "Existing native-mocked nonterminal and contradictory-failure tests now require safe protocol rejection rather than synthetic guest status."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/blaxel.json",
+        "sha256": "ee029c1d3b18406151610ba3f3051aca2ebb712d35e3fdd1629a7c7c6de0c2ed"
+      }
     },
     {
       "id": "@computesdk/brezel",
@@ -561,7 +584,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/createos-sandbox.json",
-        "sha256": "14192dd25c000bea956e7a1dabb271618225f9ebc4ed4dd1bb2590c573c4d29b"
+        "sha256": "3dd63b6f9b115769772728d0562cdcfd2051976ce867c80ddc8a78f8dea059e4"
       }
     },
     {
@@ -600,7 +623,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/daytona.json",
-        "sha256": "de709997295d110399519d1b4d13d93b3e56ef9b69e1bee4752766789b1b1032"
+        "sha256": "d255d02682dee804b63cebc2f7f9196a18ce99900a4613c999ff56ea626516ca"
       }
     },
     {
@@ -711,7 +734,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/e2b.json",
-        "sha256": "60e2189e1210b09e95021a2c1973993085b6b018b5d41c15d4acf9d044984256"
+        "sha256": "182d459635962d7fd7a06067bce9c4d9f64c6eaa9df4a5673abe37835d918f91"
       }
     },
     {
@@ -864,10 +887,10 @@
       },
       "entrypoint": "packages/hopx/src/index.ts",
       "symbol": "hopx",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -877,10 +900,21 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+        "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
+        "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
+        "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
+        "The inspected native SDK has no error.result contract; those tests cover legacy compatibility only and cannot establish a completed successful command after an exception.",
+        "Shell env/cwd quoting, timeout policy, lifecycle/cleanup and broader capability contracts remain outside these tests."
       ],
-      "claims": []
+      "claims": [
+        "Named native-only-mocked tests validate required stdout/stderr strings and integer native exit_code, preserving valid nonzero/negative statuses and completed zero.",
+        "Named tests reject caught compatibility result zero and malformed metadata; complete nonzero error.result compatibility remains supported without claiming native SDK authority for that synthetic path."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/hopx.json",
+        "sha256": "97fb8dfbb07d4283a177bc50e939f324603210e49d319f1dab12f2a775d435d5"
+      }
     },
     {
       "id": "@computesdk/hyperbrowser",
@@ -946,7 +980,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/isorun.json",
-        "sha256": "9bffac755c9b83344185d5f94fc4f86956723b501b026098d0ca6952bae25403"
+        "sha256": "e10dbf017e3f5da0d42d23826e88335826a8e0044aefb318dcf13d5eafe9790d"
       }
     },
     {
@@ -1183,7 +1217,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/microsandbox.json",
-        "sha256": "df2ce4f02337fde926cf03959ce2573a9465588f88d2d2bd31a7479c13975a97"
+        "sha256": "031ef16ec92afad50743eda26bef1cff582e1aaf4589178627e2381e6bffe3b7"
       }
     },
     {
@@ -1242,6 +1276,13 @@
             "file": "packages/modal/src/index.ts",
             "contains": "Modal provider does not support listing sandboxes."
           }
+        },
+        {
+          "description": "Provider-backed command timeouts require positive whole multiples of1000ms with the pinned native SDK; explicit zero and unsupported precision reject before exec.",
+          "evidence": {
+            "file": "packages/modal/src/index.ts",
+            "contains": "MODAL_COMMAND_TIMEOUT_UNSUPPORTED"
+          }
         }
       ],
       "gaps": [
@@ -1249,16 +1290,18 @@
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Initial launch/wait failures precede the read-cleanup scope; non-integrity errors still use existing native error text.",
-        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
+        "Timeout preflight is provider-backed only; no universal zero policy, independent daemon-route validation, hard elapsed-time bound or remote cancellation guarantee is established."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
         "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
-        "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command."
+        "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command.",
+        "Named provider-backed timeout preflight tests reject unsupported precision and malformed values before native exec, preserving supported whole-second millisecond values and omission without rounding."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/modal.json",
-        "sha256": "309bed46f14158f71ca8550c0f39d167176c08be859d0ce73e193da0af0269df"
+        "sha256": "0366877a8a1338de014e74cd702340bfb8fbd13a38f784e3c6b459497b6a7375"
       }
     },
     {
@@ -1775,7 +1818,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/sandbox0.json",
-        "sha256": "5996d006f5a4b7944c076ce7707d43e65d073e7a52ecb2035de121553c0ab3c1"
+        "sha256": "6e2d14d3407984ca9565aa446b56f9f9e50f03285a1256ec50b6d2ee2fdfc8f6"
       }
     },
     {
@@ -1841,7 +1884,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/sprites.json",
-        "sha256": "b64d6fdeace1ce8b2d3a609fcf73d8096b1512dea8016b155783c6835db16d56"
+        "sha256": "c13e8d7db63403957be444a502718c57dc6436b15a740aec01dd2fb617256212"
       }
     },
     {
@@ -2093,10 +2136,10 @@
       },
       "entrypoint": "packages/vercel/src/index.ts",
       "symbol": "vercel",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -2106,10 +2149,21 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+        "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+        "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
+        "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
+        "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
+        "The native SDK itself masks some missing finished wire exit status to zero; adapter-boundary checks cannot recover that omission.",
+        "Detached exit0 is an explicit launch acknowledgement only, not proof of child completion or complete streams."
       ],
-      "claims": []
+      "claims": [
+        "Named native-only-mocked tests reject missing, null or malformed foreground exit status, preserve valid integer statuses and exact captured text, and acknowledge only explicit detached null as launched rather than completed.",
+        "Named tests preserve ordinary native-error handling and timeout forwarding without replaying the command."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/vercel.json",
+        "sha256": "143a136bab8ce37cd9aafbd688d82688f4ec1d49365aaef2116f8895b7dfc2d3"
+      }
     }
   ],
   "exclusions": [

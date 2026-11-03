@@ -34,10 +34,10 @@ machine-readable roster. Current checked counts:
 | Omitted discovered adapter entries | 0 |
 | Cloud Run entries explicitly excluded from compatibility review | 2 |
 | Entries included in compatibility review | 68 |
-| Included entries without a scoped adapter-mocked/native run (**uncovered**) | **60** |
+| Included entries without a scoped adapter-mocked/native run (**uncovered**) | **56** |
 | Included entries without native verification | 68 |
-| Roster entries currently `unknown` | 62 |
-| `declared` / `adapter-mocked` / `native-verified` entries | 0 / 8 / 0 |
+| Roster entries currently `unknown` | 58 |
+| `declared` / `adapter-mocked` / `native-verified` entries | 0 / 12 / 0 |
 
 These are public entry counts, not independent backend counts: deprecated
 `@computesdk/agentcore` forwards to `@computesdk/aws/agentcore`.
@@ -45,7 +45,7 @@ Both `@computesdk/gcp/cloud-run` and deprecated `@computesdk/cloud-run` are
 accounted for, but **explicitly excluded from this compatibility review**.
 Their presence makes no claim of Cloud Run support.
 
-Eight entries have explicitly recorded **limited, mocked reliability regressions**;
+Twelve entries have explicitly recorded **limited, mocked reliability regressions**;
 all other entries remain `unknown`. No native provider has been certified.
 Inventory checks do not execute these adapter regressions. An adapter test
 file's presence, a generic factory mock, a build, or a source fix alone does
@@ -72,21 +72,25 @@ bash/sh command-string fixtures. Neither calls a live provider.
 | Scope | Passing checks |
 | --- | ---: |
 | Shared byte-count/child-status helper | 49 |
-| Shared snapshot-list metadata core units | 11 |
+| Shared snapshot metadata/affinity core units | 42 |
 | E2B snapshot/template regressions, including real-core coupling | 67 |
-| Modal native-mocked unit/regression files | 65 |
+| Modal native-mocked unit/regression files | 76 |
 | Isorun command-capture regressions | 80 |
 | CreateOS command-capture regressions | 85 |
 | Sandbox0 native-mocked unit/regression file | 66 |
 | Microsandbox native-mocked unit/regression file | 87 |
 | Sprites shell/protocol regressions | 17 |
 | Daytona shell/protocol regressions | 80 |
-| **Total selected checks** | **607** |
+| Vercel command completion regressions | 26 |
+| HopX command completion regressions | 45 |
+| Beam command completion regressions | 22 |
+| Blaxel command completion/stream regressions | 84 |
+| **Total selected checks** | **826** |
 
-These totals include existing unit checks; they are not 607 new tests or
-607 native executions. Recorded adapter evidence is under
+These totals include existing unit checks; they are not 826 new tests or
+826 native executions. Recorded adapter evidence is under
 `conformance/runs/local-mocked/`, against production/test revision
-`035a64c1`. The helper and metadata units do not count as adapters.
+`1a472184`. The helper and core units do not count as adapters.
 
 The second reliability batch closes these specific gaps:
 
@@ -112,21 +116,54 @@ observed consumer 2.57 version or every version allowed by its dependency range.
 Controlled legacy-template shims test forwarding/error behavior only; those
 methods are absent from the inspected E2B SDK.
 
+The next batch adds bounded, existing-contract safeguards:
+
+* Known snapshot restore/delete and known-instance snapshot creation stay with
+  the recorded provider and preserve original owner errors. Snapshot-ID
+  collisions reject automatic routing rather than overwriting ownership.
+  Ownership is **in-memory only** and resets on reconfiguration. Unknown IDs
+  keep legacy discovery/fallback; provider-name deduplication, general instance
+  routing and instance-ID collision policy are unchanged. This is not global
+  resource isolation or a persistent provider-qualified reference. In-flight
+  operations racing reconfiguration are not addressed by these checks.
+* Vercel validates foreground status but preserves explicit detached-null launch
+  acknowledgements. HopX validates output/status and does not turn a caught
+  exception with synthetic zero metadata into success. Legacy nonzero
+  `error.result` cases are compatibility tests, not an inspected native contract.
+* Beam requires the numeric native `wait()` result rather than startup state;
+  Blaxel requires terminal state plus an explicit valid final numeric exit code.
+  Missing or contradictory metadata rejects instead of guessing success/failure.
+  Valid native negative/signal codes remain where the native contract permits
+  them; Beam's negative running sentinel is not a completed result.
+* Modal provider-backed command preflight reports unsupported timeout precision
+  before native exec rather than synthesizing guest exit127. Positive whole
+  multiples of 1000 milliseconds and omission pass unchanged; no rounding,
+  shared zero policy or new remote cancellation support is introduced.
+
+Vercel 3.8.0 and Beam 1.0.22 already normalize some missing wire values to zero
+inside their native libraries. Adapter-boundary mocks cannot recover that
+information and do not establish raw-wire integrity. HopX evidence targets
+0.5.1 and Blaxel targets 0.3.21; dependency-range compatibility remains unverified.
+
 The full workspace build, root-configured typecheck and affected-adapter
 typechecks pass. Two **pre-existing, unchanged** CreateOS `index.test.ts`
 ingress-default assertions still fail (tests expect `true`, implementation
 defaults to `false`); they are not included in this narrow regression command.
-The core unit suite also passes (30 passed, 5 integration tests skipped), as do
-124 explicitly selected shared-provider unit checks. These overlap the table
-and must not be added to its total. The entire root test command was not run as
-part of this local-only check.
+The core unit suite also passes (61 passed, 5 integration tests skipped), as do
+124 explicitly selected shared-provider unit checks from the prior batch.
+Nine Beam readiness units pass with the integration suite explicitly filtered
+out and credentials blank; their numeric-wait fixture now matches the inspected
+native contract. These auxiliary runs do not increase the selected 826 total:
+some repeat table checks, while Beam readiness is a separate filtered suite.
+Do not sum their counts. The entire root test command was not run as part of
+this local-only check.
 
 Important remaining gaps include live native behavior, upstream SDK wire
 normalization, same-length corruption, early failure cleanup, remote
 timeout/cancellation, and Sandbox0 context-versus-stream precedence. Microsandbox
 timeout-124 output deliberately remains best-effort, not verified completed
 output. A fallback native Daytona failure does not establish complete child
-streams. The eight roster entries preserve provider-specific limitations.
+streams. The twelve roster entries preserve provider-specific limitations.
 
 ## Discovery and provenance
 
@@ -204,7 +241,7 @@ they do not certify the current/future tree, every capability, or native
 behavior. The recorded input hashes aid manual provenance review; the guard
 does not compare those hashes to every current source/dependency input.
 Reviewers must inspect test contents, execution results and the named revision.
-The eight scoped statuses here record only the separately executed local mocked
+The twelve scoped statuses here record only the separately executed local mocked
 regressions above. No native calls or native-verification promotions were made.
 
 ## Guard behavior and limits

@@ -1,0 +1,112 @@
+{
+  "provider": "@computesdk/blaxel",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/blaxel/src/__tests__/command-contract.test.ts",
+      "contains": "describe('Blaxel native command completion contract"
+    },
+    {
+      "file": "packages/blaxel/src/__tests__/run-command.test.ts",
+      "contains": "describe('blaxel runCommand output capture"
+    }
+  ],
+  "claims": [
+    "Named native-only-mocked tests require terminal state plus an explicit valid final numeric exit code, rejecting missing/invalid fields, still-running results and contradictory failed-plus-zero instead of inferring zero or one.",
+    "Named tests prevent startup-code inheritance, preserve valid native nonzero/negative statuses and exercise late log delivery, bounded drain and timer cleanup.",
+    "Existing native-mocked nonterminal and contradictory-failure tests now require safe protocol rejection rather than synthetic guest status."
+  ],
+  "limitations": [
+    "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+    "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
+    "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
+    "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
+    "Terminal status labels alone do not prove numeric success or failure; no output checksum or raw transport integrity is established.",
+    "The bounded log-drain timer is not an overall timeout guarantee: final stream wait, kill and logs operations still depend on native settlement."
+  ],
+  "command": "pnpm --filter @computesdk/blaxel --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/run-command.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
+  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
+  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0",
+    "VERCEL_TOKEN": "",
+    "VERCEL_OIDC_TOKEN": "",
+    "HOPX_API_KEY": "",
+    "BEAM_TOKEN": "",
+    "BEAM_WORKSPACE_ID": "",
+    "BL_API_KEY": "",
+    "BL_WORKSPACE": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 84,
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "inputHashes": [
+    {
+      "file": "packages/blaxel/package.json",
+      "sha256": "eb555de4801fb5b6dd1319f23a2cc571d7d0157d350226840e5fd93077a364a4"
+    },
+    {
+      "file": "packages/blaxel/src/__tests__/command-contract.test.ts",
+      "sha256": "79633b41b0a68f0a24c8e12373ec310a9cba94e85205286e7c9290002053162c"
+    },
+    {
+      "file": "packages/blaxel/src/__tests__/run-command.test.ts",
+      "sha256": "bf7af893a6249911b57c2dbddaa235e03b4f842fd144d49a5a0843e4f1b6b83a"
+    },
+    {
+      "file": "packages/blaxel/src/index.ts",
+      "sha256": "2dac0152d9cc7f3be6c95ae3f8193f548c5936356f7396946c629a16b51b7eae"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "@blaxel/core",
+    "version": "0.3.21",
+    "manifestSha256": "a68a2724d5c4f01d632a899c39d39b274569ac4f3690c343e2d2ac8513669ff4"
+  }
+}

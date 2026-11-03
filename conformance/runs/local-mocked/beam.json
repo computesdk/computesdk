@@ -1,0 +1,103 @@
+{
+  "provider": "@computesdk/beam",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/beam/src/__tests__/command-contract.test.ts",
+      "contains": "describe('Beam native command completion contract"
+    }
+  ],
+  "claims": [
+    "Named native-only-mocked tests require the numeric wait() result, reject missing/invalid/negative running-sentinel returns even when a stale handle contains zero, and preserve valid nonnegative native statuses without an unsigned-byte cap.",
+    "Named tests preserve existing timeout124 and native-error127 behavior without command replay."
+  ],
+  "limitations": [
+    "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+    "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
+    "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
+    "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
+    "The native process constructor may normalize missing completed wire status to zero before the adapter sees it; these checks are not raw-wire validation.",
+    "Launch, output reads and best-effort remote kill are not proven to fit a hard elapsed-time bound; remote termination and reaping remain unverified."
+  ],
+  "command": "pnpm --filter @computesdk/beam --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
+  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
+  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0",
+    "VERCEL_TOKEN": "",
+    "VERCEL_OIDC_TOKEN": "",
+    "HOPX_API_KEY": "",
+    "BEAM_TOKEN": "",
+    "BEAM_WORKSPACE_ID": "",
+    "BL_API_KEY": "",
+    "BL_WORKSPACE": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 22,
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "inputHashes": [
+    {
+      "file": "packages/beam/package.json",
+      "sha256": "37a3b964bbffab732030550d6cdd85cead0147834c4e12918cd2d41c3a931273"
+    },
+    {
+      "file": "packages/beam/src/__tests__/command-contract.test.ts",
+      "sha256": "bac6ebfd04a530e1933afaf3e9022712997305c23cca8c1c1e54d7110adf4bfb"
+    },
+    {
+      "file": "packages/beam/src/index.ts",
+      "sha256": "c6b036c77e8b67e22e9c98febf18e4a2b0e09a0ba4e2b48a6632b1a0ad1327df"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "@beamcloud/beam-js",
+    "version": "1.0.22",
+    "manifestSha256": "e628a24706755a33636583c1c04d7eda01c2096062ab3663f12d408e0902a29e"
+  }
+}

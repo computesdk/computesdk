@@ -22,9 +22,9 @@
     "Legacy template shim cases are synthetic compatibility tests; those hooks are absent from the inspected native SDK and no builder or snapshot/template alias is added.",
     "Native service errors propagate with their original details; only locally generated malformed-response/unsupported diagnostics are fixed messages."
   ],
-  "revision": "035a64c1b907ab29b1c7a8265dde82294bc0be9e",
-  "recordedAt": "2026-11-03T03:47:56.287834+00:00",
-  "executionFinishedAt": "2026-11-03T03:47:56.207259+00:00",
+  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
+  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
+  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
   "executionGroup": "pnpm test:provider-contracts",
   "environment": {
     "COMPUTESDK_API_KEY": "",
@@ -40,7 +40,14 @@
     "SPRITES_TOKEN": "",
     "SKIP_INTEGRATION": "true",
     "E2B_API_KEY": "",
-    "COMPUTESDK_INTEGRATION": "0"
+    "COMPUTESDK_INTEGRATION": "0",
+    "VERCEL_TOKEN": "",
+    "VERCEL_OIDC_TOKEN": "",
+    "HOPX_API_KEY": "",
+    "BEAM_TOKEN": "",
+    "BEAM_WORKSPACE_ID": "",
+    "BL_API_KEY": "",
+    "BL_WORKSPACE": ""
   },
   "runtime": {
     "node": "v24.22.1",
@@ -52,7 +59,7 @@
   "inputHashes": [
     {
       "file": "packages/computesdk/src/compute.ts",
-      "sha256": "e39da1d3bfb33eb3165779c14e1536d7cb2f63d587b4f797b365ce2990b3f9c3"
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
     },
     {
       "file": "packages/e2b/package.json",
@@ -86,7 +93,7 @@
     },
     {
       "file": "packages/computesdk/dist/index.mjs",
-      "sha256": "471805e9cd6048b38d9330b6876394b0e908ee444da7f155fe01393979331325"
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
     }
   ],
   "installedNativeDependency": {
