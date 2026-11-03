@@ -43,7 +43,7 @@ interface ProviderInstanceManager {
 
 interface ProviderSnapshotManager {
   create(instanceId: string, options?: { name?: string; metadata?: Record<string, any> }): Promise<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>;
-  list(): Promise<Array<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>>;
+  list(): Promise<Array<{ id: string; provider: string; createdAt?: Date | string | null; metadata?: Record<string, any> }>>;
   delete(snapshotId: string): Promise<void>;
 }
 
@@ -431,17 +431,27 @@ class ComputeManager {
       );
     },
 
-    list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
-      const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
+    /** Creation time is omitted when the provider does not report it. */
+    list: async (): Promise<Array<{ id: string; provider: string; createdAt?: Date; metadata?: Record<string, any> }>> => {
+      const snapshots: Array<{ id: string; provider: string; createdAt?: Date; metadata?: Record<string, any> }> = [];
 
       for (const provider of this.getProviders()) {
         if (!provider.snapshot) continue;
         const listed = await provider.snapshot.list();
         for (const snapshot of listed) {
+          const { createdAt, ...details } = snapshot;
+          let normalizedCreatedAt: Date | undefined;
+          if (createdAt != null) {
+            normalizedCreatedAt = new Date(createdAt);
+            if (Number.isNaN(normalizedCreatedAt.getTime())) {
+              // Do not expose raw provider metadata or learn ownership for an invalid record.
+              throw new Error('Snapshot list returned an invalid createdAt timestamp.');
+            }
+          }
           this.snapshotProviders.set(snapshot.id, provider);
           snapshots.push({
-            ...snapshot,
-            createdAt: new Date(snapshot.createdAt),
+            ...details,
+            ...(normalizedCreatedAt === undefined ? {} : { createdAt: normalizedCreatedAt }),
           });
         }
       }
