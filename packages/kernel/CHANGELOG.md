@@ -1,5 +1,13 @@
 # @computesdk/kernel
 
+## 0.2.27
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.2.26
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @computesdk/gcp
 
+## 0.1.9
+
+### Patch Changes
+
+- fc62a65: fix(gcp/cloud-run): chunk writeFile payloads into a staging file so a single `/bin/sh -c` argument stays under the kernel's MAX_ARG_STRLEN (spawn E2BIG on files >~96KB)
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.1.8
 
 ### Patch Changes

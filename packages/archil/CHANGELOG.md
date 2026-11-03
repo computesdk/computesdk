@@ -1,5 +1,14 @@
 # @computesdk/archil
 
+## 0.4.28
+
+### Patch Changes
+
+- 24803d6: Add additive standard CPU/RAM sizeClass requests, immutable pure provider capability resolution and request metadata, with typed pre-create failures instead of silently ignored or default-sized requests. Initially map sm/md/lg/xl for Namespace Linux amd64 and new Archil persistent VMs; preserve every legacy create path without sizeClass. Other mappings remain explicitly unknown; no builds, live availability checks, or consumer migrations are performed.
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.4.27
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @computesdk/platform
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - @computesdk/provider@2.1.21
+
 ## 0.2.0
 
 ### Minor Changes
