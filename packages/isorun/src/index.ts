@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { Isorun, Sandbox } from 'isorun'
-import { defineProvider, escapeShellArg } from '@computesdk/provider'
+import { defineProvider, escapeShellArg, readVerifiedCommandOutput, parseCommandExitCode } from '@computesdk/provider'
 
 import type {
   CommandResult,
@@ -145,27 +145,26 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
           ` printf '%s' "$C" > ${base}.code`
 
         const timeoutSec = Math.max(1, Math.ceil((options?.timeout ?? DEFAULT_TIMEOUT_MS) / 1000))
-        const result = await sandbox.exec(wrapped, timeoutSec)
+        await sandbox.exec(wrapped, timeoutSec)
 
         try {
-          const readVerified = async (path: string, lenPath: string): Promise<string> => {
-            const lenR = await sandbox.exec(`cat ${lenPath} 2>/dev/null`, 60).catch(() => null)
-            const expected = lenR ? Number.parseInt(lenR.stdout.trim(), 10) : Number.NaN
-            const first = (await sandbox.exec(`cat ${path}`, 60)).stdout
-            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first
-            const second = (await sandbox.exec(`cat ${path}`, 60)).stdout
-            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first
-          }
-
-          const stdout = await readVerified(`${base}.out`, `${base}.outlen`)
-          const stderr = await readVerified(`${base}.err`, `${base}.errlen`)
+          const stdout = await readVerifiedCommandOutput({
+            stream: 'stdout',
+            readLength: async () => (await sandbox.exec(`cat ${base}.outlen 2>/dev/null`, 60)).stdout,
+            read: async () => (await sandbox.exec(`cat ${base}.out`, 60)).stdout,
+          })
+          const stderr = await readVerifiedCommandOutput({
+            stream: 'stderr',
+            readLength: async () => (await sandbox.exec(`cat ${base}.errlen 2>/dev/null`, 60)).stdout,
+            read: async () => (await sandbox.exec(`cat ${base}.err`, 60)).stdout,
+          })
           const codeText = await sandbox.exec(`cat ${base}.code 2>/dev/null`, 60).then((r) => r.stdout).catch(() => '')
 
-          const fileExit = Number.parseInt(codeText.trim(), 10)
           return {
             stdout,
             stderr,
-            exitCode: Number.isInteger(fileExit) ? fileExit : result.exitCode,
+            // The wrapper can succeed even when the child's status was lost.
+            exitCode: parseCommandExitCode(codeText),
             durationMs: Date.now() - startTime,
           }
         } finally {

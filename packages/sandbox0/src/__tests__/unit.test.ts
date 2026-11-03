@@ -62,6 +62,8 @@ function makeSandbox() {
   const guestFiles = new Map<string, string>();
   const ctxScripts = new Map<string, string>();
   const canned = { out: 'ok\n', err: '', code: '0' };
+  const readOverrides = new Map<string, string[]>();
+  const reads: string[] = [];
   let ctxSeq = 122;
   return {
     id: 'sb_123',
@@ -70,6 +72,8 @@ function makeSandbox() {
     clusterId: 'cluster_1',
     canned,
     guestFiles,
+    readOverrides,
+    reads,
     cmd: vi.fn().mockImplementation(async (script: string) => {
       const contextId = `ctx_${++ctxSeq}`;
       ctxScripts.set(contextId, script);
@@ -91,10 +95,16 @@ function makeSandbox() {
     getContext: vi.fn().mockImplementation(async (contextId: string) => {
       const script = ctxScripts.get(contextId) ?? '';
       const cat = script.match(/^cat (\S+)/);
+      const suffix = cat?.[1].split('.').pop() ?? '';
+      if (cat) reads.push(suffix);
+      const override = readOverrides.get(suffix);
+      const stdout = override
+        ? (override.length > 1 ? override.shift()! : override[0])
+        : (cat ? guestFiles.get(cat[1]) ?? '' : '');
       return {
         id: contextId,
         running: false,
-        stdout: cat ? (guestFiles.get(cat[1]) ?? '') : '',
+        stdout,
         stderr: '',
         exitCode: 0,
         state: 'exited',
@@ -227,6 +237,106 @@ describe('sandbox0 provider', () => {
     });
     expect(sandbox.sandboxId).toBe('sb_123');
     expect(sandbox.getInstance()).toBe(nativeSandbox);
+  });
+
+  describe('completed command output integrity', () => {
+    describe.each(['out', 'err'] as const)('%s stream', (stream) => {
+      it('rejects two truncated captures rather than returning the longer one', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['100']);
+        nativeSandbox.readOverrides.set(stream, ['x'.repeat(40), 'x'.repeat(60)]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+          reason: 'byte-length-mismatch',
+          stream: stream === 'out' ? 'stdout' : 'stderr',
+          expectedBytes: 100,
+          actualBytes: 60,
+          attempts: 2,
+        });
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      });
+
+      it('accepts an exact second capture only, including UTF-8 bytes', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, [' 7\n']);
+        nativeSandbox.readOverrides.set(stream, ['é', 'é🙂\n']);
+        const result = await sandbox.runCommand('echo hello');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('é🙂\n');
+        expect(nativeSandbox.reads.filter((suffix) => suffix === stream)).toHaveLength(2);
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      });
+
+      it('does not reread an exact first UTF-8 capture', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['6']);
+        nativeSandbox.readOverrides.set(stream, ['é🙂', 'must not be read']);
+        const result = await sandbox.runCommand('echo hello');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('é🙂');
+        expect(nativeSandbox.reads.filter((suffix) => suffix === stream)).toHaveLength(1);
+      });
+
+      it('rejects an oversized second capture too', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['3']);
+        nativeSandbox.readOverrides.set(stream, ['x', 'xxxx']);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+        });
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      });
+    });
+
+    it.each(['', 'garbage', '100junk', '-1', '1.5', '1e2', 'Infinity', '9007199254740992'])(
+      'rejects missing or invalid byte count %j', async (length) => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set('outlen', [length]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+        });
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      },
+    );
+
+    it('accepts empty output only with verified zero lengths', async () => {
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+      for (const stream of ['out', 'err']) {
+        nativeSandbox.readOverrides.set(stream, ['']);
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+      }
+      await expect(sandbox.runCommand('true')).resolves.toMatchObject({
+        stdout: '', stderr: '', exitCode: 0,
+      });
+      expect(nativeSandbox.guestFiles.size).toBe(0);
+    });
+
+    it('verifies stdout and stderr independently without mixing captures', async () => {
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+      nativeSandbox.readOverrides.set('outlen', ['3']);
+      nativeSandbox.readOverrides.set('out', ['out']);
+      nativeSandbox.readOverrides.set('errlen', ['4']);
+      nativeSandbox.readOverrides.set('err', ['e', 'err!']);
+      await expect(sandbox.runCommand('echo hello')).resolves.toMatchObject({
+        stdout: 'out', stderr: 'err!', exitCode: 0,
+      });
+    });
+
+    it.each(['', 'garbage', '0junk', '-1', '256', '1.5', '1e2', '9007199254740992'])(
+      'rejects missing or invalid child exit code %j despite native exit zero', async (code) => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set('code', [code]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+          reason: 'invalid-exit-code',
+        });
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      },
+    );
+
+    it('preserves a known nonzero child exit code', async () => {
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+      nativeSandbox.readOverrides.set('code', [' 23\n']);
+      await expect(sandbox.runCommand('echo hello; exit 23')).resolves.toMatchObject({ exitCode: 23 });
+    });
   });
 
   it('runs shell commands with cwd, env, and timeout', async () => {

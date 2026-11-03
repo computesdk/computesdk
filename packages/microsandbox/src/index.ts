@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { defineProvider, resolveVolumeRef, createConfigGate, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, createConfigGate, isUnifiedVolumeMounts, withVolumeSettle, readVerifiedCommandOutput, parseCommandExitCode } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -498,21 +498,22 @@ async function readGuestFile(native: NativeSandbox, path: string): Promise<strin
  *  stdout alike) — a truncated read returns successfully and is
  *  indistinguishable from real output. The worker records the byte count
  *  next to each output file, so compare and retry once through the other
- *  transport before trusting the result. */
+ *  transport before trusting the result. Reject if neither read is exact. */
 async function readGuestFileChecked(
   native: NativeSandbox,
   path: string,
   lenPath: string,
+  stream: 'stdout' | 'stderr',
 ): Promise<string> {
-  const lenText = await readGuestFile(native, lenPath).catch(() => '');
-  const expected = Number.parseInt(lenText.trim(), 10);
-  const first = await readGuestFile(native, path);
-  if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
-  const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
-  const second = output.stdout();
-  // A second bad read is still better than dropping the whole result —
-  // return whichever capture got more bytes.
-  return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+  return readVerifiedCommandOutput({
+    readLength: () => readGuestFile(native, lenPath),
+    read: () => readGuestFile(native, path),
+    reread: async () => {
+      const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
+      return output.stdout();
+    },
+    stream,
+  });
 }
 
 async function runCommand(
@@ -600,9 +601,11 @@ async function runCommand(
     const remaining = deadline - performance.now();
     if (remaining <= 0) {
       await execShort(native, detachedKillScript(paths)).catch(() => undefined);
+      // A timed-out worker need not have written completion byte counts.
+      // Preserve best-effort partial output, not verified-completion semantics.
       const [stdout, stderr] = await Promise.all([
-        readGuestFileChecked(native, paths.out, paths.outLen).catch(() => ''),
-        readGuestFileChecked(native, paths.err, paths.errLen).catch(() => ''),
+        readGuestFile(native, paths.out).catch(() => ''),
+        readGuestFile(native, paths.err).catch(() => ''),
       ]);
       await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
       return {
@@ -617,15 +620,14 @@ async function runCommand(
 
   try {
     const [stdout, stderr, codeText] = await Promise.all([
-      readGuestFileChecked(native, paths.out, paths.outLen),
-      readGuestFileChecked(native, paths.err, paths.errLen),
-      readGuestFile(native, paths.code),
+      readGuestFileChecked(native, paths.out, paths.outLen, 'stdout'),
+      readGuestFileChecked(native, paths.err, paths.errLen, 'stderr'),
+      readGuestFile(native, paths.code).catch(() => ''),
     ]);
-    const exitCode = Number.parseInt(codeText.trim(), 10);
     return {
       stdout,
       stderr,
-      exitCode: Number.isNaN(exitCode) ? 1 : exitCode,
+      exitCode: parseCommandExitCode(codeText),
       durationMs: performance.now() - startedAt,
     };
   } finally {
