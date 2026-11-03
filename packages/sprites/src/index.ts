@@ -131,7 +131,7 @@ async function execStream(url: URL, token: string, script: string): Promise<{ st
         Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data);
       if (!isBinary) {
         const text = bytes.toString('utf8');
-        if (text.startsWith('control:') && exit === undefined) return;
+        if (text.startsWith('control:')) return;
         let message: { type?: string; exit_code?: unknown; tty?: unknown };
         try { message = JSON.parse(text); } catch {
           return invalid({ phase: 'text-json', kind: 'invalid-json', afterExit: exit !== undefined });
@@ -149,7 +149,15 @@ async function execStream(url: URL, token: string, script: string): Promise<{ st
           },
         };
         if (message.type === 'exit') return complete(message.exit_code, diagnostic);
-        if (message.type === 'session_info' && message.tty !== true && exit === undefined) return;
+        if (message.type === 'session_info' && message.tty === true) return invalid(diagnostic);
+        if (message.type === 'error') return invalid(diagnostic);
+        // sprites-go@5b9403bdc2468901b7c13c353e8b8592c459de81 websocket.go
+        // non-PTY TextMessage branch (575-627): other notifications go only to
+        // the optional TextMessageHandler, never stdout/stderr or completion.
+        // Native diagnostics confirmed such a string-typed notification before
+        // any exit. Ignore metadata on either side of exit, but still require
+        // the actual transport exit AND the independent shell child footer.
+        if (typeof message.type === 'string') return;
         // Do not expose server errors, metadata, URLs, or command/env contents.
         return invalid(diagnostic);
       }

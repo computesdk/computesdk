@@ -138,10 +138,6 @@ describe('Sprites real-adapter command contract (local native boundary)', () => 
   });
 
   it.each([
-    ['unknown kind', {
-      type: 'private-kind', exitCode: 0, code: 'private-code', error: 'private-error',
-      tty: true, 'private-key': 'private-output',
-    }, 'other'],
     ['known error', { type: 'error', error: 'private-error' }, 'error'],
     ['unexpected TTY', { type: 'session_info', tty: true }, 'session_info'],
     ['camelCase exit', { type: 'exit', exitCode: 0 }, 'exit'],
@@ -155,12 +151,37 @@ describe('Sprites real-adapter command contract (local native boundary)', () => 
       phase: 'text-kind', kind, afterExit: false,
       fields: { type: { present: true, type: 'string' } },
     });
-    if (kind === 'other' || _name === 'camelCase exit') {
+    if (_name === 'camelCase exit') {
       expect(error.diagnostic?.fields?.exitCode).toEqual({ present: true, type: 'number', numericRange: 'zero' });
       expect(error.diagnostic?.fields?.exit_code).toEqual({ present: false, type: 'undefined' });
     }
     expect(`${error.message}\n${JSON.stringify(error)}`).not.toContain('private-');
     expect(error.message).toContain('"phase":"text-kind"');
+  });
+
+  it('ignores unknown string-typed JSON notifications before and after real output/completion', async () => {
+    execFrames = (script, socket) => {
+      // Synthetic fixture matching Native's safe observed shape (type:string,
+      // exit_code/exitCode/code/tty/error absent), NOT captured native JSON.
+      socket.send(JSON.stringify({ type: 'provider-notification' }));
+      frame(socket, 1, runScript(script));
+      frame(socket, 3, Buffer.from([0]));
+      socket.send(JSON.stringify({ type: 'another-notification', 'private-key': 'private-value' }));
+      socket.send(JSON.stringify({ type: 'session_info', tty: false }));
+      socket.send('control: notification');
+    };
+    expect(await (await instance()).runCommand("printf 'echo\\000\\001 café🚀'; printf 'err\\002' >&2; exit 7"))
+      .toMatchObject({ stdout: 'echo\0\x01 café🚀', stderr: 'err\x02', exitCode: 7 });
+  });
+
+  it('does not treat unknown metadata alone as command output or completion', async () => {
+    execFrames = (_script, socket) => {
+      socket.send(JSON.stringify({ type: 'provider-notification' }));
+      socket.close();
+    };
+    await expect((await instance()).runCommand('true')).rejects.toMatchObject({
+      code: 'SPRITES_COMMAND_PROTOCOL_ERROR', reason: 'missing-completion',
+    });
   });
 
   it.each([
@@ -213,7 +234,9 @@ describe('Sprites real-adapter command contract (local native boundary)', () => 
     ['empty binary message', [Buffer.alloc(0)]],
     ['unknown binary channel', [Buffer.from([99, 0])]],
     ['malformed text', ['not-json-secret']],
-    ['unknown text type', ['{"type":"unknown","secret":"do-not-leak"}']],
+    ['absent text type', ['{"secret":"do-not-leak"}']],
+    ['non-string text type', ['{"type":42,"secret":"do-not-leak"}']],
+    ['array text', ['["do-not-leak"]']],
     ['server error', ['{"type":"error","error":"do-not-leak"}']],
     ['unexpected TTY', ['{"type":"session_info","tty":true}']],
   ])('rejects %s without exposing server data', async (_name, messages) => {
