@@ -7,21 +7,39 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 //      undefined (which makes the e2b SDK silently target api.e2b.app).
 //   2. A native lel_<hex> key → must be re-prefixed to its e2b_<hex> alias,
 //      because e2b SDK ≥2.27 rejects non-e2b_ keys client-side.
-const { mockCreate, mockConnect } = vi.hoisted(() => ({
+const { mockCreate, mockGetInfo, mockConnect } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
+  mockGetInfo: vi.fn(),
   mockConnect: vi.fn(),
 }));
 
-vi.mock('e2b', () => {
-  class CommandExitError extends Error {}
+vi.mock('e2b', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('e2b')>();
   class Sandbox {
     sandboxId = 'sbx_test';
     commands = { run: vi.fn() };
     static async create(...args: unknown[]) { mockCreate(...args); return new Sandbox(); }
+    // Match the installed public getInfo contract. These fixtures check option
+    // forwarding only; they are not evidence of native API behavior.
+    static async getInfo(sandboxId: string, ...args: unknown[]) {
+      mockGetInfo(sandboxId, ...args);
+      return {
+        sandboxId,
+        templateId: 'local-template',
+        metadata: {},
+        startedAt: new Date('2026-01-01T00:00:00Z'),
+        endAt: new Date('2026-01-01T00:05:00Z'),
+        state: 'running',
+        cpuCount: 1,
+        memoryMB: 512,
+        envdVersion: '0.2.0',
+      } satisfies import('e2b').SandboxInfo;
+    }
     static async connect(...args: unknown[]) { mockConnect(...args); return new Sandbox(); }
     static list() { return { nextItems: async () => [] }; }
   }
-  return { Sandbox, CommandExitError };
+  // Keep genuine native error classes, including SandboxNotFoundError.
+  return { ...actual, Sandbox };
 });
 
 import { lelantos } from '../index';
@@ -32,6 +50,7 @@ const savedEnv: Record<string, string | undefined> = {};
 describe('connection options', () => {
   beforeEach(() => {
     mockCreate.mockReset();
+    mockGetInfo.mockReset();
     mockConnect.mockReset();
     for (const key of ENV_KEYS) {
       savedEnv[key] = process.env[key];
@@ -66,10 +85,17 @@ describe('connection options', () => {
     expect(mockCreate.mock.calls[0][0]).toMatchObject({ domain: 'self-hosted.example.dev' });
   });
 
-  it('threads the default domain into connect-based calls (getById/destroy)', async () => {
+  it('threads the default domain into getById precheck and connect', async () => {
     const provider = lelantos({ apiKey: 'e2b_abc123' });
-    await provider.sandbox.getById('sbx_test');
+    const sandbox = await provider.sandbox.getById('sbx_test');
+    expect(sandbox?.instanceId).toBe('sbx_test');
+    expect(mockGetInfo).toHaveBeenCalledTimes(1);
+    expect(mockGetInfo).toHaveBeenCalledWith('sbx_test', {
+      apiKey: 'e2b_abc123',
+      domain: 'lelantos.ai',
+    });
     expect(mockConnect).toHaveBeenCalledTimes(1);
+    expect(mockConnect.mock.calls[0][0]).toBe('sbx_test');
     expect(mockConnect.mock.calls[0][1]).toMatchObject({ domain: 'lelantos.ai' });
   });
 

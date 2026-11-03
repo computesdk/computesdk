@@ -5,7 +5,7 @@
  * Supports code execution, shell commands, filesystem, snapshots, and preview URLs.
  */
 
-import { Box, EphemeralBox } from '@upstash/box';
+import { Box, BoxError, EphemeralBox } from '@upstash/box';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -33,6 +33,27 @@ export interface UpstashConfig {
   runtime?: string;
   /** Execution timeout in milliseconds (default: 600000) */
   timeout?: number;
+}
+
+function validateBoxId(id: unknown): asserts id is string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error('Upstash box ID must be a non-empty string.');
+  }
+  // Box.get accepts names as well as IDs, but interpolates the reference raw.
+  // Preserve arbitrary safe-segment names; reject only ambiguous routing syntax.
+  // The URL ends in this reference, so raw trailing spaces would be stripped.
+  if (id.endsWith(' ')) {
+    throw new Error('Upstash box ID must be a route-safe reference.');
+  }
+  let decoded = id;
+  for (;;) {
+    if (/[/\\?#\u0000-\u001f\u007f]/.test(decoded) || decoded === '.' || decoded === '..') {
+      throw new Error('Upstash box ID must be a route-safe reference.');
+    }
+    const next = decoded.replace(/%([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+    if (next === decoded) break;
+    decoded = next;
+  }
 }
 
 /**
@@ -134,6 +155,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
             box = ephemeralBox;
           }
 
+          validateBoxId(box?.id);
           return { instance: box, instanceId: box.id,
           };
         } catch (error) {
@@ -156,16 +178,18 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       },
 
       getById: async (config: UpstashConfig, sandboxId: string) => {
+        validateBoxId(sandboxId);
         const apiKey = config.apiKey || process.env.UPSTASH_BOX_API_KEY!;
-
+        let box: Box;
         try {
-          const box = await Box.get(sandboxId, { apiKey });
-
-          return { instance: box, instanceId: box.id,
-          };
+          // Native get sends only the box GET, then constructs a local full Box.
+          box = await Box.get(sandboxId, { apiKey });
         } catch (error) {
-          return null;
+          if (error instanceof BoxError && error.statusCode === 404) return null;
+          throw error;
         }
+        validateBoxId(box?.id);
+        return { instance: box, instanceId: box.id };
       },
 
       list: async (config: UpstashConfig) => {
@@ -181,14 +205,19 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       },
 
       destroy: async (config: UpstashConfig, sandboxId: string) => {
+        validateBoxId(sandboxId);
         const apiKey = config.apiKey || process.env.UPSTASH_BOX_API_KEY!;
-
+        let box: Box;
         try {
-          const box = await Box.get(sandboxId, { apiKey });
-          await box.delete();
+          box = await Box.get(sandboxId, { apiKey });
         } catch (error) {
-          // Box might already be destroyed or doesn't exist
+          if (error instanceof BoxError && error.statusCode === 404) return;
+          throw error;
         }
+        validateBoxId(box?.id);
+        // A positive lookup ends the absence-classification scope. Preserve all
+        // delete failures, including a racing 404; native void ACK is sufficient.
+        await box.delete();
       },
 
       // Instance operations
