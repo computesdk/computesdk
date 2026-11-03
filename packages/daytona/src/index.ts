@@ -33,6 +33,13 @@ export class DaytonaCommandProtocolError extends Error {
   }
 }
 
+function requireDaytonaSandboxIdentity(sandbox: DaytonaSandbox): string {
+  if (!sandbox || typeof sandbox.id !== 'string' || sandbox.id.length === 0) {
+    throw new Error('Daytona lookup returned a sandbox without a valid native identity.');
+  }
+  return sandbox.id;
+}
+
 /**
  * Resolve a volume by id OR name — `d.volume.get()` looks up by name only,
  * so an id falls back to a list scan. Returns null when nothing matches
@@ -174,16 +181,12 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
 
       getById: async (config: DaytonaConfig, sandboxId: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        try {
-          const daytona = new Daytona({ apiKey: apiKey });
-          const session = await daytona.get(sandboxId);
-          return { instance: session, instanceId: sandboxId };
-        } catch (error) {
-          if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
-            return null;
-          }
-          throw new Error(`Failed to get Daytona sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        const daytona = new Daytona({ apiKey: apiKey });
+        // SDK 0.224.0 get first queries the sandbox, then may query its toolbox
+        // proxy URL. Either can throw the same public 404 class/statusCode.
+        // Without public endpoint provenance, no get rejection proves absence.
+        const session = await daytona.get(sandboxId);
+        return { instance: session, instanceId: requireDaytonaSandboxIdentity(session) };
       },
 
       list: async (config: DaytonaConfig) => {
@@ -204,16 +207,14 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
 
       destroy: async (config: DaytonaConfig, sandboxId: string) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        try {
-          const daytona = new Daytona({ apiKey: apiKey });
-          const sandbox = await daytona.get(sandboxId);
-          await sandbox.delete();
-        } catch (error) {
-          if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
-            return;
-          }
-          throw new Error(`Failed to destroy Daytona sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        const daytona = new Daytona({ apiKey: apiKey });
+        // A 404 from public get may concern only the auxiliary toolbox URL,
+        // even after the sandbox exists. Propagate rather than claim cleanup.
+        const sandbox = await daytona.get(sandboxId);
+        requireDaytonaSandboxIdentity(sandbox);
+        // Native delete resolves void once accepted. Do not invent an
+        // acknowledgement shape or suppress failures after a positive lookup.
+        await sandbox.delete();
       },
 
       runCommand: async (sandbox: DaytonaSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {

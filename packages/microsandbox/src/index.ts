@@ -228,7 +228,16 @@ function errorMessage(error: unknown): string {
 }
 
 function isNotFound(error: unknown): boolean {
+  // Public MicrosandboxError.code / SandboxNotFoundError discriminator in
+  // microsandbox 0.6.18. Message text and generic HTTP errors are not absence.
   return !!error && typeof error === 'object' && (error as { code?: string }).code === 'sandboxNotFound';
+}
+
+function requireSandboxName(handle: NativeSandboxHandle): string {
+  if (!handle || typeof handle.name !== 'string' || handle.name.length === 0) {
+    throw new Error('Microsandbox lookup returned a handle without a valid native name.');
+  }
+  return handle.name;
 }
 
 function requireLocal(backendKind: 'local' | 'cloud', capability: string): void {
@@ -869,16 +878,20 @@ const _microsandbox = defineProvider<
       }),
 
       getById: async (config, sandboxId) => withBackend(selectBackend(config), async ({ Sandbox }) => {
+        let handle: NativeSandboxHandle;
         try {
-          const handle = await Sandbox.get(sandboxId);
-          return {
-            sandbox: handleFromNative(handle, selectBackend(config), config.timeout ?? DEFAULT_TIMEOUT_MS),
-            sandboxId,
-          };
+          // The public get performs an existing-sandbox database lookup, not
+          // merely construction of a lightweight local handle.
+          handle = await Sandbox.get(sandboxId);
         } catch (error) {
           if (isNotFound(error)) return null;
           throw error;
         }
+        const instanceId = requireSandboxName(handle);
+        return {
+          instance: handleFromNative(handle, selectBackend(config), config.timeout ?? DEFAULT_TIMEOUT_MS),
+          instanceId,
+        };
       }),
 
       list: async (config) => withBackend(selectBackend(config), async ({ Sandbox }) => {
@@ -900,11 +913,17 @@ const _microsandbox = defineProvider<
       }),
 
       destroy: async (config, sandboxId) => withBackend(selectBackend(config), async ({ Sandbox }) => {
+        let handle: NativeSandboxHandle;
         try {
-          await removeSandbox(await Sandbox.get(sandboxId));
+          handle = await Sandbox.get(sandboxId);
         } catch (error) {
-          if (!isNotFound(error)) throw error;
+          if (isNotFound(error)) return;
+          throw error;
         }
+        requireSandboxName(handle);
+        // stopWithTimeout/remove return void. Keep retries, but never hide
+        // their failures after a positive lookup (including deletion races).
+        await removeSandbox(handle);
       }),
 
       runCommand,
