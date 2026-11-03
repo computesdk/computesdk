@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadProfiles, selectProfiles, blockedReason, credentialPattern, providerModule,
-  sourceFingerprint, acceptedLiveResult, expectedCases, vaultEnvdef, createResourceJournal, reportPath } from '../compute-conformance.mjs';
+  sourceFingerprint, acceptedLiveResult, expectedCases, vaultEnvdef, createResourceJournal, reportPath, reviewedCleanup } from '../compute-conformance.mjs';
 import { summarizeNative } from '../compute-conformance-reporter.mjs';
 
 const profiles = loadProfiles();
@@ -34,8 +34,8 @@ test('blocked profiles and missing configuration cannot become native pass', () 
   const beam = profiles.find(p => p.id === '@computesdk/beam');
   assert.equal(blockedReason(beam, { BEAM_TOKEN: 'unit-value', BEAM_WORKSPACE_ID: 'unit-value' }), 'needs-reviewed-cleanup-contract');
   assert.deepEqual(profiles.filter(p => p.cleanup.status === 'source-reviewed-sdk-absence').map(p => p.id).sort(), [
-    '@computesdk/blaxel', '@computesdk/e2b', '@computesdk/isorun',
-    '@computesdk/neevcloud', '@computesdk/sandbox0', '@computesdk/sprites', '@computesdk/vercel',
+    '@computesdk/e2b', '@computesdk/isorun', '@computesdk/leap0',
+    '@computesdk/neevcloud', '@computesdk/sandbox0', '@computesdk/sprites', '@computesdk/upstash', '@computesdk/vercel',
   ]);
   const createos = profiles.find(p => p.id === '@computesdk/createos-sandbox');
   assert.equal(createos.cleanup.status, 'source-reviewed-native-terminal');
@@ -43,6 +43,14 @@ test('blocked profiles and missing configuration cannot become native pass', () 
   assert.equal(blockedReason(createos, { CREATEOS_SANDBOX_API_KEY: 'unit-value' }), null);
   assert.equal(blockedReason({ ...e2b, cleanup: createos.cleanup }, { E2B_API_KEY: 'unit-value' }),
     'needs-reviewed-cleanup-contract');
+  const blaxel = profiles.find(p => p.id === '@computesdk/blaxel');
+  assert.equal(reviewedCleanup(blaxel), true);
+  assert.equal(blaxel.cleanup.oracle, 'blaxel-terminated-metadata');
+  assert.deepEqual(profiles.filter(p => p.cleanup.status === 'source-reviewed-native-terminal').map(p => p.id).sort(),
+    ['@computesdk/blaxel', '@computesdk/createos-sandbox']);
+  for (const [profile, cleanup] of [[blaxel, createos.cleanup], [createos, blaxel.cleanup]]) {
+    assert.equal(reviewedCleanup({ ...profile, cleanup }), false);
+  }
 });
 test('vault selection contains only missing names for the selected provider, never values', () => {
   assert.equal(credentialPattern(e2b, {}), '^(E2B_API_KEY)=$');
@@ -50,12 +58,94 @@ test('vault selection contains only missing names for the selected provider, nev
   assert.equal(credentialPattern(e2b, env), '');
   assert.equal(env.E2B_API_KEY, 'unit-only-not-a-secret');
 });
-test('actual prepare CLI permits both reviewed cleanup modes without credentials, but never blocked modes', () => {
-  for (const [id, code, reason] of [
+test('unreviewed cleanup attempt requires exact true and cannot bypass credentials, readiness or oracle review', () => {
+  const beam = profiles.find(p => p.id === '@computesdk/beam');
+  const credentials = Object.fromEntries(beam.requiredEnvironment.map(name => [name, 'unit-value']));
+  for (const flag of [undefined, '', 'false', 'TRUE', '1', ' true ', true]) {
+    assert.equal(blockedReason(beam, { ...credentials, COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP: flag }),
+      'needs-reviewed-cleanup-contract');
+  }
+  const env = { ...credentials, COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP: 'true' };
+  assert.equal(blockedReason(beam, env), null);
+  assert.equal(reviewedCleanup(beam), false, 'attempt is not review or certification');
+  assert.match(blockedReason(beam, { COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP: 'true' }), /^missing configuration:/);
+  assert.equal(blockedReason({ ...beam, readiness: 'blocked' }, env), 'needs-reviewed-live-profile');
+  for (const cleanup of [
+    { ...beam.cleanup, oracle: 'unreviewed' },
+    { ...beam.cleanup, status: 'unknown' },
+    { ...beam.cleanup, status: 'source-reviewed-native-terminal', oracle: 'createos-destroyed-metadata' },
+    { ...beam.cleanup, status: 'source-reviewed-sdk-absence', oracle: 'blaxel-terminated-metadata' },
+  ]) assert.equal(blockedReason({ ...beam, cleanup }, env), 'needs-reviewed-cleanup-contract');
+});
+test('vault-check CLI is metadata-only and sanitizes missing names, invalid metadata and success', () => {
+  const file = reportPath(e2b.id), previous = existsSync(file) ? readFileSync(file) : undefined;
+  try {
+    for (const [metadata, code, reason] of [
+      [[], 2, 'missing configuration: E2B_API_KEY'],
+      [[{ description: 'E2B_API_KEY', object_id: 'unit-private-object-id' }], 0, undefined],
+      [[{ description: 'E2B_API_KEY', object_id: 'unit-private-object-id' },
+        { description: 'E2B_API_KEY', object_id: 'unit-private-object-id-2' }], 2, 'invalid vault metadata'],
+      [{ secret: 'unit-private-object-id' }, 2, 'invalid vault metadata'],
+    ]) {
+      const child = spawnSync(process.execPath, ['scripts/compute-conformance.mjs', 'vault-check', '--provider', 'e2b'], {
+        input: JSON.stringify(metadata), encoding: 'utf8', env: { PATH: process.env.PATH,
+          COMPUTE_CONFORMANCE_EXPECTED_SOURCE: sourceFingerprint().sha256, COMPUTE_CONFORMANCE_MAX_CREATES: '1' },
+      });
+      assert.equal(child.status, code, child.stderr);
+      const text = readFileSync(file, 'utf8'), report = JSON.parse(text);
+      assert.equal(report.nativePassed, 0);
+      assert.equal(report.outcome, code ? 'blocked' : 'prepared-not-executed');
+      if (reason) assert.equal(report.reason, reason);
+      assert.ok(!`${text}${child.stdout}${child.stderr}`.includes('unit-private-object-id'));
+    }
+  } finally {
+    if (previous !== undefined) writeFileSync(file, previous);
+    else rmSync(file, { force: true });
+  }
+});
+test('opt-in metadata stages still pin source, require a positive create cap, and preserve blocked outcomes', () => {
+  const profile = profiles.find(p => p.id === '@computesdk/beam');
+  const file = reportPath(profile.id), previous = existsSync(file) ? readFileSync(file) : undefined;
+  const env = { PATH: process.env.PATH, COMPUTE_CONFORMANCE_PROVIDER: profile.id,
+    COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP: 'true',
+    COMPUTE_CONFORMANCE_EXPECTED_SOURCE: sourceFingerprint().sha256, COMPUTE_CONFORMANCE_MAX_CREATES: '15' };
+  try {
+    for (const [override, reason] of [
+      [{ COMPUTE_CONFORMANCE_EXPECTED_SOURCE: '0'.repeat(64) }, 'candidate source fingerprint mismatch'],
+      [{ COMPUTE_CONFORMANCE_MAX_CREATES: '0' }, 'explicit positive SDK create-attempt limit required'],
+      [{ COMPUTE_CONFORMANCE_MAX_CREATES: '1.5' }, 'explicit positive SDK create-attempt limit required'],
+      [{}, `missing configuration: ${profile.requiredEnvironment.join(', ')}`],
+    ]) {
+      const child = spawnSync(process.execPath, ['scripts/compute-conformance.mjs', 'vault-check'], {
+        input: '[]', encoding: 'utf8', env: { ...env, ...override },
+      });
+      assert.equal(child.status, 2, child.stderr);
+      const report = JSON.parse(readFileSync(file, 'utf8'));
+      assert.equal(report.outcome, 'blocked');
+      assert.equal(report.nativePassed, 0);
+      assert.equal(report.reason, reason);
+      const saved = readFileSync(file, 'utf8');
+      const incomplete = spawnSync(process.execPath, ['scripts/compute-conformance.mjs', 'incomplete'], {
+        encoding: 'utf8', env,
+      });
+      assert.equal(incomplete.status, 0, incomplete.stderr);
+      assert.equal(readFileSync(file, 'utf8'), saved);
+    }
+  } finally {
+    if (previous !== undefined) writeFileSync(file, previous);
+    else rmSync(file, { force: true });
+  }
+});
+test('actual prepare CLI reuses strict cleanup gates without requiring credentials', () => {
+  for (const [id, code, reason, flag] of [
     ['e2b', 0, undefined],
     ['createos-sandbox', 0, undefined],
+    ['blaxel', 0, undefined],
     ['beam', 2, 'needs-reviewed-cleanup-contract'],
+    ['beam', 0, undefined, 'true'],
+    ['beam', 2, 'needs-reviewed-cleanup-contract', 'TRUE'],
     ['aws/agentcore', 2, 'needs-reviewed-live-profile'],
+    ['aws/agentcore', 2, 'needs-reviewed-live-profile', 'true'],
   ]) {
     const file = reportPath(`@computesdk/${id}`);
     const previous = existsSync(file) ? readFileSync(file) : undefined;
@@ -64,11 +154,14 @@ test('actual prepare CLI permits both reviewed cleanup modes without credentials
         ['scripts/compute-conformance.mjs', 'prepare', '--provider', id], {
           encoding: 'utf8',
           env: { PATH: process.env.PATH, COMPUTE_CONFORMANCE_EXPECTED_SOURCE: sourceFingerprint().sha256,
-            COMPUTE_CONFORMANCE_MAX_CREATES: '1' },
+            COMPUTE_CONFORMANCE_MAX_CREATES: '1',
+            ...(flag === undefined ? {} : { COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP: flag }) },
         });
       assert.equal(child.status, code, `${id}: ${child.stderr}`);
       const report = JSON.parse(readFileSync(file, 'utf8'));
       assert.equal(report.nativePassed, 0);
+      assert.equal(report.cleanupReview, profiles.find(p => p.id === `@computesdk/${id}`).cleanup.status);
+      assert.equal(report.attemptUnreviewedCleanup, flag === 'true');
       assert.equal(report.outcome, code === 0 ? 'prepared-not-executed' : 'blocked');
       if (reason) assert.equal(report.reason, reason);
     } finally {
@@ -161,17 +254,22 @@ test('source fingerprint is stable and includes new source/config files, not res
   assert.ok(first.inputs.every(input => !input.file.startsWith('conformance-results/')));
   assert.ok(first.inputs.every(input => !input.file.includes('.bundled_')));
 });
-test('workflow is manual, serial, explicit about paid execution, and does not publish SDK packages', () => {
+test('workflow is manual, bounded to five parallel legs, and checks metadata before install/build', () => {
   const text = readFileSync(new URL('../../.computesdk/workflows/provider-conformance.yml', import.meta.url), 'utf8');
-  for (const fragment of ['workflow_dispatch:', 'max-parallel: 1', 'expected_source:', 'max_create_attempts:',
+  for (const fragment of ['workflow_dispatch:', 'max-parallel: 5', 'fail-fast: false', 'expected_source:', 'max_create_attempts:',
     'compute-conformance.mjs prepare', 'compute-conformance.mjs run --execute', 'persist-credentials: false',
-    'secrets.NSC_TOKEN', 'load-compute-vault.sh']) {
+    'secrets.NSC_TOKEN', 'load-compute-vault.sh', 'attempt_unreviewed_cleanup:',
+    'COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP: ${{ inputs.attempt_unreviewed_cleanup }}',
+    'nsc vault list --output json 2>/dev/null | node scripts/compute-conformance.mjs vault-check']) {
     assert.ok(text.includes(fragment), fragment);
   }
   assert.ok(!/\b(?:push|pull_request|schedule):|\b(?:pnpm|npm) (?:publish|release)\b/.test(text));
   assert.ok(!text.includes('secrets[matrix.'), 'Dynamic indexing grants the entire org secret context');
-  assert.ok(text.indexOf('Build SDK candidate') < text.indexOf('Prepare Namespace vault authentication'),
-    'Build code should not receive a bootstrapped Namespace vault token file');
+  assert.match(text, /attempt_unreviewed_cleanup:[\s\S]*?type: boolean\n        default: false/);
+  assert.ok(text.indexOf('compute-conformance.mjs prepare') < text.indexOf('Prepare Namespace vault authentication'));
+  assert.ok(text.indexOf('nscloud-setup@') < text.indexOf('compute-conformance.mjs vault-check'));
+  assert.ok(text.indexOf('compute-conformance.mjs vault-check') < text.indexOf('pnpm install'));
+  assert.ok(text.indexOf('pnpm install') < text.indexOf('Build SDK candidate'));
 });
 test('execute=false emits a fully excluded nonempty vector, not 55 skipped but provisioned runner legs', () => {
   const child = spawnSync(process.execPath, ['scripts/compute-conformance.mjs', 'workflow-plan', '--provider', 'all'],
@@ -256,6 +354,20 @@ test('reviewed native terminal evidence never fabricates SDK absence', () => {
     assert.ok(attempt.cleanup.destroyAcknowledgedAt);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+test('Blaxel terminal journal accepts only exact TERMINATED metadata for an owned ID', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
+  try {
+    const file = join(dir, 'resources.json');
+    const journal = createResourceJournal(file, '@computesdk/blaxel', '1'.repeat(64));
+    journal.requested(1); journal.returned(1, { sandboxId: 'owned-unit-id' });
+    journal.nativeTerminal('owned-unit-id', 'blaxel-terminated-metadata', 'TERMINATED');
+    journal.assertHealthy();
+    const attempt = JSON.parse(readFileSync(file, 'utf8')).attempts[0];
+    assert.equal(attempt.state, 'native-reported-terminal');
+    assert.equal(attempt.absenceAt, undefined);
+    assert.deepEqual(attempt.terminalObservation, { oracle: 'blaxel-terminated-metadata', status: 'TERMINATED' });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 test('unreviewed terminal provider, oracle or state cannot produce cleanup evidence', () => {
   const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
   try {
@@ -263,6 +375,11 @@ test('unreviewed terminal provider, oracle or state cannot produce cleanup evide
       [e2b.id, 'createos-destroyed-metadata', 'destroyed'],
       ['@computesdk/createos-sandbox', 'unreviewed', 'destroyed'],
       ['@computesdk/createos-sandbox', 'createos-destroyed-metadata', 'stopped'],
+      ['@computesdk/createos-sandbox', 'blaxel-terminated-metadata', 'TERMINATED'],
+      ['@computesdk/blaxel', 'createos-destroyed-metadata', 'destroyed'],
+      ['@computesdk/blaxel', 'blaxel-terminated-metadata', 'terminated'],
+      ['@computesdk/blaxel', 'blaxel-terminated-metadata', 'stopped'],
+      ['@computesdk/blaxel', 'unreviewed', 'TERMINATED'],
     ]) {
       const file = join(dir, 'resources.json');
       const journal = createResourceJournal(file, provider, '1'.repeat(64));

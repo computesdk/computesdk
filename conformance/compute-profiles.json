@@ -407,11 +407,20 @@
         {
           "file": "packages/blaxel/src/__tests__/index.test.ts",
           "contains": "supportsFilesystem: true,   // Blaxel supports filesystem operations via fs API"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "const blaxelStatus = typeof nativeStatus === 'string' &&"
+        },
+        {
+          "file": "conformance/compute-cleanup-probe.ts",
+          "contains": "options.oracle === 'blaxel-terminated-metadata'"
         }
       ],
       "cleanup": {
-        "status": "source-reviewed-sdk-absence",
-        "reason": "Installed SDK 0.3.21 metadata lookup maps only documented parsed error:string/code:404 bodies; omitted optional code propagates. Delete validates required returned metadata.name. Acknowledgement is not absence; strict later SDK-null verification remains required. Source review only."
+        "status": "source-reviewed-native-terminal",
+        "oracle": "blaxel-terminated-metadata",
+        "reason": "Fresh SDK lookup must return the identical owned ID. SDK-null is absence; otherwise only getInfo metadata.blaxelStatus exactly TERMINATED is the separately reviewed native-terminal observation. Installed @blaxel/core 0.3.21 explicitly treats TERMINATED as non-reusable terminal; SDK stopped and native STANDBY are not oracles. The reserved status is captured from the public native getter after labels, with no spoofing or private state. Retained metadata remains present; this does not manufacture null or prove physical/billing deletion. Original failed shared run remains failed; supplemental DELETE versus timing causality is unknown."
       }
     },
     {
@@ -1658,11 +1667,51 @@
         {
           "file": "packages/leap0/src/__tests__/index.test.ts",
           "contains": "ports: [3000, 8080],"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "const client = createLeap0Client(config);"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "sandbox = await client.sandboxes.get(sandboxId);"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "if (error instanceof Leap0NotFoundError) return null;"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "await client.sandboxes.delete(sandboxId);"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "if (!(error instanceof Leap0NotFoundError)) throw error;"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "return { instance: sandbox, instanceId: sandbox.id };"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "function validateSandboxId(id: unknown): asserts id is string {"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('does not turn retained deleted metadata into absence'"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('the installed native get maps scoped 404 to its actual class'"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('keeps the cached canonical client after failed delete'"
         }
       ],
       "cleanup": {
-        "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Installed leap0 0.6.0 uses fresh POST /v1/sandbox, not attach/create-if-exists; getById performs fresh scoped resource GET and returns null only for native Leap0NotFoundError derived from HTTP response.status 404, not body code/message. Nonmissing HTTP, transport and schema failures propagate. Canonical returned IDs are validated and retained. DELETE uses the same owned-ID route and honest native HTTP-success void acknowledgement, tolerating typed 404 only; acknowledgement is not absence. Existing bounded shared cleanup must observe a later fresh SDK getById(ownedId) === null after successful positive owned-ID lookup. Retained deleted/paused/deleting metadata remains present; no terminal-state oracle is approved. Source qualification only, not a native pass, physical deletion/billing proof or dispatch authorization."
       }
     },
     {
@@ -3639,11 +3688,31 @@
         {
           "file": "packages/upstash/src/__tests__/index.test.ts",
           "contains": "ports: [3000, 8080]"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "box = await Box.get(sandboxId, { apiKey });"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "if (error instanceof BoxError && error.statusCode === 404) return null;"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "await box.delete();"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('does not filter retained stopped metadata', async () => {"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('deletes using canonical native identity and accepts void acknowledgement', async () => {"
         }
       ],
       "cleanup": {
-        "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Installed @upstash/box 0.5.5 public Box.get performs a fresh exact-reference resource GET and constructs a local full Box without resume, polling, hydration or terminal filtering. Only its actual HTTP BoxError.statusCode===404 at this lookup becomes SDK null; authentication, transport and other status errors propagate. Native instance delete returns void acknowledgement only; every post-positive delete failure propagates, including 404. Existing shared cleanup must freshly poll public SDK getById for the SDK-owned canonical ID until null within its deadline; retained metadata (including deleted/paused/error or unknown status) remains present and must fail strict absence. Qualification is conditional source/controlled-fetch evidence, not a native pass, dispatch approval, physical deletion or billing certification."
       }
     },
     {

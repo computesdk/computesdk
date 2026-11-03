@@ -15,6 +15,10 @@ const createos = {
   profileId: '@computesdk/createos-sandbox',
   oracle: 'createos-destroyed-metadata',
 } as const satisfies CleanupProbeOptions;
+const blaxel = {
+  profileId: '@computesdk/blaxel',
+  oracle: 'blaxel-terminated-metadata',
+} as const satisfies CleanupProbeOptions;
 
 function fixture(info: unknown = { id: ownedId, metadata: { createosStatus: 'destroyed' } }) {
   const getInfo = vi.fn(async () => info);
@@ -230,6 +234,78 @@ describe('cleanup probe (local harness self-test)', () => {
     await expect(probeCleanup(f.manager, id as string, createos))
       .rejects.toThrow('Cleanup probe requires an owned SDK ID');
     expect(f.getById).not.toHaveBeenCalled();
+    expect(f.getInfo).not.toHaveBeenCalled();
+  });
+});
+
+describe('Blaxel terminal probe (local harness self-test, not native evidence)', () => {
+  it('accepts only the exact owned native TERMINATED metadata under the reviewed pair', async () => {
+    const f = fixture({ id: ownedId, status: 'stopped', metadata: { blaxelStatus: 'TERMINATED' } });
+    expect(await probeCleanup(f.manager, ownedId, blaxel)).toEqual({
+      kind: 'native-terminal', oracle: blaxel.oracle, status: 'TERMINATED',
+    });
+    expect(f.getById).toHaveBeenCalledOnce();
+    expect(f.getById).toHaveBeenCalledWith(ownedId);
+    expect(f.getInfo).toHaveBeenCalledOnce();
+  });
+  it.each([
+    undefined, {}, { profileId: blaxel.profileId },
+    { profileId: '@computesdk/other', oracle: blaxel.oracle },
+    { profileId: createos.profileId, oracle: blaxel.oracle },
+    { profileId: blaxel.profileId, oracle: createos.oracle },
+    { profileId: blaxel.profileId, oracle: 'sdk-absence' as const },
+  ])('does not apply Blaxel terminal evidence outside its exact pair (%j)', async options => {
+    const f = fixture({ id: ownedId, metadata: { blaxelStatus: 'TERMINATED' } });
+    expect(await probeCleanup(f.manager, ownedId, options)).toEqual({ kind: 'present' });
+    expect(f.getInfo).not.toHaveBeenCalled();
+  });
+  it.each([
+    undefined, '', 'stopped', 'destroyed', 'terminated', 'Terminated',
+    'TERMINATED ', 'TERMINATING', 'DELETING', 'STANDBY', 'ARCHIVED', 'FAILED',
+  ])('does not infer native termination from other status %j', async blaxelStatus => {
+    const f = fixture({ id: ownedId, status: 'stopped', metadata: { blaxelStatus } });
+    expect(await probeCleanup(f.manager, ownedId, blaxel)).toEqual({ kind: 'present' });
+    expect(f.getInfo).toHaveBeenCalledOnce();
+  });
+  it('does not treat normalized stopped, standby or another provider field as Blaxel termination', async () => {
+    const f = fixture({ id: ownedId, status: 'stopped',
+      metadata: { createosStatus: 'destroyed', state: 'STANDBY' } });
+    expect(await probeCleanup(f.manager, ownedId, blaxel)).toEqual({ kind: 'present' });
+  });
+  it.each([
+    { id: 'not-owned', metadata: { blaxelStatus: 'TERMINATED' } },
+    { id: ownedId, metadata: { blaxelStatus: null } },
+    { id: ownedId, metadata: { blaxelStatus: false } },
+    { id: ownedId, metadata: { blaxelStatus: 1 } },
+    { id: ownedId, metadata: { blaxelStatus: ['TERMINATED'] } },
+    { id: ownedId, metadata: { blaxelStatus: {} } },
+  ])('rejects invalid or unowned Blaxel info, rather than manufacturing terminal evidence (%j)', async info => {
+    const f = fixture(info);
+    await expect(probeCleanup(f.manager, ownedId, blaxel))
+      .rejects.toThrow('Cleanup info did not return valid owned SDK metadata');
+  });
+  it('uses the info of each fresh public lookup, never a cached terminal observation', async () => {
+    const f = fixture({ id: ownedId, metadata: { blaxelStatus: 'TERMINATED' } });
+    expect(await probeCleanup(f.manager, ownedId, blaxel)).toMatchObject({ kind: 'native-terminal' });
+    const currentInfo = vi.fn(async () => ({ id: ownedId, metadata: { blaxelStatus: 'DEPLOYED' } }));
+    f.getById.mockResolvedValue({ sandboxId: ownedId, getInfo: currentInfo });
+    expect(await probeCleanup(f.manager, ownedId, blaxel)).toEqual({ kind: 'present' });
+    expect(f.getById).toHaveBeenCalledTimes(2);
+    expect(f.getInfo).toHaveBeenCalledOnce();
+    expect(currentInfo).toHaveBeenCalledOnce();
+  });
+  it('preserves public SDK errors instead of guessing terminal state or retrying', async () => {
+    const f = fixture();
+    const error = new Error('local sensitive sentinel');
+    f.getInfo.mockRejectedValue(error);
+    await expect(probeCleanup(f.manager, ownedId, blaxel)).rejects.toBe(error);
+    expect(f.getById).toHaveBeenCalledOnce();
+    expect(f.getInfo).toHaveBeenCalledOnce();
+  });
+  it('still accepts exact SDK null separately from native terminal metadata', async () => {
+    const f = fixture();
+    f.getById.mockResolvedValue(null);
+    expect(await probeCleanup(f.manager, ownedId, blaxel)).toEqual({ kind: 'sdk-absent' });
     expect(f.getInfo).not.toHaveBeenCalled();
   });
 });

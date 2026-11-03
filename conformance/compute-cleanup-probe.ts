@@ -10,7 +10,7 @@ export interface CleanupManager {
 
 export interface CleanupProbeOptions {
   profileId?: string;
-  oracle?: 'sdk-absence' | 'createos-destroyed-metadata';
+  oracle?: 'sdk-absence' | 'createos-destroyed-metadata' | 'blaxel-terminated-metadata';
 }
 
 export type CleanupObservation =
@@ -20,6 +20,11 @@ export type CleanupObservation =
     kind: 'native-terminal';
     oracle: 'createos-destroyed-metadata';
     status: 'destroyed';
+  }
+  | {
+    kind: 'native-terminal';
+    oracle: 'blaxel-terminated-metadata';
+    status: 'TERMINATED';
   };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -47,10 +52,19 @@ export async function probeCleanup(
   if (!isRecord(found) || found.sandboxId !== ownedId) {
     throw new Error('Cleanup lookup did not return the owned SDK ID');
   }
-  if (options.profileId !== '@computesdk/createos-sandbox' ||
-      options.oracle !== 'createos-destroyed-metadata') {
-    return { kind: 'present' };
-  }
+  const terminal = options.profileId === '@computesdk/createos-sandbox' &&
+    options.oracle === 'createos-destroyed-metadata'
+    ? {
+      field: 'createosStatus', status: 'destroyed',
+      observation: { kind: 'native-terminal', oracle: 'createos-destroyed-metadata', status: 'destroyed' },
+    } as const
+    : options.profileId === '@computesdk/blaxel' && options.oracle === 'blaxel-terminated-metadata'
+      ? {
+        field: 'blaxelStatus', status: 'TERMINATED',
+        observation: { kind: 'native-terminal', oracle: 'blaxel-terminated-metadata', status: 'TERMINATED' },
+      } as const
+      : undefined;
+  if (!terminal) return { kind: 'present' };
   if (typeof found.getInfo !== 'function') {
     throw new Error('Cleanup lookup did not return a public SDK info method');
   }
@@ -59,11 +73,11 @@ export async function probeCleanup(
       (info.metadata !== undefined && !isRecord(info.metadata))) {
     throw new Error('Cleanup info did not return valid owned SDK metadata');
   }
-  const status: unknown = info.metadata?.createosStatus;
+  const status: unknown = info.metadata?.[terminal.field];
   if (status !== undefined && typeof status !== 'string') {
     throw new Error('Cleanup info did not return valid owned SDK metadata');
   }
-  return status === 'destroyed'
-    ? { kind: 'native-terminal', oracle: 'createos-destroyed-metadata', status: 'destroyed' }
+  return status === terminal.status
+    ? terminal.observation
     : { kind: 'present' };
 }

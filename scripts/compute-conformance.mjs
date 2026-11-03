@@ -9,6 +9,10 @@ import { createHash } from 'node:crypto';
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const readJSON = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const nativeRules = new Map([
+  ['@computesdk/createos-sandbox', { oracle: 'createos-destroyed-metadata', status: 'destroyed' }],
+  ['@computesdk/blaxel', { oracle: 'blaxel-terminated-metadata', status: 'TERMINATED' }],
+]);
 export const reportPath = (id, root = ROOT) =>
   resolve(root, 'conformance-results', `${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
 
@@ -71,8 +75,8 @@ export function createResourceJournal(file, provider, fingerprint) {
     },
     nativeTerminal(id, oracle, status) {
       observe(() => {
-        if (provider !== '@computesdk/createos-sandbox' ||
-            oracle !== 'createos-destroyed-metadata' || status !== 'destroyed') {
+        const rule = nativeRules.get(provider);
+        if (!rule || oracle !== rule.oracle || status !== rule.status) {
           throw new Error('Unreviewed native cleanup oracle');
         }
         const owned = attempts.filter(a => a.sandboxId === id);
@@ -116,7 +120,7 @@ export function loadProfiles(root = ROOT) {
     if (!['needs-review', 'source-reviewed-sdk-absence', 'source-reviewed-native-terminal'].includes(p.cleanup?.status) ||
         typeof p.cleanup.reason !== 'string' || !p.cleanup.reason) throw new Error('Missing compute cleanup review');
     if (p.cleanup.status === 'source-reviewed-native-terminal' &&
-        (p.id !== '@computesdk/createos-sandbox' || p.cleanup.oracle !== 'createos-destroyed-metadata')) {
+        (!nativeRules.has(p.id) || p.cleanup.oracle !== nativeRules.get(p.id).oracle)) {
       throw new Error('Unreviewed native terminal cleanup oracle');
     }
     if (p.cleanup.oracle !== undefined && p.cleanup.status !== 'source-reviewed-native-terminal') {
@@ -160,22 +164,27 @@ export function vaultEnvdef(metadata, profile, env) {
         item.object_id.trim() !== item.object_id) throw new Error('Invalid vault object reference');
     selected.set(name, item.object_id);
   }
-  if (profile.requiredEnvironment.some(name => !env[name]?.trim() && !selected.has(name))) {
-    throw new Error('Required provider credentials are missing from vault metadata');
+  const missing = profile.requiredEnvironment.filter(name => !env[name]?.trim() && !selected.has(name));
+  if (missing.length) {
+    const error = new Error('Required provider credentials are missing from vault metadata');
+    error.missingRequiredNames = missing;
+    throw error;
   }
   return selected.size ? [...selected].sort(([a], [b]) => a.localeCompare(b)).map(([name, id]) => `${name}=${id}`).join('\n') + '\n' : '';
 }
 
 export function reviewedCleanup(profile) {
   return (profile.cleanup?.status === 'source-reviewed-sdk-absence' && profile.cleanup.oracle === undefined) ||
-    (profile.id === '@computesdk/createos-sandbox' &&
+    (nativeRules.has(profile.id) &&
       profile.cleanup?.status === 'source-reviewed-native-terminal' &&
-      profile.cleanup.oracle === 'createos-destroyed-metadata');
+      profile.cleanup.oracle === nativeRules.get(profile.id).oracle);
 }
 
 export function blockedReason(profile, env) {
   if (profile.readiness !== 'wired') return 'needs-reviewed-live-profile';
-  if (!reviewedCleanup(profile)) {
+  const attemptUnreviewed = env.COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP === 'true' &&
+    profile.cleanup?.status === 'needs-review' && profile.cleanup.oracle === undefined;
+  if (!reviewedCleanup(profile) && !attemptUnreviewed) {
     return 'needs-reviewed-cleanup-contract';
   }
   const missing = profile.requiredEnvironment.filter(name => !env[name]?.trim());
@@ -293,22 +302,29 @@ export function main(args = process.argv.slice(2)) {
     if (!['passed-selected-contracts', 'blocked', 'failed'].includes(existing.outcome)) {
       mkdirSync(dirname(output), { recursive: true });
       writeFileSync(output, JSON.stringify({ provider: selected[0].id, outcome: 'failed',
-        reason: 'workflow did not complete; inspect Actions stage status', nativePassed: 0 }, null, 2) + '\n');
+        reason: 'workflow did not complete; inspect Actions stage status', nativePassed: 0,
+        cleanupReview: selected[0].cleanup.status,
+        attemptUnreviewedCleanup: process.env.COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP === 'true' }, null, 2) + '\n');
     }
     return 0;
   }
-  if (!['prepare', 'check', 'run'].includes(command) || (command === 'run' && !rest.includes('--execute')) || selected.length !== 1) {
+  if (!['prepare', 'vault-check', 'check', 'run'].includes(command) || (command === 'run' && !rest.includes('--execute')) || selected.length !== 1) {
     throw new Error('Select one compute provider; live execution additionally requires run --execute');
   }
   const profile = selected[0];
   const env = process.env;
   const output = reportPath(profile.id);
   mkdirSync(dirname(output), { recursive: true });
-  const write = report => writeFileSync(output, JSON.stringify(report, null, 2) + '\n');
+  const write = report => writeFileSync(output, JSON.stringify({ ...report,
+    cleanupReview: profile.cleanup.status,
+    attemptUnreviewedCleanup: env.COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP === 'true',
+  }, null, 2) + '\n');
   const suite = env.COMPUTE_CONFORMANCE_SUITE || 'shared';
-  const blocked = (command === 'prepare' ? (profile.readiness !== 'wired' ? 'needs-reviewed-live-profile' :
-    !reviewedCleanup(profile) ? 'needs-reviewed-cleanup-contract' : null) :
-    blockedReason(profile, env)) || (!['shared', 'crud'].includes(suite) ? 'unknown suite' :
+  // Metadata stages ignore only credential values, never readiness/cleanup gates.
+  const gateEnv = ['prepare', 'vault-check'].includes(command) ? {
+    ...env, ...Object.fromEntries(profile.requiredEnvironment.map(name => [name, 'metadata-stage-placeholder'])),
+  } : env;
+  const blocked = blockedReason(profile, gateEnv) || (!['shared', 'crud'].includes(suite) ? 'unknown suite' :
     suite === 'crud' && profile.id !== '@computesdk/isorun' ? 'needs-reviewed-crud-profile' : null);
   if (blocked) {
     write({ provider: profile.id, outcome: 'blocked', reason: blocked, nativePassed: 0 });
@@ -326,6 +342,21 @@ export function main(args = process.argv.slice(2)) {
   if (!Number.isSafeInteger(maxCreates) || maxCreates <= 0) {
     write({ provider: profile.id, outcome: 'blocked', reason: 'explicit positive SDK create-attempt limit required', nativePassed: 0 });
     return 2;
+  }
+  if (command === 'vault-check') {
+    try {
+      // Validate references in memory only; never print or persist the envdef.
+      vaultEnvdef(JSON.parse(readFileSync(0, 'utf8')), profile, env);
+    } catch (error) {
+      const missing = error?.missingRequiredNames;
+      const reason = Array.isArray(missing) ? `missing configuration: ${missing.join(', ')}` : 'invalid vault metadata';
+      write({ provider: profile.id, outcome: 'blocked', reason, nativePassed: 0 });
+      console.error(`BLOCKED: ${reason}`);
+      return 2;
+    }
+    write({ provider: profile.id, outcome: 'prepared-not-executed', sourceFingerprint: fingerprint.sha256,
+      vaultMetadata: 'validated', nativePassed: 0 });
+    return 0;
   }
   if (command === 'check' || command === 'prepare') {
     write({ provider: profile.id, outcome: 'prepared-not-executed', sourceFingerprint: fingerprint.sha256, nativePassed: 0 });

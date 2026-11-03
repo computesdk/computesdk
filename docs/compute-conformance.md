@@ -41,11 +41,12 @@ compute entrypoints in this checkout**. These are not 55 independent companies.
 
 * **35 configuration-wired** profiles have reviewed factory/credential mappings.
 * **20 configuration-blocked** profiles require reviewed setup first.
-* Of the 35, **8 shared-suite execution candidates** have source-reviewed
-  cleanup observations: SDK absence for Blaxel, E2B, Isorun, NeevCloud, Sandbox0,
-  Sprites and Vercel; explicit fresh `destroyed` metadata for CreateOS.
-  The other 27 remain
-  cleanup-blocked. These are current development-tree reviews; a frozen older
+* Of the 35, **10 shared-suite candidates** have source-reviewed observations:
+  SDK absence for E2B, Isorun, Leap0, NeevCloud, Sandbox0, Sprites, Upstash and
+  Vercel; exact fresh native terminal metadata for CreateOS and Blaxel.
+  The other 25 remain cleanup-blocked by default. An explicit diagnostic opt-in
+  can attempt their existing contracts without claiming source certification.
+  These are current development-tree reviews; a frozen older
   candidate retains its own smaller catalog and fingerprint.
 * **No live result is established by this catalog.** Source review is not
   account approval, native verification or physical-deletion proof.
@@ -54,6 +55,35 @@ All 55 remain visible in an `all` plan; blocked entries do not silently disappea
 Selection flags mean tests are selected, not that a capability is certified.
 Background, streaming and interactive-process tests are currently unselected;
 that does not declare them unsupported.
+
+### One all-provider matrix
+
+After explicit approval for real provider workloads, dispatch the same full
+shared suite for every entry in one workflow. The matrix has five concurrent
+jobs and does not cancel other providers after a failure:
+
+```sh
+compute actions dispatch computesdk/computesdk --org computesdk \
+  --workflow .computesdk/workflows/provider-conformance.yml --ref main \
+  --with-changes --inputs provider=all suite=shared execute=true \
+  attempt_unreviewed_cleanup=true expected_source=<FROZEN_SOURCE_FINGERPRINT> \
+  max_create_attempts=15 --json
+```
+
+The diagnostic opt-in permits only configuration-wired profiles with an
+unreviewed cleanup implementation to attempt the suite. Positive lookup of the
+owned ID and bounded post-destroy SDK-absence verification remain mandatory.
+It cannot bypass unsafe/missing setup, credentials, fingerprint or resource
+budgets, or opt into an unknown native terminal oracle. The 20 configuration
+blocks remain explicit. Missing credential names are checked remotely before
+dependency installation/build, without revealing values. A matrix row is not
+a successful native execution merely because it was scheduled.
+
+The cap is **15 forwarded SDK create requests per provider**, not a VM, native
+retry, disk, Actions-worker or dollar cap. Native dependencies can perform
+additional operations. Cleanup incidents require investigation, not blind
+retries; SDK absence and native terminal metadata do not prove physical
+reclamation or billing cessation.
 
 The shared suite checks creation/identity, command execution/quoting, info and
 selected filesystem/URL cases. URL cases currently check syntax, not HTTP
@@ -77,8 +107,11 @@ only exact SDK null or the owned ID's fresh
 `getInfo().metadata.createosStatus === 'destroyed'`. SDK `stopped`, native
 `destroying`/`paused`, an acknowledgement, or a lookup error do not qualify.
 The journal distinguishes **native-reported terminal** from **SDK absence**;
-neither proves physical reclamation or the end of billing. Other profiles cannot
-opt into this oracle.
+neither proves physical reclamation or the end of billing. Blaxel has a separate
+exact `blaxel-terminated-metadata` oracle requiring a fresh owned lookup and
+`getInfo().metadata.blaxelStatus === 'TERMINATED'`; normalized `stopped`,
+`STANDBY`, label values and other statuses do not qualify. Other profiles cannot
+opt into either oracle.
 
 ### Recorded first live wave: November 3, 2026
 
@@ -190,8 +223,9 @@ JSON is uploaded. The temporary vault envdef contains names/object IDs only.
 The bootstrap token is an ephemeral, permission-restricted remote auth file;
 only a file created by this job is removed by its cleanup step.
 
-SDK build/typecheck precedes vault authentication. Profile, cleanup-review,
-candidate-fingerprint and positive SDK-create-budget gates precede bootstrap.
+Profile, cleanup-review/diagnostic opt-in, candidate-fingerprint and positive
+SDK-create-budget gates precede bootstrap. Vault name-only preflight then
+precedes dependency installation and SDK build/typecheck.
 The native entrypoint repeats its gates before importing a provider.
 
 The following are **operator examples, not executed runs**:
@@ -272,8 +306,9 @@ then fix → rerun the failing provider/case → rerun its selected suite. Expan
 configuration and contract coverage in reviewed batches. These manual workflows
 do **not yet enforce an automatic publishing/release gate**, and their artifacts
 do not automatically promote historical inventory verification statuses.
-Do not relax cleanup gates just to run an unsafe baseline: use a reviewed
-baseline or provide a separate, reviewed native cleanup oracle first.
+Diagnostic attempts do not relax owned-ID verification, cleanup assertions or
+unsafe-configuration blocks. A new native-terminal observation requires its own
+reviewed, provider-specific oracle; a destroy acknowledgement is not sufficient.
 
 ## Test-suite migration
 

@@ -8,7 +8,7 @@ import { runIntegrationTests, type ProviderTestConfig } from '../packages/test-u
 import { runProviderCrudTest } from '../packages/test-utils/src/provider-crud-test';
 import { loadProfiles, blockedReason, providerModule, sourceFingerprint, reportPath, createResourceJournal } from '../scripts/compute-conformance.mjs';
 import { withDeadline } from '../packages/test-utils/src/provider-lifecycle';
-import { probeCleanup } from './compute-cleanup-probe';
+import { probeCleanup, type CleanupProbeOptions } from './compute-cleanup-probe';
 
 interface LiveProfile {
   id: string;
@@ -16,7 +16,7 @@ interface LiveProfile {
   config: Record<string, unknown>;
   configEnvironment: Record<string, string>;
   suite: Omit<ProviderTestConfig, 'provider' | 'name'>;
-  cleanup: { oracle?: 'createos-destroyed-metadata' };
+  cleanup: { oracle?: CleanupProbeOptions['oracle'] };
 }
 
 if (process.env.COMPUTESDK_CONFORMANCE_NATIVE !== '1') {
