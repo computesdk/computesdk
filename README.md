@@ -79,6 +79,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 
 | Provider | Environment Variables | Use Cases |
 |----------|----------------------|-----------|
+| **Agent37** | `AGENT37_API_KEY` | Persistent agent sandboxes, signed port URLs, dedicated-core VMs |
 | **Archil** | `ARCHIL_API_KEY` | Disk-attached command execution |
 | **Arker** | `ARKER_API_KEY` | Sandboxed VMs with persistent filesystems, forked from golden images |
 | **AWS Bedrock AgentCore** | `AWS_REGION` + AWS SDK credential chain (or `profile` / `credentials`) | Managed Code Interpreter sessions, no infrastructure to provision |
@@ -302,6 +303,7 @@ await sandbox.destroy();
 Install the provider packages you need and pass their instances into `compute.setConfig`:
 
 ```bash
+npm install @computesdk/agent37          # Agent37 provider
 npm install @computesdk/archil           # Archil provider
 npm install @computesdk/aws              # AWS providers (@computesdk/aws/ec2, @computesdk/aws/agentcore)
 npm install @computesdk/beam             # Beam provider
@@ -352,6 +354,7 @@ const sandbox = await e2bCompute.sandbox.create();
 ```
 
 See individual provider READMEs for details:
+- **[@computesdk/agent37](./packages/agent37)** - Persistent agent sandboxes with signed URLs for any port, plus dedicated-core VMs
 - **[@computesdk/archil](./packages/archil)** - Disk-attached command-execution sandboxes
 - **[@computesdk/aws](./packages/aws)** - AWS providers; `@computesdk/aws/ec2`: on-demand or Spot EC2 instances, commands over SSM Run Command; `@computesdk/aws/agentcore`: Bedrock AgentCore Code Interpreter sessions
 - **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
