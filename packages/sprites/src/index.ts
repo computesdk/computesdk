@@ -22,14 +22,47 @@ export interface SpritesConfig {
   timeout?: number;
 }
 
+type SafeFieldShape = {
+  present: boolean;
+  type: 'undefined' | 'null' | 'boolean' | 'number' | 'string' | 'array' | 'object';
+  numericRange?: 'zero' | 'nonzero-byte' | 'outside-byte' | 'non-integer';
+};
+type ProtocolDiagnostic = {
+  phase: 'text-json' | 'text-kind' | 'binary-frame' | 'transport-exit';
+  kind?: 'exit' | 'session_info' | 'error' | 'other' | 'non-object' | 'invalid-json';
+  afterExit: boolean;
+  fields?: {
+    type: SafeFieldShape; exit_code: SafeFieldShape; exitCode: SafeFieldShape;
+    code: SafeFieldShape; tty: SafeFieldShape; error: SafeFieldShape;
+  };
+  channel?: 'stdin' | 'stdout' | 'stderr' | 'exit' | 'eof' | 'other' | 'empty';
+  exitPayload?: 'missing' | 'one-byte' | 'oversized';
+  exitRange?: SafeFieldShape['numericRange'];
+};
+
+// Only fixed field names, type labels and bounded exit-code classifications.
+// Never copy keys, values, JSON, output or provider error messages into errors.
+function fieldShape(record: object, key: 'type' | 'exit_code' | 'exitCode' | 'code' | 'tty' | 'error'): SafeFieldShape {
+  const value: unknown = (record as Record<string, unknown>)[key];
+  const shape: SafeFieldShape = {
+    present: Object.prototype.hasOwnProperty.call(record, key),
+    type: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value as SafeFieldShape['type'],
+  };
+  if (typeof value === 'number' && key !== 'type' && key !== 'tty' && key !== 'error') {
+    shape.numericRange = !Number.isInteger(value) ? 'non-integer' :
+      value < 0 || value > 255 ? 'outside-byte' : value === 0 ? 'zero' : 'nonzero-byte';
+  }
+  return shape;
+}
+
 /** The exec stream ended without trustworthy child completion metadata. */
 export class SpritesCommandProtocolError extends Error {
   readonly code = 'SPRITES_COMMAND_PROTOCOL_ERROR';
   readonly provider = 'sprites';
 
-  constructor(readonly reason: 'missing-completion' | 'invalid-completion') {
+  constructor(readonly reason: 'missing-completion' | 'invalid-completion', readonly diagnostic?: ProtocolDiagnostic) {
     // Do not include command output: it may contain credentials or other secrets.
-    super('Sprites command response did not contain a valid completion record.');
+    super(`Sprites command response did not contain a valid completion record.${diagnostic ? ` ${JSON.stringify(diagnostic)}` : ''}`);
     this.name = 'SpritesCommandProtocolError';
   }
 }
@@ -72,11 +105,11 @@ async function execStream(url: URL, token: string, script: string): Promise<{ st
       if (error) reject(error);
       else resolve({ stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8') });
     };
-    const invalid = () => finish(new SpritesCommandProtocolError('invalid-completion'));
-    const complete = (code: unknown) => {
+    const invalid = (diagnostic: ProtocolDiagnostic) => finish(new SpritesCommandProtocolError('invalid-completion', diagnostic));
+    const complete = (code: unknown, diagnostic: ProtocolDiagnostic) => {
       // The shell wrapper must finish normally; its own footer carries the
       // user's child status, which can legitimately be nonzero.
-      if (exit !== undefined || !Number.isInteger(code) || code !== 0) return invalid();
+      if (exit !== undefined || !Number.isInteger(code) || code !== 0) return invalid(diagnostic);
       exit = code as number;
       // Wait for close to detect queued duplicate/contradictory exit messages.
       // Bound only the close handshake, not remote command execution.
@@ -100,22 +133,44 @@ async function execStream(url: URL, token: string, script: string): Promise<{ st
         const text = bytes.toString('utf8');
         if (text.startsWith('control:') && exit === undefined) return;
         let message: { type?: string; exit_code?: unknown; tty?: unknown };
-        try { message = JSON.parse(text); } catch { return invalid(); }
-        if (!message || typeof message !== 'object') return invalid();
-        if (message.type === 'exit') return complete(message.exit_code);
+        try { message = JSON.parse(text); } catch {
+          return invalid({ phase: 'text-json', kind: 'invalid-json', afterExit: exit !== undefined });
+        }
+        if (!message || typeof message !== 'object' || Array.isArray(message)) {
+          return invalid({ phase: 'text-json', kind: 'non-object', afterExit: exit !== undefined });
+        }
+        const diagnostic: ProtocolDiagnostic = {
+          phase: 'text-kind', afterExit: exit !== undefined,
+          kind: message.type === 'exit' || message.type === 'session_info' || message.type === 'error' ? message.type : 'other',
+          fields: {
+            type: fieldShape(message, 'type'), exit_code: fieldShape(message, 'exit_code'),
+            exitCode: fieldShape(message, 'exitCode'), code: fieldShape(message, 'code'),
+            tty: fieldShape(message, 'tty'), error: fieldShape(message, 'error'),
+          },
+        };
+        if (message.type === 'exit') return complete(message.exit_code, diagnostic);
         if (message.type === 'session_info' && message.tty !== true && exit === undefined) return;
         // Do not expose server errors, metadata, URLs, or command/env contents.
-        return invalid();
+        return invalid(diagnostic);
       }
-      if (bytes.length === 0 || exit !== undefined) return invalid();
+      const diagnostic: ProtocolDiagnostic = {
+        phase: 'binary-frame', afterExit: exit !== undefined,
+        channel: bytes.length === 0 ? 'empty' :
+          ({ 0: 'stdin', 1: 'stdout', 2: 'stderr', 3: 'exit', 4: 'eof' } as const)[bytes[0] as 0 | 1 | 2 | 3 | 4] || 'other',
+      };
+      if (bytes[0] === 3) {
+        diagnostic.exitPayload = bytes.length === 1 ? 'missing' : bytes.length === 2 ? 'one-byte' : 'oversized';
+        if (bytes.length === 2) diagnostic.exitRange = bytes[1] === 0 ? 'zero' : 'nonzero-byte';
+      }
+      if (bytes.length === 0 || exit !== undefined) return invalid(diagnostic);
       switch (bytes[0]) {
         case 1: stdout.push(bytes.subarray(1)); break;
         case 2: stderr.push(bytes.subarray(1)); break;
         case 3:
-          if (bytes.length !== 2) return invalid();
-          complete(bytes[1]);
+          if (bytes.length !== 2) return invalid(diagnostic);
+          complete(bytes[1], diagnostic);
           break;
-        default: invalid();
+        default: invalid(diagnostic);
       }
     });
     socket.on('error', () => finish(new Error('Sprites command transport failed.')));

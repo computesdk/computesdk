@@ -137,6 +137,48 @@ describe('Sprites real-adapter command contract (local native boundary)', () => 
     expect(await (await instance()).runCommand('exit 9')).toMatchObject({ stdout: '', stderr: '', exitCode: 9 });
   });
 
+  it.each([
+    ['unknown kind', {
+      type: 'private-kind', exitCode: 0, code: 'private-code', error: 'private-error',
+      tty: true, 'private-key': 'private-output',
+    }, 'other'],
+    ['known error', { type: 'error', error: 'private-error' }, 'error'],
+    ['unexpected TTY', { type: 'session_info', tty: true }, 'session_info'],
+    ['camelCase exit', { type: 'exit', exitCode: 0 }, 'exit'],
+  ])('reports only safe allowlisted shapes for %s without accepting an unknown completion', async (_name, message, kind) => {
+    execFrames = (_script, socket) => socket.send(JSON.stringify(message));
+    let caught: unknown;
+    try { await (await instance()).runCommand('echo private-command'); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(SpritesCommandProtocolError);
+    const error = caught as SpritesCommandProtocolError;
+    expect(error.diagnostic).toMatchObject({
+      phase: 'text-kind', kind, afterExit: false,
+      fields: { type: { present: true, type: 'string' } },
+    });
+    if (kind === 'other' || _name === 'camelCase exit') {
+      expect(error.diagnostic?.fields?.exitCode).toEqual({ present: true, type: 'number', numericRange: 'zero' });
+      expect(error.diagnostic?.fields?.exit_code).toEqual({ present: false, type: 'undefined' });
+    }
+    expect(`${error.message}\n${JSON.stringify(error)}`).not.toContain('private-');
+    expect(error.message).toContain('"phase":"text-kind"');
+  });
+
+  it.each([
+    [Buffer.from([3]), 'missing', undefined],
+    [Buffer.from([3, 1]), 'one-byte', 'nonzero-byte'],
+    [Buffer.from([3, 0, 97, 98, 99]), 'oversized', undefined],
+  ])('reports bounded binary exit shape without exposing bytes (%s)', async (packet, exitPayload, exitRange) => {
+    execFrames = (_script, socket) => socket.send(packet as Buffer);
+    let caught: unknown;
+    try { await (await instance()).runCommand('true'); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(SpritesCommandProtocolError);
+    expect((caught as SpritesCommandProtocolError).diagnostic).toEqual({
+      phase: 'binary-frame', afterExit: false, channel: 'exit', exitPayload,
+      ...(exitRange ? { exitRange } : {}),
+    });
+    expect(String(caught)).not.toContain('abc');
+  });
+
   it('rejects a missing transport exit even with a complete valid shell footer', async () => {
     execFrames = (script, socket) => {
       frame(socket, 1, runScript(script));
