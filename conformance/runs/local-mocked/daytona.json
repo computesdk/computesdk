@@ -1,0 +1,81 @@
+{
+  "provider": "@computesdk/daytona",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "command": "pnpm --filter @computesdk/daytona --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true"
+  },
+  "revision": "1fc0302051fe31d94f5ce225915905e23109a636",
+  "recordedAt": "2026-11-03T03:10:36.821206+00:00",
+  "executionFinishedAt": "2026-11-03T03:03:03.091574+00:00",
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 42,
+  "tests": [
+    {
+      "file": "packages/daytona/src/__tests__/command-contract.test.ts",
+      "contains": "Daytona real-adapter command contract"
+    }
+  ],
+  "claims": [
+    "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
+    "Named tests reject malformed present completion status and preserve an explicit native exit 23 when the delimiter is absent."
+  ],
+  "inputHashes": [
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "cae2afeb4cb70e3f9259ab4bd0c482d873754072a68cfb5d21683cd9833ecd89"
+    },
+    {
+      "file": "packages/daytona/package.json",
+      "sha256": "0a6d8de8de2aa0655fdc6dd9d7f122f56a37c34cd5a6d6fc13333696aed28e18"
+    },
+    {
+      "file": "packages/daytona/src/__tests__/command-contract.test.ts",
+      "sha256": "d6dbab9ee9510dd9ea40ba3ccb49b2016c0de51bc5e7dbf92dade6d69ef5e082"
+    },
+    {
+      "file": "packages/daytona/src/index.ts",
+      "sha256": "ee457545ef8807cdbc93f8245f525bacee17fc896399cb3ea0c50957e6fae215"
+    },
+    {
+      "file": "packages/provider/src/command-output.ts",
+      "sha256": "877ad798c0e5b112a368b96a6a423d929816499376a8bc18d465405d58ad5020"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "limitations": [
+    "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+    "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+    "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+    "Native missing-delimiter fallback is retained; missing native status can still default to zero, so universal child-completion validation is not claimed.",
+    "Native zsh/custom images and survival of long-running detached processes remain unverified."
+  ]
+}

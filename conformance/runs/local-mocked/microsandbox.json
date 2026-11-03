@@ -1,0 +1,81 @@
+{
+  "provider": "@computesdk/microsandbox",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "command": "pnpm --filter @computesdk/microsandbox --fail-if-no-match exec vitest run src/__tests__/index.test.ts --maxWorkers=1 --minWorkers=1",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true"
+  },
+  "revision": "1fc0302051fe31d94f5ce225915905e23109a636",
+  "recordedAt": "2026-11-03T03:10:36.821206+00:00",
+  "executionFinishedAt": "2026-11-03T03:03:03.091574+00:00",
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 62,
+  "tests": [
+    {
+      "file": "packages/microsandbox/src/__tests__/index.test.ts",
+      "contains": "describe('completed command output integrity'"
+    }
+  ],
+  "claims": [
+    "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+    "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+  ],
+  "inputHashes": [
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "cae2afeb4cb70e3f9259ab4bd0c482d873754072a68cfb5d21683cd9833ecd89"
+    },
+    {
+      "file": "packages/microsandbox/package.json",
+      "sha256": "94b623850aeea8b606a706cfe22aec149da1f48a4d965e1174adedcbe5adb989"
+    },
+    {
+      "file": "packages/microsandbox/src/__tests__/index.test.ts",
+      "sha256": "d07144d276da6277373a71f26f9e37e472e84e5f6e5786d50aabef08de650d18"
+    },
+    {
+      "file": "packages/microsandbox/src/index.ts",
+      "sha256": "9b3de58ee05ca9ec8ec5f73840192ad61ab70905a3cadf6aada881c9e453397d"
+    },
+    {
+      "file": "packages/provider/src/command-output.ts",
+      "sha256": "877ad798c0e5b112a368b96a6a423d929816499376a8bc18d465405d58ad5020"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "limitations": [
+    "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+    "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+    "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+    "Timeout exit 124 intentionally returns best-effort partial output; background launch is not completed-capture verification.",
+    "Native fs/exec read-success and early poll-failure cleanup are not established by these cases."
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "provider": "@computesdk/modal",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "command": "pnpm --filter @computesdk/modal --fail-if-no-match exec vitest run src/__tests__/command-output.test.ts src/__tests__/unit.test.ts --maxWorkers=1 --minWorkers=1",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true"
+  },
+  "revision": "1fc0302051fe31d94f5ce225915905e23109a636",
+  "recordedAt": "2026-11-03T03:10:36.821206+00:00",
+  "executionFinishedAt": "2026-11-03T03:03:03.091574+00:00",
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 27,
+  "tests": [
+    {
+      "file": "packages/modal/src/__tests__/command-output.test.ts",
+      "contains": "describe('Modal command output integrity"
+    },
+    {
+      "file": "packages/modal/src/__tests__/unit.test.ts",
+      "contains": "describe('modal sandbox creation"
+    }
+  ],
+  "claims": [
+    "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+    "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+  ],
+  "inputHashes": [
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "cae2afeb4cb70e3f9259ab4bd0c482d873754072a68cfb5d21683cd9833ecd89"
+    },
+    {
+      "file": "packages/modal/package.json",
+      "sha256": "26ff2c60d4e6d55a82d97d6f8ca3444ca072eab3a79a9f9c7ba68d31faaed36e"
+    },
+    {
+      "file": "packages/modal/src/__tests__/command-output.test.ts",
+      "sha256": "a45913df47aa3e713a3fcdf8af44c63bcfdafd0ca986e30e298405f0523a7679"
+    },
+    {
+      "file": "packages/modal/src/__tests__/unit.test.ts",
+      "sha256": "8129774f20674f924bc5b5ec373445df66815acc24d67e1bc10b31de9c4f78da"
+    },
+    {
+      "file": "packages/modal/src/index.ts",
+      "sha256": "a48523a7da884d33820248430eb01b8c408efa65a152be295cd77fe8c5d418a1"
+    },
+    {
+      "file": "packages/provider/src/command-output.ts",
+      "sha256": "877ad798c0e5b112a368b96a6a423d929816499376a8bc18d465405d58ad5020"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "limitations": [
+    "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+    "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+    "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+    "Native cat completion status and runtime-missing empty output are not validated by the existing read callback; zero-length captures do not establish successful native reads.",
+    "Initial launch/wait failures precede the read-cleanup scope; non-integrity errors still use existing native error text."
+  ]
+}

@@ -1,0 +1,2114 @@
+{
+  "schemaVersion": 1,
+  "baselineRevision": "41a638cc",
+  "providers": [
+    {
+      "id": "@computesdk/agentcore",
+      "kind": "compute",
+      "source": {
+        "file": "packages/agentcore/src/index.ts",
+        "binding": "export*:@computesdk/aws/agentcore",
+        "mechanism": "reexport"
+      },
+      "entrypoint": "packages/agentcore/src/index.ts",
+      "symbol": "agentcore",
+      "aliasOf": "@computesdk/aws/agentcore",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/agentcore/src/index.ts",
+          "contains": "export * from '@computesdk/aws/agentcore'"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/agentuity",
+      "kind": "compute",
+      "source": {
+        "file": "packages/agentuity/src/index.ts",
+        "binding": "agentuity",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/agentuity/src/index.ts",
+      "symbol": "agentuity",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/anchorbrowser",
+      "kind": "browser",
+      "source": {
+        "file": "packages/anchorbrowser/src/index.ts",
+        "binding": "anchorbrowser",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/anchorbrowser/src/index.ts",
+      "symbol": "anchorbrowser",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/anchorbrowser/src/index.ts",
+          "contains": "export const anchorbrowser = defineBrowserProvider<AnchorBrowserSession, AnchorBrowserConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/archil",
+      "kind": "compute",
+      "source": {
+        "file": "packages/archil/src/index.ts",
+        "binding": "_provider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/archil/src/index.ts",
+      "symbol": "archil",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/archil/src/index.ts",
+          "contains": "const _provider = defineProvider<ArchilSandbox, ArchilConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/arker",
+      "kind": "compute",
+      "source": {
+        "file": "packages/arker/src/index.ts",
+        "binding": "arker",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/arker/src/index.ts",
+      "symbol": "arker",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/arker/src/index.ts",
+          "contains": "export const arker = defineProvider<VM, ArkerConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/aws/agentcore",
+      "kind": "compute",
+      "source": {
+        "file": "packages/aws/src/agentcore/index.ts",
+        "binding": "_provider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/aws/src/agentcore/index.ts",
+      "symbol": "agentcore",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/aws/src/agentcore/index.ts",
+          "contains": "const _provider = defineProvider<AgentCoreSandbox, AgentCoreConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/aws/ec2",
+      "kind": "compute",
+      "source": {
+        "file": "packages/aws/src/ec2/index.ts",
+        "binding": "ec2",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/aws/src/ec2/index.ts",
+      "symbol": "ec2",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/aws/src/ec2/index.ts",
+          "contains": "export const ec2 = defineProvider<Ec2Sandbox, Ec2Config>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/beam",
+      "kind": "compute",
+      "source": {
+        "file": "packages/beam/src/index.ts",
+        "binding": "beam",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/beam/src/index.ts",
+      "symbol": "beam",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "export const beam = defineProvider<SandboxInstance, BeamConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/blaxel",
+      "kind": "compute",
+      "source": {
+        "file": "packages/blaxel/src/index.ts",
+        "binding": "blaxel",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/blaxel/src/index.ts",
+      "symbol": "blaxel",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/brezel",
+      "kind": "compute",
+      "source": {
+        "file": "packages/brezel/src/index.ts",
+        "binding": "brezel",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/brezel/src/index.ts",
+      "symbol": "brezel",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/brezel/src/index.ts",
+          "contains": "export const brezel = defineProvider<Sandbox, ConfigWithClient>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/browserbase",
+      "kind": "browser",
+      "source": {
+        "file": "packages/browserbase/src/index.ts",
+        "binding": "browserbase",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/browserbase/src/index.ts",
+      "symbol": "browserbase",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/browserbase/src/index.ts",
+          "contains": "export const browserbase = defineBrowserProvider<BrowserbaseSession, BrowserbaseConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/browserless",
+      "kind": "browser",
+      "source": {
+        "file": "packages/browserless/src/index.ts",
+        "binding": "browserless",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/browserless/src/index.ts",
+      "symbol": "browserless",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/browserless/src/index.ts",
+          "contains": "export const browserless = defineBrowserProvider<BrowserlessSession, BrowserlessConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/browseruse",
+      "kind": "browser",
+      "source": {
+        "file": "packages/browseruse/src/index.ts",
+        "binding": "browseruse",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/browseruse/src/index.ts",
+      "symbol": "browseruse",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/browseruse/src/index.ts",
+          "contains": "export const browseruse = defineBrowserProvider<BrowserUseSession, BrowserUseConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/buddy",
+      "kind": "compute",
+      "source": {
+        "file": "packages/buddy/src/index.ts",
+        "binding": "buddy",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/buddy/src/index.ts",
+      "symbol": "buddy",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/buddy/src/index.ts",
+          "contains": "export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/cloud-run",
+      "kind": "compute",
+      "source": {
+        "file": "packages/cloud-run/src/index.ts",
+        "binding": "export*:@computesdk/gcp/cloud-run",
+        "mechanism": "reexport"
+      },
+      "entrypoint": "packages/cloud-run/src/index.ts",
+      "symbol": "cloudRun",
+      "aliasOf": "@computesdk/gcp/cloud-run",
+      "status": "unknown",
+      "review": {
+        "status": "excluded",
+        "reason": "Explicitly excluded from this compatibility review; inventory presence is not a support claim."
+      },
+      "evidence": [
+        {
+          "file": "packages/cloud-run/src/index.ts",
+          "contains": "export * from '@computesdk/gcp/cloud-run'"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/cloudflare",
+      "kind": "compute",
+      "source": {
+        "file": "packages/cloudflare/src/index.ts",
+        "binding": "cloudflare",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/cloudflare/src/index.ts",
+      "symbol": "cloudflare",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/cloudflare/src/index.ts",
+          "contains": "export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({"
+        }
+      ],
+      "knownUnsupported": [
+        {
+          "description": "Listing sandboxes is explicitly unsupported.",
+          "evidence": {
+            "file": "packages/cloudflare/src/index.ts",
+            "contains": "Cloudflare does not support listing sandboxes. Use getById to reconnect to a specific sandbox ID."
+          }
+        },
+        {
+          "description": "Port forwarding requires Worker support and can be rejected.",
+          "evidence": {
+            "file": "packages/cloudflare/src/index.ts",
+            "contains": "Cloudflare sandbox Worker does not support port forwarding"
+          }
+        }
+      ],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/codesandbox",
+      "kind": "compute",
+      "source": {
+        "file": "packages/codesandbox/src/index.ts",
+        "binding": "codesandbox",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/codesandbox/src/index.ts",
+      "symbol": "codesandbox",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/collimate",
+      "kind": "compute",
+      "source": {
+        "file": "packages/collimate/src/index.ts",
+        "binding": "collimate",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/collimate/src/index.ts",
+      "symbol": "collimate",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/collimate/src/index.ts",
+          "contains": "export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/createos-sandbox",
+      "kind": "compute",
+      "source": {
+        "file": "packages/createos-sandbox/src/index.ts",
+        "binding": "createosSandbox",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/createos-sandbox/src/index.ts",
+      "symbol": "createosSandbox",
+      "status": "adapter-mocked",
+      "review": {
+        "status": "included",
+        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+      },
+      "evidence": [
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+        "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+        "Two unchanged ingress-default tests fail (expected true, existing implementation false); no ingress behavior was changed.",
+        "Native error decoration of captured stderr and native cat read-success semantics remain outside these claims."
+      ],
+      "claims": [
+        "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/createos-sandbox.json",
+        "sha256": "160676bfb4ced51eeba6db6247056833f87803ea5f08defa57d7b75eac44fd3c"
+      }
+    },
+    {
+      "id": "@computesdk/daytona",
+      "kind": "compute",
+      "source": {
+        "file": "packages/daytona/src/index.ts",
+        "binding": "daytona",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/daytona/src/index.ts",
+      "symbol": "daytona",
+      "status": "adapter-mocked",
+      "review": {
+        "status": "included",
+        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+      },
+      "evidence": [
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+        "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+        "Native missing-delimiter fallback is retained; missing native status can still default to zero, so universal child-completion validation is not claimed.",
+        "Native zsh/custom images and survival of long-running detached processes remain unverified."
+      ],
+      "claims": [
+        "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
+        "Named tests reject malformed present completion status and preserve an explicit native exit 23 when the delimiter is absent."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/daytona.json",
+        "sha256": "f7e99a248b0dd06e952504fa8d02a75b8701e1b84ffb173621010770aa576753"
+      }
+    },
+    {
+      "id": "@computesdk/declaw",
+      "kind": "compute",
+      "source": {
+        "file": "packages/declaw/src/index.ts",
+        "binding": "declaw",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/declaw/src/index.ts",
+      "symbol": "declaw",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/docker",
+      "kind": "compute",
+      "source": {
+        "file": "packages/docker/src/index.ts",
+        "binding": "docker",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/docker/src/index.ts",
+      "symbol": "docker",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/docker/src/index.ts",
+          "contains": "export const docker = defineProvider<DockerSandboxHandle, DockerConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/e2b",
+      "kind": "compute",
+      "source": {
+        "file": "packages/e2b/src/index.ts",
+        "binding": "e2b",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/e2b/src/index.ts",
+      "symbol": "e2b",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "export const e2b = defineProvider<E2BSandbox, E2BConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/ec2-firecrab",
+      "kind": "compute",
+      "source": {
+        "file": "packages/ec2-firecrab/src/index.ts",
+        "binding": "_ec2Firecrab",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/ec2-firecrab/src/index.ts",
+      "symbol": "ec2Firecrab",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/ec2-firecrab/src/index.ts",
+          "contains": "const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, never, never>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/freestyle",
+      "kind": "compute",
+      "source": {
+        "file": "packages/freestyle/src/index.ts",
+        "binding": "freestyle",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/freestyle/src/index.ts",
+      "symbol": "freestyle",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/freestyle/src/index.ts",
+          "contains": "export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleSnapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/gcp/cloud-run",
+      "kind": "compute",
+      "source": {
+        "file": "packages/gcp/src/cloud-run/index.ts",
+        "binding": "cloudRun",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/gcp/src/cloud-run/index.ts",
+      "symbol": "cloudRun",
+      "status": "unknown",
+      "review": {
+        "status": "excluded",
+        "reason": "Explicitly excluded from this compatibility review; inventory presence is not a support claim."
+      },
+      "evidence": [
+        {
+          "file": "packages/gcp/src/cloud-run/index.ts",
+          "contains": "export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/givemeanode",
+      "kind": "compute",
+      "source": {
+        "file": "packages/givemeanode/src/index.ts",
+        "binding": "provider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/givemeanode/src/index.ts",
+      "symbol": "givemeanode",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/givemeanode/src/index.ts",
+          "contains": "const provider = defineProvider<"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/gravixlayer",
+      "kind": "compute",
+      "source": {
+        "file": "packages/gravixlayer/src/index.ts",
+        "binding": "createGravixLayerProvider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/gravixlayer/src/index.ts",
+      "symbol": "gravixlayer",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "const createGravixLayerProvider = defineProvider<"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/hopx",
+      "kind": "compute",
+      "source": {
+        "file": "packages/hopx/src/index.ts",
+        "binding": "hopx",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/hopx/src/index.ts",
+      "symbol": "hopx",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "export const hopx = defineProvider<HopxSandbox, HopxConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/hyperbrowser",
+      "kind": "browser",
+      "source": {
+        "file": "packages/hyperbrowser/src/index.ts",
+        "binding": "hyperbrowser",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/hyperbrowser/src/index.ts",
+      "symbol": "hyperbrowser",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/hyperbrowser/src/index.ts",
+          "contains": "export const hyperbrowser = defineBrowserProvider<HyperbrowserSession, HyperbrowserConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/isorun",
+      "kind": "compute",
+      "source": {
+        "file": "packages/isorun/src/index.ts",
+        "binding": "isorun",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/isorun/src/index.ts",
+      "symbol": "isorun",
+      "status": "adapter-mocked",
+      "review": {
+        "status": "included",
+        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+      },
+      "evidence": [
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+        "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+        "The capture-read callback consumes native stdout without validating native cat exit status; no end-to-end native read-success guarantee.",
+        "Initial launch failures precede the existing read-cleanup scope."
+      ],
+      "claims": [
+        "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/isorun.json",
+        "sha256": "1c4f7a12c0c686fbf1a1b8a748a43be47fe4889a7d1d235baeb1cf799609675c"
+      }
+    },
+    {
+      "id": "@computesdk/just-bash",
+      "kind": "compute",
+      "source": {
+        "file": "packages/just-bash/src/index.ts",
+        "binding": "_provider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/just-bash/src/index.ts",
+      "symbol": "justBash",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/just-bash/src/index.ts",
+          "contains": "const _provider = defineProvider<JustBashSandbox, JustBashConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/k8s",
+      "kind": "compute",
+      "source": {
+        "file": "packages/k8s/src/index.ts",
+        "binding": "createK8sProvider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/k8s/src/index.ts",
+      "symbol": "k8s",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/k8s/src/index.ts",
+          "contains": "const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/kernel",
+      "kind": "browser",
+      "source": {
+        "file": "packages/kernel/src/index.ts",
+        "binding": "kernel",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/kernel/src/index.ts",
+      "symbol": "kernel",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/kernel/src/index.ts",
+          "contains": "export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/leap0",
+      "kind": "compute",
+      "source": {
+        "file": "packages/leap0/src/index.ts",
+        "binding": "_provider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/leap0/src/index.ts",
+      "symbol": "leap0",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "const _provider = defineProvider<Leap0Sandbox, Leap0Config>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/lelantos",
+      "kind": "compute",
+      "source": {
+        "file": "packages/lelantos/src/index.ts",
+        "binding": "lelantos",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/lelantos/src/index.ts",
+      "symbol": "lelantos",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/lightning",
+      "kind": "compute",
+      "source": {
+        "file": "packages/lightning/src/index.ts",
+        "binding": "lightning",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/lightning/src/index.ts",
+      "symbol": "lightning",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/lightning/src/index.ts",
+          "contains": "export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/lizard",
+      "kind": "compute",
+      "source": {
+        "file": "packages/lizard/src/index.ts",
+        "binding": "createLizard",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/lizard/src/index.ts",
+      "symbol": "lizard",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "const createLizard = defineProvider<Sandbox, LizardConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/microsandbox",
+      "kind": "compute",
+      "source": {
+        "file": "packages/microsandbox/src/index.ts",
+        "binding": "_microsandbox",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/microsandbox/src/index.ts",
+      "symbol": "microsandbox",
+      "status": "adapter-mocked",
+      "review": {
+        "status": "included",
+        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+      },
+      "evidence": [
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "const _microsandbox = defineProvider<"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+        "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+        "Timeout exit 124 intentionally returns best-effort partial output; background launch is not completed-capture verification.",
+        "Native fs/exec read-success and early poll-failure cleanup are not established by these cases."
+      ],
+      "claims": [
+        "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/microsandbox.json",
+        "sha256": "f70fe9f4dcfab8ae9efa423d22a016fab3052c09d7b208e015045ce45b8898ab"
+      }
+    },
+    {
+      "id": "@computesdk/miosa",
+      "kind": "compute",
+      "source": {
+        "file": "packages/miosa/src/index.ts",
+        "binding": "createMiosaProvider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/miosa/src/index.ts",
+      "symbol": "miosa",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "const createMiosaProvider = defineProvider<"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/modal",
+      "kind": "compute",
+      "source": {
+        "file": "packages/modal/src/index.ts",
+        "binding": "_modal",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/modal/src/index.ts",
+      "symbol": "modal",
+      "status": "adapter-mocked",
+      "review": {
+        "status": "included",
+        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+      },
+      "evidence": [
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({"
+        }
+      ],
+      "knownUnsupported": [
+        {
+          "description": "Listing sandboxes is explicitly unsupported.",
+          "evidence": {
+            "file": "packages/modal/src/index.ts",
+            "contains": "Modal provider does not support listing sandboxes."
+          }
+        }
+      ],
+      "gaps": [
+        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+        "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+        "Native cat completion status and runtime-missing empty output are not validated by the existing read callback; zero-length captures do not establish successful native reads.",
+        "Initial launch/wait failures precede the read-cleanup scope; non-integrity errors still use existing native error text."
+      ],
+      "claims": [
+        "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/modal.json",
+        "sha256": "9843f80f8eef94f8d2a192b7067e55d334c1e1d6c65fda8d42fb756d2718907f"
+      }
+    },
+    {
+      "id": "@computesdk/mosaic",
+      "kind": "compute",
+      "source": {
+        "file": "packages/mosaic/src/index.ts",
+        "binding": "mosaic",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/mosaic/src/index.ts",
+      "symbol": "mosaic",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/mosaic/src/index.ts",
+          "contains": "export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot, MosaicSnapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/namespace",
+      "kind": "compute",
+      "source": {
+        "file": "packages/namespace/src/index.ts",
+        "binding": "namespace",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/namespace/src/index.ts",
+      "symbol": "namespace",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/namespace/src/index.ts",
+          "contains": "export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/neevcloud",
+      "kind": "compute",
+      "source": {
+        "file": "packages/neevcloud/src/index.ts",
+        "binding": "neevcloud",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/neevcloud/src/index.ts",
+      "symbol": "neevcloud",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "export const neevcloud = defineProvider<Sandbox, NeevCloudConfig, SandboxTemplate, NeevCloudSnapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/northflank",
+      "kind": "compute",
+      "source": {
+        "file": "packages/northflank/src/index.ts",
+        "binding": "createNorthflankProvider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/northflank/src/index.ts",
+      "symbol": "northflank",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/northflank/src/index.ts",
+          "contains": "const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, NorthflankConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/notte",
+      "kind": "browser",
+      "source": {
+        "file": "packages/notte/src/index.ts",
+        "binding": "notte",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/notte/src/index.ts",
+      "symbol": "notte",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/notte/src/index.ts",
+          "contains": "export const notte = defineBrowserProvider<SessionResponse, NotteConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/novita",
+      "kind": "compute",
+      "source": {
+        "file": "packages/novita/src/index.ts",
+        "binding": "createNovitaProvider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/novita/src/index.ts",
+      "symbol": "novita",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaTemplate, NovitaSnapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/opencomputer",
+      "kind": "compute",
+      "source": {
+        "file": "packages/opencomputer/src/index.ts",
+        "binding": "_provider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/opencomputer/src/index.ts",
+      "symbol": "opencomputer",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "const _provider = defineProvider<OpenComputerNativeSandbox, OpenComputerConfig, any, OpenComputerSnapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/platform",
+      "kind": "compute",
+      "source": {
+        "file": "packages/platform/src/provider.ts",
+        "binding": "platform",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/platform/src/index.ts",
+      "symbol": "platform",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/platform/src/provider.ts",
+          "contains": "export const platform = defineProvider<PlatformInstance, PlatformConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/promigence",
+      "kind": "compute",
+      "source": {
+        "file": "packages/promigence/src/index.ts",
+        "binding": "promigence",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/promigence/src/index.ts",
+      "symbol": "promigence",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/promigence/src/index.ts",
+          "contains": "export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/quilt",
+      "kind": "compute",
+      "source": {
+        "file": "packages/quilt/src/index.ts",
+        "binding": "quilt",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/quilt/src/index.ts",
+      "symbol": "quilt",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/quilt/src/index.ts",
+          "contains": "export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/r2",
+      "kind": "storage",
+      "source": {
+        "file": "packages/r2/src/index.ts",
+        "binding": "r2",
+        "mechanism": "StorageProvider"
+      },
+      "entrypoint": "packages/r2/src/index.ts",
+      "symbol": "r2",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/r2/src/index.ts",
+          "contains": "export function r2(config: R2Config): R2 {"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/railway",
+      "kind": "compute",
+      "source": {
+        "file": "packages/railway/src/index.ts",
+        "binding": "railway",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/railway/src/index.ts",
+      "symbol": "railway",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/railway/src/index.ts",
+          "contains": "export const railway = defineProvider<RailwaySandbox, RailwayConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/run-cloud",
+      "kind": "compute",
+      "source": {
+        "file": "packages/run-cloud/src/index.ts",
+        "binding": "_provider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/run-cloud/src/index.ts",
+      "symbol": "runCloud",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "const _provider = defineProvider<"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/runloop",
+      "kind": "compute",
+      "source": {
+        "file": "packages/runloop/src/index.ts",
+        "binding": "runloop",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/runloop/src/index.ts",
+      "symbol": "runloop",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "export const runloop = defineProvider<"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/runtime",
+      "kind": "compute",
+      "source": {
+        "file": "packages/runtime/src/index.ts",
+        "binding": "runtime",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/runtime/src/index.ts",
+      "symbol": "runtime",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, RuntimeSnapshot>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/s3",
+      "kind": "storage",
+      "source": {
+        "file": "packages/s3/src/index.ts",
+        "binding": "s3",
+        "mechanism": "StorageProvider"
+      },
+      "entrypoint": "packages/s3/src/index.ts",
+      "symbol": "s3",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/s3/src/index.ts",
+          "contains": "export function s3(config: S3Config): S3 {"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/sail",
+      "kind": "compute",
+      "source": {
+        "file": "packages/sail/src/index.ts",
+        "binding": "sail",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/sail/src/index.ts",
+      "symbol": "sail",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/sail/src/index.ts",
+          "contains": "export const sail = defineProvider<Sailbox, SailConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/sandbox0",
+      "kind": "compute",
+      "source": {
+        "file": "packages/sandbox0/src/index.ts",
+        "binding": "_provider",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/sandbox0/src/index.ts",
+      "symbol": "sandbox0",
+      "status": "adapter-mocked",
+      "review": {
+        "status": "included",
+        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+      },
+      "evidence": [
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+        "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+        "Empty-context versus stream-output precedence remains unchanged; native cat read-success semantics are not established by the byte-count check.",
+        "Background launch and timeout behavior are not completed-capture verification."
+      ],
+      "claims": [
+        "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/sandbox0.json",
+        "sha256": "26c45334f432c75d3238290974d15cc415e948e8d027c9408b1ce5945b8fa61d"
+      }
+    },
+    {
+      "id": "@computesdk/secure-exec",
+      "kind": "compute",
+      "source": {
+        "file": "packages/secure-exec/src/index.ts",
+        "binding": "secureExec",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/secure-exec/src/index.ts",
+      "symbol": "secureExec",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/sprites",
+      "kind": "compute",
+      "source": {
+        "file": "packages/sprites/src/index.ts",
+        "binding": "sprites",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/sprites/src/index.ts",
+      "symbol": "sprites",
+      "status": "adapter-mocked",
+      "review": {
+        "status": "included",
+        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+      },
+      "evidence": [
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+        "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+        "Remote timeout/cancellation remains unchanged and unverified.",
+        "The delimiter protocol is not a byte-count/checksum or truncated-stderr guarantee; long-running trailing-background output/lifetime is unverified."
+      ],
+      "claims": [
+        "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
+        "Named tests reject missing/malformed child completion and missing stderr separators with a safe protocol error."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/sprites.json",
+        "sha256": "c7483f83d9541551d6bc3f0c1f40eac963edd5c96dcc4e8704835d77790948b5"
+      }
+    },
+    {
+      "id": "@computesdk/steel",
+      "kind": "browser",
+      "source": {
+        "file": "packages/steel/src/index.ts",
+        "binding": "steel",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/steel/src/index.ts",
+      "symbol": "steel",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/steel/src/index.ts",
+          "contains": "export const steel = defineBrowserProvider<NativeSteelSession, SteelConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/superserve",
+      "kind": "compute",
+      "source": {
+        "file": "packages/superserve/src/index.ts",
+        "binding": "superserve",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/superserve/src/index.ts",
+      "symbol": "superserve",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/tenki",
+      "kind": "compute",
+      "source": {
+        "file": "packages/tenki/src/index.ts",
+        "binding": "tenki",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/tenki/src/index.ts",
+      "symbol": "tenki",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "export const tenki = defineProvider<Session, TenkiConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/tensorlake",
+      "kind": "compute",
+      "source": {
+        "file": "packages/tensorlake/src/index.ts",
+        "binding": "tensorlake",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/tensorlake/src/index.ts",
+      "symbol": "tensorlake",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "export const tensorlake = defineProvider<"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/tigris",
+      "kind": "storage",
+      "source": {
+        "file": "packages/tigris/src/index.ts",
+        "binding": "tigris",
+        "mechanism": "StorageProvider"
+      },
+      "entrypoint": "packages/tigris/src/index.ts",
+      "symbol": "tigris",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/tigris/src/index.ts",
+          "contains": "export function tigris(config: TigrisConfig): Tigris {"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/tilion",
+      "kind": "browser",
+      "source": {
+        "file": "packages/tilion/src/index.ts",
+        "binding": "tilion",
+        "mechanism": "defineBrowserProvider"
+      },
+      "entrypoint": "packages/tilion/src/index.ts",
+      "symbol": "tilion",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/tilion/src/index.ts",
+          "contains": "export const tilion = defineBrowserProvider<TilionSession, TilionConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/uno",
+      "kind": "compute",
+      "source": {
+        "file": "packages/uno/src/index.ts",
+        "binding": "uno",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/uno/src/index.ts",
+      "symbol": "uno",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/uno/src/index.ts",
+          "contains": "export const uno = defineProvider<UnoSandbox, ConfigWithClient>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/upstash",
+      "kind": "compute",
+      "source": {
+        "file": "packages/upstash/src/index.ts",
+        "binding": "upstash",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/upstash/src/index.ts",
+      "symbol": "upstash",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({"
+        }
+      ],
+      "knownUnsupported": [
+        {
+          "description": "Ephemeral boxes do not support preview URLs.",
+          "evidence": {
+            "file": "packages/upstash/src/index.ts",
+            "contains": "Preview URLs are not supported on ephemeral boxes. Use ephemeral: false to create a full box with preview support."
+          }
+        },
+        {
+          "description": "Direct template creation is unsupported; snapshots are the documented alternative.",
+          "evidence": {
+            "file": "packages/upstash/src/index.ts",
+            "contains": "Upstash Box does not support template creation directly. Use snapshot.create() to save a box state, then Box.fromSnapshot() to restore from it."
+          }
+        }
+      ],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    },
+    {
+      "id": "@computesdk/vercel",
+      "kind": "compute",
+      "source": {
+        "file": "packages/vercel/src/index.ts",
+        "binding": "vercel",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/vercel/src/index.ts",
+      "symbol": "vercel",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "export const vercel = defineProvider<VercelSandbox, VercelConfig>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
+        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      ],
+      "claims": []
+    }
+  ],
+  "exclusions": [
+    {
+      "directory": "packages/cli",
+      "reason": "CLI client; not a compute/browser/infra/storage adapter."
+    },
+    {
+      "directory": "packages/cmd",
+      "reason": "Command construction utilities; not an adapter."
+    },
+    {
+      "directory": "packages/computesdk",
+      "reason": "Unified SDK interfaces/client; adapter implementations live in provider packages."
+    },
+    {
+      "directory": "packages/create-compute",
+      "reason": "Project scaffolder; not an adapter."
+    },
+    {
+      "directory": "packages/daemond",
+      "reason": "Daemon transport/server; not a provider adapter."
+    },
+    {
+      "directory": "packages/events",
+      "reason": "Event transport utilities; not an adapter."
+    },
+    {
+      "directory": "packages/provider",
+      "reason": "Factory/type framework (including defineInfraProvider and StorageProvider), not a native adapter."
+    },
+    {
+      "directory": "packages/test-utils",
+      "reason": "Shared test harness and generic mocks; not a native adapter or adapter verification."
+    },
+    {
+      "directory": "packages/workbench",
+      "reason": "Interactive developer tooling; not an adapter."
+    }
+  ]
+}

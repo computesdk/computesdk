@@ -50,6 +50,14 @@ jobs:
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm build
 
+    - name: Check provider conformance inventory (no provider calls)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm check:provider-conformance
+
+    - name: Run provider command contracts (native mocks only)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm test:provider-contracts
+
     - name: Run all tests (mock mode)
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm test

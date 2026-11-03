@@ -1,0 +1,81 @@
+{
+  "provider": "@computesdk/isorun",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "command": "pnpm --filter @computesdk/isorun --fail-if-no-match exec vitest run src/__tests__/command-integrity.test.ts --maxWorkers=1 --minWorkers=1",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true"
+  },
+  "revision": "1fc0302051fe31d94f5ce225915905e23109a636",
+  "recordedAt": "2026-11-03T03:10:36.821206+00:00",
+  "executionFinishedAt": "2026-11-03T03:03:03.091574+00:00",
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 21,
+  "tests": [
+    {
+      "file": "packages/isorun/src/__tests__/command-integrity.test.ts",
+      "contains": "describe(\"isorun command capture integrity"
+    }
+  ],
+  "claims": [
+    "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+    "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+  ],
+  "inputHashes": [
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "cae2afeb4cb70e3f9259ab4bd0c482d873754072a68cfb5d21683cd9833ecd89"
+    },
+    {
+      "file": "packages/isorun/package.json",
+      "sha256": "320cbacb2a2458109fb2e66e85ea3ca14cc1a9f2cae6ad7a9b9dee5c027bf35b"
+    },
+    {
+      "file": "packages/isorun/src/__tests__/command-integrity.test.ts",
+      "sha256": "c008cb5769359e0fa44e1c5e7b898e35995ce3c34a9218012d4f22962b5a15d5"
+    },
+    {
+      "file": "packages/isorun/src/index.ts",
+      "sha256": "3ded5e89e16f980484914b872a5bc1238ed3083670b6f85d6f4ed60fc9a24f06"
+    },
+    {
+      "file": "packages/provider/src/command-output.ts",
+      "sha256": "877ad798c0e5b112a368b96a6a423d929816499376a8bc18d465405d58ad5020"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "limitations": [
+    "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+    "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+    "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+    "The capture-read callback consumes native stdout without validating native cat exit status; no end-to-end native read-success guarantee.",
+    "Initial launch failures precede the existing read-cleanup scope."
+  ]
+}
