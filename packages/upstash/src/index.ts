@@ -272,7 +272,23 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       },
 
       getInfo: async (sandbox: UpstashSandboxInstance): Promise<InstanceInfo> => {
-        const { status } = await sandbox.getStatus();
+        const id = sandbox.id;
+        validateBoxId(id);
+        let data: unknown;
+        try {
+          // Fresh public status GET scoped to this instance, not cached metadata.
+          data = await sandbox.getStatus();
+        } catch {
+          throw new Error('Upstash box info lookup failed.');
+        }
+        if (typeof data !== 'object' || data === null || Array.isArray(data) ||
+            !('status' in data) || typeof data.status !== 'string' ||
+            data.status.trim().length === 0) {
+          throw new Error('Upstash box info returned an invalid status.');
+        }
+        // Preserve exact native spelling; only an explicitly reviewed native
+        // terminal value can be an oracle, never the broad universal "stopped".
+        const status = data.status;
 
         const universalStatus: InstanceInfo['status'] =
           (status === 'creating' || status === 'idle' || status === 'running') ? 'running' :
@@ -280,13 +296,13 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               'stopped';
 
         return {
-          id: sandbox.id,
+          id,
           provider: 'upstash',
           status: universalStatus,
           createdAt: new Date(),
           timeout: 600000,
           metadata: {
-            upstashBoxId: sandbox.id,
+            upstashBoxId: id,
             upstashStatus: status,
           },
         };

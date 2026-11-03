@@ -30,6 +30,42 @@ describe('Upstash full Box lifecycle contract', () => {
     http.mockResolvedValueOnce(json(resource('retained-box', 'stopped')));
     expect((await sdk().instances.getById('retained-box'))?.instanceId).toBe('retained-box');
   });
+  it.each(['deleted', 'paused', 'error', 'running', 'unknown', ' deleted '])(
+    'refreshes exact public status without converting retained %s metadata to absence', async status => {
+      http.mockResolvedValueOnce(json(resource('retained-box', 'running')));
+      const box = await sdk().instances.getById('retained-box');
+      http.mockReset();
+      http.mockResolvedValueOnce(json({ status }));
+      const info = await box!.getInfo();
+      expect(info.id).toBe('retained-box');
+      expect(info.metadata).toMatchObject({ upstashBoxId: 'retained-box', upstashStatus: status });
+      expect(http).toHaveBeenCalledTimes(1);
+      expect(String(http.mock.calls[0][0])).toMatch(/\/v2\/box\/retained-box\/status$/);
+      expect(http.mock.calls[0][1].method).toBe('GET');
+    },
+  );
+  it.each([{}, { status: null }, { status: 404 }, { status: {} }, { status: '' }, { status: ' ' }, []])(
+    'rejects malformed public status without exposing native payload %#', async body => {
+      http.mockResolvedValueOnce(json(resource()));
+      const box = await sdk().instances.getById('canonical-box');
+      http.mockReset();
+      http.mockResolvedValueOnce(json(body));
+      await expect(box!.getInfo()).rejects.toThrow('Upstash box info returned an invalid status.');
+      expect(http).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each([401, 403, 404, 500])('preserves info failure, sanitizing HTTP %s body', async status => {
+    http.mockResolvedValueOnce(json(resource()));
+    const box = await sdk().instances.getById('canonical-box');
+    http.mockReset();
+    http.mockResolvedValueOnce(json({ error: 'private-provider-body' }, status));
+    let error: unknown;
+    try { await box!.getInfo(); } catch (caught) { error = caught; }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('Upstash box info lookup failed.');
+    expect(error).not.toHaveProperty('cause');
+    expect(http).toHaveBeenCalledTimes(1);
+  });
   it('maps scoped native 404 lookup to null', async () => {
     http.mockResolvedValueOnce(json({ error: 'missing' }, 404));
     await expect(sdk().instances.getById('missing-box')).resolves.toBeNull();
