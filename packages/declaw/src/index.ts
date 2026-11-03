@@ -4,7 +4,7 @@
  * Wraps `@declaw/sdk` to expose the ComputeSDK provider interface.
  */
 
-import { Sandbox as DeclawSandbox, ConnectionConfig, Volumes as DeclawVolumes } from '@declaw/sdk';
+import { Sandbox as DeclawSandbox, ConnectionConfig, NotFoundError, Volumes as DeclawVolumes } from '@declaw/sdk';
 import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type {
@@ -22,6 +22,34 @@ export interface DeclawConfig {
   domain?: string;
   /** Default create-time timeout in milliseconds. */
   timeout?: number;
+}
+
+function requireApiKey(config: DeclawConfig): string {
+  const apiKey = config.apiKey || process.env.DECLAW_API_KEY;
+  if (!apiKey) throw new Error(`Missing Declaw API key. Provide 'apiKey' in config or set DECLAW_API_KEY.`);
+  return apiKey;
+}
+
+function sandboxIdentity(sandbox: DeclawSandbox, expected?: string): string {
+  const id = sandbox?.sandboxId;
+  validateSandboxReference(id);
+  if (expected !== undefined && id !== expected) {
+    throw new Error('Declaw: invalid sandbox identity');
+  }
+  return id;
+}
+
+function validateSandboxReference(id: string): void {
+  // Match the public connect() validator. Static kill() omits that check
+  // before interpolating the ID into its resource route.
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+    throw new Error('Declaw: invalid sandbox identity');
+  }
+}
+
+function isMissingSandbox(error: unknown, sandboxId: string): boolean {
+  return error instanceof NotFoundError &&
+    (error.sandboxId === undefined || error.sandboxId === sandboxId);
 }
 
 export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
@@ -67,47 +95,38 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
         const timeoutSec = Math.max(1, Math.ceil(ttMs / 1000));
         const template = templateId || 'node';
 
-        try {
-          const sandbox = await DeclawSandbox.create({
-            template, timeout: timeoutSec, apiKey, domain, metadata, envs,
-            // Unified mounts → declaw's [{volumeId, mountPath}] wire shape.
-            ...(unifiedVolumes && {
-              volumes: unifiedVolumes.map((m: any) => {
-                const ref = resolveVolumeRef(m.volume);
-                const volumeId = ref.id ?? ref.name;
-                if (!volumeId) throw new Error('declaw volume mount requires a volume id or name');
-                return { volumeId, mountPath: m.mountPath };
-              }),
+        const sandbox = await DeclawSandbox.create({
+          template, timeout: timeoutSec, apiKey, domain, metadata, envs,
+          // Unified mounts → declaw's [{volumeId, mountPath}] wire shape.
+          ...(unifiedVolumes && {
+            volumes: unifiedVolumes.map((m: any) => {
+              const ref = resolveVolumeRef(m.volume);
+              const volumeId = ref.id ?? ref.name;
+              if (!volumeId) throw new Error('declaw volume mount requires a volume id or name');
+              return { volumeId, mountPath: m.mountPath };
             }),
-            ...providerOptions,
-          });
-          const sandboxId = (sandbox as any).sandboxId ?? (sandbox as any).sandbox_id;
-          if (!sandboxId) throw new Error('Declaw create() returned sandbox without an ID');
-          return { instance: sandbox, instanceId: sandboxId };
-        } catch (error) {
-          if (error instanceof Error) {
-            const msg = error.message.toLowerCase();
-            if (msg.includes('unauthorized') || msg.includes('api key') || msg.includes('401')) {
-              throw new Error(`Declaw authentication failed. Check your DECLAW_API_KEY.`);
-            }
-            if (msg.includes('402') || msg.includes('insufficient balance')) {
-              throw new Error(`Declaw wallet balance is insufficient. Top up at https://declaw.ai/`);
-            }
-            if (msg.includes('429') || msg.includes('concurrent') || msg.includes('rate limit')) {
-              throw new Error(`Declaw concurrency/rate limit reached: ${error.message}`);
-            }
-          }
-          throw new Error(`Failed to create Declaw sandbox: ${error instanceof Error ? error.message : String(error)}`);
-        }
+          }),
+          ...providerOptions,
+        });
+        const sandboxId = sandboxIdentity(sandbox);
+        return { instance: sandbox, instanceId: sandboxId };
       },
 
       getById: async (config: DeclawConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+        const apiKey = requireApiKey(config);
+        validateSandboxReference(sandboxId);
         const domain = config.domain || process.env.DECLAW_DOMAIN;
+        let sandbox: DeclawSandbox;
         try {
-          const sandbox = await DeclawSandbox.connect(sandboxId, { apiKey, domain });
-          return { instance: sandbox, instanceId: sandboxId };
-        } catch { return null; }
+          // SDK 1.2.3 connect performs one GET /sandboxes/:id; its public
+          // NotFoundError is produced by that route's HTTP 404 only.
+          sandbox = await DeclawSandbox.connect(sandboxId, { apiKey, domain });
+        } catch (error) {
+          if (isMissingSandbox(error, sandboxId)) return null;
+          throw error;
+        }
+        sandboxIdentity(sandbox, sandboxId);
+        return { instance: sandbox, instanceId: sandboxId };
       },
 
       list: async (config: DeclawConfig) => {
@@ -130,15 +149,21 @@ export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({
       },
 
       destroy: async (config: DeclawConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.DECLAW_API_KEY!;
+        const apiKey = requireApiKey(config);
+        validateSandboxReference(sandboxId);
         const domain = config.domain || process.env.DECLAW_DOMAIN;
+        let acknowledged: boolean;
         try {
-          await DeclawSandbox.kill(sandboxId, {
+          // Public kill is a single-resource DELETE, not a connect/hydrate call.
+          acknowledged = await DeclawSandbox.kill(sandboxId, {
             config: new ConnectionConfig({ apiKey, domain }),
           });
-        } catch {
-          // Idempotent: sandbox may already be gone.
+        } catch (error) {
+          if (isMissingSandbox(error, sandboxId)) return;
+          throw error;
         }
+        // The native boolean false is documented as already dead, not failure.
+        if (typeof acknowledged !== 'boolean') throw new Error('Declaw: invalid kill acknowledgement');
       },
 
       runCommand: async (sandbox: DeclawSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {

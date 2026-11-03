@@ -90,6 +90,40 @@ function resolveApiKey(config: AgentuityConfig): string {
         ?? '';
 }
 
+function requireApiKey(config: AgentuityConfig): string {
+    const apiKey = resolveApiKey(config);
+    if (!apiKey) {
+        throw new Error('Missing Agentuity API key. Provide `apiKey` in config or set AGENTUITY_SDK_KEY.');
+    }
+    return apiKey;
+}
+
+function lifecycleData(body: unknown): any {
+    if (body && typeof body === 'object' && 'success' in body && body.success !== true) {
+        throw new Error('Agentuity: lifecycle request failed');
+    }
+    return unwrapResponse(body);
+}
+
+function sandboxIdentity(data: any, expected?: string): string {
+    const id = data?.sandboxId;
+    validateSandboxReference(id);
+    if (expected !== undefined && id !== expected) {
+        throw new Error('Agentuity: invalid sandbox identity');
+    }
+    return id;
+}
+
+function validateSandboxReference(id: string): void {
+    // Even an encoded "." or ".." is normalized by URL parsers to a parent
+    // route; its 404 cannot establish absence of a sandbox.
+    // Reject noncanonical whitespace/control identities rather than trimming
+    // them into another sandbox ID. Other path characters are encoded on use.
+    if (typeof id !== 'string' || !id || id.trim() !== id || id === '.' || id === '..' || /[\u0000-\u001f\u007f]/.test(id)) {
+        throw new Error('Agentuity: invalid sandbox identity');
+    }
+}
+
 async function agentuityFetch(
     handle: { apiKey: string; baseURL: string },
     method: string,
@@ -254,50 +288,57 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
                 const res = await agentuityFetch(handle, 'POST', '/sandbox', body);
 
                 if (!res.ok) {
-                    const text = await res.text().catch(() => '');
                     if (res.status === 401) {
                         throw new Error(
                             'Agentuity authentication failed. Please check your AGENTUITY_SDK_KEY.',
                         );
                     }
-                    throw new Error(`Agentuity: failed to create sandbox (${res.status}): ${text}`);
+                    throw new Error(`Agentuity: failed to create sandbox (${res.status})`);
                 }
 
-                const data = unwrapResponse<{
-                    sandboxId: string;
-                    status: string;
-                    stdoutStreamUrl?: string;
-                    stderrStreamUrl?: string;
-                }>(await res.json());
+                const data = lifecycleData(await res.json());
+                const sandboxId = sandboxIdentity(data);
 
                 const sandbox: AgentuityHandle = {
-                    sandboxId: data.sandboxId,
+                    sandboxId,
                     apiKey,
                     baseURL,
                     stdoutStreamUrl: data.stdoutStreamUrl,
                     stderrStreamUrl: data.stderrStreamUrl,
                 };
 
-                return { instance: sandbox, instanceId: data.sandboxId };
+                return { instance: sandbox, instanceId: sandboxId };
             },
 
             /**
              * Reconnect to an existing sandbox by ID.
              *
-             * GET /sandbox/status/{sandboxId}
+             * GET /sandbox/{sandboxId}
              */
             getById: async (
                 config: AgentuityConfig,
                 sandboxId: string,
             ): Promise<{ instance: AgentuityHandle; instanceId: string } | null> => {
-                const apiKey = resolveApiKey(config);
-                if (!apiKey) return null;
+                const apiKey = requireApiKey(config);
+                validateSandboxReference(sandboxId);
 
                 const baseURL = resolveBaseURL(config);
                 const handle = { apiKey, baseURL };
 
-                const res = await agentuityFetch(handle, 'GET', `/sandbox/status/${sandboxId}`);
-                if (!res.ok) return null;
+                // The public sandboxGet route queries this resource directly.
+                const res = await agentuityFetch(handle, 'GET', `/sandbox/${encodeURIComponent(sandboxId)}`);
+                if (res.status === 404) return null;
+                if (!res.ok) throw new Error(`Agentuity: failed to get sandbox (${res.status})`);
+                let body: unknown;
+                try {
+                    body = await res.json();
+                } catch (error) {
+                    // This lookup parser is new: do not expose raw response
+                    // snippets from SyntaxError.message or retain a cause.
+                    if (error instanceof SyntaxError) throw new Error('Agentuity: invalid sandbox response JSON');
+                    throw error;
+                }
+                sandboxIdentity(lifecycleData(body), sandboxId);
 
                 const sandbox: AgentuityHandle = { sandboxId, apiKey, baseURL };
                 return { instance: sandbox, instanceId: sandboxId };
@@ -333,14 +374,31 @@ export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({
              * DELETE /sandbox/{sandboxId}
              */
             destroy: async (config: AgentuityConfig, sandboxId: string): Promise<void> => {
-                const apiKey = resolveApiKey(config);
-                if (!apiKey) return;
+                const apiKey = requireApiKey(config);
+                validateSandboxReference(sandboxId);
 
                 const baseURL = resolveBaseURL(config);
                 const handle = { apiKey, baseURL };
 
-                // Best-effort — ignore errors (sandbox may already be gone)
-                await agentuityFetch(handle, 'DELETE', `/sandbox/${sandboxId}`).catch(() => undefined);
+                const res = await agentuityFetch(handle, 'DELETE', `/sandbox/${encodeURIComponent(sandboxId)}`);
+                if (res.status === 404) return;
+                if (!res.ok) throw new Error(`Agentuity: failed to destroy sandbox (${res.status})`);
+                if (res.status !== 204) {
+                    const text = await res.text();
+                    if (text) {
+                        let acknowledgement;
+                        try {
+                            acknowledgement = JSON.parse(text);
+                        } catch {
+                            // JSON.parse can quote private response bytes in
+                            // its error message. Do not attach that error.
+                            throw new Error('Agentuity: invalid destroy acknowledgement');
+                        }
+                        if (!acknowledgement || acknowledgement.success !== true) {
+                            throw new Error('Agentuity: invalid destroy acknowledgement');
+                        }
+                    }
+                }
             },
 
             // ── Execution ─────────────────────────────────────────────────────

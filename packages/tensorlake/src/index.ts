@@ -6,7 +6,7 @@
  * Uses the official tensorlake npm SDK (0.5.7).
  */
 
-import { Sandbox, SandboxClient, SandboxStatus, OutputMode } from "tensorlake";
+import { Sandbox, SandboxClient, SandboxStatus, SandboxNotFoundError, OutputMode } from "tensorlake";
 import type {
   CreateAndConnectOptions,
   SandboxClientOptions,
@@ -168,6 +168,26 @@ function resolveAuth(config: TensorlakeConfig): {
   return { apiKey, apiUrl };
 }
 
+function sandboxIdentity(value: { sandboxId: string }, expected?: string): string {
+  const id = value?.sandboxId;
+  validateSandboxReference(id);
+  if (expected !== undefined && id !== expected) {
+    throw new Error("Tensorlake: invalid sandbox identity");
+  }
+  return id;
+}
+
+function validateSandboxReference(id: string): void {
+  // The native resource client interpolates IDs/names without encoding. Do
+  // not let a path/query/fragment (including encoded traversal) target a
+  // different resource, or turn its route-level 404 into sandbox absence.
+  // URL parsers also trim trailing ASCII whitespace before normalizing dot
+  // segments, so ". " and ".. " must be rejected, never trimmed into IDs.
+  if (typeof id !== "string" || !id || id.trim() !== id || id === "." || id === ".." || /[/\\?#%\u0000-\u001f\u007f]/.test(id)) {
+    throw new Error("Tensorlake: invalid sandbox identity");
+  }
+}
+
 export const tensorlake = defineProvider<
   TensorlakeSandboxContext,
   TensorlakeConfig
@@ -208,16 +228,9 @@ export const tensorlake = defineProvider<
         const quotaDeadline = startTime + 30_000;
         let lastError: unknown;
         for (let attempt = 0; ; attempt++) {
+          let instance: InstanceType<typeof Sandbox>;
           try {
-            const instance = await Sandbox.create(params);
-            const sandbox: TensorlakeSandboxContext = {
-              config,
-              sandbox: instance,
-            };
-            const durationMs = Date.now() - startTime;
-            return { instance: sandbox, instanceId: instance.sandboxId,
-              durationMs,
-            };
+            instance = await Sandbox.create(params);
           } catch (error) {
             lastError = error;
             const message =
@@ -228,34 +241,37 @@ export const tensorlake = defineProvider<
             await new Promise((resolve) =>
               setTimeout(resolve, Math.min(1000 * (attempt + 1), 3000)),
             );
+            continue;
           }
+          // A successful create must not be repeated if identity hydration
+          // subsequently fails, even when the error text mentions quota.
+          const instanceId = sandboxIdentity(instance);
+          const sandbox: TensorlakeSandboxContext = { config, sandbox: instance };
+          return { instance: sandbox, instanceId, durationMs: Date.now() - startTime };
         }
-        const error = lastError;
-        if (error instanceof Error && error.message.includes("401")) {
-          throw new Error(
-            `Tensorlake authentication failed. Please check your TENSORLAKE_API_KEY. ` +
-              `Get your API key from https://app.tensorlake.ai`,
-          );
-        }
-        throw new Error(
-          `Failed to create Tensorlake sandbox: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+        throw lastError;
       },
 
       getById: async (config: TensorlakeConfig, sandboxId: string) => {
+        const { apiKey, apiUrl } = resolveAuth(config);
+        validateSandboxReference(sandboxId);
+        const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
+        // connect returns a local handle. Validate its raw lifecycle target
+        // before info() can turn a normalized wrong-route 404 into absence.
+        sandboxIdentity(sandbox, sandboxId);
+        let info: SandboxInfo;
         try {
-          const { apiKey, apiUrl } = resolveAuth(config);
-          const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
-          const ctx: TensorlakeSandboxContext = {
-            config,
-            sandbox,
-          };
-          return { instance: ctx, instanceId: sandbox.sandboxId };
-        } catch {
-          return null;
+          // connect is only a lazy local handle in 0.5.158. Public info()
+          // queries SandboxClient.get and pins documented name aliases to IDs.
+          info = await sandbox.info();
+        } catch (error) {
+          if (error instanceof SandboxNotFoundError && error.sandboxId === sandboxId) return null;
+          throw error;
         }
+        const instanceId = sandboxIdentity(info);
+        sandboxIdentity(sandbox, instanceId);
+        const ctx: TensorlakeSandboxContext = { config, sandbox };
+        return { instance: ctx, instanceId };
       },
 
       list: async (config: TensorlakeConfig) => {
@@ -285,12 +301,17 @@ export const tensorlake = defineProvider<
       },
 
       destroy: async (config: TensorlakeConfig, sandboxId: string) => {
+        const { apiKey, apiUrl } = resolveAuth(config);
+        validateSandboxReference(sandboxId);
+        const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
+        sandboxIdentity(sandbox, sandboxId);
         try {
-          const { apiKey, apiUrl } = resolveAuth(config);
-          const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
+          // terminate delegates to one resource-specific client.delete and
+          // returns Promise<void>; its acknowledgement is not an absence proof.
           await sandbox.terminate();
-        } catch {
-          // Sandbox may already be terminated
+        } catch (error) {
+          if (error instanceof SandboxNotFoundError && error.sandboxId === sandboxId) return;
+          throw error;
         }
       },
 
