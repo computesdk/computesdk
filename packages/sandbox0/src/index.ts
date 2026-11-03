@@ -551,6 +551,14 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
                 Date.now() + 60_000,
                 60_000,
               );
+              const exitCodes = [done.context?.exitCode, done.terminal?.exitCode]
+                .filter((code) => code !== undefined);
+              // Empty/exact stdout alone cannot certify a successful cat.
+              // Either native source may be unavailable, but any reported
+              // failure conflicts with success and must fail closed.
+              if (exitCodes.length === 0 || exitCodes.some((code) => code !== 0)) {
+                throw new Error('Sandbox0 capture read did not exit successfully.');
+              }
               return done.context?.stdout ?? done.output.stdout;
             } finally {
               deleteContextBestEffort(sandbox, s.contextId);

@@ -10,18 +10,22 @@ import { isorun } from "../index";
 
 beforeEach(() => { vi.clearAllMocks(); });
 
+type CaptureFile = "out" | "err" | "outlen" | "errlen" | "code";
+
 type Capture = {
   out?: string[];
   err?: string[];
   outlen?: string | Error;
   errlen?: string | Error;
   code?: string | Error;
+  nativeReads?: Partial<Record<CaptureFile, unknown[]>>;
 };
 
 // Only the native SDK is faked. defineProvider, sandbox handles, and the
 // production adapter's guest-file capture/readback protocol all run unchanged.
 async function fixture(capture: Capture = {}) {
   const reads = { out: 0, err: 0 };
+  const catReads = { out: 0, err: 0, outlen: 0, errlen: 0, code: 0 };
   const out = capture.out ?? ["output"];
   const err = capture.err ?? [""];
   const files = {
@@ -56,12 +60,16 @@ async function fixture(capture: Capture = {}) {
       }
       const match = /^cat (\S+)(?: 2>\/dev\/null)?$/.exec(command);
       if (!match) throw new Error(`Unexpected native command: ${command}`);
+      const file = match[1]!.split(".").pop()! as CaptureFile;
+      const attempt = catReads[file]++;
+      const overrides = capture.nativeReads?.[file];
+      if (overrides) return overrides[Math.min(attempt, overrides.length - 1)];
       return { stdout: read(match[1]!), stderr: "", exitCode: 0 };
     }),
   };
   mocks.get.mockResolvedValue(native);
   const sandbox = await isorun({ apiKey: "local-test-only" }).sandbox.getById(native.id);
-  return { sandbox: sandbox!, native, reads, wrappers, cleanups };
+  return { sandbox: sandbox!, native, reads, catReads, wrappers, cleanups };
 }
 
 describe("isorun command capture integrity (native SDK fake)", () => {
@@ -145,4 +153,77 @@ describe("isorun command capture integrity (native SDK fake)", () => {
     expect(f.wrappers).toHaveLength(1);
     expect(f.cleanups).toHaveLength(1);
   });
+});
+
+// Runtime-invalid replies are intentional: native HTTP payloads can violate
+// their declared types. Valid replies use only the installed SDK's real fields.
+function nativeCatResult(stdout: unknown, status: unknown): unknown {
+  return { stdout, stderr: "native-stderr-secret", exitCode: status };
+}
+
+async function expectSafeReadFailure(f: Awaited<ReturnType<typeof fixture>>) {
+  const error: unknown = await f.sandbox.runCommand("command-secret").catch((e: unknown) => e);
+  expect(error).toMatchObject({ code: "COMMAND_OUTPUT_INTEGRITY" });
+  expect(String(error) + JSON.stringify(error)).not.toMatch(/native-stderr-secret|native-agent-secret|captured-output-secret|command-secret/);
+  expect(f.wrappers).toHaveLength(1);
+  expect(f.cleanups).toHaveLength(1);
+  return error;
+}
+
+describe("native capture read completion", () => {
+  it.each(["out", "err"] as const)("rejects a failed native %s cat returning empty text for a zero-byte capture", async (file) => {
+    const f = await fixture({ out: [""], err: [""], nativeReads: { [file]: [nativeCatResult("", 1)] } });
+    const error = await expectSafeReadFailure(f);
+    expect(error).toMatchObject({ reason: "output-read-failed", stream: file === "out" ? "stdout" : "stderr", attempts: 1 });
+    expect(f.catReads[file]).toBe(1);
+  });
+
+  it.each(["out", "err"] as const)("rejects failed native %s cat even if text has exactly the recorded byte count", async (file) => {
+    const secret = "captured-output-secret";
+    const f = await fixture({ [file]: [secret], nativeReads: { [file]: [nativeCatResult(secret, 1)] } });
+    await expectSafeReadFailure(f);
+    expect(f.catReads[file]).toBe(1);
+  });
+
+  it.each(["out", "err"] as const)("rejects a failed exact-size second native %s cat without replaying the command", async (file) => {
+    const complete = "x".repeat(100);
+    const f = await fixture({
+      [file]: [complete],
+      nativeReads: { [file]: [nativeCatResult(complete.slice(0, 40), 0), nativeCatResult(complete, 1)] },
+    });
+    const error = await expectSafeReadFailure(f);
+    expect(error).toMatchObject({ reason: "output-read-failed", attempts: 2 });
+    expect(f.catReads[file]).toBe(2);
+  });
+
+  it.each(["outlen", "errlen", "code"] as const)("rejects failed native %s cat despite valid-looking metadata", async (file) => {
+    const f = await fixture({ out: [""], err: [""], nativeReads: { [file]: [nativeCatResult("0", 1)] } });
+    const error = await expectSafeReadFailure(f);
+    expect(error).toMatchObject({ reason: file === "code" ? "invalid-exit-code" : "length-read-failed" });
+    expect(f.catReads[file]).toBe(1);
+  });
+
+  for (const file of ["out", "err", "outlen", "errlen", "code"] as const) {
+    describe(`${file} malformed native reply`, () => {
+      it.each([
+        { name: "undefined reply", make: () => undefined },
+        { name: "null reply", make: () => null },
+        { name: "missing payload", make: () => ({}) },
+        { name: "missing status", make: (text: string) => nativeCatResult(text, undefined) },
+        { name: "null status", make: (text: string) => nativeCatResult(text, null) },
+        { name: "string status", make: (text: string) => nativeCatResult(text, "0") },
+        { name: "missing stdout", make: () => nativeCatResult(undefined, 0) },
+        { name: "null stdout", make: () => nativeCatResult(null, 0) },
+        { name: "numeric stdout", make: () => nativeCatResult(0, 0) },
+        { name: "buffer stdout", make: () => nativeCatResult(Buffer.from(""), 0) },
+      ])("rejects $name with safe diagnostics", async ({ make }) => {
+        const f = await fixture({
+          out: [""], err: [""],
+          nativeReads: { [file]: [make(file === "out" || file === "err" ? "" : "0")] },
+        });
+        await expectSafeReadFailure(f);
+        expect(f.catReads[file]).toBe(1);
+      });
+    });
+  }
 });

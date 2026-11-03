@@ -485,12 +485,27 @@ async function execShort(native: NativeSandbox, script: string) {
   return native.execWith('/bin/sh', (builder) => builder.args(['-c', script]));
 }
 
-async function readGuestFile(native: NativeSandbox, path: string): Promise<string> {
+async function readGuestFileViaExec(
+  native: NativeSandbox,
+  path: string,
+  requireSuccessfulExec: boolean,
+): Promise<string> {
+  const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
+  if (requireSuccessfulExec && output.code !== 0) {
+    throw new Error('Microsandbox capture read did not exit successfully.');
+  }
+  return output.stdout();
+}
+
+async function readGuestFile(
+  native: NativeSandbox,
+  path: string,
+  requireSuccessfulExec = false,
+): Promise<string> {
   try {
     return await native.fs().readToString(path);
   } catch {
-    const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
-    return output.stdout();
+    return readGuestFileViaExec(native, path, requireSuccessfulExec);
   }
 }
 
@@ -506,12 +521,9 @@ async function readGuestFileChecked(
   stream: 'stdout' | 'stderr',
 ): Promise<string> {
   return readVerifiedCommandOutput({
-    readLength: () => readGuestFile(native, lenPath),
-    read: () => readGuestFile(native, path),
-    reread: async () => {
-      const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
-      return output.stdout();
-    },
+    readLength: () => readGuestFile(native, lenPath, true),
+    read: () => readGuestFile(native, path, true),
+    reread: () => readGuestFileViaExec(native, path, true),
     stream,
   });
 }
@@ -622,7 +634,7 @@ async function runCommand(
     const [stdout, stderr, codeText] = await Promise.all([
       readGuestFileChecked(native, paths.out, paths.outLen, 'stdout'),
       readGuestFileChecked(native, paths.err, paths.errLen, 'stderr'),
-      readGuestFile(native, paths.code).catch(() => ''),
+      readGuestFile(native, paths.code, true).catch(() => ''),
     ]);
     return {
       stdout,

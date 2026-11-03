@@ -523,7 +523,14 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         try {
           const readFile = async (path: string): Promise<string> => {
             const r = await sandbox.runCommand("cat", [path]);
-            return r.result.stdout;
+            const captured = r?.result;
+            // Buffered CreateOS results require exit_code, and error signals
+            // an agent-start failure even when that status happens to be zero.
+            if (!captured || captured.exit_code !== 0 || typeof captured.stdout !== "string" ||
+                (captured.error !== undefined && captured.error !== "")) {
+              throw new Error("Capture file read failed");
+            }
+            return captured.stdout;
           };
           const stdout = await readVerifiedCommandOutput({
             stream: "stdout",

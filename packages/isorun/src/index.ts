@@ -148,17 +148,26 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
         await sandbox.exec(wrapped, timeoutSec)
 
         try {
+          const readFile = async (path: string, quiet = false): Promise<string> => {
+            const r = await sandbox.exec(`cat ${path}${quiet ? ' 2>/dev/null' : ''}`, 60)
+            // Empty or exact-size text from a failed cat is not a verified
+            // capture. Isorun's buffered exec contract requires exitCode.
+            if (!r || r.exitCode !== 0 || typeof r.stdout !== 'string') {
+              throw new Error('Capture file read failed')
+            }
+            return r.stdout
+          }
           const stdout = await readVerifiedCommandOutput({
             stream: 'stdout',
-            readLength: async () => (await sandbox.exec(`cat ${base}.outlen 2>/dev/null`, 60)).stdout,
-            read: async () => (await sandbox.exec(`cat ${base}.out`, 60)).stdout,
+            readLength: () => readFile(`${base}.outlen`, true),
+            read: () => readFile(`${base}.out`),
           })
           const stderr = await readVerifiedCommandOutput({
             stream: 'stderr',
-            readLength: async () => (await sandbox.exec(`cat ${base}.errlen 2>/dev/null`, 60)).stdout,
-            read: async () => (await sandbox.exec(`cat ${base}.err`, 60)).stdout,
+            readLength: () => readFile(`${base}.errlen`, true),
+            read: () => readFile(`${base}.err`),
           })
-          const codeText = await sandbox.exec(`cat ${base}.code 2>/dev/null`, 60).then((r) => r.stdout).catch(() => '')
+          const codeText = await readFile(`${base}.code`, true).catch(() => '')
 
           return {
             stdout,

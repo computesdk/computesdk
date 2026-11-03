@@ -16,6 +16,14 @@ vi.mock('modal', () => ({
 
 import { modal } from '../index';
 
+type CaptureFile = 'out' | 'err' | 'outlen' | 'errlen' | 'code';
+type NativeCat = {
+  text?: unknown;
+  status?: unknown;
+  readText?: () => Promise<unknown>;
+  wait?: () => Promise<unknown>;
+};
+
 type Capture = {
   stdout?: string[];
   stderr?: string[];
@@ -24,6 +32,7 @@ type Capture = {
   code?: string;
   missingCode?: boolean;
   outerCode?: number;
+  cat?: Partial<Record<CaptureFile, NativeCat>>;
 };
 
 function capture({
@@ -34,28 +43,29 @@ function capture({
   code = '0',
   missingCode = false,
   outerCode = 0,
+  cat = {},
 }: Capture = {}) {
   const reads = { stdout: 0, stderr: 0 };
-  const process = (text: string, exitCode = 0) => ({
-    stdout: { readText: async () => text },
+  const process = (text: string, exitCode = 0, native: NativeCat = {}) => ({
+    stdout: { readText: native.readText ?? (async () => 'text' in native ? native.text : text) },
     stderr: { readText: async () => '' },
-    wait: async () => exitCode,
+    wait: native.wait ?? (async () => 'status' in native ? native.status : exitCode),
   });
   exec.mockImplementation(async (argv: string[]) => {
     if (argv[0] === 'sh') return process('', outerCode);
     if (argv[0] === 'rm') return process('');
     if (argv[0] !== 'cat') throw new Error('Unexpected native exec');
     const path = argv[1];
-    if (path.endsWith('.outlen')) return process(stdoutLength);
-    if (path.endsWith('.errlen')) return process(stderrLength);
-    if (path.endsWith('.code')) return process(missingCode ? '' : code, missingCode ? 1 : 0);
+    if (path.endsWith('.outlen')) return process(stdoutLength, 0, cat.outlen);
+    if (path.endsWith('.errlen')) return process(stderrLength, 0, cat.errlen);
+    if (path.endsWith('.code')) return process(missingCode ? '' : code, missingCode ? 1 : 0, cat.code);
     if (path.endsWith('.out')) {
       const index = Math.min(reads.stdout++, stdout.length - 1);
-      return process(stdout[index]);
+      return process(stdout[index], 0, cat.out);
     }
     if (path.endsWith('.err')) {
       const index = Math.min(reads.stderr++, stderr.length - 1);
-      return process(stderr[index]);
+      return process(stderr[index], 0, cat.err);
     }
     throw new Error('Unexpected capture path');
   });
@@ -98,6 +108,128 @@ describe('Modal command output integrity (native SDK mocks)', () => {
   it('accepts verified empty streams', async () => {
     capture();
     await expect(run()).resolves.toMatchObject({ stdout: '', stderr: '', exitCode: 0 });
+  });
+
+  describe.each([
+    { file: 'out' as const, stream: 'stdout' as const },
+    { file: 'err' as const, stream: 'stderr' as const },
+  ])('native cat status validation for $stream', ({ file, stream }) => {
+    it.each(['', 'plausible output'])('rejects failed cat even when its output %j matches the expected byte count', async (text) => {
+      capture({ [stream]: [text], cat: { [file]: { status: 1 } } });
+      await expect(run()).rejects.toMatchObject({
+        code: 'COMMAND_OUTPUT_INTEGRITY', reason: 'output-read-failed', stream,
+        expectedBytes: Buffer.byteLength(text), attempts: 1,
+      });
+      expect(exec.mock.calls.filter(([argv]) => argv[0] === 'sh')).toHaveLength(1);
+      expect(exec.mock.calls.some(([argv]) => argv[0] === 'rm')).toBe(true);
+    });
+
+    it.each([undefined, null, '0', NaN, 0.5, -1, 256])('rejects missing or invalid native wait status %j', async (status) => {
+      capture({ cat: { [file]: { status } } });
+      await expect(run()).rejects.toMatchObject({
+        code: 'COMMAND_OUTPUT_INTEGRITY', reason: 'output-read-failed', stream, expectedBytes: 0, attempts: 1,
+      });
+    });
+
+    it.each([undefined, null])('does not coerce missing native readText value %j into valid empty output', async (text) => {
+      capture({ cat: { [file]: { text } } });
+      await expect(run()).rejects.toMatchObject({
+        code: 'COMMAND_OUTPUT_INTEGRITY', reason: 'output-read-failed', stream, expectedBytes: 0, attempts: 1,
+      });
+    });
+  });
+
+  it.each([
+    { file: 'outlen' as const, stream: 'stdout' },
+    { file: 'errlen' as const, stream: 'stderr' },
+  ])('rejects failed native length-file cat for $stream even with a plausible length', async ({ file, stream }) => {
+    capture({ cat: { [file]: { status: 1, text: '0' } } });
+    await expect(run()).rejects.toMatchObject({
+      code: 'COMMAND_OUTPUT_INTEGRITY', reason: 'length-read-failed', stream, attempts: 0,
+    });
+  });
+
+  it.each([undefined, null])('rejects missing length-file readText %j as metadata transport failure', async (text) => {
+    capture({ cat: { outlen: { text } } });
+    await expect(run()).rejects.toMatchObject({
+      code: 'COMMAND_OUTPUT_INTEGRITY', reason: 'length-read-failed', stream: 'stdout', attempts: 0,
+    });
+  });
+
+  it('rejects failed native code-file cat instead of trusting plausible child status text', async () => {
+    capture({ cat: { code: { status: 1, text: '0' } } });
+    await expect(run()).rejects.toMatchObject({
+      code: 'COMMAND_OUTPUT_INTEGRITY', reason: 'invalid-exit-code',
+    });
+  });
+
+  it.each([undefined, null])('rejects missing code-file readText %j instead of child success', async (text) => {
+    capture({ cat: { code: { text } } });
+    await expect(run()).rejects.toMatchObject({
+      code: 'COMMAND_OUTPUT_INTEGRITY', reason: 'invalid-exit-code',
+    });
+  });
+
+  it('drains readText and awaits cat completion concurrently, preserving Unicode and a completed nonzero child status', async () => {
+    let reading = false;
+    let waiting = false;
+    const text = '  🙂漢é\n';
+    capture({
+      stdout: [text], stderr: ['warning\n'], code: '23',
+      cat: {
+        out: {
+          readText: async () => {
+            reading = true;
+            await Promise.resolve();
+            if (!waiting) throw new Error('Native read must overlap wait');
+            return text;
+          },
+          wait: async () => {
+            waiting = true;
+            await Promise.resolve();
+            if (!reading) throw new Error('Native wait must overlap read');
+            return 0;
+          },
+        },
+      },
+    });
+    await expect(run()).resolves.toMatchObject({ stdout: text, stderr: 'warning\n', exitCode: 23 });
+    expect(reading && waiting).toBe(true);
+    expect(exec.mock.calls.filter(([argv]) => argv[0] === 'sh')).toHaveLength(1);
+  });
+
+  it.each([
+    { file: 'out' as const, reason: 'output-read-failed', stream: 'stdout', attempts: 1 },
+    { file: 'err' as const, reason: 'output-read-failed', stream: 'stderr', attempts: 1 },
+    { file: 'outlen' as const, reason: 'length-read-failed', stream: 'stdout', attempts: 0 },
+    { file: 'errlen' as const, reason: 'length-read-failed', stream: 'stderr', attempts: 0 },
+    { file: 'code' as const, reason: 'invalid-exit-code' },
+  ])('safely reports native cat wait rejection for $file without output or secrets', async ({ file, reason, stream, attempts }) => {
+    const secret = 'native-wait-secret-token';
+    const captured = 'captured-private-output';
+    capture({
+      stdout: [captured], stderr: [captured],
+      cat: { [file]: { wait: async () => { throw new Error(secret); } } },
+    });
+    const failure = await run().catch((error) => error);
+    expect(failure).toMatchObject({ code: 'COMMAND_OUTPUT_INTEGRITY', reason, stream, attempts });
+    expect(String(failure)).not.toContain(secret);
+    expect(JSON.stringify(failure)).not.toContain(secret);
+    expect(failure.stack).not.toContain(secret);
+    expect(String(failure)).not.toContain(captured);
+    expect(JSON.stringify(failure)).not.toContain(captured);
+    expect(failure.stack).not.toContain(captured);
+    expect(failure).not.toHaveProperty('cause');
+  });
+
+  it.each(['out', 'outlen', 'code'] as const)('safely reports native cat readText rejection for %s', async (file) => {
+    const secret = 'native-read-secret-output';
+    capture({ cat: { [file]: { readText: async () => { throw new Error(secret); } } } });
+    const failure = await run().catch((error) => error);
+    expect(failure).toMatchObject({ code: 'COMMAND_OUTPUT_INTEGRITY' });
+    expect(String(failure)).not.toContain(secret);
+    expect(JSON.stringify(failure)).not.toContain(secret);
+    expect(failure).not.toHaveProperty('cause');
   });
 
   it.each(['', 'not-a-length', '10junk', '-1', '9007199254740992', '1.5'])(

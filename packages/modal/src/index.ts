@@ -262,7 +262,13 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           try {
             const readFile = async (path: string): Promise<string> => {
               const p = await modalSandbox.instance.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-              return (await p.stdout.readText()) || '';
+              // Drain while waiting: successful text delivery alone does not
+              // prove cat succeeded, even when the expected capture is empty.
+              const [text, status] = await Promise.all([p.stdout.readText(), p.wait()]);
+              if (status !== 0 || typeof text !== 'string') {
+                throw new Error('Command capture read failed');
+              }
+              return text;
             };
             const stdout = await readVerifiedCommandOutput({
               readLength: () => readFile(`${base}.outlen`),
