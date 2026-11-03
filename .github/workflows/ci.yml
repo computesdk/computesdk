@@ -54,7 +54,7 @@ jobs:
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm check:provider-conformance
 
-    - name: Run provider command contracts (native mocks only)
+    - name: Run provider reliability contracts (local mocks only)
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm test:provider-contracts
 

@@ -15,11 +15,13 @@
     "DAYTONA_API_KEY": "",
     "SPRITES_API_KEY": "",
     "SPRITES_TOKEN": "",
-    "SKIP_INTEGRATION": "true"
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0"
   },
-  "revision": "1fc0302051fe31d94f5ce225915905e23109a636",
-  "recordedAt": "2026-11-03T03:10:36.821206+00:00",
-  "executionFinishedAt": "2026-11-03T03:03:03.091574+00:00",
+  "revision": "035a64c1b907ab29b1c7a8265dde82294bc0be9e",
+  "recordedAt": "2026-11-03T03:47:56.287834+00:00",
+  "executionFinishedAt": "2026-11-03T03:47:56.207259+00:00",
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
@@ -38,7 +40,7 @@
   "inputHashes": [
     {
       "file": "packages/computesdk/src/compute.ts",
-      "sha256": "cae2afeb4cb70e3f9259ab4bd0c482d873754072a68cfb5d21683cd9833ecd89"
+      "sha256": "e39da1d3bfb33eb3165779c14e1536d7cb2f63d587b4f797b365ce2990b3f9c3"
     },
     {
       "file": "packages/provider/src/command-output.ts",
@@ -77,5 +79,19 @@
     "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
     "Remote timeout/cancellation remains unchanged and unverified.",
     "The delimiter protocol is not a byte-count/checksum or truncated-stderr guarantee; long-running trailing-background output/lifetime is unverified."
-  ]
+  ],
+  "executionGroup": "pnpm test:provider-contracts",
+  "builtArtifacts": [
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "471805e9cd6048b38d9330b6876394b0e908ee444da7f155fe01393979331325"
+    }
+  ],
+  "installedNativeDependency": {
+    "kind": "in-repository client; no external native SDK dependency"
+  }
 }

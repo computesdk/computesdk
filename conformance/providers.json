@@ -536,7 +536,7 @@
       "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -550,15 +550,18 @@
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Two unchanged ingress-default tests fail (expected true, existing implementation false); no ingress behavior was changed.",
-        "Native error decoration of captured stderr and native cat read-success semantics remain outside these claims."
+        "Native error decoration of captured stderr remains outside these claims.",
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
-        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
+        "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command.",
+        "Native-boundary tests use result.exit_code and reject agent-start errors, including plausible output returned with a nominal zero status."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/createos-sandbox.json",
-        "sha256": "160676bfb4ced51eeba6db6247056833f87803ea5f08defa57d7b75eac44fd3c"
+        "sha256": "14192dd25c000bea956e7a1dabb271618225f9ebc4ed4dd1bb2590c573c4d29b"
       }
     },
     {
@@ -574,7 +577,7 @@
       "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -587,16 +590,17 @@
         "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
-        "Native missing-delimiter fallback is retained; missing native status can still default to zero, so universal child-completion validation is not claimed.",
-        "Native zsh/custom images and survival of long-running detached processes remain unverified."
+        "Native zsh/custom images and survival of long-running detached processes remain unverified.",
+        "Absent-footer native failures remain failure information only, not proof of child completion or full separated output."
       ],
       "claims": [
         "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
-        "Named tests reject malformed present completion status and preserve an explicit native exit 23 when the delimiter is absent."
+        "Named tests reject malformed present completion status and preserve an explicit native exit 23 when the delimiter is absent.",
+        "Named tests reject absent completion with missing, malformed or zero native status; preserve explicit native failures1..255; and verify fixed typed protocol diagnostics without captured secrets."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/daytona.json",
-        "sha256": "f7e99a248b0dd06e952504fa8d02a75b8701e1b84ffb173621010770aa576753"
+        "sha256": "de709997295d110399519d1b4d13d93b3e56ef9b69e1bee4752766789b1b1032"
       }
     },
     {
@@ -665,10 +669,10 @@
       },
       "entrypoint": "packages/e2b/src/index.ts",
       "symbol": "e2b",
-      "status": "unknown",
+      "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included for visibility; no adapter-scoped verification run recorded."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -676,12 +680,39 @@
           "contains": "export const e2b = defineProvider<E2BSandbox, E2BConfig>({"
         }
       ],
-      "knownUnsupported": [],
-      "gaps": [
-        "No adapter-scoped conformance run recorded. Generic factory mocks are not adapter verification.",
-        "Native behavior and full capability/unsupported coverage are unverified; an empty knownUnsupported list does not imply support."
+      "knownUnsupported": [
+        {
+          "description": "Template list explicitly fails as unimplemented by this adapter when the installed SDK lacks its legacy hook.",
+          "evidence": {
+            "file": "packages/e2b/src/index.ts",
+            "contains": "E2B template.list is not implemented by this adapter for the installed SDK."
+          }
+        },
+        {
+          "description": "Template delete explicitly fails as unimplemented by this adapter when the installed SDK lacks its legacy hook.",
+          "evidence": {
+            "file": "packages/e2b/src/index.ts",
+            "contains": "E2B template.delete is not implemented by this adapter for the installed SDK."
+          }
+        }
       ],
-      "claims": []
+      "gaps": [
+        "Only named local lifecycle regressions are covered; live native behavior, snapshot create/restore, retention, authorization isolation and other contracts remain unverified.",
+        "Native contract inspection targets installed e2b 2.30.1, not consumer 2.57 or every version allowed by the declared dependency range.",
+        "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+        "Legacy template shim cases are synthetic compatibility tests; those hooks are absent from the inspected native SDK and no builder or snapshot/template alias is added.",
+        "Native service errors propagate with their original details; only locally generated malformed-response/unsupported diagnostics are fixed messages."
+      ],
+      "claims": [
+        "Named native-boundary-mocked tests cover snapshot pagination, source filtering, total limits, configuration precedence, and propagation of native failures.",
+        "Named tests reject malformed inventory pages/IDs and nonboolean deletion results; native true/false deletion is handled according to the inspected 2.30.1 contract.",
+        "Real-core/provider/native-only-mocked roundtrip preserves absent snapshot creation time and deletes the exact returned native ID with configured credentials.",
+        "Existing template operations fail explicitly when legacy hooks are absent; controlled legacy shims test forwarding/error behavior only, not installed native support."
+      ],
+      "verification": {
+        "file": "conformance/runs/local-mocked/e2b.json",
+        "sha256": "60e2189e1210b09e95021a2c1973993085b6b018b5d41c15d4acf9d044984256"
+      }
     },
     {
       "id": "@computesdk/ec2-firecrab",
@@ -892,7 +923,7 @@
       "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -905,16 +936,17 @@
         "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
-        "The capture-read callback consumes native stdout without validating native cat exit status; no end-to-end native read-success guarantee.",
-        "Initial launch failures precede the existing read-cleanup scope."
+        "Initial launch failures precede the existing read-cleanup scope.",
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
-        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
+        "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/isorun.json",
-        "sha256": "1c4f7a12c0c686fbf1a1b8a748a43be47fe4889a7d1d235baeb1cf799609675c"
+        "sha256": "9bffac755c9b83344185d5f94fc4f86956723b501b026098d0ca6952bae25403"
       }
     },
     {
@@ -1126,7 +1158,7 @@
       "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -1140,15 +1172,18 @@
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Timeout exit 124 intentionally returns best-effort partial output; background launch is not completed-capture verification.",
-        "Native fs/exec read-success and early poll-failure cleanup are not established by these cases."
+        "Early poll-failure cleanup remains outside these cases; real provider FS/exec behavior remains unverified.",
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
-        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
+        "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command.",
+        "Completed exec fallback reads validate the native code getter; successful empty native FS reads and explicitly best-effort timeout124 behavior are preserved."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/microsandbox.json",
-        "sha256": "f70fe9f4dcfab8ae9efa423d22a016fab3052c09d7b208e015045ce45b8898ab"
+        "sha256": "df2ce4f02337fde926cf03959ce2573a9465588f88d2d2bd31a7479c13975a97"
       }
     },
     {
@@ -1192,7 +1227,7 @@
       "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -1213,16 +1248,17 @@
         "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
-        "Native cat completion status and runtime-missing empty output are not validated by the existing read callback; zero-length captures do not establish successful native reads.",
-        "Initial launch/wait failures precede the read-cleanup scope; non-integrity errors still use existing native error text."
+        "Initial launch/wait failures precede the read-cleanup scope; non-integrity errors still use existing native error text.",
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
-        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
+        "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/modal.json",
-        "sha256": "9843f80f8eef94f8d2a192b7067e55d334c1e1d6c65fda8d42fb756d2718907f"
+        "sha256": "309bed46f14158f71ca8550c0f39d167176c08be859d0ce73e193da0af0269df"
       }
     },
     {
@@ -1714,7 +1750,7 @@
       "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -1727,16 +1763,19 @@
         "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
-        "Empty-context versus stream-output precedence remains unchanged; native cat read-success semantics are not established by the byte-count check.",
-        "Background launch and timeout behavior are not completed-capture verification."
+        "Empty-context versus stream-output precedence remains unchanged; real provider behavior remains unverified.",
+        "Background launch and timeout behavior are not completed-capture verification.",
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
-        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status."
+        "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
+        "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command.",
+        "Native-boundary tests accept either available successful exit source and reject missing, invalid or conflicting context/terminal exit status."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/sandbox0.json",
-        "sha256": "26c45334f432c75d3238290974d15cc415e948e8d027c9408b1ce5945b8fa61d"
+        "sha256": "5996d006f5a4b7944c076ce7707d43e65d073e7a52ecb2035de121553c0ab3c1"
       }
     },
     {
@@ -1780,7 +1819,7 @@
       "status": "adapter-mocked",
       "review": {
         "status": "included",
-        "reason": "Included; only the named local command regression contracts have a recorded native-mocked run."
+        "reason": "Included; only the named local reliability contracts have a recorded adapter-mocked run."
       },
       "evidence": [
         {
@@ -1802,7 +1841,7 @@
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/sprites.json",
-        "sha256": "c7483f83d9541551d6bc3f0c1f40eac963edd5c96dcc4e8704835d77790948b5"
+        "sha256": "b64d6fdeace1ce8b2d3a609fcf73d8096b1512dea8016b155783c6835db16d56"
       }
     },
     {

@@ -15,16 +15,18 @@
     "DAYTONA_API_KEY": "",
     "SPRITES_API_KEY": "",
     "SPRITES_TOKEN": "",
-    "SKIP_INTEGRATION": "true"
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0"
   },
-  "revision": "1fc0302051fe31d94f5ce225915905e23109a636",
-  "recordedAt": "2026-11-03T03:10:36.821206+00:00",
-  "executionFinishedAt": "2026-11-03T03:03:03.091574+00:00",
+  "revision": "035a64c1b907ab29b1c7a8265dde82294bc0be9e",
+  "recordedAt": "2026-11-03T03:47:56.287834+00:00",
+  "executionFinishedAt": "2026-11-03T03:47:56.207259+00:00",
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
   },
-  "passedTests": 42,
+  "passedTests": 80,
   "tests": [
     {
       "file": "packages/daytona/src/__tests__/command-contract.test.ts",
@@ -33,12 +35,13 @@
   ],
   "claims": [
     "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
-    "Named tests reject malformed present completion status and preserve an explicit native exit 23 when the delimiter is absent."
+    "Named tests reject malformed present completion status and preserve an explicit native exit 23 when the delimiter is absent.",
+    "Named tests reject absent completion with missing, malformed or zero native status; preserve explicit native failures1..255; and verify fixed typed protocol diagnostics without captured secrets."
   ],
   "inputHashes": [
     {
       "file": "packages/computesdk/src/compute.ts",
-      "sha256": "cae2afeb4cb70e3f9259ab4bd0c482d873754072a68cfb5d21683cd9833ecd89"
+      "sha256": "e39da1d3bfb33eb3165779c14e1536d7cb2f63d587b4f797b365ce2990b3f9c3"
     },
     {
       "file": "packages/daytona/package.json",
@@ -46,11 +49,11 @@
     },
     {
       "file": "packages/daytona/src/__tests__/command-contract.test.ts",
-      "sha256": "d6dbab9ee9510dd9ea40ba3ccb49b2016c0de51bc5e7dbf92dade6d69ef5e082"
+      "sha256": "9460c058cdec251ab821c200690d1e81993a311d67c42aa94eaa37bf3c40b58c"
     },
     {
       "file": "packages/daytona/src/index.ts",
-      "sha256": "ee457545ef8807cdbc93f8245f525bacee17fc896399cb3ea0c50957e6fae215"
+      "sha256": "c8b43a80454f51cba3231c93155a351261db56194169afdce84ee1c4b28b2132"
     },
     {
       "file": "packages/provider/src/command-output.ts",
@@ -75,7 +78,23 @@
     "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
     "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
     "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
-    "Native missing-delimiter fallback is retained; missing native status can still default to zero, so universal child-completion validation is not claimed.",
-    "Native zsh/custom images and survival of long-running detached processes remain unverified."
-  ]
+    "Native zsh/custom images and survival of long-running detached processes remain unverified.",
+    "Absent-footer native failures remain failure information only, not proof of child completion or full separated output."
+  ],
+  "executionGroup": "pnpm test:provider-contracts",
+  "builtArtifacts": [
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "471805e9cd6048b38d9330b6876394b0e908ee444da7f155fe01393979331325"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "@daytonaio/sdk",
+    "version": "0.224.0",
+    "manifestSha256": "124cc8c1e9c4fcef353bf39d9a6312c79b5436ecc10eb9e3c8895ab1f50912db"
+  }
 }

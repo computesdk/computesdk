@@ -34,10 +34,10 @@ machine-readable roster. Current checked counts:
 | Omitted discovered adapter entries | 0 |
 | Cloud Run entries explicitly excluded from compatibility review | 2 |
 | Entries included in compatibility review | 68 |
-| Included entries without a scoped adapter-mocked/native run (**uncovered**) | **61** |
+| Included entries without a scoped adapter-mocked/native run (**uncovered**) | **60** |
 | Included entries without native verification | 68 |
-| Roster entries currently `unknown` | 63 |
-| `declared` / `adapter-mocked` / `native-verified` entries | 0 / 7 / 0 |
+| Roster entries currently `unknown` | 62 |
+| `declared` / `adapter-mocked` / `native-verified` entries | 0 / 8 / 0 |
 
 These are public entry counts, not independent backend counts: deprecated
 `@computesdk/agentcore` forwards to `@computesdk/aws/agentcore`.
@@ -45,13 +45,16 @@ Both `@computesdk/gcp/cloud-run` and deprecated `@computesdk/cloud-run` are
 accounted for, but **explicitly excluded from this compatibility review**.
 Their presence makes no claim of Cloud Run support.
 
-Seven entries have explicitly recorded **limited, mocked command regressions**;
+Eight entries have explicitly recorded **limited, mocked reliability regressions**;
 all other entries remain `unknown`. No native provider has been certified.
 Inventory checks do not execute these adapter regressions. An adapter test
 file's presence, a generic factory mock, a build, or a source fix alone does
 not promote a status.
 
-## Command regressions shipped with this patch
+## Reliability regressions shipped with these patches
+
+This series hardens existing SDK behavior. It does not introduce build, image,
+artifact-registry, or new provider primitives.
 
 After the normal full workspace build, run:
 
@@ -60,38 +63,70 @@ pnpm test:provider-contracts
 ```
 
 CI runs this command separately from the inventory guard. It selects explicit
-native-mocked test files, not package-wide integration scripts, and blanks
-provider credential variables including the Sprites/Sandbox0 token fallbacks.
+adapter/native-mocked and shared helper/core unit files, not package-wide
+integration scripts. It disables the core integration gate and blanks relevant
+provider credentials including E2B and the Sprites/Sandbox0 token fallbacks.
 Sprites uses bounded local stdin-fed bash fixtures; Daytona uses bounded local
 bash/sh command-string fixtures. Neither calls a live provider.
 
 | Scope | Passing checks |
 | --- | ---: |
 | Shared byte-count/child-status helper | 49 |
-| Modal native-mocked unit/regression files | 27 |
-| Isorun command-capture regressions | 21 |
-| CreateOS command-capture regressions | 21 |
-| Sandbox0 native-mocked unit/regression file | 41 |
-| Microsandbox native-mocked unit/regression file | 62 |
+| Shared snapshot-list metadata core units | 11 |
+| E2B snapshot/template regressions, including real-core coupling | 67 |
+| Modal native-mocked unit/regression files | 65 |
+| Isorun command-capture regressions | 80 |
+| CreateOS command-capture regressions | 85 |
+| Sandbox0 native-mocked unit/regression file | 66 |
+| Microsandbox native-mocked unit/regression file | 87 |
 | Sprites shell/protocol regressions | 17 |
-| Daytona shell/protocol regressions | 42 |
-| **Total selected checks** | **280** |
+| Daytona shell/protocol regressions | 80 |
+| **Total selected checks** | **607** |
 
-These totals include existing unit checks; they are not 280 new tests or
-280 native executions. Recorded adapter evidence is under
-`conformance/runs/local-mocked/`, against production/test revision `1fc03020`.
-The helper is a framework utility, not an eighth verified adapter.
+These totals include existing unit checks; they are not 607 new tests or
+607 native executions. Recorded adapter evidence is under
+`conformance/runs/local-mocked/`, against production/test revision
+`035a64c1`. The helper and metadata units do not count as adapters.
+
+The second reliability batch closes these specific gaps:
+
+* Modal, Isorun, CreateOS, Sandbox0 and Microsandbox now require successful native
+  capture-read completion, not just plausible text or matching byte counts.
+  Failed reads cannot certify empty output, lengths, or child exit status.
+* Daytona rejects missing child completion when native status is absent,
+  malformed or zero. An explicit native failure remains useful failure
+  information; it is not proof of child completion.
+* E2B snapshot inventory uses the actual native snapshot paginator and validates
+  pages/IDs. Deletion uses the actual native snapshot method, propagates
+  failures, and accepts its documented boolean not-found result.
+* Core `snapshot.list()` omits unknown `createdAt` and rejects invalid dates.
+  **The public timestamp is now optional; consumers must guard its absence.**
+  Snapshot creation behavior is unchanged.
+* Existing E2B template list/delete no longer invent empty inventory or cleanup
+  success when legacy hooks are absent. They fail explicitly as unimplemented
+  by this adapter, without adding a builder or aliasing templates to snapshots.
+
+Primary installed SDK contracts were inspected for the five capture readers,
+Daytona and E2B. E2B evidence targets installed **2.30.1**, not the separately
+observed consumer 2.57 version or every version allowed by its dependency range.
+Controlled legacy-template shims test forwarding/error behavior only; those
+methods are absent from the inspected E2B SDK.
 
 The full workspace build, root-configured typecheck and affected-adapter
 typechecks pass. Two **pre-existing, unchanged** CreateOS `index.test.ts`
 ingress-default assertions still fail (tests expect `true`, implementation
 defaults to `false`); they are not included in this narrow regression command.
-The entire root test command was not run as part of this local-only check.
+The core unit suite also passes (30 passed, 5 integration tests skipped), as do
+124 explicitly selected shared-provider unit checks. These overlap the table
+and must not be added to its total. The entire root test command was not run as
+part of this local-only check.
 
-Important remaining gaps include successful native `cat`/empty-read semantics,
-same-length corruption, early failure cleanup, remote timeout/cancellation,
-Sandbox0 context-versus-stream precedence, and Daytona's missing-footer native
-fallback. The seven roster entries preserve provider-specific limitations.
+Important remaining gaps include live native behavior, upstream SDK wire
+normalization, same-length corruption, early failure cleanup, remote
+timeout/cancellation, and Sandbox0 context-versus-stream precedence. Microsandbox
+timeout-124 output deliberately remains best-effort, not verified completed
+output. A fallback native Daytona failure does not establish complete child
+streams. The eight roster entries preserve provider-specific limitations.
 
 ## Discovery and provenance
 
@@ -128,8 +163,9 @@ adapter, and newly added packages must be classified.
 
 Each entry also has a nonempty `gaps` list and `knownUnsupported` evidence.
 Only a few explicit source-level limitations have been recorded so far
-(Cloudflare listing/port forwarding, Modal listing, and Upstash ephemeral
-previews/direct template creation). **An empty `knownUnsupported` list means
+(Cloudflare listing/port forwarding, Modal listing, E2B legacy-template hooks,
+and Upstash ephemeral previews/direct template creation).
+**An empty `knownUnsupported` list means
 not inventoried, not that every operation is supported.** These source
 declarations are not native behavior verification.
 
@@ -168,7 +204,7 @@ they do not certify the current/future tree, every capability, or native
 behavior. The recorded input hashes aid manual provenance review; the guard
 does not compare those hashes to every current source/dependency input.
 Reviewers must inspect test contents, execution results and the named revision.
-The seven promotions here record only the separately executed local mocked
+The eight scoped statuses here record only the separately executed local mocked
 regressions above. No native calls or native-verification promotions were made.
 
 ## Guard behavior and limits

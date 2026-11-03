@@ -3,11 +3,13 @@ import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Deliberate whitelist: these exercise real adapters with native boundaries
-// mocked. Do not replace this with package test scripts or directory globs;
+// Deliberate whitelist: real-adapter/native-boundary regressions and shared
+// helper/core unit checks. Do not replace it with package scripts or globs;
 // those can include credential-gated, paid integration tests.
 const suites = [
   ['@computesdk/provider', 'command-output.test.ts'],
+  ['computesdk', 'snapshot-metadata.test.ts'],
+  ['@computesdk/e2b', 'snapshot-contract.test.ts'],
   ['@computesdk/modal', 'command-output.test.ts', 'unit.test.ts'],
   ['@computesdk/isorun', 'command-integrity.test.ts'],
   ['@computesdk/createos-sandbox', 'command-integrity.test.ts'],
@@ -20,7 +22,9 @@ const suites = [
 const env = {
   ...process.env,
   SKIP_INTEGRATION: 'true',
+  COMPUTESDK_INTEGRATION: '0',
   COMPUTESDK_API_KEY: '',
+  E2B_API_KEY: '',
   MODAL_TOKEN_ID: '',
   MODAL_TOKEN_SECRET: '',
   ISORUN_API_KEY: '',
@@ -39,7 +43,7 @@ if (process.platform === 'win32') {
   process.exitCode = 1;
 } else {
   for (const [name, ...tests] of suites) {
-    console.log(`\nProvider contract suite: ${name} (native mocks only)`);
+    console.log(`\nProvider contract suite: ${name} (local mocks only)`);
     const result = spawnSync('pnpm', [
       '--filter', name, '--fail-if-no-match', 'exec', 'vitest', 'run',
       ...tests.map((test) => `src/__tests__/${test}`),
