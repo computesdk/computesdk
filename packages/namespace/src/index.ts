@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { randomUUID } from 'node:crypto';
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
@@ -285,6 +285,32 @@ export const fetchNamespace = async (
  */
 export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
   name: 'namespace',
+  sizes: (config, profile, options) => {
+    for (const [field, value] of [['instanceOptions', options?.instanceOptions], ['instanceOptions.shape', options?.instanceOptions?.shape]] as const) {
+      if (value !== undefined && (value === null || typeof value !== 'object' || Array.isArray(value))) {
+        throw new InstanceSizeError('invalid', `${field} must be an object when requesting sizeClass`);
+      }
+    }
+    const instanceOptions = plainObject(options?.instanceOptions);
+    const shape = plainObject(instanceOptions.shape);
+    if (shape.virtual_cpu !== undefined || shape.memory_megabytes !== undefined ||
+        shape.virtualCpu !== undefined || shape.memoryMegabytes !== undefined ||
+        options?.virtualCpu !== undefined || options?.memoryMegabytes !== undefined ||
+        options?.virtual_cpu !== undefined || options?.memory_megabytes !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with instanceOptions.shape CPU/memory');
+    }
+    const os = shape.os ?? config.os ?? 'linux';
+    const arch = shape.machine_arch ?? config.machineArch ?? 'amd64';
+    if (os !== 'linux' || arch !== 'amd64' || shape.machineArch !== undefined) {
+      return { status: 'unknown', reason: 'Standard shapes are verified only for Namespace Linux amd64, not this OS/architecture.' };
+    }
+    if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl') {
+      return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
+    }
+    return { status: 'supported', nativeOptions: {
+      instanceOptions: { shape: { virtual_cpu: profile.vcpus, memory_megabytes: profile.memoryMiB } },
+    } };
+  },
 
   methods: {
     instances: {

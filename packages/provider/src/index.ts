@@ -72,3 +72,8 @@ export type { StreamedProcess } from './stream-process';
 
 // Export all types
 export type * from './types';
+
+export { createInstanceSizeManager } from './sizes';
+export type { InstanceSizeResolver, InstanceSizeSupport } from './sizes';
+export { InstanceSizeError, INSTANCE_SIZE_PROFILES } from 'computesdk';
+export type { InstanceSizeClass, InstanceSizeProfile, InstanceSizeManager, InstanceSizeResolution, InstanceSizeMetadata, InstanceSizeStatus, InstanceSizeErrorCode, InstanceSizeNativeOptions, InstanceSizeNativeValue } from 'computesdk';

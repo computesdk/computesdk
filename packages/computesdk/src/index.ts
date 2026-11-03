@@ -92,3 +92,5 @@ export type {
 // `compute.setConfig({...}); compute.sandbox.create()`.
 export { compute } from './compute';
 export type { CallableCompute, ExplicitComputeConfig, ComputeCreateVolumeOptions } from './compute';
+
+export * from './sizes';

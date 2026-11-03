@@ -361,6 +361,13 @@ export interface InstanceEgressInfo {
  */
 export interface CreateInstanceOptions extends InstanceResourceOptions {
   /**
+   * Standard CPU/RAM request. Never aliases the provider-native `size` field.
+   * Pins the normally selected provider; disables fallbackOnError even for
+   * native auth/capacity failures. Unknown/blocked mappings fail before create.
+   * Native CPU/RAM/tier selectors cannot be combined with this field.
+   */
+  sizeClass?: import('../sizes').InstanceSizeClass;
+  /**
    * Select the provider's ephemeral compute surface when it offers both
    * ephemeral and persistent instances.
    *
@@ -491,6 +498,9 @@ export interface Instance {
    * `CreateInstanceOptions.egress`. Undefined otherwise.
    */
   readonly egress?: InstanceEgressInfo;
+
+  /** Create-time request mapping only; absent on legacy creates and reattached instances. */
+  readonly sizing?: import('../sizes').InstanceSizeMetadata;
 
   /**
    * Attach a volume to this running instance — present only on providers

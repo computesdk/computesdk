@@ -155,6 +155,9 @@ export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any, TVo
   /** Provider name/type */
   readonly name: string;
 
+  /** Optional for legacy custom providers; absent means unknown, never silently supported. */
+  readonly sizes?: import('computesdk').InstanceSizeManager;
+
   /** Instance management operations */
   readonly instances: ProviderInstanceManager<TInstance>;
 

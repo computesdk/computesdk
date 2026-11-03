@@ -131,3 +131,21 @@ configured `execution` mode.
 - **persistent mode**: `pause`/`resume`/`fork` are available on the underlying
   `disk`-SDK sandbox via `getInstance()` — the generic provider interface has
   no `pause`/`resume` methods, so only `getById`/`runCommand` auto-resume.
+
+## Standard sizes (persistent VMs only)
+
+`archil({ execution: 'persistent' }).sizes.list()` / `resolve('sm')` declares exact
+`sm`, `md`, `lg`, and `xl` requests. `create({ sizeClass: 'sm' })` maps to adapter
+`vcpus: 1`, `memoryMiB: 2048`, then native `vcpuCount` / `memSizeMiB`. Explicit
+`ephemeral: false` can select persistent mode; the default exec mode remains
+unchanged and reports `unavailable` for VM sizing. Attach (`sandboxId`/`instanceId`)
+and fork (`snapshotId`) standard requests reject as `unsupported` before API calls;
+those paths cannot apply a new VM size. Conflicting native controls reject too.
+`xs`/`2xl` remain `unknown` in this initial adapter catalog.
+
+The persistent API documents 1–32 vCPUs and 256–65536 MiB, but adapter declarations
+are not account/quota/region guarantees or measurements. Discovery is pure and
+needs no credentials. Successful standardized creates expose frozen
+`instance.sizing` request metadata, not observed CPU/RAM. Local mock coverage uses
+the installed `disk` SDK; it does not certify separately locked consumer versions
+or published artifacts. Legacy creates without `sizeClass` remain unchanged.

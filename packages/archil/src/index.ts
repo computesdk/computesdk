@@ -14,7 +14,7 @@
  *   tools, and background processes persist across commands.
  */
 
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, InstanceSizeError } from '@computesdk/provider';
 import { Archil as ArchilClient, ArchilError } from 'disk';
 import type {
   CreateSandboxRequest as ArchilSandboxRequest,
@@ -391,6 +391,28 @@ const sandboxModes = new Map<string, ArchilExecutionMode>();
 
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
   name: 'archil',
+  sizes: (config, profile, options) => {
+    if (options?.sandbox !== undefined && (options.sandbox === null || typeof options.sandbox !== 'object' || Array.isArray(options.sandbox))) {
+      throw new InstanceSizeError('invalid', 'sandbox must be an object when requesting sizeClass');
+    }
+    if (options?.vcpuCount !== undefined || options?.memSizeMiB !== undefined ||
+        options?.vcpu_count !== undefined || options?.mem_size_mib !== undefined ||
+        options?.sandbox?.vcpu_count !== undefined || options?.sandbox?.mem_size_mib !== undefined ||
+        options?.sandbox?.vcpuCount !== undefined || options?.sandbox?.memSizeMiB !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Archil CPU/memory fields');
+    }
+    if (options?.snapshotId !== undefined || options?.sandboxId !== undefined || options?.instanceId !== undefined) {
+      return { status: 'unsupported', reason: 'Archil attach/fork does not apply CPU/RAM overrides; create a new persistent VM to request a standard size.' };
+    }
+    const execution = options?.ephemeral === undefined ? config.execution ?? 'exec' : options.ephemeral ? 'exec' : 'persistent';
+    if (execution !== 'persistent') {
+      return { status: 'unavailable', reason: 'Archil exec containers do not expose persistent VM sizing. Select execution: persistent or ephemeral: false.' };
+    }
+    if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl') {
+      return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
+    }
+    return { status: 'supported', nativeOptions: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: async (config: ArchilConfig, options?: ArchilCreateOptions) => {

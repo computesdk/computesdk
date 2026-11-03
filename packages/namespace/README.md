@@ -65,3 +65,26 @@ const sandbox = await compute.instances.create({
 - All operations use Namespace's compute API
 - Environment variables take precedence over config options
 - Instances are immediately deleted when destroyed (no delayed deletion)
+
+## Standard sizes (local discovery)
+
+`provider.sizes.list()` / `resolve('sm', context?)` declares exact `sm`, `md`, `lg`,
+and `xl` CPU/RAM requests for **Linux amd64 only**. `create({ sizeClass: 'sm' })`
+requests `instanceOptions.shape.virtual_cpu: 1` and `memory_megabytes: 2048`.
+Per-create standard requests override factory CPU/RAM defaults while preserving
+other instance options. Combining them with explicit native CPU/RAM fields is an
+error, even when the numbers match. Non-Linux/unverified architectures and
+`xs`/`2xl` remain `unknown`. Legacy native shape overrides are unchanged.
+
+These are adapter-declared requests based on the documented Linux machine-shape
+catalog, not account/region availability checks or observed resources. Discovery
+never reads token files or calls Namespace. Successful standardized creates expose
+frozen `instance.sizing` request metadata.
+
+Unit boundary: the resolver intentionally sends the canonical MiB number
+unchanged to Namespace's `memory_megabytes` field (2048/4096/8192/16384), matching
+the adapter's existing binary-sized request convention. This is an explicit
+provider API mapping assumption, not an empirical inference from the machine
+shape documentation's “GB” labels or a certification of delivered bytes. Factory
+CPU/RAM values are defaults overridden by `sizeClass`; explicit per-create
+CPU/RAM selectors, including ambiguous aliases, are rejected instead.
