@@ -155,7 +155,7 @@ test('source fingerprint is stable and includes new source/config files, not res
     'packages/test-utils/src/provider-test-suite.ts', '.computesdk/workflows/provider-conformance.yml',
     'packages/e2b/tsup.config.ts', 'packages/e2b/tsconfig.json', 'tsconfig.json',
     'conformance/providers.json', 'scripts/load-compute-vault.sh', 'conformance/compute-cleanup-probe.ts',
-    'conformance/vitest.unit.config.mts']) {
+    'conformance/vitest.unit.config.mts', '.computesdk/workflows/compute-static.yml']) {
     assert.ok(first.inputs.some(input => input.file === name), name);
   }
   assert.ok(first.inputs.every(input => !input.file.startsWith('conformance-results/')));
@@ -178,6 +178,16 @@ test('execute=false emits a fully excluded nonempty vector, not 55 skipped but p
     { encoding: 'utf8', env: { PATH: process.env.PATH, COMPUTE_CONFORMANCE_WORKFLOW_EXECUTE: 'false' } });
   assert.equal(child.status, 0, child.stderr);
   assert.deepEqual(JSON.parse(child.stdout), { plan_only: ['not-executed'], exclude: [{ plan_only: 'not-executed' }] });
+});
+test('all-compute static workflow pins source and Node22 without vault, credentials or native suites', () => {
+  const text = readFileSync('.computesdk/workflows/compute-static.yml', 'utf8');
+  assert.match(text, /expected_source:[\s\S]*required: true/);
+  assert.match(text, /node-version: '22'/);
+  assert.match(text, /process\.env\.EXPECTED_SOURCE !== actual/);
+  assert.match(text, /pnpm install --frozen-lockfile --ignore-scripts/);
+  assert.ok(text.indexOf('pnpm build') < text.indexOf('pnpm typecheck:compute'));
+  assert.match(text, /pnpm check:provider-conformance/);
+  assert.doesNotMatch(text, /secrets[.\[]|NSC_TOKEN|load-compute-vault|vitest|run --execute/);
 });
 test('resource journal records only returned IDs and explicit SDK absence, never SDK objects', () => {
   const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));

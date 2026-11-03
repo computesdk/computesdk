@@ -5,6 +5,35 @@ It does not install a published ComputeSDK candidate, ingest benchmarks, publish
 packages, or certify an entire provider from a smoke test. Browser, storage and
 Cloud Run are out of scope. Aliases are not executed twice.
 
+## Static gate for every compute provider
+
+After the ordered workspace build:
+
+```sh
+pnpm typecheck:compute
+```
+
+This runs the pure Node gate tests, then explicit `tsc --noEmit` commands for
+all **55 canonical compute profiles / 54 package directories**, including
+setup- and cleanup-blocked profiles. AWS AgentCore/EC2 share one package.
+Missing manifests/configs, zero matching packages and any compiler failure
+fail the gate; there is no fallback to a root config or partial provider list.
+CI runs it after the build/inventory and before runtime tests.
+
+Collimate and GiveMeANode use separate no-emit test configs so their four
+previously excluded tests are checked without changing production emit scope.
+The gate compiles adapter/test source against the installed native declarations;
+it does not execute tests, load providers or call native APIs. Existing
+`skipLibCheck` and `any` limitations remain: static success is not live coverage.
+The first local all-package run used Node `24.22.1`; CI selects Node 22.
+Local green alone is not evidence of an independent Node 22 run.
+
+`.computesdk/workflows/compute-static.yml` runs this build/inventory/typecheck
+gate on Node 22 using `--with-changes` and an exact `expected_source` input.
+It has no organization-secret references, vault bootstrap or provider tests.
+It creates no SDK sandboxes; the Actions worker itself still incurs execution
+cost. A successful static run must never be counted as a native-provider pass.
+
 ## Current coverage and gates
 
 `conformance/compute-profiles.json` accounts for all **55 canonical, in-scope
@@ -75,13 +104,30 @@ Fixed-ID, zero-create recovery run `899173ca-65b7-4ef4-9a37-89364df36732`
 observed CreateOS metadata **already destroyed before** its supplemental DELETE,
 with the destruction timestamp during the original test. This supports the
 retained-terminal oracle correction; the original shared run remains failed,
-not retroactively passed. Its new oracle still requires a new candidate run.
+not retroactively passed.
 The expected `NEEV_API_KEY`, `NEEV_ORG_ID` and `NEEV_PROJECT_ID` metadata names
 were all absent; provision them remotely before retrying that provider.
 
 The first wave observed **45 forwarded SDK creates**, not a count of physical
 VMs, native retries, Actions workers or dollars. Recovery journals and raw logs
 remain private; use each run's curated artifacts for evidence.
+
+### CreateOS corrective rerun
+
+Run `2a2f4caa-3a6f-404a-b123-26cce37cf747` passed all **13/13** selected
+shared cases, with no missing/skipped cases or hook errors, on frozen
+`61c9176a`, source fingerprint
+`0b42113e00164ac98ca31141c7bcf5e64ac309af60a7fa3027ad5058345bf846`.
+All 13 unique owned IDs were separately journaled **native-reported-terminal**
+with the exact reviewed CreateOS `destroyed` oracle after destroy acknowledgement;
+none was relabeled SDK-null/physical/billing absence.
+
+The CreateOS adapter binary is identical to the originally failing run; the
+correction is to the cleanup observation and its journal, not filtering SDK
+metadata into null. Original failures and per-row source histories remain
+preserved in the private all-provider scorecard. Including this follow-up,
+58 SDK create requests had been observed, with four providers having scoped
+live shared-suite passes across the two exact candidate fingerprints.
 
 Additional explicit limits:
 
@@ -199,8 +245,10 @@ Vitest process. One passing native smoke case cannot substitute for the suite.
 Retry is zero; missing credentials and blocked configuration are not passes.
 
 Shared-suite verification requires a positive SDK lookup matching the newly
-owned ID before testing, then bounded exact `getById(id) === null` after
-destruction. Authentication/network errors must propagate in eligible lookup
+owned ID before testing, then bounded reviewed observations after destruction:
+exact `getById(id) === null`, or only CreateOS's fresh owned `destroyed` metadata.
+These are separately journaled as SDK absence and native-reported terminal,
+respectively. Authentication/network errors must propagate in eligible lookup
 implementations. Generic consumers without these verification callbacks still
 establish only destroy acknowledgement. Neither path proves physical deletion,
 cessation of billing, or correctness of the vendor's server response.

@@ -15,6 +15,7 @@
     "test:watch": "pnpm -r --parallel run test:watch",
     "test:coverage": "pnpm -r run test:coverage",
     "typecheck": "pnpm --filter '@computesdk/cmd' --filter '@computesdk/provider' --filter 'computesdk' --filter '@computesdk/events' --filter '@computesdk/workbench' --filter '@computesdk/docker' --filter '@computesdk/microsandbox' --filter '@computesdk/novita' --filter '@computesdk/aws' --filter '@computesdk/gcp' --filter 'daemond' run typecheck",
+    "typecheck:compute": "node --test scripts/__tests__/compute-typecheck.test.mjs && node scripts/typecheck-compute-providers.mjs",
     "changeset": "changeset",
     "version": "changeset version && pnpm install --no-frozen-lockfile",
     "release": "pnpm run build && changeset publish",

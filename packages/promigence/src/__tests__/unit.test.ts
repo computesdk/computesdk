@@ -475,7 +475,7 @@ describe('promigence provider (unit, fake client)', () => {
 
     const list = await c.snapshot.list();
     expect(list.map((s) => [s.id, s.provider, s.metadata?.alias, s.metadata?.verified])).toEqual([['snap_1', 'promigence', 'myapp', true]]);
-    expect(list[0].createdAt.toISOString()).toBe('2030-02-03T00:00:00.000Z');
+    expect(list[0].createdAt?.toISOString()).toBe('2030-02-03T00:00:00.000Z');
 
     await c.snapshot.delete('snap_1');
     expect(client.last('snapshots.delete')[0]).toBe('snap_1');
