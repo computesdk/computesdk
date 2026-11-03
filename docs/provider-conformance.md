@@ -79,24 +79,38 @@ bash/sh command-string fixtures. Neither calls a live provider.
 | Shared byte-count/child-status helper | 49 |
 | Shared snapshot metadata/affinity core units | 42 |
 | E2B snapshot/template and instance lookup/delete regressions | 118 |
-| Modal native-mocked unit/regression files | 76 |
+| Modal native-mocked unit/regression files | 109 |
 | Isorun command-capture regressions | 80 |
 | CreateOS command-capture regressions | 85 |
 | Sandbox0 native-mocked unit/regression file | 66 |
-| Microsandbox native-mocked unit/regression file | 87 |
-| Sprites shell/protocol regressions | 17 |
-| Daytona shell/protocol regressions | 80 |
-| Vercel command completion regressions | 26 |
-| HopX command completion regressions | 45 |
-| Beam command completion regressions | 22 |
-| Blaxel command completion/stream regressions | 84 |
-| **Total selected checks** | **937** |
+| Microsandbox command/lifecycle unit regressions | 113 |
+| Sprites shell/protocol and HTTP lifecycle regressions | 49 |
+| Daytona shell/protocol and lifecycle propagation regressions | 110 |
+| Vercel command completion and permanent-deletion regressions | 66 |
+| HopX command completion and lifecycle regressions | 103 |
+| Beam command completion and lifecycle regressions | 54 |
+| Blaxel command completion/stream and lifecycle regressions | 118 |
+| **Total selected checks** | **1,222** |
 
-These totals include existing unit checks; they are not 937 new tests or
-937 native executions. Recorded adapter evidence is under
-`conformance/runs/local-mocked/`: the E2B record now targets production/test
-revision `3f05eda6`, while the other adapter records retain `1a472184`.
+These totals include existing unit checks; they are not 1,222 new tests or
+1,222 native executions. Recorded adapter evidence is under
+`conformance/runs/local-mocked/`: eight lifecycle-expanded records target
+production/test revision `ea98a93a`; E2B retains `3f05eda6`, and Isorun,
+CreateOS and Sandbox0 retain `1a472184`.
 The helper, harness and core units do not count as adapters.
+
+The lifecycle batch adds 285 named regressions across eight existing adapters.
+It propagates previously masked lookup/delete failures, validates native
+identities and preserves documented acknowledgement semantics instead of
+inventing successful deletion. Vercel uses permanent delete, not resumable stop,
+while retaining snapshots and separately owned drives. Independent callgraph
+review caught Daytona's positive sandbox lookup followed by a secondary toolbox
+404; all public-get errors now propagate because that generic 404 cannot prove
+sandbox absence. Only Blaxel, Sprites and Vercel gained source-reviewed
+SDK-absence eligibility; that is not a live result. Modal, Beam, HopX, Daytona
+and cloud Microsandbox remain cleanup-blocked for the explicit reasons in the
+compute profile catalog. None of this proves physical deletion or billing
+cessation.
 
 The compute-loop batch removes canned native-success substitution and caller-
 scope hooks, fences per-attempt ownership/deadlines and fails cleanup errors.
@@ -167,7 +181,7 @@ The core unit suite also passes (61 passed, 5 integration tests skipped), as do
 124 explicitly selected shared-provider unit checks from the prior batch.
 Nine Beam readiness units pass with the integration suite explicitly filtered
 out and credentials blank; their numeric-wait fixture now matches the inspected
-native contract. These auxiliary runs do not increase the selected 826 total:
+native contract. These auxiliary runs do not increase the selected 1,222 total:
 some repeat table checks, while Beam readiness is a separate filtered suite.
 Do not sum their counts. The entire root test command was not run as part of
 this local-only check.

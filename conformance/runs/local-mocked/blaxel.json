@@ -10,25 +10,31 @@
     {
       "file": "packages/blaxel/src/__tests__/run-command.test.ts",
       "contains": "describe('blaxel runCommand output capture"
+    },
+    {
+      "file": "packages/blaxel/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Blaxel native lifecycle contract (offline)', () => {"
     }
   ],
   "claims": [
     "Named native-only-mocked tests require terminal state plus an explicit valid final numeric exit code, rejecting missing/invalid fields, still-running results and contradictory failed-plus-zero instead of inferring zero or one.",
     "Named tests prevent startup-code inheritance, preserve valid native nonzero/negative statuses and exercise late log delivery, bounded drain and timer cleanup.",
-    "Existing native-mocked nonterminal and contradictory-failure tests now require safe protocol rejection rather than synthetic guest status."
+    "Existing native-mocked nonterminal and contradictory-failure tests now require safe protocol rejection rather than synthetic guest status.",
+    "Named lifecycle regressions validate required metadata.name from native GET and DELETE and classify only documented parsed error:string/code:404 lookup failures. Other initialization, malformed identity and deletion errors propagate."
   ],
   "limitations": [
-    "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
     "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
     "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
     "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
     "Terminal status labels alone do not prove numeric success or failure; no output checksum or raw transport integrity is established.",
-    "The bounded log-drain timer is not an overall timeout guarantee: final stream wait, kill and logs operations still depend on native settlement."
+    "The bounded log-drain timer is not an overall timeout guarantee: final stream wait, kill and logs operations still depend on native settlement.",
+    "Numeric error code is optional in native404 bodies; code-absent errors remain errors, not invented absence. Returned delete metadata acknowledges acceptance only; no observed physical-deletion/billing claim."
   ],
-  "command": "pnpm --filter @computesdk/blaxel --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/run-command.test.ts --maxWorkers=1 --minWorkers=1",
-  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
-  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
-  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "command": "pnpm --filter @computesdk/blaxel --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/run-command.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:31.020445+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
   "executionGroup": "pnpm test:provider-contracts",
   "environment": {
     "COMPUTESDK_API_KEY": "",
@@ -51,16 +57,22 @@
     "BEAM_TOKEN": "",
     "BEAM_WORKSPACE_ID": "",
     "BL_API_KEY": "",
-    "BL_WORKSPACE": ""
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
   },
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
   },
-  "passedTests": 84,
+  "passedTests": 118,
   "liveProviderVerification": false,
   "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
   "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
     {
       "file": "packages/blaxel/package.json",
       "sha256": "eb555de4801fb5b6dd1319f23a2cc571d7d0157d350226840e5fd93077a364a4"
@@ -70,12 +82,16 @@
       "sha256": "79633b41b0a68f0a24c8e12373ec310a9cba94e85205286e7c9290002053162c"
     },
     {
+      "file": "packages/blaxel/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "bfaa0c6258e98433e47d06b7f8a609ec1faba2bb29eb84e41790823d26d9822f"
+    },
+    {
       "file": "packages/blaxel/src/__tests__/run-command.test.ts",
-      "sha256": "bf7af893a6249911b57c2dbddaa235e03b4f842fd144d49a5a0843e4f1b6b83a"
+      "sha256": "183dabfefba0753ed68320f48cdaeedfd8e9e6f636b500de0c4c5574851bc35d"
     },
     {
       "file": "packages/blaxel/src/index.ts",
-      "sha256": "2dac0152d9cc7f3be6c95ae3f8193f548c5936356f7396946c629a16b51b7eae"
+      "sha256": "573d2ca2999c9b81721fc947ed63dbfe982128a05af9574afa4826ff847cd6b0"
     },
     {
       "file": "packages/computesdk/src/compute.ts",
@@ -96,12 +112,16 @@
   ],
   "builtArtifacts": [
     {
-      "file": "packages/provider/dist/index.mjs",
-      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+      "file": "packages/blaxel/dist/index.mjs",
+      "sha256": "cb5851241a4cfbeab68a8524e237422be52cf461fb917209683920c7d20181f7"
     },
     {
       "file": "packages/computesdk/dist/index.mjs",
       "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
     }
   ],
   "installedNativeDependency": {

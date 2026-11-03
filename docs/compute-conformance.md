@@ -12,9 +12,11 @@ compute entrypoints in this checkout**. These are not 55 independent companies.
 
 * **20 configuration-wired** profiles have reviewed factory/credential mappings.
 * **35 configuration-blocked** profiles require reviewed setup first.
-* Of the 20, only **5 shared-suite execution candidates** have source-reviewed
-  lookup/delete error handling suitable for SDK-absence checks: CreateOS,
-  E2B, Isorun, NeevCloud and Sandbox0. The other 15 remain cleanup-blocked.
+* Of the 20, **8 shared-suite execution candidates** have source-reviewed
+  lookup/delete error handling suitable for SDK-absence checks: Blaxel, CreateOS,
+  E2B, Isorun, NeevCloud, Sandbox0, Sprites and Vercel. The other 12 remain
+  cleanup-blocked. These are current development-tree reviews; a frozen older
+  candidate retains its own smaller catalog and fingerprint.
 * **No live result is established by this catalog.** Source review is not
   account approval, native verification or physical-deletion proof.
 
@@ -35,6 +37,22 @@ E2B CRUD remains blocked: its list implementation still has independent gaps.
 E2B positive lookup retains its existing native `connect` behavior, which can
 resume a paused sandbox or renew its timeout; it is not a pure inspection API.
 Its absence path uses typed metadata-not-found before any connection attempt.
+
+Additional explicit limits:
+
+* Modal polls for existence but exposes raw RPC failures without a public
+  nullable-absence discriminator; Beam's connection failures likewise lack one.
+* HopX native error heuristics can obscure true missing responses, and its
+  connect-based destroy cannot handle a stopped sandbox. Do not guess absence.
+* Daytona public get can first find a sandbox and then receive a generic 404
+  fetching toolbox metadata. Every such error now propagates; nullable lookup
+  remains unresolved. Delete defaults to acceptance rather than waiting.
+* Microsandbox lookup establishes persisted native database-handle state, not a
+  fresh remote cloud VM query. That distinction prevents cloud-absence approval.
+* Vercel destroy permanently deletes the sandbox instead of stopping a resumable
+  session. It explicitly retains orphan snapshots and separately owned drives.
+* Blaxel 404 bodies without their optional numeric code remain errors rather
+  than invented absence. A returned delete model is acknowledgement only.
 
 ## Local, source-only preparation
 

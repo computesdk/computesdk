@@ -32,7 +32,10 @@ test('blocked profiles and missing configuration cannot become native pass', () 
   assert.equal(blockedReason(e2b, { E2B_API_KEY: 'unit-only-not-a-secret' }), null);
   const beam = profiles.find(p => p.id === '@computesdk/beam');
   assert.equal(blockedReason(beam, { BEAM_TOKEN: 'unit-value', BEAM_WORKSPACE_ID: 'unit-value' }), 'needs-reviewed-cleanup-contract');
-  assert.equal(profiles.filter(p => p.cleanup.status === 'source-reviewed-sdk-absence').length, 5);
+  assert.deepEqual(profiles.filter(p => p.cleanup.status === 'source-reviewed-sdk-absence').map(p => p.id).sort(), [
+    '@computesdk/blaxel', '@computesdk/createos-sandbox', '@computesdk/e2b', '@computesdk/isorun',
+    '@computesdk/neevcloud', '@computesdk/sandbox0', '@computesdk/sprites', '@computesdk/vercel',
+  ]);
 });
 test('vault selection contains only missing names for the selected provider, never values', () => {
   assert.equal(credentialPattern(e2b, {}), '^(E2B_API_KEY)=$');

@@ -2,7 +2,7 @@
   "provider": "@computesdk/modal",
   "status": "adapter-mocked",
   "result": "passed",
-  "command": "pnpm --filter @computesdk/modal --fail-if-no-match exec vitest run src/__tests__/command-output.test.ts src/__tests__/unit.test.ts src/__tests__/timeout-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "command": "pnpm --filter @computesdk/modal --fail-if-no-match exec vitest run src/__tests__/command-output.test.ts src/__tests__/unit.test.ts src/__tests__/timeout-contract.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
   "environment": {
     "COMPUTESDK_API_KEY": "",
     "MODAL_TOKEN_ID": "",
@@ -24,16 +24,18 @@
     "BEAM_TOKEN": "",
     "BEAM_WORKSPACE_ID": "",
     "BL_API_KEY": "",
-    "BL_WORKSPACE": ""
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
   },
-  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
-  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
-  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:30.995239+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
   },
-  "passedTests": 76,
+  "passedTests": 109,
   "tests": [
     {
       "file": "packages/modal/src/__tests__/command-output.test.ts",
@@ -46,15 +48,24 @@
     {
       "file": "packages/modal/src/__tests__/timeout-contract.test.ts",
       "contains": "describe('Modal command timeout preflight"
+    },
+    {
+      "file": "packages/modal/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Modal lifecycle contract (public native SDK mocks)', () => {"
     }
   ],
   "claims": [
     "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
     "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
     "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command.",
-    "Named provider-backed timeout preflight tests reject unsupported precision and malformed values before native exec, preserving supported whole-second millisecond values and omission without rounding."
+    "Named provider-backed timeout preflight tests reject unsupported precision and malformed values before native exec, preserving supported whole-second millisecond values and omission without rounding.",
+    "Named lifecycle regressions query poll after fromId, retain successful null/zero/nonzero poll values, and propagate original lookup/termination errors without inventing a void acknowledgement payload."
   ],
   "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
     {
       "file": "packages/computesdk/src/compute.ts",
       "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
@@ -72,6 +83,10 @@
       "sha256": "0cbff2b0937fe17853103db5de67515f57d34d0a8426968a3a5fb9a411aa0151"
     },
     {
+      "file": "packages/modal/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "75796638d3547c37d6449f8033786c072c6a29c04b65ca8bff8836b11afa972c"
+    },
+    {
       "file": "packages/modal/src/__tests__/timeout-contract.test.ts",
       "sha256": "9c4395b2a0b29119c8d0cf549468bd81ae39d0ae7366a0697af20148573d6fb9"
     },
@@ -81,7 +96,7 @@
     },
     {
       "file": "packages/modal/src/index.ts",
-      "sha256": "8051513ffa308bc69ceb9beceb5bdb047a9d93112bcece27c0c61e022b7ff77c"
+      "sha256": "3437f096132460ad3da201cab225156e92b0e87283a2f39d2f1d0c6391d353c8"
     },
     {
       "file": "packages/provider/src/command-output.ts",
@@ -103,22 +118,27 @@
   "liveProviderVerification": false,
   "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
   "limitations": [
-    "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
     "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
     "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
     "Initial launch/wait failures precede the read-cleanup scope; non-integrity errors still use existing native error text.",
     "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
-    "Timeout preflight is provider-backed only; no universal zero policy, independent daemon-route validation, hard elapsed-time bound or remote cancellation guarantee is established."
+    "Timeout preflight is provider-backed only; no universal zero policy, independent daemon-route validation, hard elapsed-time bound or remote cancellation guarantee is established.",
+    "Raw poll RPC errors have no public authoritative nullable-absence discriminator; Modal remains cleanup-blocked. Poll/terminate do not prove physical deletion or billing cessation."
   ],
   "executionGroup": "pnpm test:provider-contracts",
   "builtArtifacts": [
     {
-      "file": "packages/provider/dist/index.mjs",
-      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
-    },
-    {
       "file": "packages/computesdk/dist/index.mjs",
       "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/modal/dist/index.mjs",
+      "sha256": "448aade416a833382c43d2ce5335a7afb8ef497831a4c045bf9d90ad65c5bd7c"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
     }
   ],
   "installedNativeDependency": {

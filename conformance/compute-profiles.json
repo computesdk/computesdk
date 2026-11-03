@@ -243,7 +243,7 @@
       ],
       "cleanup": {
         "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "reason": "Lookup/termination errors now propagate and native true acknowledgement is required, but installed 1.0.22 connect failures lack a documented sandbox-absence discriminator. SDK Boolean-normalizes the underlying acknowledgement. Remains blocked."
       }
     },
     {
@@ -303,8 +303,8 @@
         }
       ],
       "cleanup": {
-        "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Installed SDK 0.3.21 metadata lookup maps only documented parsed error:string/code:404 bodies; omitted optional code propagates. Delete validates required returned metadata.name. Acknowledgement is not absence; strict later SDK-null verification remains required. Source review only."
       }
     },
     {
@@ -593,7 +593,7 @@
       ],
       "cleanup": {
         "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "reason": "All public get errors now propagate: SDK 0.224.0 first finds the sandbox then may fail a separate toolbox-proxy lookup with the same generic 404. Nullable lookup/idempotent missing destroy cannot be classified safely. Delete(wait=false) is only acknowledgement. Remains blocked."
       }
     },
     {
@@ -896,7 +896,7 @@
       ],
       "cleanup": {
         "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "reason": "Lookup accepts only APIError404 plus semantic SANDBOX_NOT_FOUND; native message heuristics can rewrite actual missing responses into ambiguous errors. Destroy still connects/resumes first and cannot handle stopped sandboxes through that flow. Remains blocked pending reviewed native absence/terminal semantics."
       }
     },
     {
@@ -1274,7 +1274,7 @@
       ],
       "cleanup": {
         "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "reason": "Documented sandboxNotFound applies to persisted native database-handle lookup; public JS does not establish a fresh remote cloud-control-plane absence query. Stop/remove errors now propagate after positive lookup, with existing retries. Cloud profile remains blocked pending a reviewed cleanup oracle."
       }
     },
     {
@@ -1370,7 +1370,7 @@
       ],
       "cleanup": {
         "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "reason": "Lookup now polls and propagates errors; installed 0.11.0 poll exposes raw RPC failures without an authoritative public nullable-absence discriminator. Termination acknowledgement is not absence. Remains blocked; do not guess gRPC codes."
       }
     },
     {
@@ -1979,8 +1979,8 @@
         }
       ],
       "cleanup": {
-        "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Official HTTP API 0.1.12 GET/DELETE sprite-name routes document 404 absence. Lookup validates organization-scoped name; other HTTP/network/decoding failures propagate. Strict later SDK-null verification remains required. Source review only."
       }
     },
     {
@@ -2261,8 +2261,8 @@
         }
       ],
       "cleanup": {
-        "status": "needs-review",
-        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Installed SDK 3.8.0 metadata lookup maps genuine APIError HTTP 404 only. Destroy permanently deletes the sandbox without stop or orphan-snapshot/drive deletion; strict later SDK-null verification remains required. Source review only, no live result."
       }
     }
   ]

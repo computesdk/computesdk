@@ -222,20 +222,22 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+        "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
         "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
         "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
         "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
         "The native process constructor may normalize missing completed wire status to zero before the adapter sees it; these checks are not raw-wire validation.",
-        "Launch, output reads and best-effort remote kill are not proven to fit a hard elapsed-time bound; remote termination and reaping remain unverified."
+        "Launch, output reads and best-effort remote kill are not proven to fit a hard elapsed-time bound; remote termination and reaping remain unverified.",
+        "Public terminate Boolean-normalizes its wire acknowledgement, and connection errors lack an authoritative public absence discriminator. No raw-wire, observed absence or physical-termination claim; profile remains cleanup-blocked."
       ],
       "claims": [
         "Named native-only-mocked tests require the numeric wait() result, reject missing/invalid/negative running-sentinel returns even when a stale handle contains zero, and preserve valid nonnegative native statuses without an unsigned-byte cap.",
-        "Named tests preserve existing timeout124 and native-error127 behavior without command replay."
+        "Named tests preserve existing timeout124 and native-error127 behavior without command replay.",
+        "Named lifecycle regressions propagate native connection/termination failures, validate container identity, require exact public true acknowledgement, and avoid reconnecting a native handle already connected by lookup."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/beam.json",
-        "sha256": "63af54e1075dc86584dce4ee49d5a6788d40206bcb91dfec5f31a88536184c09"
+        "sha256": "f89ba187f51b8248b44bc406ef82ed3db4d879b509cfb1d69be0c9b52af252f4"
       }
     },
     {
@@ -261,21 +263,23 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+        "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
         "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
         "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
         "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
         "Terminal status labels alone do not prove numeric success or failure; no output checksum or raw transport integrity is established.",
-        "The bounded log-drain timer is not an overall timeout guarantee: final stream wait, kill and logs operations still depend on native settlement."
+        "The bounded log-drain timer is not an overall timeout guarantee: final stream wait, kill and logs operations still depend on native settlement.",
+        "Numeric error code is optional in native404 bodies; code-absent errors remain errors, not invented absence. Returned delete metadata acknowledges acceptance only; no observed physical-deletion/billing claim."
       ],
       "claims": [
         "Named native-only-mocked tests require terminal state plus an explicit valid final numeric exit code, rejecting missing/invalid fields, still-running results and contradictory failed-plus-zero instead of inferring zero or one.",
         "Named tests prevent startup-code inheritance, preserve valid native nonzero/negative statuses and exercise late log delivery, bounded drain and timer cleanup.",
-        "Existing native-mocked nonterminal and contradictory-failure tests now require safe protocol rejection rather than synthetic guest status."
+        "Existing native-mocked nonterminal and contradictory-failure tests now require safe protocol rejection rather than synthetic guest status.",
+        "Named lifecycle regressions validate required metadata.name from native GET and DELETE and classify only documented parsed error:string/code:404 lookup failures. Other initialization, malformed identity and deletion errors propagate."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/blaxel.json",
-        "sha256": "ee029c1d3b18406151610ba3f3051aca2ebb712d35e3fdd1629a7c7c6de0c2ed"
+        "sha256": "7fed75130b3513098530ea898f8c7208e1c010b6fc5ff0f4a8a70016dccaead5"
       }
     },
     {
@@ -610,20 +614,22 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Native zsh/custom images and survival of long-running detached processes remain unverified.",
-        "Absent-footer native failures remain failure information only, not proof of child completion or full separated output."
+        "Absent-footer native failures remain failure information only, not proof of child completion or full separated output.",
+        "Public get may fail toolbox-proxy hydration after finding the sandbox. No generic404 can safely prove absence; nullable lookup/idempotent missing destroy remain unresolved and cleanup-blocked. Native delete(wait=false) acknowledges acceptance only."
       ],
       "claims": [
         "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
         "Named tests reject malformed present completion status and preserve an explicit native exit 23 when the delimiter is absent.",
-        "Named tests reject absent completion with missing, malformed or zero native status; preserve explicit native failures1..255; and verify fixed typed protocol diagnostics without captured secrets."
+        "Named tests reject absent completion with missing, malformed or zero native status; preserve explicit native failures1..255; and verify fixed typed protocol diagnostics without captured secrets.",
+        "Named lifecycle regressions preserve canonical native IDs and every public-get/delete failure; real SDK error classes and a two-stage positive-sandbox/auxiliary404 model prevent false-null and false-idempotent cleanup."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/daytona.json",
-        "sha256": "d255d02682dee804b63cebc2f7f9196a18ce99900a4613c999ff56ea626516ca"
+        "sha256": "00cc12d25dcf61d9950c3ffab9719fe060e0a1f98ac928c71cc0657b5ecdf770"
       }
     },
     {
@@ -901,20 +907,22 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+        "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
         "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
         "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
         "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
         "The inspected native SDK has no error.result contract; those tests cover legacy compatibility only and cannot establish a completed successful command after an exception.",
-        "Shell env/cwd quoting, timeout policy, lifecycle/cleanup and broader capability contracts remain outside these tests."
+        "Shell env/cwd quoting, timeout policy and broader capability contracts remain outside these tests.",
+        "Destroy still requires connect: paused boxes may resume/refresh, stopped boxes refuse connection. Native heuristics can rewrite true missing responses into ambiguous Expired/FileNotFound errors; profile remains cleanup-blocked."
       ],
       "claims": [
         "Named native-only-mocked tests validate required stdout/stderr strings and integer native exit_code, preserving valid nonzero/negative statuses and completed zero.",
-        "Named tests reject caught compatibility result zero and malformed metadata; complete nonzero error.result compatibility remains supported without claiming native SDK authority for that synthetic path."
+        "Named tests reject caught compatibility result zero and malformed metadata; complete nonzero error.result compatibility remains supported without claiming native SDK authority for that synthetic path.",
+        "Named lifecycle regressions classify only actual APIError404 plus server SANDBOX_NOT_FOUND, preserve original ambiguous failures, and validate native sandbox IDs. Actual exported HTTPClient tests use an in-process Axios adapter to prove reachable scoped errors and heuristic rewrites without network."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/hopx.json",
-        "sha256": "97fb8dfbb07d4283a177bc50e939f324603210e49d319f1dab12f2a775d435d5"
+        "sha256": "b64ae96776cfaef671daa6ec4ce15f22afbf8a1da99bded5b5210d88a5ea57e2"
       }
     },
     {
@@ -1203,22 +1211,24 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Timeout exit 124 intentionally returns best-effort partial output; background launch is not completed-capture verification.",
         "Early poll-failure cleanup remains outside these cases; real provider FS/exec behavior remains unverified.",
-        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
+        "Persisted native database-handle absence is not a fresh remote-cloud VM query. Cloud cleanup stays blocked pending a reviewed oracle; connection/start effects and native retries remain unchanged."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
         "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
         "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command.",
-        "Completed exec fallback reads validate the native code getter; successful empty native FS reads and explicitly best-effort timeout124 behavior are preserved."
+        "Completed exec fallback reads validate the native code getter; successful empty native FS reads and explicitly best-effort timeout124 behavior are preserved.",
+        "Named lifecycle regressions use the documented sandboxNotFound discriminator only around initial database-handle lookup, return canonical names through the real factory, and propagate post-positive stop/remove/configuration errors with existing retries preserved."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/microsandbox.json",
-        "sha256": "031ef16ec92afad50743eda26bef1cff582e1aaf4589178627e2381e6bffe3b7"
+        "sha256": "c09ff065e7230c02409d2ff6586ba30afeb4e8552bacd76a056e712367b14472"
       }
     },
     {
@@ -1287,22 +1297,24 @@
         }
       ],
       "gaps": [
-        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Initial launch/wait failures precede the read-cleanup scope; non-integrity errors still use existing native error text.",
         "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
-        "Timeout preflight is provider-backed only; no universal zero policy, independent daemon-route validation, hard elapsed-time bound or remote cancellation guarantee is established."
+        "Timeout preflight is provider-backed only; no universal zero policy, independent daemon-route validation, hard elapsed-time bound or remote cancellation guarantee is established.",
+        "Raw poll RPC errors have no public authoritative nullable-absence discriminator; Modal remains cleanup-blocked. Poll/terminate do not prove physical deletion or billing cessation."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
         "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
         "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command.",
-        "Named provider-backed timeout preflight tests reject unsupported precision and malformed values before native exec, preserving supported whole-second millisecond values and omission without rounding."
+        "Named provider-backed timeout preflight tests reject unsupported precision and malformed values before native exec, preserving supported whole-second millisecond values and omission without rounding.",
+        "Named lifecycle regressions query poll after fromId, retain successful null/zero/nonzero poll values, and propagate original lookup/termination errors without inventing a void acknowledgement payload."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/modal.json",
-        "sha256": "0366877a8a1338de014e74cd702340bfb8fbd13a38f784e3c6b459497b6a7375"
+        "sha256": "d4406eca3e2221e361065050b7d823ecde554e378ab4537cdd43d6784ada23d7"
       }
     },
     {
@@ -1873,19 +1885,21 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+        "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Remote timeout/cancellation remains unchanged and unverified.",
-        "The delimiter protocol is not a byte-count/checksum or truncated-stderr guarantee; long-running trailing-background output/lifetime is unverified."
+        "The delimiter protocol is not a byte-count/checksum or truncated-stderr guarantee; long-running trailing-background output/lifetime is unverified.",
+        "HTTP metadata absence is not proof of physical deletion or billing cessation. Background/timeouts and complete capability coverage remain unverified."
       ],
       "claims": [
         "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
-        "Named tests reject missing/malformed child completion and missing stderr separators with a safe protocol error."
+        "Named tests reject missing/malformed child completion and missing stderr separators with a safe protocol error.",
+        "Named HTTP-only lifecycle regressions use organization-scoped sprite names, validate returned name identity, classify only documented HTTP404 absence, and propagate other HTTP, JSON and transport errors."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/sprites.json",
-        "sha256": "c13e8d7db63403957be444a502718c57dc6436b15a740aec01dd2fb617256212"
+        "sha256": "fb9720437995d45bfc6b1ccdb2134f88b9a8fa3fa3cc9b6767f59d0435d5dfd3"
       }
     },
     {
@@ -2150,20 +2164,22 @@
       ],
       "knownUnsupported": [],
       "gaps": [
-        "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+        "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
         "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
         "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
         "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
         "The native SDK itself masks some missing finished wire exit status to zero; adapter-boundary checks cannot recover that omission.",
-        "Detached exit0 is an explicit launch acknowledgement only, not proof of child completion or complete streams."
+        "Detached exit0 is an explicit launch acknowledgement only, not proof of child completion or complete streams.",
+        "Permanent native delete and later SDK-null verification have not run live. Orphan snapshots and separately owned drives are deliberately retained and may keep storage charges; no all-artifact/billing cleanup claim."
       ],
       "claims": [
         "Named native-only-mocked tests reject missing, null or malformed foreground exit status, preserve valid integer statuses and exact captured text, and acknowledge only explicit detached null as launched rather than completed.",
-        "Named tests preserve ordinary native-error handling and timeout forwarding without replaying the command."
+        "Named tests preserve ordinary native-error handling and timeout forwarding without replaying the command.",
+        "Named lifecycle regressions map genuine native sandbox APIError404 only, validate matching native names, permanently delete instead of stop, await void deletion, and retain orphan snapshots/drives through manager and instance paths."
       ],
       "verification": {
         "file": "conformance/runs/local-mocked/vercel.json",
-        "sha256": "143a136bab8ce37cd9aafbd688d82688f4ec1d49365aaef2116f8895b7dfc2d3"
+        "sha256": "c492c05359359e788d23eb23dbb52246ff57e4907ccb0eeb7b82417c91887a08"
       }
     }
   ],

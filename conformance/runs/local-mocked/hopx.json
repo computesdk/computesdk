@@ -6,24 +6,30 @@
     {
       "file": "packages/hopx/src/__tests__/command-contract.test.ts",
       "contains": "describe('HopX real-adapter command contract"
+    },
+    {
+      "file": "packages/hopx/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('HopX real-factory lifecycle contract (native SDK boundary)', () => {"
     }
   ],
   "claims": [
     "Named native-only-mocked tests validate required stdout/stderr strings and integer native exit_code, preserving valid nonzero/negative statuses and completed zero.",
-    "Named tests reject caught compatibility result zero and malformed metadata; complete nonzero error.result compatibility remains supported without claiming native SDK authority for that synthetic path."
+    "Named tests reject caught compatibility result zero and malformed metadata; complete nonzero error.result compatibility remains supported without claiming native SDK authority for that synthetic path.",
+    "Named lifecycle regressions classify only actual APIError404 plus server SANDBOX_NOT_FOUND, preserve original ambiguous failures, and validate native sandbox IDs. Actual exported HTTPClient tests use an in-process Axios adapter to prove reachable scoped errors and heuristic rewrites without network."
   ],
   "limitations": [
-    "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
     "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
     "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
     "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
     "The inspected native SDK has no error.result contract; those tests cover legacy compatibility only and cannot establish a completed successful command after an exception.",
-    "Shell env/cwd quoting, timeout policy, lifecycle/cleanup and broader capability contracts remain outside these tests."
+    "Shell env/cwd quoting, timeout policy and broader capability contracts remain outside these tests.",
+    "Destroy still requires connect: paused boxes may resume/refresh, stopped boxes refuse connection. Native heuristics can rewrite true missing responses into ambiguous Expired/FileNotFound errors; profile remains cleanup-blocked."
   ],
-  "command": "pnpm --filter @computesdk/hopx --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts --maxWorkers=1 --minWorkers=1",
-  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
-  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
-  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "command": "pnpm --filter @computesdk/hopx --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:31.013741+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
   "executionGroup": "pnpm test:provider-contracts",
   "environment": {
     "COMPUTESDK_API_KEY": "",
@@ -46,16 +52,22 @@
     "BEAM_TOKEN": "",
     "BEAM_WORKSPACE_ID": "",
     "BL_API_KEY": "",
-    "BL_WORKSPACE": ""
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
   },
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
   },
-  "passedTests": 45,
+  "passedTests": 103,
   "liveProviderVerification": false,
   "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
   "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
     {
       "file": "packages/computesdk/src/compute.ts",
       "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
@@ -69,8 +81,12 @@
       "sha256": "6b7f08182b20e7f0d57de6c4b7b2c4290976fe785e72558a6bb48e8a5834e8bb"
     },
     {
+      "file": "packages/hopx/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "365229b372285b4287762e1416d9b0430af41caae92f2ca8db9a440633c30304"
+    },
+    {
       "file": "packages/hopx/src/index.ts",
-      "sha256": "f0314267ae611e6069a9d85f6a54c3c81ffd3dcfa4b875a211896985534a05c1"
+      "sha256": "df64db20124d87c926498affc6666dfe55a275f03fc2ba43fc0f4fffd3845888"
     },
     {
       "file": "packages/provider/src/factory.ts",
@@ -87,12 +103,16 @@
   ],
   "builtArtifacts": [
     {
-      "file": "packages/provider/dist/index.mjs",
-      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
-    },
-    {
       "file": "packages/computesdk/dist/index.mjs",
       "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/hopx/dist/index.mjs",
+      "sha256": "cb6d9dcb052c69c680da017eae1ee465641a094b39ff8017794b932a2fa7c0b9"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
     }
   ],
   "installedNativeDependency": {

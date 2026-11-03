@@ -2,7 +2,7 @@
   "provider": "@computesdk/sprites",
   "status": "adapter-mocked",
   "result": "passed",
-  "command": "pnpm --filter @computesdk/sprites --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "command": "pnpm --filter @computesdk/sprites --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
   "environment": {
     "COMPUTESDK_API_KEY": "",
     "MODAL_TOKEN_ID": "",
@@ -24,27 +24,38 @@
     "BEAM_TOKEN": "",
     "BEAM_WORKSPACE_ID": "",
     "BL_API_KEY": "",
-    "BL_WORKSPACE": ""
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
   },
-  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
-  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
-  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:30.999431+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
   },
-  "passedTests": 17,
+  "passedTests": 49,
   "tests": [
     {
       "file": "packages/sprites/src/__tests__/command-contract.test.ts",
       "contains": "Sprites real-adapter command contract"
+    },
+    {
+      "file": "packages/sprites/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Sprites lifecycle contract (native HTTP mocks)', () => {"
     }
   ],
   "claims": [
     "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
-    "Named tests reject missing/malformed child completion and missing stderr separators with a safe protocol error."
+    "Named tests reject missing/malformed child completion and missing stderr separators with a safe protocol error.",
+    "Named HTTP-only lifecycle regressions use organization-scoped sprite names, validate returned name identity, classify only documented HTTP404 absence, and propagate other HTTP, JSON and transport errors."
   ],
   "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
     {
       "file": "packages/computesdk/src/compute.ts",
       "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
@@ -70,8 +81,12 @@
       "sha256": "b99dabeb2b0752c61cf8d84db3fb174191883efa38212e43c42e82d9682b9830"
     },
     {
+      "file": "packages/sprites/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "d0d31998e3d691c914c6e661087aaa68d1ade39e4cbc72ff96a2d01bcf0d478b"
+    },
+    {
       "file": "packages/sprites/src/index.ts",
-      "sha256": "12c812a815ebc6fbb12847c0c3fc1c93215f3b031a43a065f904a954f17711cb"
+      "sha256": "2742ed0176cffab81a9b9b0cc617ed9db2732dd7be75d62429c3e29a7cb64c9d"
     },
     {
       "file": "pnpm-lock.yaml",
@@ -81,21 +96,26 @@
   "liveProviderVerification": false,
   "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
   "limitations": [
-    "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
     "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
     "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
     "Remote timeout/cancellation remains unchanged and unverified.",
-    "The delimiter protocol is not a byte-count/checksum or truncated-stderr guarantee; long-running trailing-background output/lifetime is unverified."
+    "The delimiter protocol is not a byte-count/checksum or truncated-stderr guarantee; long-running trailing-background output/lifetime is unverified.",
+    "HTTP metadata absence is not proof of physical deletion or billing cessation. Background/timeouts and complete capability coverage remain unverified."
   ],
   "executionGroup": "pnpm test:provider-contracts",
   "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
     {
       "file": "packages/provider/dist/index.mjs",
       "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
     },
     {
-      "file": "packages/computesdk/dist/index.mjs",
-      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+      "file": "packages/sprites/dist/index.mjs",
+      "sha256": "ff94ae0feef5dc0836539aa4c019ba330a7c5359c640869207ef4959a4a10b66"
     }
   ],
   "installedNativeDependency": {

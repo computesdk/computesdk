@@ -2,7 +2,7 @@
   "provider": "@computesdk/daytona",
   "status": "adapter-mocked",
   "result": "passed",
-  "command": "pnpm --filter @computesdk/daytona --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "command": "pnpm --filter @computesdk/daytona --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
   "environment": {
     "COMPUTESDK_API_KEY": "",
     "MODAL_TOKEN_ID": "",
@@ -24,28 +24,39 @@
     "BEAM_TOKEN": "",
     "BEAM_WORKSPACE_ID": "",
     "BL_API_KEY": "",
-    "BL_WORKSPACE": ""
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
   },
-  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
-  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
-  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:31.002799+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
   },
-  "passedTests": 80,
+  "passedTests": 110,
   "tests": [
     {
       "file": "packages/daytona/src/__tests__/command-contract.test.ts",
       "contains": "Daytona real-adapter command contract"
+    },
+    {
+      "file": "packages/daytona/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Daytona native lifecycle contract', () => {"
     }
   ],
   "claims": [
     "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
     "Named tests reject malformed present completion status and preserve an explicit native exit 23 when the delimiter is absent.",
-    "Named tests reject absent completion with missing, malformed or zero native status; preserve explicit native failures1..255; and verify fixed typed protocol diagnostics without captured secrets."
+    "Named tests reject absent completion with missing, malformed or zero native status; preserve explicit native failures1..255; and verify fixed typed protocol diagnostics without captured secrets.",
+    "Named lifecycle regressions preserve canonical native IDs and every public-get/delete failure; real SDK error classes and a two-stage positive-sandbox/auxiliary404 model prevent false-null and false-idempotent cleanup."
   ],
   "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
     {
       "file": "packages/computesdk/src/compute.ts",
       "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
@@ -59,8 +70,12 @@
       "sha256": "9460c058cdec251ab821c200690d1e81993a311d67c42aa94eaa37bf3c40b58c"
     },
     {
+      "file": "packages/daytona/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "2f9ce6155febf452328f575a6fca55cfef52356cb4b4c1314fa683ac36611cee"
+    },
+    {
       "file": "packages/daytona/src/index.ts",
-      "sha256": "c8b43a80454f51cba3231c93155a351261db56194169afdce84ee1c4b28b2132"
+      "sha256": "727104ec7550b5fb94867637f0bfbdb9c33152139f3a13cc9b332c0c86fe0eb7"
     },
     {
       "file": "packages/provider/src/command-output.ts",
@@ -82,21 +97,26 @@
   "liveProviderVerification": false,
   "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
   "limitations": [
-    "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
     "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
     "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
     "Native zsh/custom images and survival of long-running detached processes remain unverified.",
-    "Absent-footer native failures remain failure information only, not proof of child completion or full separated output."
+    "Absent-footer native failures remain failure information only, not proof of child completion or full separated output.",
+    "Public get may fail toolbox-proxy hydration after finding the sandbox. No generic404 can safely prove absence; nullable lookup/idempotent missing destroy remain unresolved and cleanup-blocked. Native delete(wait=false) acknowledges acceptance only."
   ],
   "executionGroup": "pnpm test:provider-contracts",
   "builtArtifacts": [
     {
-      "file": "packages/provider/dist/index.mjs",
-      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
-    },
-    {
       "file": "packages/computesdk/dist/index.mjs",
       "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/daytona/dist/index.mjs",
+      "sha256": "9cc473663822e8f5b53e5b639bde817b83b13dc0696970dd511bac373a9b3998"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
     }
   ],
   "installedNativeDependency": {

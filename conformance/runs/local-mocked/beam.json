@@ -6,24 +6,30 @@
     {
       "file": "packages/beam/src/__tests__/command-contract.test.ts",
       "contains": "describe('Beam native command completion contract"
+    },
+    {
+      "file": "packages/beam/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Beam native lifecycle contract (offline)', () => {"
     }
   ],
   "claims": [
     "Named native-only-mocked tests require the numeric wait() result, reject missing/invalid/negative running-sentinel returns even when a stale handle contains zero, and preserve valid nonnegative native statuses without an unsigned-byte cap.",
-    "Named tests preserve existing timeout124 and native-error127 behavior without command replay."
+    "Named tests preserve existing timeout124 and native-error127 behavior without command replay.",
+    "Named lifecycle regressions propagate native connection/termination failures, validate container identity, require exact public true acknowledgement, and avoid reconnecting a native handle already connected by lookup."
   ],
   "limitations": [
-    "Only named local command-completion regressions are covered; live provider behavior, other operation contracts and full capability coverage remain unverified.",
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
     "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
     "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
     "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
     "The native process constructor may normalize missing completed wire status to zero before the adapter sees it; these checks are not raw-wire validation.",
-    "Launch, output reads and best-effort remote kill are not proven to fit a hard elapsed-time bound; remote termination and reaping remain unverified."
+    "Launch, output reads and best-effort remote kill are not proven to fit a hard elapsed-time bound; remote termination and reaping remain unverified.",
+    "Public terminate Boolean-normalizes its wire acknowledgement, and connection errors lack an authoritative public absence discriminator. No raw-wire, observed absence or physical-termination claim; profile remains cleanup-blocked."
   ],
-  "command": "pnpm --filter @computesdk/beam --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts --maxWorkers=1 --minWorkers=1",
-  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
-  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
-  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "command": "pnpm --filter @computesdk/beam --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:31.017148+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
   "executionGroup": "pnpm test:provider-contracts",
   "environment": {
     "COMPUTESDK_API_KEY": "",
@@ -46,16 +52,22 @@
     "BEAM_TOKEN": "",
     "BEAM_WORKSPACE_ID": "",
     "BL_API_KEY": "",
-    "BL_WORKSPACE": ""
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
   },
   "runtime": {
     "node": "v24.22.1",
     "pnpm": "9.15.0"
   },
-  "passedTests": 22,
+  "passedTests": 54,
   "liveProviderVerification": false,
   "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
   "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
     {
       "file": "packages/beam/package.json",
       "sha256": "37a3b964bbffab732030550d6cdd85cead0147834c4e12918cd2d41c3a931273"
@@ -65,8 +77,12 @@
       "sha256": "bac6ebfd04a530e1933afaf3e9022712997305c23cca8c1c1e54d7110adf4bfb"
     },
     {
+      "file": "packages/beam/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "c37ea0f0fb3d0dfe5df3ae96ec010dd7b3b320c5f00a0469a07a886c543b3c77"
+    },
+    {
       "file": "packages/beam/src/index.ts",
-      "sha256": "c6b036c77e8b67e22e9c98febf18e4a2b0e09a0ba4e2b48a6632b1a0ad1327df"
+      "sha256": "450125c5db0e53e7ab84ef6896333f13cc290ae9b01779c4c1e47ab25cf8c75f"
     },
     {
       "file": "packages/computesdk/src/compute.ts",
@@ -87,12 +103,16 @@
   ],
   "builtArtifacts": [
     {
-      "file": "packages/provider/dist/index.mjs",
-      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+      "file": "packages/beam/dist/index.mjs",
+      "sha256": "60f95edcc2a23b9656292de26d02811d401ed2a651ecaafbe60d7992e34d7e9d"
     },
     {
       "file": "packages/computesdk/dist/index.mjs",
       "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
     }
   ],
   "installedNativeDependency": {
