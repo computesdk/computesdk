@@ -2558,6 +2558,9 @@ importers:
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -2565,6 +2568,9 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.5
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: ^1.0.0
         version: 1.6.1(vitest@1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))

@@ -3,6 +3,7 @@
  */
 
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import WebSocket, { type RawData } from 'ws';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -31,6 +32,98 @@ export class SpritesCommandProtocolError extends Error {
     super('Sprites command response did not contain a valid completion record.');
     this.name = 'SpritesCommandProtocolError';
   }
+}
+
+/** Non-TTY WebSocket messages preserve channel boundaries; HTTP exec does not. */
+async function execStream(url: URL, token: string, script: string): Promise<{ stdout: string; stderr: string }> {
+  // Public protocol: superfly/sprites-go@5b9403bdc2468901b7c13c353e8b8592c459de81,
+  // websocket.go: StreamStdin=0, Stdout=1, Stderr=2, Exit=3, StdinEOF=4.
+  // Text session_info/control notifications and {type:"exit",exit_code:n}
+  // are handled separately from binary data. Never decode each UTF-8 chunk.
+  return new Promise((resolve, reject) => {
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        followRedirects: false,
+        // Bound a peer that never completes the upgrade, not remote execution.
+        handshakeTimeout: 10_000,
+      });
+    } catch {
+      reject(new Error('Sprites command transport failed.'));
+      return;
+    }
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let exit: number | undefined;
+    let settled = false;
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      if (closeTimer) clearTimeout(closeTimer);
+      socket.removeAllListeners();
+      if (socket.readyState !== WebSocket.CLOSED) {
+        // terminate() can emit an asynchronous error while connecting.
+        socket.on('error', () => {});
+        socket.once('close', () => socket.removeAllListeners());
+        socket.terminate();
+      }
+      if (error) reject(error);
+      else resolve({ stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8') });
+    };
+    const invalid = () => finish(new SpritesCommandProtocolError('invalid-completion'));
+    const complete = (code: unknown) => {
+      // The shell wrapper must finish normally; its own footer carries the
+      // user's child status, which can legitimately be nonzero.
+      if (exit !== undefined || !Number.isInteger(code) || code !== 0) return invalid();
+      exit = code as number;
+      // Wait for close to detect queued duplicate/contradictory exit messages.
+      // Bound only the close handshake, not remote command execution.
+      closeTimer = setTimeout(() => finish(), 1_000);
+      closeTimer.unref();
+      socket.close();
+    };
+    socket.on('open', () => {
+      try {
+        socket.send(Buffer.concat([Buffer.from([0]), Buffer.from(script, 'utf8')]));
+        socket.send(Buffer.from([4]));
+      } catch {
+        finish(new Error('Sprites command transport failed.'));
+      }
+    });
+    socket.on('message', (data: RawData, isBinary: boolean) => {
+      if (settled) return;
+      const bytes = Buffer.isBuffer(data) ? data :
+        Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data);
+      if (!isBinary) {
+        const text = bytes.toString('utf8');
+        if (text.startsWith('control:') && exit === undefined) return;
+        let message: { type?: string; exit_code?: unknown; tty?: unknown };
+        try { message = JSON.parse(text); } catch { return invalid(); }
+        if (!message || typeof message !== 'object') return invalid();
+        if (message.type === 'exit') return complete(message.exit_code);
+        if (message.type === 'session_info' && message.tty !== true && exit === undefined) return;
+        // Do not expose server errors, metadata, URLs, or command/env contents.
+        return invalid();
+      }
+      if (bytes.length === 0 || exit !== undefined) return invalid();
+      switch (bytes[0]) {
+        case 1: stdout.push(bytes.subarray(1)); break;
+        case 2: stderr.push(bytes.subarray(1)); break;
+        case 3:
+          if (bytes.length !== 2) return invalid();
+          complete(bytes[1]);
+          break;
+        default: invalid();
+      }
+    });
+    socket.on('error', () => finish(new Error('Sprites command transport failed.')));
+    socket.on('close', () => {
+      if (exit === undefined) finish(new SpritesCommandProtocolError('missing-completion'));
+      else finish();
+    });
+  });
 }
 
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
@@ -150,9 +243,9 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
           shellCmd = `${envPrefix}\n${shellCmd}`;
         }
 
-        // The exec endpoint returns one combined stream — keep stdout/stderr
-        // separated by redirecting stderr to a file and cat'ing it behind a
-        // delimiter. Newlines preserve comments/heredocs/trailing &, and the
+        // Keep the strict existing shell completion/stderr envelope even though
+        // WebSocket also separates transport stdout/stderr. Newlines preserve
+        // comments/heredocs/trailing &, and the
         // subshell keeps a user `exit` from skipping completion and cleanup.
         // This framing does not implement remote timeout/cancellation.
         const errFile = `/tmp/.computesdk-stderr-${commandId}`;
@@ -162,18 +255,13 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         shellCmd = `{\n(\n${shellCmd}\n) 2>"${escapeShellArg(errFile)}"\n__sp_ec=$?\nprintf '%s%s\\n' "${delimiter}" "$__sp_ec"\nprintf '%s\\n' "${errDelimiter}"\ncat "${escapeShellArg(errFile)}" 2>/dev/null\nrm -f "${escapeShellArg(errFile)}"\n}\n`;
 
         const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/exec`);
+        url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
         url.searchParams.set('cmd', 'bash');
         url.searchParams.set('stdin', 'true');
 
         try {
-          const res = await fetch(url.toString(), {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain' },
-            body: shellCmd,
-          });
-
-          const raw = await res.text();
-          if (!res.ok) return { stdout: '', stderr: raw, exitCode: 1, durationMs: Date.now() - startTime };
+          const transport = await execStream(url, token, shellCmd);
+          const raw = transport.stdout;
 
           const delimIdx = raw.lastIndexOf(delimiter);
           if (delimIdx === -1) {
@@ -189,7 +277,7 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
             throw new SpritesCommandProtocolError('invalid-completion');
           }
           const exitCode = Number(status);
-          const stderr = rest.substring(stderrHeader.length);
+          const stderr = rest.substring(stderrHeader.length) + transport.stderr;
           return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
           if (error instanceof SpritesCommandProtocolError) throw error;

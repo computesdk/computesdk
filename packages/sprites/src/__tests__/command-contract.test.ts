@@ -2,47 +2,199 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { WebSocketServer, type WebSocket, type RawData } from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommandResult } from '@computesdk/provider';
 import { sprites, SpritesCommandProtocolError } from '../index';
 
-// Exercise the real adapter. Only the HTTP boundary is replaced; the submitted
-// script runs in a bounded local bash, never on a provider or paid sandbox.
+// Exercise the real adapter with a loopback-only WebSocket peer and mocked
+// lifecycle HTTP. Bash is bounded and local; never contact a provider.
 let execBody: ((script: string) => string) | undefined;
+let execFrames: ((script: string, socket: WebSocket) => void) | undefined;
+let server: WebSocketServer;
+let baseUrl: string;
+let handshake: { url?: string; authorization?: string };
 const roots: string[] = [];
 const stderrFiles: string[] = [];
 
-beforeEach(() => {
+function bytes(data: RawData): Buffer {
+  return Buffer.isBuffer(data) ? data : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data);
+}
+
+function frame(socket: WebSocket, channel: number, payload: string | Buffer = '') {
+  socket.send(Buffer.concat([Buffer.from([channel]), Buffer.from(payload)]));
+}
+
+function runScript(script: string): Buffer {
+  // Sprites feeds bash its script on stdin, unlike an exec API using -c.
+  const result = spawnSync('/bin/bash', ['--noprofile', '--norc'], {
+    input: script, timeout: 2_000, env: { PATH: '/usr/bin:/bin' },
+  });
+  if (result.error) throw result.error;
+  expect(result.status).toBe(0);
+  expect(result.stderr.length).toBe(0);
+  return result.stdout;
+}
+
+beforeEach(async () => {
   execBody = undefined;
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (new URL(url).pathname.endsWith('/exec')) {
-      const script = String(init?.body);
+  execFrames = undefined;
+  handshake = {};
+  server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing loopback port');
+  baseUrl = `http://127.0.0.1:${address.port}/v1`;
+  server.on('connection', (socket, request) => {
+    handshake = { url: request.url, authorization: request.headers.authorization };
+    const input: Buffer[] = [];
+    socket.on('error', () => {});
+    socket.on('message', (data, isBinary) => {
+      const message = bytes(data);
+      expect(isBinary).toBe(true);
+      if (message[0] === 0) { input.push(message.subarray(1)); return; }
+      expect(message).toEqual(Buffer.from([4]));
+      const script = Buffer.concat(input).toString('utf8');
       const stderrFile = script.match(/\/tmp\/\.computesdk-stderr-[A-Za-z0-9_]+/)?.[0];
       if (stderrFile) stderrFiles.push(stderrFile);
-      if (execBody) return new Response(execBody(script));
-      // Sprites feeds bash its script on stdin, unlike an exec API using -c.
-      const result = spawnSync('/bin/bash', ['--noprofile', '--norc'], {
-        input: script, encoding: 'utf8', timeout: 2_000,
-        env: { PATH: '/usr/bin:/bin' },
-      });
-      if (result.error) throw result.error;
-      return new Response(result.stdout + result.stderr);
-    }
+      if (execFrames) { execFrames(script, socket); return; }
+      frame(socket, 1, execBody ? execBody(script) : runScript(script));
+      frame(socket, 3, Buffer.from([0]));
+    });
+  });
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (new URL(url).pathname.endsWith('/exec')) throw new Error('HTTP exec must not be used');
     return new Response(JSON.stringify({ id: 'local', name: 'local' }));
   }));
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
+  for (const socket of server.clients) socket.terminate();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
   for (const file of stderrFiles.splice(0)) rmSync(file, { force: true });
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 async function instance() {
-  return sprites({ apiKey: 'mock-only', baseUrl: 'https://sprites.invalid/v1' }).instances.create();
+  return sprites({ apiKey: 'mock-only', baseUrl }).instances.create();
 }
 
 describe('Sprites real-adapter command contract (local native boundary)', () => {
+  it('preserves distinct output messages without leaking channel SOH into quoted stdout', async () => {
+    execFrames = (script, socket) => {
+      const output = runScript(script);
+      const footer = output.indexOf('__COMPUTESDK_EXIT_');
+      expect(footer).toBeGreaterThan(0);
+      // Synthetic official protocol, NOT a native wire capture. The equivalent
+      // HTTP chunks reproduced "\u0001hello world\n\u0001" before the fix.
+      // Emit consecutive messages in one tick; the WebSocket layer retains
+      // message boundaries regardless of TCP splitting/coalescing.
+      frame(socket, 1, output.subarray(0, footer));
+      frame(socket, 1, output.subarray(footer));
+      frame(socket, 3, Buffer.from([0]));
+
+    };
+    const result = await (await instance()).runCommand('echo "hello world"');
+    expect(result).toMatchObject({ stdout: 'hello world\n', stderr: '', exitCode: 0 });
+    expect(handshake.authorization).toBe('Bearer mock-only');
+    expect(handshake.url).not.toContain('mock-only');
+    expect(handshake.url).toContain('/v1/sprites/local/exec?');
+    expect(handshake.url).toContain('stdin=true');
+  });
+
+  it('reassembles fragmented messages and split UTF-8 without stripping payload controls or mixing streams', async () => {
+    const nativeStderr = Buffer.from('native\0\x01\x02\x03 café🚀');
+    execFrames = (script, socket) => {
+      const output = runScript(script);
+      // Public ws fragmentation: a channel prefix belongs to the MESSAGE,
+      // never to each underlying WebSocket continuation/TCP fragment.
+      socket.send(Buffer.from([1]), { binary: true, fin: false });
+      socket.send(output.subarray(0, 1), { binary: true, fin: true });
+      // One output byte per distinct message splits multi-byte UTF-8, shell
+      // footer tokens, NUL and literal channel-valued user bytes.
+      for (let i = 1; i < output.length; i++) frame(socket, 1, output.subarray(i, i + 1));
+      for (const byte of nativeStderr) frame(socket, 2, Buffer.from([byte]));
+      frame(socket, 3, Buffer.from([0]));
+    };
+    const result = await (await instance()).runCommand(
+      "printf 'A\\000\\001\\002\\003 café🚀'; printf 'err\\000\\001\\002\\003 café🚀' >&2; exit 7",
+    );
+    expect(result).toMatchObject({
+      stdout: 'A\0\x01\x02\x03 café🚀',
+      stderr: `err\0\x01\x02\x03 café🚀${nativeStderr.toString('utf8')}`,
+      exitCode: 7,
+    });
+  });
+
+  it('accepts documented text metadata and a valid text transport exit without inventing child zero', async () => {
+    execFrames = (script, socket) => {
+      socket.send('control: notification');
+      socket.send(JSON.stringify({ type: 'session_info', session_id: 'local', tty: false }));
+      frame(socket, 1, runScript(script));
+      socket.send(JSON.stringify({ type: 'exit', exit_code: 0 }));
+    };
+    expect(await (await instance()).runCommand('exit 9')).toMatchObject({ stdout: '', stderr: '', exitCode: 9 });
+  });
+
+  it('rejects a missing transport exit even with a complete valid shell footer', async () => {
+    execFrames = (script, socket) => {
+      frame(socket, 1, runScript(script));
+      socket.close();
+    };
+    await expect((await instance()).runCommand('true')).rejects.toBeInstanceOf(SpritesCommandProtocolError);
+  });
+
+  it('bounds close-handshake cleanup when a peer stops reading after a valid exit', async () => {
+    execFrames = (script, socket) => {
+      frame(socket, 1, runScript(script));
+      frame(socket, 3, Buffer.from([0]));
+      // Public ws pause(): this local peer deliberately never reads/replies to
+      // the client's close frame. Remote execution itself is already complete.
+      socket.pause();
+    };
+    expect(await (await instance()).runCommand('printf done')).toMatchObject({
+      stdout: 'done', stderr: '', exitCode: 0,
+    });
+  });
+
+  it.each([
+    ['empty exit', [Buffer.from([3])]],
+    ['oversized exit', [Buffer.from([3, 0, 0])]],
+    ['nonzero wrapper exit', [Buffer.from([3, 1])]],
+    ['duplicate exit', [Buffer.from([3, 0]), Buffer.from([3, 0])]],
+    ['contradictory exit', [Buffer.from([3, 0]), Buffer.from([3, 7])]],
+    ['missing text exit code', ['{"type":"exit"}']],
+    ['out-of-range text exit', ['{"type":"exit","exit_code":256}']],
+    ['fractional text exit', ['{"type":"exit","exit_code":0.5}']],
+    ['string text exit', ['{"type":"exit","exit_code":"0"}']],
+    ['empty binary message', [Buffer.alloc(0)]],
+    ['unknown binary channel', [Buffer.from([99, 0])]],
+    ['malformed text', ['not-json-secret']],
+    ['unknown text type', ['{"type":"unknown","secret":"do-not-leak"}']],
+    ['server error', ['{"type":"error","error":"do-not-leak"}']],
+    ['unexpected TTY', ['{"type":"session_info","tty":true}']],
+  ])('rejects %s without exposing server data', async (_name, messages) => {
+    execFrames = (script, socket) => {
+      frame(socket, 1, runScript(script));
+      for (const message of messages) socket.send(message);
+    };
+    let caught: unknown;
+    try { await (await instance()).runCommand('true'); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(SpritesCommandProtocolError);
+    expect(String(caught)).not.toMatch(/secret|do-not-leak/);
+  });
+
+  it('sanitizes constructor/transport failures instead of echoing URL credentials', async () => {
+    const sandbox = await sprites({
+      apiKey: 'mock-only',
+      baseUrl: 'http://secret-user:secret-password@127.0.0.1:0/v1',
+    }).instances.create();
+    expect(await sandbox.runCommand('echo secret-command')).toMatchObject({
+      stdout: '', stderr: 'Sprites command transport failed.', exitCode: 127,
+    });
+  });
+
   it.each([
     ['trailing comment', "printf 'out\\n'; printf 'err\\n' >&2 # trailing comment", 'out\n', 'err\n', 0],
     ['heredoc', "cat <<'PAYLOAD'\nquoted \"$HOME\" `literal`\nPAYLOAD", 'quoted "$HOME" `literal`\n', '', 0],

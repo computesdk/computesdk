@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "computesdk": "workspace:*"
+    "computesdk": "workspace:*",
+    "ws": "8.22.0"
   },
   "keywords": [
     "computesdk",
@@ -52,6 +53,7 @@
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
+    "@types/ws": "8.18.1",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
     "rimraf": "^5.0.0",
