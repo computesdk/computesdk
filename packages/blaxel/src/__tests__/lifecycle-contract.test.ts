@@ -100,3 +100,104 @@ describe('Blaxel native lifecycle contract (offline)', () => {
     expect(vendor.delete).toHaveBeenCalledOnce();
   });
 });
+
+// Match the installed public SandboxInstance.status getter, not raw HTTP's
+// `state` field or the SDK's backing `sandbox` storage.
+function nativeStatusSnapshot(status: unknown, labels: Record<string, string> = {}) {
+  const readStatus = vi.fn(() => status);
+  const handle = {
+    ...native(),
+    metadata: { name: id, labels },
+    get status() { return readStatus(); },
+  };
+  Object.defineProperties(handle, {
+    state: { get() { throw new Error('No public SandboxInstance.state getter'); } },
+    sandbox: { get() { throw new Error('Do not inspect native backing storage'); } },
+  });
+  return { handle, readStatus };
+}
+
+describe('Blaxel public native status snapshot contract (offline)', () => {
+  it('reports the confirmed TERMINATED snapshot as stopped without calling it absent', async () => {
+    // Installed @blaxel/core 0.3.21 sandbox.js:17-28 identifies TERMINATED
+    // as non-reusable terminal. STANDBY is a separate raw-API state, not a
+    // public SandboxInstance property and not this completion signal.
+    const { handle, readStatus } = nativeStatusSnapshot('TERMINATED');
+    vendor.get.mockResolvedValue(handle);
+    const sandbox = await provider().sandbox.getById(id);
+    expect(sandbox).not.toBeNull();
+    const info = await sandbox!.getInfo();
+    expect(info).toMatchObject({
+      id, provider: 'blaxel', status: 'stopped',
+      metadata: { blaxelStatus: 'TERMINATED' },
+    });
+    expect(info.metadata).not.toHaveProperty('state');
+    expect(info.metadata).not.toHaveProperty('blaxelState');
+    expect(readStatus).toHaveBeenCalledOnce();
+    expect(vendor.get).toHaveBeenCalledWith(id);
+    expect(vendor.get).toHaveBeenCalledOnce();
+    expect(vendor.delete).not.toHaveBeenCalled();
+    expect(handle.process.exec).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['DEPLOYED', 'running'], ['FAILED', 'error'], ['DELETING', 'stopped'],
+    ['DEACTIVATED', 'running'], ['DEACTIVATING', 'running'], ['ARCHIVED', 'running'],
+    ['TERMINATING', 'running'], ['STANDBY', 'running'], ['stopped', 'running'],
+    ['terminated', 'running'], [' terminated ', 'running'], ['TERMINATED_PENDING', 'running'],
+    ['Future state Ω', 'running'], ['x'.repeat(128), 'running'],
+  ])('preserves native status %s losslessly and retains mapping %s', async (status, expected) => {
+    const { handle } = nativeStatusSnapshot(status);
+    vendor.get.mockResolvedValue(handle);
+    const sandbox = await provider().sandbox.getById(id);
+    const info = await sandbox!.getInfo();
+    expect(info.status).toBe(expected);
+    expect(info.metadata?.blaxelStatus).toBe(status);
+    expect(vendor.get).toHaveBeenCalledOnce();
+  });
+  it.each([
+    { status: 'DEPLOYED', spoof: 'TERMINATED', mapped: 'running' },
+    { status: 'TERMINATED', spoof: 'DEPLOYED', mapped: 'stopped' },
+    { status: 'Future native value', spoof: 'TERMINATED', mapped: 'running' },
+  ])('reserves metadata.blaxelStatus against label spoofing: %j', async ({ status, spoof, mapped }) => {
+    const { handle } = nativeStatusSnapshot(status, { blaxelStatus: spoof, project: 'kept' });
+    vendor.get.mockResolvedValue(handle);
+    const sandbox = await provider().sandbox.getById(id);
+    const info = await sandbox!.getInfo();
+    expect(info.status).toBe(mapped);
+    expect(info.metadata?.blaxelStatus).toBe(status);
+    expect(info.metadata?.project).toBe('kept');
+  });
+  it.each([
+    undefined, null, false, 42, {}, ['TERMINATED'],
+    { toString: () => 'TERMINATED' }, '', `TERMINATED${'x'.repeat(128)}`,
+  ])('does not manufacture terminal metadata from missing/invalid native status %j', async (status) => {
+    const { handle } = nativeStatusSnapshot(status, { blaxelStatus: 'TERMINATED', project: 'kept' });
+    vendor.get.mockResolvedValue(handle);
+    const sandbox = await provider().sandbox.getById(id);
+    const info = await sandbox!.getInfo();
+    expect(info.status).toBe('running');
+    expect(Object.prototype.hasOwnProperty.call(info.metadata, 'blaxelStatus')).toBe(true);
+    expect(info.metadata?.blaxelStatus).toBeUndefined();
+    expect(info.metadata?.project).toBe('kept');
+    expect(vendor.get).toHaveBeenCalledOnce();
+  });
+  it('uses the metadata snapshot from each fresh getById and makes no getInfo refresh requests', async () => {
+    const first = nativeStatusSnapshot('TERMINATED');
+    const second = nativeStatusSnapshot('DEPLOYED');
+    vendor.get.mockResolvedValueOnce(first.handle).mockResolvedValueOnce(second.handle);
+    const compute = provider();
+    const oldSnapshot = await compute.sandbox.getById(id);
+    const newSnapshot = await compute.sandbox.getById(id);
+    await expect(oldSnapshot!.getInfo()).resolves.toMatchObject({
+      status: 'stopped', metadata: { blaxelStatus: 'TERMINATED' },
+    });
+    await expect(newSnapshot!.getInfo()).resolves.toMatchObject({
+      status: 'running', metadata: { blaxelStatus: 'DEPLOYED' },
+    });
+    await oldSnapshot!.getInfo();
+    expect(vendor.get).toHaveBeenCalledTimes(2);
+    expect(first.readStatus).toHaveBeenCalledTimes(2);
+    expect(second.readStatus).toHaveBeenCalledOnce();
+    expect(vendor.delete).not.toHaveBeenCalled();
+  });
+});

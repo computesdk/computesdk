@@ -364,15 +364,23 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 			getInfo: async (sandbox: SandboxInstance): Promise<InstanceInfo> => {
 				const runtime = sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node';
+				// Public native snapshot only: no refresh request or raw API state.
+				// Preserve bounded strings losslessly; never coerce or truncate an
+				// invalid value into something that could look terminal.
+				const nativeStatus = sandbox.status;
+				const blaxelStatus = typeof nativeStatus === 'string' &&
+					nativeStatus.length > 0 && nativeStatus.length <= 128 ? nativeStatus : undefined;
 				return {
 					id: sandbox.metadata?.name || 'blaxel-unknown',
 					provider: 'blaxel',
-					status: convertSandboxStatus(sandbox.status),
+					status: convertSandboxStatus(blaxelStatus),
 					createdAt: sandbox.metadata?.createdAt ? new Date(sandbox.metadata.createdAt) : new Date(),
 					timeout: parseTTLToMilliseconds(sandbox.spec?.runtime?.ttl),
 					metadata: {
 						runtime,
-						...sandbox.metadata?.labels
+						...sandbox.metadata?.labels,
+						// Reserved even when undefined: labels cannot spoof native status.
+						blaxelStatus,
 					}
 				};
 			},
@@ -682,6 +690,9 @@ function initializeBlaxel(config: BlaxelConfig): void {
 }
 
 function convertSandboxStatus(status: string | undefined): 'running' | 'stopped' | 'error' {
+	// @blaxel/core 0.3.21 sandbox.js:17-28 explicitly classifies this exact
+	// native enum value as terminal/non-reusable. Do not infer other labels.
+	if (status === 'TERMINATED') return 'stopped';
 	switch (status?.toLowerCase()) {
 		case 'deployed': return 'running';
 		case 'deleting': return 'stopped';
