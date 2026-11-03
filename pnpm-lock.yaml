@@ -983,9 +983,15 @@ importers:
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
+      '@daytona/api-client':
+        specifier: 0.224.0
+        version: 0.224.0
       '@daytonaio/sdk':
         specifier: ^0.224.0
         version: 0.224.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      axios:
+        specifier: 1.20.0
+        version: 1.20.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk

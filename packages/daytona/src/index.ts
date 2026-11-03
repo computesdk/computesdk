@@ -3,6 +3,8 @@
  */
 
 import { Daytona, DaytonaNotFoundError, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
+import { Configuration, SandboxApi } from '@daytona/api-client';
+import axios, { isAxiosError } from 'axios';
 import { resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, errorText } from '@computesdk/provider';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
@@ -14,6 +16,12 @@ import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, Run
 export interface DaytonaConfig {
   /** Daytona API key - if not provided, will fallback to DAYTONA_API_KEY environment variable */
   apiKey?: string;
+  /** Daytona API URL; defaults to DAYTONA_API_URL or the native SDK's public endpoint. */
+  apiUrl?: string;
+  /** Organization used by the native Daytona client. */
+  organizationId?: string;
+  /** Default native Daytona region. */
+  target?: string;
   /** Default runtime environment (e.g. 'python', 'node') */
   runtime?: string;
   /** Execution timeout in milliseconds */
@@ -33,11 +41,85 @@ export class DaytonaCommandProtocolError extends Error {
   }
 }
 
-function requireDaytonaSandboxIdentity(sandbox: DaytonaSandbox): string {
+function requireDaytonaLookupIdentity(identity: unknown): string {
+  // Treat IDs/names as opaque, not URLs. Even encodeURIComponent leaves dot
+  // segments intact; percent escapes, separators, and controls can be routed
+  // differently by HTTP clients/proxies. Reject rather than rewrite or trim.
+  if (typeof identity !== 'string' || identity.length === 0
+    || identity !== identity.trim() || identity === '.' || identity === '..'
+    || /[\u0000-\u001f\u007f:/\\?#%]/u.test(identity)
+    || /[\uD800-\uDFFF]/u.test(identity)) {
+    throw new Error('Daytona lookup requires an unambiguous native ID or name.');
+  }
+  return identity;
+}
+
+function requireDaytonaSandboxIdentity(sandbox: Pick<DaytonaSandbox, 'id'>): string {
   if (!sandbox || typeof sandbox.id !== 'string' || sandbox.id.length === 0) {
     throw new Error('Daytona lookup returned a sandbox without a valid native identity.');
   }
-  return sandbox.id;
+  return requireDaytonaLookupIdentity(sandbox.id);
+}
+
+/** Never retain raw Axios errors: their request/response/cause contain auth. */
+class DaytonaMetadataLookupError extends Error {
+  readonly code = 'DAYTONA_METADATA_LOOKUP_FAILED';
+
+  constructor(readonly statusCode?: number) {
+    super('Daytona sandbox metadata lookup failed.');
+    this.name = 'DaytonaMetadataLookupError';
+  }
+}
+
+/**
+ * A public Daytona.get() 404 is ambiguous: SDK 0.224.0 first GETs the resource,
+ * then may GET its toolbox proxy URL. Probe only the resource with the public
+ * generated client; never infer absence from full-handle hydration errors.
+ */
+async function lookupDaytonaSandbox(config: DaytonaConfig, sandboxId: string): Promise<DaytonaSandbox | null> {
+  requireDaytonaLookupIdentity(sandboxId);
+  const apiKey = config.apiKey || process.env.DAYTONA_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable.");
+  }
+  // Resolve once and pass the same scope to both public clients. These defaults
+  // are DaytonaConfig's documented process-environment/default endpoint values,
+  // not inferred endpoints or private fields from a constructed Daytona client.
+  const nativeConfig = {
+    apiKey,
+    apiUrl: config.apiUrl || process.env.DAYTONA_API_URL || process.env.DAYTONA_SERVER_URL || 'https://app.daytona.io/api',
+    organizationId: config.organizationId || process.env.DAYTONA_ORGANIZATION_ID,
+    target: config.target || process.env.DAYTONA_TARGET,
+  };
+  let metadata;
+  try {
+    const metadataApi = new SandboxApi(new Configuration({
+      basePath: nativeConfig.apiUrl,
+      accessToken: nativeConfig.apiKey,
+    }), '', axios.create({
+      // Isolate caller-installed global interceptors and never forward credentials
+      // through a redirect. Match the installed SDK's default response deadline.
+      maxRedirects: 0,
+      timeout: 24 * 60 * 60 * 1000,
+    }));
+    metadata = (await metadataApi.getSandbox(sandboxId)).data;
+  } catch (error) {
+    // Only this exact resource request's typed HTTP response proves absence.
+    const status = isAxiosError(error) ? error.response?.status : undefined;
+    if (status === 404) return null;
+    throw new DaytonaMetadataLookupError(
+      typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+        ? status : undefined,
+    );
+  }
+  const canonicalId = requireDaytonaSandboxIdentity(metadata);
+  // Do not construct the high-level client on absence: its constructor opens
+  // an event connection. Obtain complete usable handles only via public get.
+  const session = await new Daytona(nativeConfig).get(canonicalId);
+  if (requireDaytonaSandboxIdentity(session) !== canonicalId) {
+    throw new Error('Daytona lookup returned a sandbox with an inconsistent native identity.');
+  }
+  return session;
 }
 
 /**
@@ -180,12 +262,8 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       getById: async (config: DaytonaConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        const daytona = new Daytona({ apiKey: apiKey });
-        // SDK 0.224.0 get first queries the sandbox, then may query its toolbox
-        // proxy URL. Either can throw the same public 404 class/statusCode.
-        // Without public endpoint provenance, no get rejection proves absence.
-        const session = await daytona.get(sandboxId);
+        const session = await lookupDaytonaSandbox(config, sandboxId);
+        if (!session) return null;
         return { instance: session, instanceId: requireDaytonaSandboxIdentity(session) };
       },
 
@@ -206,12 +284,8 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       destroy: async (config: DaytonaConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        const daytona = new Daytona({ apiKey: apiKey });
-        // A 404 from public get may concern only the auxiliary toolbox URL,
-        // even after the sandbox exists. Propagate rather than claim cleanup.
-        const sandbox = await daytona.get(sandboxId);
-        requireDaytonaSandboxIdentity(sandbox);
+        const sandbox = await lookupDaytonaSandbox(config, sandboxId);
+        if (!sandbox) return;
         // Native delete resolves void once accepted. Do not invent an
         // acknowledgement shape or suppress failures after a positive lookup.
         await sandbox.delete();
