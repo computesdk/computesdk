@@ -4,7 +4,7 @@
  * `compute` delegates to one or more configured provider instances directly.
  */
 
-import { assertInstanceSizeSupported, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager } from './sizes';
+import { assertInstanceSizeSupported, hasInstanceSizeRequest, validateInstanceSizeOptions } from './sizes';
 
 import type {
   Instance as InstanceInterface,
@@ -57,7 +57,8 @@ interface ProviderVolumeManager {
 }
 
 export interface DirectProvider {
-  readonly sizes?: InstanceSizeManager;
+  /** Legacy providers may use this name for unrelated data; guarded before standard-size use. */
+  readonly sizes?: unknown;
   readonly name?: string;
   /** Instance lifecycle manager (canonical). */
   readonly instances?: ProviderInstanceManager;

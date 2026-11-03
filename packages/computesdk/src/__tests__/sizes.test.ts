@@ -53,6 +53,14 @@ describe('standard sizing core contract', () => {
       expect(p.sandbox!.create).not.toHaveBeenCalled();
     }
   });
+  it.each([{ sizes: ['native'] }, { sizes: () => ['native'] }, { sizes: { native: 'tier' } }])(
+    'keeps no-class legacy extensions source-compatible and rejects their standard requests: %j', async ({ sizes }) => {
+      const base = provider();
+      const legacy = { ...base, sizes };
+      await compute({ provider: legacy }).instances.create({ size: 'native' });
+      await expect(compute({ provider: legacy }).instances.create({ sizeClass: 'sm' })).rejects.toMatchObject({ code: 'unknown' });
+      expect(base.sandbox!.create).toHaveBeenCalledTimes(1);
+    });
   it('does not silently lose inherited sizeClass through routing option spreads', async () => {
     const p = provider('custom', supported);
     await expect(compute({ provider: p }).instances.create(Object.create({ sizeClass: 'sm' }))).rejects.toMatchObject({ code: 'invalid' });

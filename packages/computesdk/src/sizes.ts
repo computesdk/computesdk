@@ -98,9 +98,17 @@ export function validateInstanceSizeOptions(options: import('./types/universal-i
   return profile;
 }
 
+/** Narrow the permissive legacy extension slot only when its explicit contract is present. */
+export function isInstanceSizeManager(value: unknown): value is InstanceSizeManager {
+  return value !== null && (typeof value === 'object' || typeof value === 'function') &&
+    'contract' in value && value.contract === 'computesdk.instance-sizes.v1' &&
+    'resolve' in value && typeof value.resolve === 'function' &&
+    'list' in value && typeof value.list === 'function';
+}
+
 /** Guard custom/legacy providers too: a missing contract must not silently ignore a request. */
 export function assertInstanceSizeSupported(
-  provider: { readonly name?: string; readonly sizes?: InstanceSizeManager },
+  provider: { readonly name?: string; readonly sizes?: unknown },
   options?: import('./types/universal-instance').CreateInstanceOptions,
 ): void {
   if (!hasInstanceSizeRequest(options)) return;
@@ -110,11 +118,11 @@ export function assertInstanceSizeSupported(
     error.name = 'AbortError';
     throw error;
   }
-  if (!provider.sizes || provider.sizes.contract !== 'computesdk.instance-sizes.v1' ||
-      typeof provider.sizes.resolve !== 'function' || typeof provider.sizes.list !== 'function') {
+  const sizes = provider.sizes;
+  if (!isInstanceSizeManager(sizes)) {
     throw new InstanceSizeError('unknown', `provider "${provider.name ?? 'custom'}" has no standard sizing contract`);
   }
-  const resolution = provider.sizes.resolve(profile.sizeClass, options);
+  const resolution = sizes.resolve(profile.sizeClass, options);
   if (!resolution || !['supported', 'unknown', 'unsupported', 'unconfigured', 'unavailable', 'requires-build'].includes(resolution.status)) {
     throw new InstanceSizeError('unknown', 'provider returned an invalid standard sizing resolution');
   }

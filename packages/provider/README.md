@@ -588,3 +588,23 @@ Standard options, the bounded native resource context, and emitted patches use
 enumerable own string-key data descriptors. Symbol/non-enumerable/accessor fields
 reject before hook/copy/create; a function carrying a defined `sizeClass` cannot
 opt out of validation. Missing/undefined `sizeClass` retains legacy passthrough.
+
+For source compatibility, base `Provider.sizes` / `DirectProvider.sizes` is an
+optional `unknown` extension slot: legacy arrays, functions, or unrelated objects
+remain assignable even without a standard request. Use `isInstanceSizeManager`
+to narrow this slot before discovery. `defineProvider` and SDK adapter factories
+still return a required, strongly typed `sizes` manager; a missing/incompatible
+runtime contract still rejects a defined standard request before create.
+
+Compiler-only legacy compatibility coverage is included by this package's
+`tsconfig.json` (`src/**/*`, including `src/__tests__/legacy-size-types.ts`). Run
+it explicitly from the workspace root without network/install:
+
+```sh
+pnpm exec tsc --noEmit --strict --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck packages/provider/src/__tests__/legacy-size-types.ts
+```
+
+The normal mock suite also runs `legacy-size-types.test.ts`, which invokes the
+already installed TypeScript compiler on this fixture offline (`--noEmit`); the
+fixture's type-only example calls are never executed. No install/network step is
+needed, so a structural legacy regression fails ordinary `pnpm test` too.

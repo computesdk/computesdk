@@ -1060,7 +1060,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     private config: TConfig,
     private providerName: string,
     private methods: InstanceMethods<TInstance, TConfig>,
-    private providerInstance: Provider
+    private providerInstance: Provider & { readonly sizes: InstanceSizeManager }
   ) {}
 
   private wrap(result: InstanceLifecycleResult<TInstance>): GeneratedInstance<TInstance> {

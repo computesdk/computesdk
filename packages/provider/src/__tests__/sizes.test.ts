@@ -3,6 +3,7 @@ import { defineProvider, type InstanceMethods } from '../factory';
 import { createCompute } from '../compute';
 import { defineInfraProvider } from '../infra-factory';
 import { createInstanceSizeManager, type InstanceSizeResolver } from '../sizes';
+import type { Provider } from '../types/provider';
 
 function fixture(sizes?: InstanceSizeResolver<{}>) {
   const methods: InstanceMethods<{}, {}> = {
@@ -212,4 +213,13 @@ describe('provider standard size framework', () => {
     expect(infraCreate).not.toHaveBeenCalled();
     expect(createInstanceSizeManager({}).resolve('md').status).toBe('unknown');
   });
+  it.each([{ sizes: ['native'] }, { sizes: () => ['native'] }, { sizes: { native: 'tier' } }])(
+    'accepts unrelated legacy Provider extensions without weakening standard preflight: %j', async ({ sizes }) => {
+      const { provider, methods } = fixture();
+      const legacy: Provider = { ...provider, sizes };
+      const sdk = createCompute({ provider: legacy });
+      await sdk.instances.create({ size: 'native' });
+      await expect(sdk.instances.create({ sizeClass: 'sm' })).rejects.toMatchObject({ code: 'unknown' });
+      expect(methods.create).toHaveBeenCalledTimes(1);
+    });
 });

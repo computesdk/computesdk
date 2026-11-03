@@ -211,8 +211,7 @@ export interface InstanceFileSystem {
 /**
  * Resource sizing options for instance creation.
  *
- * These are the cross-provider knobs for CPU, memory, and provider-specific
- * resource selection. Field names intentionally mirror the provider SDKs that
+ * These are provider-native knobs for CPU, memory, and resource selection. Field names intentionally mirror the provider SDKs that
  * consume them, so callers can build a single typed resource map (e.g. keyed
  * by provider name) instead of resorting to `Record<string, any>`. Every field
  * is optional; providers only read the keys they understand and fall back to
@@ -221,6 +220,10 @@ export interface InstanceFileSystem {
  * Units are intentionally not normalized — `memory` is MB for Blaxel/Beam,
  * `memoryMiB`/`memMiB` are MiB for Modal/Isorun, and `memoryMb` is MB for
  * Tensorlake. See each provider's docs for the exact interpretation.
+ *
+ * This native-option/default behavior does NOT apply to the additive
+ * CreateInstanceOptions.sizeClass field: that uses normalized vCPUs/MiB and
+ * strict capability validation before create instead of silent default fallback.
  */
 export interface InstanceResourceOptions {
   /** CPU cores (Modal, Beam). Modal: 1 core = 2 vCPUs. */
