@@ -531,3 +531,80 @@ See these provider implementations for reference:
 ## License
 
 MIT
+
+## Pure standard-size capability hook
+
+`defineProvider` accepts an optional synchronous `sizes(config, profile, options)`
+hook. Legacy custom `Provider` implementations need not add this field. Factory
+providers expose an immutable `provider.sizes.list(context?)` / `resolve(class,
+context?)` manager; adapters without a hook report `unknown` and reject explicit
+`sizeClass` requests instead of ignoring them. Context can include mode or
+platform selectors, but must not combine standard and native size controls.
+
+```ts
+sizes: (_config, profile, options) => {
+  if (options?.snapshotId) {
+    return { status: 'unsupported', reason: 'Restores inherit resource sizing.' };
+  }
+  // Declare supported only after verifying exact CPU + RAM bounds and semantics.
+  return {
+    status: 'supported',
+    nativeOptions: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB },
+  };
+},
+```
+
+The factory applies flat fields and merges the known Namespace
+`instanceOptions.shape` resource path in
+a copy of create options, strips `sizeClass`, and records immutable request
+metadata as `instance.sizing`. Hooks must return only resource mapping fields,
+never copy caller env/metadata/authorization/passthrough bodies into the patch.
+This bounded merge preserves unrelated nested fields without freezing caller
+objects; it does not recursively normalize arbitrary create options. Standard
+resource contexts and emitted patches reject unsafe keys/accessors; plain and
+null-prototype data objects are accepted. No-class requests are untouched.
+Operational `resolution.nativeOptions` is separate from `instance.sizing`, which
+contains only requested/resolved CPU/RAM/class and provenance.
+They must be pure: no client construction, credentials checks, template listing,
+network access, builds, or provisioning. Supported mappings are adapter-declared
+requests, not measured resources or account/region availability guarantees.
+Return `unconfigured`, `unavailable`, `requires-build`, `unknown`, or `unsupported`
+with a reason when an exact mapping cannot be declared. No fallback or automatic
+build occurs. Discovery results are copied and frozen (including nested native
+options); caller inputs are not frozen or mutated.
+
+`createCompute` guards legacy custom providers lacking a sizing contract.
+`defineInfraProvider` currently rejects standard-size requests as `unknown`; its
+legacy native create path is unchanged. Direct calls into a handwritten custom
+provider remain that provider author's responsibility.
+
+An `InstanceSizeManager` carries `contract: 'computesdk.instance-sizes.v1'` to make
+opt-in explicit and distinguish unrelated legacy `sizes` properties. A handwritten
+provider declaring this contract is responsible for actually consuming
+`sizeClass` in its create method; the framework guarantees this for
+`defineProvider` adapters. The core rejects incompatible/malformed declarations.
+
+Standard options, the bounded native resource context, and emitted patches use
+enumerable own string-key data descriptors. Symbol/non-enumerable/accessor fields
+reject before hook/copy/create; a function carrying a defined `sizeClass` cannot
+opt out of validation. Missing/undefined `sizeClass` retains legacy passthrough.
+
+For source compatibility, base `Provider.sizes` / `DirectProvider.sizes` is an
+optional `unknown` extension slot: legacy arrays, functions, or unrelated objects
+remain assignable even without a standard request. Use `isInstanceSizeManager`
+to narrow this slot before discovery. `defineProvider` and SDK adapter factories
+still return a required, strongly typed `sizes` manager; a missing/incompatible
+runtime contract still rejects a defined standard request before create.
+
+Compiler-only legacy compatibility coverage is included by this package's
+`tsconfig.json` (`src/**/*`, including `src/__tests__/legacy-size-types.ts`). Run
+it explicitly from the workspace root without network/install:
+
+```sh
+pnpm exec tsc --noEmit --strict --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck packages/provider/src/__tests__/legacy-size-types.ts
+```
+
+The normal mock suite also runs `legacy-size-types.test.ts`, which invokes the
+already installed TypeScript compiler on this fixture offline (`--noEmit`); the
+fixture's type-only example calls are never executed. No install/network step is
+needed, so a structural legacy regression fails ordinary `pnpm test` too.

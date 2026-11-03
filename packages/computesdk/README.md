@@ -359,3 +359,99 @@ import type {
 ## License
 
 MIT
+
+## Standard CPU/RAM requests
+
+Use the additive `sizeClass` option, **not** the provider-native `size` string:
+
+```ts
+import { compute, INSTANCE_SIZE_PROFILES, InstanceSizeError } from 'computesdk';
+import { namespace } from '@computesdk/namespace';
+
+const provider = namespace({ token: '...' });
+// Pure local discovery: no vendor API calls, account checks, builds, or creates.
+const catalog = provider.sizes.list();
+const plan = provider.sizes.resolve('sm');
+if (plan.status === 'supported') {
+  const instance = await compute({ provider }).instances.create({ sizeClass: 'sm' });
+  console.log(instance.sizing); // requested/resolved REQUEST, never observed hardware
+}
+```
+
+Canonical targets (RAM is MiB; 1024 MiB = 1 GiB):
+
+| sizeClass | vCPUs | RAM MiB |
+| --- | ---: | ---: |
+| `xs` | 1 | 1024 |
+| `sm` | 1 | 2048 |
+| `md` | 2 | 4096 |
+| `lg` | 4 | 8192 |
+| `xl` | 8 | 16384 |
+| `2xl` | 16 | 32768 |
+
+`sm`/`md`/`lg`/`xl` preserve the benchmark's historical S/M/L/XL targets.
+Only Namespace Linux amd64 and **new persistent Archil VMs** initially declare
+those four mappings. `xs` and `2xl` are defined targets but remain `unknown` in
+these adapters. Other adapters default to `unknown`, not guessed support.
+Archil exec is `unavailable`; attaching or forking an existing VM with a standard
+size is `unsupported` because those paths do not resize it.
+
+Resolution statuses are `supported`, `unconfigured`, `unavailable`,
+`requires-build`, `unknown`, and `unsupported`. `supported` means only an
+**adapter-declared exact native request translation**. It does not guarantee
+quota, regional capacity, account eligibility, successful creation, or measured
+CPU/RAM. Missing template bindings can be `unconfigured`; a required resource
+artifact can be `requires-build`. No image builds are performed automatically.
+
+A standard request rejects invalid runtime values, unverified mappings, and
+conflicting native CPU/RAM/tier options (including `size`) **before creation**.
+Catch `InstanceSizeError` and inspect `.code` (`invalid`, `conflict`, or a blocked
+status), `.resolution` when present, and `.fallback === false`. Standard requests
+do not fall back to another provider/default size, even on subsequent create
+failure. In multi-provider configurations explicitly choose `provider` when
+necessary; discovery does not automatically select a provider.
+
+`instance.sizing` contains frozen `requested`, `resolved` CPU/RAM, and
+`provenance: 'adapter-declared'` metadata only for a successful standardized
+create. It is absent for legacy creates and get/list/attach handles; it is not
+observed-resource telemetry. Creates without `sizeClass` retain native options,
+defaults, and legacy `sandbox` aliases unchanged.
+
+This is an SDK foundation, not a benchmark-runner migration: consumers must use a
+released compatible SDK and independently plan blocked/skipped work. Existing
+benchmark mappings, published artifacts, and live CI results are not changed by
+this API alone. Mock tests validate the local source/installed native SDK only,
+not cloud availability or the bytes of separately pinned consumer dependencies.
+
+### `fallbackOnError` and provider selection
+
+`sizeClass` pins the provider chosen by the existing priority, round-robin, or
+explicit-provider selection policy. `fallbackOnError: true` is overridden for
+that request: a selected unknown/unavailable provider rejects even if a later
+provider supports the class. Native authentication/capacity/create errors also
+stop after that one provider and retain their original error identity/flags;
+they are not relabeled as `InstanceSizeError`. Requests without `sizeClass` retain
+legacy fallback behavior. For example, use `{ sizeClass: 'md', provider:
+'namespace' }` to explicitly select Namespace in a multi-provider compute client.
+
+Supported `sizes.resolve` results separately expose `nativeOptions`: an
+operational **resource-only patch**, not a complete create body. The factory
+applies flat fields and merges the known Namespace `instanceOptions.shape` path,
+preserving unrelated native input. Unsafe keys/accessors on these standard
+resource paths are rejected; legacy requests bypass this validation.
+`instance.sizing` deliberately excludes this operational payload and all caller
+env, metadata, authorization and native passthrough fields, so request telemetry
+does not promote arbitrary caller secrets into public sizing metadata.
+
+Unknown/unconfigured/build-required mappings do not establish that a native size
+is impossible or authorize shrinking a benchmark matrix. Keep requested coverage
+visible: unresolved cells require investigation/configuration, not removal to
+produce a green result. This initial two-adapter foundation does not claim the
+previous benchmark mapping gaps or live CI failures are all fixed.
+
+For a defined standard request, root options and the bounded resource context
+must be plain objects with safe, **enumerable own string-key data properties**.
+Non-enumerable fields (including `sizeClass` or `signal`), symbol keys, accessors,
+and callable options reject before routing/spreading can lose or invoke them.
+Namespace platform selectors must also be strings when present. These rules apply
+only to standard requests; missing/undefined `sizeClass` keeps legacy behavior.

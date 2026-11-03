@@ -41,6 +41,8 @@ import {
 } from 'daemond';
 import { readInstanceEgress, setupInstanceEgress } from './egress.js';
 import { withVolumeSettle } from './utils.js';
+import { InstanceSizeError, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeMetadata } from 'computesdk';
+import { applyInstanceSizePatch, createInstanceSizeManager, type InstanceSizeResolver } from './sizes.js';
 
 type DaemonStreamState = {
   token: string;
@@ -373,6 +375,8 @@ export interface VolumeMethods<TVolume extends Volume = Volume, TConfig = any> {
  */
 export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume> {
   name: string;
+  /** Pure local standard-size capability and native request resolution. */
+  sizes?: InstanceSizeResolver<TConfig>;
   methods: {
     /** Instance lifecycle methods (canonical key). */
     instances?: InstanceMethods<TInstance, TConfig>;
@@ -471,6 +475,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   readonly filesystem: InstanceFileSystem;
   /** Set at create when `CreateInstanceOptions.egress` was passed. */
   egress?: InstanceEgressInfo;
+  sizing?: InstanceSizeMetadata;
   /** Present only when the provider implements runtime attach. */
   readonly attachVolume?: (volume: string | Volume, mountPath: string) => Promise<void>;
   /** Present only when the provider implements runtime detach. */
@@ -1055,7 +1060,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     private config: TConfig,
     private providerName: string,
     private methods: InstanceMethods<TInstance, TConfig>,
-    private providerInstance: Provider
+    private providerInstance: Provider & { readonly sizes: InstanceSizeManager }
   ) {}
 
   private wrap(result: InstanceLifecycleResult<TInstance>): GeneratedInstance<TInstance> {
@@ -1072,7 +1077,21 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
   }
 
   async create(options?: CreateInstanceOptions): Promise<ProviderInstance<TInstance>> {
+    const standardRequest = hasInstanceSizeRequest(options);
+    if (standardRequest) validateInstanceSizeOptions(options!);
     throwIfAborted(options?.signal);
+    let sizing: InstanceSizeMetadata | undefined;
+    if (standardRequest && options) {
+      const resolution = this.providerInstance.sizes!.resolve(options.sizeClass!, options);
+      if (resolution.status !== 'supported') {
+        throw new InstanceSizeError(resolution.status, resolution.reason, resolution);
+      }
+      sizing = Object.freeze({ requested: resolution.requested, resolved: resolution.resolved, provenance: resolution.provenance });
+      const { sizeClass: _sizeClass, ...legacyOptions } = options;
+      options = applyInstanceSizePatch(legacyOptions, resolution.nativeOptions);
+      // sizeClass is SDK-only, even if a custom resolver accidentally includes it.
+      delete options.sizeClass;
+    }
 
     const signal = options?.signal;
     const runCreate = () => this.methods.create(this.config, options).then(normalizeInstanceResult);
@@ -1100,6 +1119,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     }
 
     const instance = this.wrap(result);
+    if (sizing) Object.defineProperty(instance, 'sizing', { value: sizing, enumerable: true, writable: false });
 
     if (options?.egress && typeof options.egress === 'object' && !Array.isArray(options.egress)) {
       throwIfAborted(signal);
@@ -1232,6 +1252,7 @@ class GeneratedVolumeManager<TVolume extends Volume, TConfig> implements Provide
  */
 class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extends Volume = Volume> implements Provider<TInstance, TTemplate, TSnapshot, TVolume> {
   readonly name: string;
+  readonly sizes: InstanceSizeManager;
   readonly instances: ProviderInstanceManager<TInstance>;
   /** @deprecated Use `instances`. Always the same manager object. */
   readonly sandbox: ProviderInstanceManager<TInstance>;
@@ -1241,6 +1262,8 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
 
   constructor(config: TConfig, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>) {
     this.name = providerConfig.name;
+    this.sizes = createInstanceSizeManager(config, providerConfig.sizes);
+    Object.defineProperty(this, 'sizes', { writable: false, configurable: false });
 
     const instanceMethods = providerConfig.methods.instances ?? providerConfig.methods.sandbox;
     if (!instanceMethods) {
@@ -1281,7 +1304,7 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
  */
 export function defineProvider<TInstance, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume>(
   providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>
-): (config: TConfig) => Provider<TInstance, TTemplate, TSnapshot, TVolume> {
+): (config: TConfig) => Provider<TInstance, TTemplate, TSnapshot, TVolume> & { readonly sizes: InstanceSizeManager } {
   return (config: TConfig) => {
     return new GeneratedProvider(config, providerConfig);
   };

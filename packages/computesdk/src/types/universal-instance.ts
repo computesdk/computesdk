@@ -211,8 +211,7 @@ export interface InstanceFileSystem {
 /**
  * Resource sizing options for instance creation.
  *
- * These are the cross-provider knobs for CPU, memory, and provider-specific
- * resource selection. Field names intentionally mirror the provider SDKs that
+ * These are provider-native knobs for CPU, memory, and resource selection. Field names intentionally mirror the provider SDKs that
  * consume them, so callers can build a single typed resource map (e.g. keyed
  * by provider name) instead of resorting to `Record<string, any>`. Every field
  * is optional; providers only read the keys they understand and fall back to
@@ -221,6 +220,10 @@ export interface InstanceFileSystem {
  * Units are intentionally not normalized — `memory` is MB for Blaxel/Beam,
  * `memoryMiB`/`memMiB` are MiB for Modal/Isorun, and `memoryMb` is MB for
  * Tensorlake. See each provider's docs for the exact interpretation.
+ *
+ * This native-option/default behavior does NOT apply to the additive
+ * CreateInstanceOptions.sizeClass field: that uses normalized vCPUs/MiB and
+ * strict capability validation before create instead of silent default fallback.
  */
 export interface InstanceResourceOptions {
   /** CPU cores (Modal, Beam). Modal: 1 core = 2 vCPUs. */
@@ -361,6 +364,15 @@ export interface InstanceEgressInfo {
  */
 export interface CreateInstanceOptions extends InstanceResourceOptions {
   /**
+   * Standard CPU/RAM request. Never aliases the provider-native `size` field.
+   * Pins the normally selected provider; disables fallbackOnError even for
+   * native auth/capacity failures. Unknown/blocked mappings fail before create.
+   * Native CPU/RAM/tier selectors cannot be combined with this field.
+   * Standard root/resource context requires enumerable own string-key data
+   * properties; callable options, accessors and non-enumerable controls reject.
+   */
+  sizeClass?: import('../sizes').InstanceSizeClass;
+  /**
    * Select the provider's ephemeral compute surface when it offers both
    * ephemeral and persistent instances.
    *
@@ -491,6 +503,9 @@ export interface Instance {
    * `CreateInstanceOptions.egress`. Undefined otherwise.
    */
   readonly egress?: InstanceEgressInfo;
+
+  /** Create-time request mapping only; absent on legacy creates and reattached instances. */
+  readonly sizing?: import('../sizes').InstanceSizeMetadata;
 
   /**
    * Attach a volume to this running instance — present only on providers
