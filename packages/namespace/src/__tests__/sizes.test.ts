@@ -41,6 +41,28 @@ describe('Namespace standard size mapping (mock-only)', () => {
     await expect(namespace({ token: 'test' }).instances.create(options as any)).rejects.toMatchObject({ fallback: false });
     expect(fetch).not.toHaveBeenCalled();
   });
+  it('uses the validated enumerable platform override in both resolution and the native request', async () => {
+    const fetch = mockFetch();
+    const provider = namespace({ token: 'test', os: 'macos', machineArch: 'arm64' });
+    const options = { sizeClass: 'sm' as const, instanceOptions: { shape: { os: 'linux', machine_arch: 'amd64' } } };
+    expect(provider.sizes.resolve('sm', options)).toMatchObject({
+      status: 'supported', nativeOptions: { instanceOptions: { shape: {
+        virtual_cpu: 1, memory_megabytes: 2048, os: 'linux', machine_arch: 'amd64',
+      } } },
+    });
+    await provider.instances.create(options);
+    expect(JSON.parse((fetch.mock.calls as any[][])[0][1].body).shape).toEqual({
+      virtual_cpu: 1, memory_megabytes: 2048, os: 'linux', machine_arch: 'amd64',
+    });
+  });
+  it('pins the validated platform even if factory defaults change during credential await', async () => {
+    const fetch = mockFetch();
+    const config = { token: 'test', os: 'linux', machineArch: 'amd64' };
+    const create = namespace(config).instances.create({ sizeClass: 'sm' });
+    config.os = 'macos'; config.machineArch = 'arm64';
+    await create;
+    expect(JSON.parse((fetch.mock.calls as any[][])[0][1].body).shape).toMatchObject({ os: 'linux', machine_arch: 'amd64' });
+  });
   it.each([null, [], 'invalid', 7])('rejects malformed native shape %j before credentials/API', async shape => {
     const fetch = mockFetch();
     await expect(namespace({ tokenFile: '/must-not-read' }).instances.create({ sizeClass: 'sm', instanceOptions: { shape } })).rejects.toMatchObject({ code: 'invalid' });
@@ -54,6 +76,26 @@ describe('Namespace standard size mapping (mock-only)', () => {
     }
     const provider = namespace({ token: 'test' });
     await expect(provider.instances.create({ sizeClass: 'sm', instanceOptions: { shape: { os: 'macos' } } })).rejects.toMatchObject({ code: 'unknown' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['non-enumerable instanceOptions', Object.defineProperty({}, 'instanceOptions', { value: { shape: { os: 'linux' } } })],
+    ['non-enumerable shape', { instanceOptions: Object.defineProperty({}, 'shape', { value: { os: 'linux' } }) }],
+    ['non-enumerable os', { instanceOptions: { shape: Object.defineProperty({}, 'os', { value: 'linux' }) } }],
+    ['non-enumerable architecture', { instanceOptions: { shape: Object.defineProperty({}, 'machine_arch', { value: 'amd64' }) } }],
+    ['null os', { instanceOptions: { shape: { os: null } } }],
+    ['undefined os', { instanceOptions: { shape: { os: undefined } } }],
+    ['numeric os', { instanceOptions: { shape: { os: 1 } } }],
+    ['null architecture', { instanceOptions: { shape: { machine_arch: null } } }],
+    ['undefined architecture', { instanceOptions: { shape: { machine_arch: undefined } } }],
+  ])('rejects %s before a platform context can diverge from its native request', async (_name, context) => {
+    const fetch = mockFetch();
+    const provider = namespace({ token: 'test' });
+    // Preserve the original descriptor forms; spreading the test context would hide the bug.
+    const options = Object.defineProperty(context, 'sizeClass', { value: 'sm', enumerable: true });
+    await expect(provider.instances.create(options as any)).rejects.toMatchObject({ code: 'invalid' });
+    expect(() => provider.sizes.resolve('sm', options as any)).toThrowError(/sizeClass/);
+    expect(() => provider.sizes.list(options as any)).toThrowError(/sizeClass/);
     expect(fetch).not.toHaveBeenCalled();
   });
   it('preserves legacy per-create native shape and native size fields', async () => {

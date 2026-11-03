@@ -448,3 +448,10 @@ is impossible or authorize shrinking a benchmark matrix. Keep requested coverage
 visible: unresolved cells require investigation/configuration, not removal to
 produce a green result. This initial two-adapter foundation does not claim the
 previous benchmark mapping gaps or live CI failures are all fixed.
+
+For a defined standard request, root options and the bounded resource context
+must be plain objects with safe, **enumerable own string-key data properties**.
+Non-enumerable fields (including `sizeClass` or `signal`), symbol keys, accessors,
+and callable options reject before routing/spreading can lose or invoke them.
+Namespace platform selectors must also be strings when present. These rules apply
+only to standard requests; missing/undefined `sizeClass` keeps legacy behavior.

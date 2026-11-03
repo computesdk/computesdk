@@ -365,6 +365,8 @@ export interface CreateInstanceOptions extends InstanceResourceOptions {
    * Pins the normally selected provider; disables fallbackOnError even for
    * native auth/capacity failures. Unknown/blocked mappings fail before create.
    * Native CPU/RAM/tier selectors cannot be combined with this field.
+   * Standard root/resource context requires enumerable own string-key data
+   * properties; callable options, accessors and non-enumerable controls reject.
    */
   sizeClass?: import('../sizes').InstanceSizeClass;
   /**

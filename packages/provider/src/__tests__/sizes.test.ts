@@ -115,6 +115,59 @@ describe('provider standard size framework', () => {
     expect(methods.create).not.toHaveBeenCalled();
     expect(malformed.methods.create).not.toHaveBeenCalled();
   });
+  it.each(['create', 'resolve', 'list'] as const)('rejects symbol-key accessors before %s can invoke getters or hooks', async route => {
+    const getter = vi.fn(() => 'dummy');
+    const resolver = vi.fn(exact);
+    const { provider, methods } = fixture(resolver);
+    const options = Object.defineProperty({ sizeClass: 'sm' as const }, Symbol('probe'), { enumerable: true, get: getter });
+    if (route === 'create') await expect(provider.instances.create(options)).rejects.toMatchObject({ code: 'invalid' });
+    else expect(() => route === 'resolve' ? provider.sizes.resolve('sm', options) : provider.sizes.list(options)).toThrowError(/sizeClass/);
+    expect(getter).not.toHaveBeenCalled(); expect(resolver).not.toHaveBeenCalled(); expect(methods.create).not.toHaveBeenCalled();
+  });
+  it('rejects symbol keys in emitted resource patches without invoking their accessors', async () => {
+    const getter = vi.fn(() => 1);
+    const patch = Object.defineProperty({}, Symbol('resource'), { enumerable: true, get: getter });
+    const { provider, methods } = fixture(() => ({ status: 'supported', nativeOptions: patch }));
+    await expect(provider.instances.create({ sizeClass: 'sm' })).rejects.toMatchObject({ code: 'invalid' });
+    expect(getter).not.toHaveBeenCalled(); expect(methods.create).not.toHaveBeenCalled();
+  });
+  it.each(['create', 'resolve', 'list'] as const)('rejects non-enumerable sizeClass through %s', async route => {
+    const { provider, methods } = fixture(exact);
+    const options = Object.defineProperty({}, 'sizeClass', { value: 'sm' });
+    if (route === 'create') await expect(provider.instances.create(options)).rejects.toMatchObject({ code: 'invalid' });
+    else expect(() => route === 'resolve' ? provider.sizes.resolve('sm', options) : provider.sizes.list(options)).toThrowError(/sizeClass/);
+    expect(methods.create).not.toHaveBeenCalled();
+  });
+  it('rejects a non-enumerable signal rather than creating without cancellation', async () => {
+    const { provider, methods } = fixture(exact);
+    const controller = new AbortController();
+    const options = Object.defineProperty({ sizeClass: 'sm' as const }, 'signal', { value: controller.signal });
+    await expect(provider.instances.create(options)).rejects.toMatchObject({ code: 'invalid' });
+    expect(methods.create).not.toHaveBeenCalled();
+  });
+  it('rejects defined standard fields on function options in factory, createCompute and infra facades', async () => {
+    const { provider, methods } = fixture();
+    const options = Object.assign(() => {}, { sizeClass: 'sm' });
+    await expect(provider.instances.create(options as any)).rejects.toMatchObject({ code: 'invalid' });
+    await expect(createCompute({ provider }).instances.create(options as any)).rejects.toMatchObject({ code: 'invalid' });
+    const create = vi.fn().mockResolvedValue({ instance: {}, instanceId: 'bad' });
+    const infra = defineInfraProvider({ name: 'infra', methods: { create, getById: vi.fn(), list: vi.fn(), destroy: vi.fn() } })({});
+    await expect(infra.create(options as any)).rejects.toMatchObject({ code: 'invalid' });
+    expect(methods.create).not.toHaveBeenCalled(); expect(create).not.toHaveBeenCalled();
+  });
+  it('retains legacy descriptor/callable passthrough when sizeClass is undefined', async () => {
+    const { provider, methods } = fixture();
+    const getter = vi.fn(() => 'legacy-symbol');
+    const options = Object.defineProperty(Object.defineProperty({ sizeClass: undefined }, 'signal', {
+      value: new AbortController().signal,
+    }), Symbol('legacy'), { enumerable: true, get: getter });
+    await provider.instances.create(options);
+    expect(vi.mocked(methods.create).mock.calls[0][1]).toBe(options);
+    const callable = Object.defineProperty(() => {}, 'sizeClass', { value: undefined });
+    await provider.instances.create(callable as any);
+    expect(vi.mocked(methods.create).mock.calls[1][1]).toBe(callable);
+    expect(getter).not.toHaveBeenCalled();
+  });
   it('accepts null-prototype resource data and preserves unrelated live object identities', async () => {
     const patch = Object.assign(Object.create(null), { instanceOptions: Object.assign(Object.create(null), {
       shape: Object.assign(Object.create(null), { virtual_cpu: 1, memory_megabytes: 2048 }),

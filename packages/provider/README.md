@@ -583,3 +583,8 @@ opt-in explicit and distinguish unrelated legacy `sizes` properties. A handwritt
 provider declaring this contract is responsible for actually consuming
 `sizeClass` in its create method; the framework guarantees this for
 `defineProvider` adapters. The core rejects incompatible/malformed declarations.
+
+Standard options, the bounded native resource context, and emitted patches use
+enumerable own string-key data descriptors. Symbol/non-enumerable/accessor fields
+reject before hook/copy/create; a function carrying a defined `sizeClass` cannot
+opt out of validation. Missing/undefined `sizeClass` retains legacy passthrough.

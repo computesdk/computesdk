@@ -25,8 +25,11 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 function safeDescriptors(value: unknown): PropertyDescriptorMap {
   if (!isPlainRecord(value)) throw new InstanceSizeError('invalid', 'sizing resource context must be a plain object');
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  for (const [key, descriptor] of Object.entries(descriptors)) {
-    if (UNSAFE_KEYS.has(key) || !('value' in descriptor)) throw new InstanceSizeError('invalid', 'sizing resource context contains an unsafe key or accessor');
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if (typeof key !== 'string' || UNSAFE_KEYS.has(key) || !('value' in descriptor) || !descriptor.enumerable) {
+      throw new InstanceSizeError('invalid', 'sizing resource context requires safe enumerable string-key data properties');
+    }
   }
   return descriptors;
 }
@@ -61,7 +64,11 @@ function immutableCopy<T>(value: T, ancestors = new Set<object>()): T {
   let copy: unknown;
   if (Array.isArray(value)) {
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (Object.entries(descriptors).some(([key, d]) => key !== 'length' && (!/^\d+$/.test(key) || !('value' in d)))) {
+    if (Reflect.ownKeys(descriptors).some(key => {
+      if (key === 'length') return false;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+      return typeof key !== 'string' || !/^\d+$/.test(key) || !('value' in descriptor) || !descriptor.enumerable;
+    })) {
       throw new InstanceSizeError('invalid', 'unsafe size descriptor array');
     }
     copy = Object.freeze(Array.from({ length: value.length }, (_, index) => {

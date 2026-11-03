@@ -81,10 +81,17 @@ catalog, not account/region availability checks or observed resources. Discovery
 never reads token files or calls Namespace. Successful standardized creates expose
 frozen `instance.sizing` request metadata.
 
-Unit boundary: the resolver intentionally sends the canonical MiB number
-unchanged to Namespace's `memory_megabytes` field (2048/4096/8192/16384), matching
-the adapter's existing binary-sized request convention. This is an explicit
-provider API mapping assumption, not an empirical inference from the machine
-shape documentation's “GB” labels or a certification of delivered bytes. Factory
+Unit boundary: the [official Namespace TypeScript SDK compute example](https://namespace.so/docs/reference/typescript-sdk/compute/index.md)
+explicitly describes 4 GiB using `memoryMegabytes: 4 * 1024`. Accordingly the
+resolver sends canonical MiB numbers unchanged to the corresponding native
+`memory_megabytes` field (2048/4096/8192/16384); no decimal-MB conversion is
+performed. This is documented request-unit evidence, not a measurement of
+delivered bytes or an inference solely from machine-shape “GB” labels. Factory
 CPU/RAM values are defaults overridden by `sizeClass`; explicit per-create
 CPU/RAM selectors, including ambiguous aliases, are rejected instead.
+
+Standard platform context must use enumerable own data properties; present
+`os`/`machine_arch` selectors must be strings, not null/undefined. The resolved
+patch explicitly carries the verified Linux/amd64 platform into the native
+request, so a factory default cannot diverge from the declared mapping. Legacy
+creates without `sizeClass` retain their original descriptor behavior.

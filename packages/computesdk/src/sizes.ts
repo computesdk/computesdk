@@ -61,14 +61,18 @@ export function getInstanceSizeProfile(sizeClass: unknown): InstanceSizeProfile 
 
 /** Detect opt-in without invoking a sizeClass accessor or losing inherited fields in spreads. */
 export function hasInstanceSizeRequest(options?: import('./types/universal-instance').CreateInstanceOptions): boolean {
-  if (options === null || typeof options !== 'object') return false;
+  if (options === null || (typeof options !== 'object' && typeof options !== 'function')) return false;
   const descriptor = Object.getOwnPropertyDescriptor(options, 'sizeClass');
   if (!descriptor) {
     if ('sizeClass' in options) throw new InstanceSizeError('invalid', 'sizeClass must be an own create option');
     return false;
   }
   if (!('value' in descriptor)) throw new InstanceSizeError('invalid', 'sizeClass must not be an accessor');
-  return descriptor.value !== undefined;
+  if (descriptor.value === undefined) return false;
+  if (typeof options !== 'object' || !descriptor.enumerable) {
+    throw new InstanceSizeError('invalid', 'defined sizeClass requires enumerable data on plain create options');
+  }
+  return true;
 }
 
 /** Native CPU/RAM/tier selectors must not ambiguously compete with the standard request. */
@@ -76,9 +80,11 @@ export function validateInstanceSizeOptions(options: import('./types/universal-i
   const prototype = Object.getPrototypeOf(options);
   if (prototype !== Object.prototype && prototype !== null) throw new InstanceSizeError('invalid', 'standard create options must be a plain object');
   const descriptors = Object.getOwnPropertyDescriptors(options);
-  for (const [key, descriptor] of Object.entries(descriptors)) {
-    if (['__proto__', 'prototype', 'constructor'].includes(key) || !('value' in descriptor)) {
-      throw new InstanceSizeError('invalid', 'standard create options contain an unsafe key or accessor');
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = Object.getOwnPropertyDescriptor(options, key)!;
+    if (typeof key !== 'string' || ['__proto__', 'prototype', 'constructor'].includes(key) ||
+        !('value' in descriptor) || !descriptor.enumerable) {
+      throw new InstanceSizeError('invalid', 'standard create options require safe enumerable string-key data properties');
     }
   }
   if (!Object.prototype.hasOwnProperty.call(descriptors, 'sizeClass')) {

@@ -299,6 +299,12 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         options?.virtual_cpu !== undefined || options?.memory_megabytes !== undefined) {
       throw new InstanceSizeError('conflict', 'cannot combine sizeClass with instanceOptions.shape CPU/memory');
     }
+    for (const field of ['os', 'machine_arch']) {
+      const descriptor = Object.getOwnPropertyDescriptor(shape, field);
+      if (descriptor && typeof descriptor.value !== 'string') {
+        throw new InstanceSizeError('invalid', 'Namespace platform selectors must be strings when present');
+      }
+    }
     const os = shape.os ?? config.os ?? 'linux';
     const arch = shape.machine_arch ?? config.machineArch ?? 'amd64';
     if (os !== 'linux' || arch !== 'amd64' || shape.machineArch !== undefined) {
@@ -308,7 +314,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
     }
     return { status: 'supported', nativeOptions: {
-      instanceOptions: { shape: { virtual_cpu: profile.vcpus, memory_megabytes: profile.memoryMiB } },
+      instanceOptions: { shape: { virtual_cpu: profile.vcpus, memory_megabytes: profile.memoryMiB, os: 'linux', machine_arch: 'amd64' } },
     } };
   },
 

@@ -58,6 +58,25 @@ describe('standard sizing core contract', () => {
     await expect(compute({ provider: p }).instances.create(Object.create({ sizeClass: 'sm' }))).rejects.toMatchObject({ code: 'invalid' });
     expect(p.sandbox!.create).not.toHaveBeenCalled();
   });
+  it('rejects non-enumerable standard fields before routing or fallback can lose them', async () => {
+    const first = provider(); const second = provider('ready', supported);
+    const options = Object.defineProperty({}, 'sizeClass', { value: 'sm' });
+    await expect(compute({ providers: [first, second], fallbackOnError: true }).instances.create(options)).rejects.toMatchObject({ code: 'invalid' });
+    expect(first.sandbox!.create).not.toHaveBeenCalled(); expect(second.sandbox!.create).not.toHaveBeenCalled();
+  });
+  it('rejects callable options carrying a defined standard request rather than treating them as legacy', async () => {
+    const p = provider();
+    const options = Object.assign(() => {}, { sizeClass: 'sm' });
+    await expect(compute({ provider: p }).instances.create(options as any)).rejects.toMatchObject({ code: 'invalid' });
+    expect(p.sandbox!.create).not.toHaveBeenCalled();
+  });
+  it('never invokes a symbol-key accessor while routing a standard request', async () => {
+    const p = provider('ready', supported);
+    const getter = vi.fn(() => 'dummy');
+    const options = Object.defineProperty({ sizeClass: 'sm' as const }, Symbol('probe'), { enumerable: true, get: getter });
+    await expect(compute({ provider: p }).instances.create(options)).rejects.toMatchObject({ code: 'invalid' });
+    expect(getter).not.toHaveBeenCalled(); expect(p.sandbox!.create).not.toHaveBeenCalled();
+  });
   it('keeps round-robin policy but preflights without rerouting unknown/unavailable providers', async () => {
     const blocked = provider('blocked', { ...supported, resolve: sizeClass => ({
       status: 'unavailable', requested: getInstanceSizeProfile(sizeClass), provenance: 'adapter-declared', reason: 'mode',
