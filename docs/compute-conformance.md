@@ -10,11 +10,12 @@ Cloud Run are out of scope. Aliases are not executed twice.
 `conformance/compute-profiles.json` accounts for all **55 canonical, in-scope
 compute entrypoints in this checkout**. These are not 55 independent companies.
 
-* **20 configuration-wired** profiles have reviewed factory/credential mappings.
-* **35 configuration-blocked** profiles require reviewed setup first.
-* Of the 20, **8 shared-suite execution candidates** have source-reviewed
-  lookup/delete error handling suitable for SDK-absence checks: Blaxel, CreateOS,
-  E2B, Isorun, NeevCloud, Sandbox0, Sprites and Vercel. The other 12 remain
+* **35 configuration-wired** profiles have reviewed factory/credential mappings.
+* **20 configuration-blocked** profiles require reviewed setup first.
+* Of the 35, **8 shared-suite execution candidates** have source-reviewed
+  cleanup observations: SDK absence for Blaxel, E2B, Isorun, NeevCloud, Sandbox0,
+  Sprites and Vercel; explicit fresh `destroyed` metadata for CreateOS.
+  The other 27 remain
   cleanup-blocked. These are current development-tree reviews; a frozen older
   candidate retains its own smaller catalog and fingerprint.
 * **No live result is established by this catalog.** Source review is not
@@ -37,6 +38,50 @@ E2B CRUD remains blocked: its list implementation still has independent gaps.
 E2B positive lookup retains its existing native `connect` behavior, which can
 resume a paused sandbox or renew its timeout; it is not a pure inspection API.
 Its absence path uses typed metadata-not-found before any connection attempt.
+Installed e2b 2.30.1 can derive that typed error from body `code: 404` before
+checking actual HTTP status, and its connect handle stamps the requested ID.
+Neither adapter mocks nor handle equality establish raw HTTP auth provenance or
+returned wire identity. The same native limitation applies to Lelantos.
+
+CreateOS retains metadata after destruction. Its reviewed cleanup oracle accepts
+only exact SDK null or the owned ID's fresh
+`getInfo().metadata.createosStatus === 'destroyed'`. SDK `stopped`, native
+`destroying`/`paused`, an acknowledgement, or a lookup error do not qualify.
+The journal distinguishes **native-reported terminal** from **SDK absence**;
+neither proves physical reclamation or the end of billing. Other profiles cannot
+opt into this oracle.
+
+### Recorded first live wave: November 3, 2026
+
+These results belong to frozen candidate `368e5ff2`, source fingerprint
+`8b913ad3a420cbc2150b6a587cc93f92836142b52d86be7ed8fc1e7a0a725d6d`.
+They do not certify this newer development tree or unselected capabilities.
+
+| Provider / suite | Result | Actions run |
+| --- | --- | --- |
+| Isorun / CRUD | 5/5 required cases | `0fc73e4f-250b-4db8-b7fa-f7d9326bdcdd` |
+| Isorun / shared | 15/15 required cases | `f9b36664-6be2-4604-9e15-2d175cd4c57b` |
+| E2B / shared | 15/15 required cases | `2cb82d06-97b7-46a1-ab39-41891db2f6d7` |
+| Sandbox0 / shared | 13/13 required cases | `3f8ee3d1-fc60-4631-bc7c-04fe9c569fc5` |
+| CreateOS / shared | Failed afterEach: old SDK-null cleanup oracle | `27c62172-5b6c-45d4-8238-c7144f4f2ef3` |
+| NeevCloud / shared | Blocked before native entry: required vault metadata absent | `6d117c9f-f8aa-48db-afe3-a8126484e7c5` |
+
+The three passing shared suites have zero missing/skipped required cases and
+43 unique owned IDs subsequently journaled as SDK-absent. The separate CRUD
+pilot used one SDK create and explicitly verified SDK absence. NeevCloud used
+zero SDK creates by verified stage ordering; no provider behavior was tested.
+
+Fixed-ID, zero-create recovery run `899173ca-65b7-4ef4-9a37-89364df36732`
+observed CreateOS metadata **already destroyed before** its supplemental DELETE,
+with the destruction timestamp during the original test. This supports the
+retained-terminal oracle correction; the original shared run remains failed,
+not retroactively passed. Its new oracle still requires a new candidate run.
+The expected `NEEV_API_KEY`, `NEEV_ORG_ID` and `NEEV_PROJECT_ID` metadata names
+were all absent; provision them remotely before retrying that provider.
+
+The first wave observed **45 forwarded SDK creates**, not a count of physical
+VMs, native retries, Actions workers or dollars. Recovery journals and raw logs
+remain private; use each run's curated artifacts for evidence.
 
 Additional explicit limits:
 
@@ -85,7 +130,8 @@ It is manual, serial and defaults to `execute=false`.
 First enable `computesdk/computesdk` in Compute Actions if it is still disabled.
 Review the repository's other discovered workflows before enabling automatic
 triggers. Enabling, dispatching, publishing and pushing are separate operations;
-this work does not perform them.
+local preparation does not perform them. The live campaign records separately
+identify explicitly dispatched runs.
 
 The workflow reuses the benchmarks' credential route: the declared org
 `NSC_TOKEN` bootstraps Namespace Vault **inside the remote Actions job**.

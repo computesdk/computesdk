@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, mkdirSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadProfiles, selectProfiles, blockedReason, credentialPattern, providerModule,
-  sourceFingerprint, acceptedLiveResult, expectedCases, vaultEnvdef, createResourceJournal } from '../compute-conformance.mjs';
+  sourceFingerprint, acceptedLiveResult, expectedCases, vaultEnvdef, createResourceJournal, reportPath } from '../compute-conformance.mjs';
 import { summarizeNative } from '../compute-conformance-reporter.mjs';
 
 const profiles = loadProfiles();
@@ -15,7 +15,8 @@ test('catalog covers all 55 canonical compute entries without aliases, browser, 
   assert.equal(profiles.length, 55);
   assert.equal(new Set(profiles.map(p => p.id)).size, 55);
   assert.ok(!profiles.some(p => /cloud-run|browser|tigris/.test(p.id)));
-  assert.equal(profiles.filter(p => p.readiness === 'wired').length, 20);
+  assert.equal(profiles.filter(p => p.readiness === 'wired').length, 35);
+  assert.equal(profiles.filter(p => p.readiness === 'blocked').length, 20);
 });
 test('selection is exact, including canonical subpaths; all is explicit', () => {
   assert.equal(selectProfiles(profiles, 'e2b')[0], e2b);
@@ -27,21 +28,54 @@ test('selection is exact, including canonical subpaths; all is explicit', () => 
   }
 });
 test('blocked profiles and missing configuration cannot become native pass', () => {
-  assert.equal(blockedReason(profiles.find(p => p.id === '@computesdk/archil'), {}), 'needs-reviewed-live-profile');
+  assert.equal(blockedReason(profiles.find(p => p.id === '@computesdk/aws/agentcore'), {}), 'needs-reviewed-live-profile');
   assert.equal(blockedReason(e2b, {}), 'missing configuration: E2B_API_KEY');
   assert.equal(blockedReason(e2b, { E2B_API_KEY: 'unit-only-not-a-secret' }), null);
   const beam = profiles.find(p => p.id === '@computesdk/beam');
   assert.equal(blockedReason(beam, { BEAM_TOKEN: 'unit-value', BEAM_WORKSPACE_ID: 'unit-value' }), 'needs-reviewed-cleanup-contract');
   assert.deepEqual(profiles.filter(p => p.cleanup.status === 'source-reviewed-sdk-absence').map(p => p.id).sort(), [
-    '@computesdk/blaxel', '@computesdk/createos-sandbox', '@computesdk/e2b', '@computesdk/isorun',
+    '@computesdk/blaxel', '@computesdk/e2b', '@computesdk/isorun',
     '@computesdk/neevcloud', '@computesdk/sandbox0', '@computesdk/sprites', '@computesdk/vercel',
   ]);
+  const createos = profiles.find(p => p.id === '@computesdk/createos-sandbox');
+  assert.equal(createos.cleanup.status, 'source-reviewed-native-terminal');
+  assert.equal(createos.cleanup.oracle, 'createos-destroyed-metadata');
+  assert.equal(blockedReason(createos, { CREATEOS_SANDBOX_API_KEY: 'unit-value' }), null);
+  assert.equal(blockedReason({ ...e2b, cleanup: createos.cleanup }, { E2B_API_KEY: 'unit-value' }),
+    'needs-reviewed-cleanup-contract');
 });
 test('vault selection contains only missing names for the selected provider, never values', () => {
   assert.equal(credentialPattern(e2b, {}), '^(E2B_API_KEY)=$');
   const env = { E2B_API_KEY: 'unit-only-not-a-secret' };
   assert.equal(credentialPattern(e2b, env), '');
   assert.equal(env.E2B_API_KEY, 'unit-only-not-a-secret');
+});
+test('actual prepare CLI permits both reviewed cleanup modes without credentials, but never blocked modes', () => {
+  for (const [id, code, reason] of [
+    ['e2b', 0, undefined],
+    ['createos-sandbox', 0, undefined],
+    ['beam', 2, 'needs-reviewed-cleanup-contract'],
+    ['aws/agentcore', 2, 'needs-reviewed-live-profile'],
+  ]) {
+    const file = reportPath(`@computesdk/${id}`);
+    const previous = existsSync(file) ? readFileSync(file) : undefined;
+    try {
+      const child = spawnSync(process.execPath,
+        ['scripts/compute-conformance.mjs', 'prepare', '--provider', id], {
+          encoding: 'utf8',
+          env: { PATH: process.env.PATH, COMPUTE_CONFORMANCE_EXPECTED_SOURCE: sourceFingerprint().sha256,
+            COMPUTE_CONFORMANCE_MAX_CREATES: '1' },
+        });
+      assert.equal(child.status, code, `${id}: ${child.stderr}`);
+      const report = JSON.parse(readFileSync(file, 'utf8'));
+      assert.equal(report.nativePassed, 0);
+      assert.equal(report.outcome, code === 0 ? 'prepared-not-executed' : 'blocked');
+      if (reason) assert.equal(report.reason, reason);
+    } finally {
+      if (previous !== undefined) writeFileSync(file, previous);
+      else rmSync(file, { force: true });
+    }
+  }
 });
 test('Namespace vault envdef selects only requested metadata, ignores deleted/other entries and preserves existing env', () => {
   const metadata = [
@@ -120,7 +154,8 @@ test('source fingerprint is stable and includes new source/config files, not res
   for (const name of ['conformance/compute-native.test.ts', 'conformance/compute-profiles.json',
     'packages/test-utils/src/provider-test-suite.ts', '.computesdk/workflows/provider-conformance.yml',
     'packages/e2b/tsup.config.ts', 'packages/e2b/tsconfig.json', 'tsconfig.json',
-    'conformance/providers.json', 'scripts/load-compute-vault.sh']) {
+    'conformance/providers.json', 'scripts/load-compute-vault.sh', 'conformance/compute-cleanup-probe.ts',
+    'conformance/vitest.unit.config.mts']) {
     assert.ok(first.inputs.some(input => input.file === name), name);
   }
   assert.ok(first.inputs.every(input => !input.file.startsWith('conformance-results/')));
@@ -156,6 +191,76 @@ test('resource journal records only returned IDs and explicit SDK absence, never
     assert.equal(report.attempts[0].state, 'sdk-reported-absent');
     assert.equal(report.attempts[0].sandboxId, sandbox.sandboxId);
     assert.ok(!text.includes(sandbox.secret));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('cleanup diagnostics preserve the destroy ACK separately from later lookup outcomes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
+  try {
+    const file = join(dir, 'resources.json');
+    const journal = createResourceJournal(file, e2b.id, '1'.repeat(64));
+    journal.requested(1);
+    journal.returned(1, { sandboxId: 'owned-unit-id', privateBody: 'NEVER-SERIALIZE-THIS' });
+    journal.cleanupObserved('owned-unit-id', 'destroy-acknowledged');
+    journal.cleanupObserved('owned-unit-id', 'lookup-pending');
+    journal.cleanupObserved('owned-unit-id', 'sdk-present');
+    let attempt = JSON.parse(readFileSync(file, 'utf8')).attempts[0];
+    assert.equal(attempt.state, 'returned'); // ACK/presence is NOT absence.
+    assert.equal(attempt.cleanup.phase, 'sdk-present');
+    assert.ok(Number.isFinite(Date.parse(attempt.cleanup.destroyAcknowledgedAt)));
+    journal.cleanupObserved('owned-unit-id', 'lookup-error');
+    attempt = JSON.parse(readFileSync(file, 'utf8')).attempts[0];
+    assert.equal(attempt.cleanup.phase, 'lookup-error');
+    assert.ok(attempt.cleanup.destroyAcknowledgedAt);
+    assert.ok(!readFileSync(file, 'utf8').includes('NEVER-SERIALIZE-THIS'));
+    journal.absent('owned-unit-id'); journal.assertHealthy();
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).attempts[0].state, 'sdk-reported-absent');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('unknown cleanup targets or labels cannot fabricate evidence or leak arbitrary text', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
+  try {
+    const file = join(dir, 'resources.json');
+    const journal = createResourceJournal(file, e2b.id, '1'.repeat(64));
+    journal.requested(1); journal.returned(1, { sandboxId: 'owned-unit-id' });
+    journal.cleanupObserved('unowned', 'destroy-acknowledged');
+    journal.cleanupObserved('owned-unit-id', 'NEVER-SERIALIZE-THIS');
+    assert.throws(() => journal.assertHealthy(), /journal is incomplete/);
+    const text = readFileSync(file, 'utf8');
+    assert.ok(!text.includes('NEVER-SERIALIZE-THIS'));
+    assert.equal(JSON.parse(text).attempts[0].cleanup, undefined);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('reviewed native terminal evidence never fabricates SDK absence', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
+  try {
+    const file = join(dir, 'resources.json');
+    const journal = createResourceJournal(file, '@computesdk/createos-sandbox', '1'.repeat(64));
+    journal.requested(1); journal.returned(1, { sandboxId: 'owned-unit-id' });
+    journal.cleanupObserved('owned-unit-id', 'destroy-acknowledged');
+    journal.nativeTerminal('owned-unit-id', 'createos-destroyed-metadata', 'destroyed');
+    journal.assertHealthy();
+    const attempt = JSON.parse(readFileSync(file, 'utf8')).attempts[0];
+    assert.equal(attempt.state, 'native-reported-terminal');
+    assert.equal(attempt.absenceAt, undefined);
+    assert.deepEqual(attempt.terminalObservation, { oracle: 'createos-destroyed-metadata', status: 'destroyed' });
+    assert.ok(attempt.cleanup.destroyAcknowledgedAt);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('unreviewed terminal provider, oracle or state cannot produce cleanup evidence', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
+  try {
+    for (const [provider, oracle, status] of [
+      [e2b.id, 'createos-destroyed-metadata', 'destroyed'],
+      ['@computesdk/createos-sandbox', 'unreviewed', 'destroyed'],
+      ['@computesdk/createos-sandbox', 'createos-destroyed-metadata', 'stopped'],
+    ]) {
+      const file = join(dir, 'resources.json');
+      const journal = createResourceJournal(file, provider, '1'.repeat(64));
+      journal.requested(1); journal.returned(1, { sandboxId: 'owned-unit-id' });
+      journal.nativeTerminal('owned-unit-id', oracle, status);
+      assert.throws(() => journal.assertHealthy(), /journal is incomplete/);
+      assert.equal(JSON.parse(readFileSync(file, 'utf8')).attempts[0].state, 'returned');
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 test('post-allocation journal I/O failure cannot hide the exact original sandbox from cleanup', () => {

@@ -22,6 +22,12 @@ const suites = [
   ['@computesdk/hopx', 'command-contract.test.ts', 'lifecycle-contract.test.ts'],
   ['@computesdk/beam', 'command-contract.test.ts', 'lifecycle-contract.test.ts'],
   ['@computesdk/blaxel', 'command-contract.test.ts', 'run-command.test.ts', 'lifecycle-contract.test.ts'],
+  ['@computesdk/agentuity', 'lifecycle-contract.test.ts'],
+  ['@computesdk/declaw', 'lifecycle-contract.test.ts'],
+  ['@computesdk/tensorlake', 'lifecycle-contract.test.ts', 'streaming.test.ts'],
+  ['@computesdk/leap0', 'lifecycle-contract.test.ts'],
+  ['@computesdk/lelantos', 'lifecycle-contract.test.ts', 'connection-opts.test.ts', 'run-command-env.test.ts'],
+  ['@computesdk/upstash', 'lifecycle-contract.test.ts'],
 ];
 
 const env = {
@@ -49,6 +55,12 @@ const env = {
   BEAM_WORKSPACE_ID: '',
   BL_API_KEY: '',
   BL_WORKSPACE: '',
+  AGENTUITY_SDK_KEY: '',
+  DECLAW_API_KEY: '',
+  TENSORLAKE_API_KEY: '',
+  LEAP0_API_KEY: '',
+  LELANTOS_API_KEY: '',
+  UPSTASH_BOX_API_KEY: '',
 };
 const cwd = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 

@@ -7,7 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { runIntegrationTests, type ProviderTestConfig } from '../packages/test-utils/src/provider-test-suite';
 import { runProviderCrudTest } from '../packages/test-utils/src/provider-crud-test';
 import { loadProfiles, blockedReason, providerModule, sourceFingerprint, reportPath, createResourceJournal } from '../scripts/compute-conformance.mjs';
-import { waitForSandboxAbsence, withDeadline } from '../packages/test-utils/src/provider-lifecycle';
+import { withDeadline } from '../packages/test-utils/src/provider-lifecycle';
+import { probeCleanup } from './compute-cleanup-probe';
 
 interface LiveProfile {
   id: string;
@@ -15,6 +16,7 @@ interface LiveProfile {
   config: Record<string, unknown>;
   configEnvironment: Record<string, string>;
   suite: Omit<ProviderTestConfig, 'provider' | 'name'>;
+  cleanup: { oracle?: 'createos-destroyed-metadata' };
 }
 
 if (process.env.COMPUTESDK_CONFORMANCE_NATIVE !== '1') {
@@ -84,11 +86,38 @@ if (process.env.COMPUTESDK_CONFORMANCE_NATIVE !== '1') {
         if (found?.sandboxId !== sandbox.sandboxId) throw new Error('SDK presence lookup did not return the owned ID');
       },
       verifyCleanup: async sandbox => {
-        await waitForSandboxAbsence(() => selected.sandbox.getById(sandbox.sandboxId), {
-          timeoutMs: 8000, pollIntervalMs: 250,
-          failureMessage: 'SDK-reported absence was not verified for the owned ID',
-        });
-        journal.absent(sandbox.sandboxId);
+        // This callback starts only AFTER the original destroy fulfilled.
+        // Keep that distinction when a later lookup fails or times out.
+        journal.cleanupObserved(sandbox.sandboxId, 'destroy-acknowledged');
+        const failure = 'Reviewed cleanup observation failed or timed out for the owned ID';
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+          journal.cleanupObserved(sandbox.sandboxId, 'lookup-pending');
+          let observation;
+          try {
+            observation = await withDeadline(
+              () => probeCleanup(selected.sandbox, sandbox.sandboxId, {
+                profileId: profile.id, oracle: profile.cleanup.oracle,
+              }), deadline - Date.now(), failure,
+            );
+          } catch {
+            journal.cleanupObserved(sandbox.sandboxId, 'lookup-error');
+            throw new Error(failure);
+          }
+          if (Date.now() >= deadline) throw new Error(failure);
+          if (observation.kind === 'sdk-absent') {
+            journal.cleanupObserved(sandbox.sandboxId, 'sdk-absent');
+            journal.absent(sandbox.sandboxId);
+            return;
+          }
+          if (observation.kind === 'native-terminal') {
+            journal.nativeTerminal(sandbox.sandboxId, observation.oracle, observation.status);
+            return;
+          }
+          journal.cleanupObserved(sandbox.sandboxId, 'sdk-present');
+          await new Promise(resolve => setTimeout(resolve, Math.min(250, deadline - Date.now())));
+        }
+        throw new Error(failure);
       },
     });
   }

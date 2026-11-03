@@ -20,7 +20,7 @@ export function createResourceJournal(file, provider, fingerprint) {
     try {
       mkdirSync(dirname(file), { recursive: true });
       writeFileSync(file, JSON.stringify({ provider, sourceFingerprint: fingerprint,
-        assurance: 'SDK-returned IDs and SDK-reported absence only; not physical deletion proof', attempts }, null, 2) + '\n');
+        assurance: 'SDK-returned IDs and explicitly scoped SDK/native cleanup observations; not physical deletion or billing proof', attempts }, null, 2) + '\n');
     } catch {
       unhealthy = true;
       throw new Error('Compute resource journal could not be persisted');
@@ -47,11 +47,40 @@ export function createResourceJournal(file, provider, fingerprint) {
     rejected(number) {
       observe(() => { attempts.find(a => a.number === number).state = 'rejected-id-unknown'; });
     },
+    cleanupObserved(id, phase) {
+      // Fixed operation labels only: never serialize native errors, response
+      // bodies or SDK objects. An ACK is deliberately not an absence claim.
+      const allowed = ['destroy-acknowledged', 'lookup-pending', 'sdk-present', 'sdk-absent', 'lookup-error'];
+      observe(() => {
+        if (!allowed.includes(phase)) throw new Error('Invalid cleanup observation');
+        const owned = attempts.filter(a => a.sandboxId === id);
+        if (!owned.length) throw new Error('Unknown owned ID');
+        for (const a of owned) {
+          const observedAt = new Date().toISOString();
+          a.cleanup = { ...a.cleanup, phase, observedAt };
+          if (phase === 'destroy-acknowledged') a.cleanup.destroyAcknowledgedAt = observedAt;
+        }
+      });
+    },
     absent(id) {
       observe(() => {
         const owned = attempts.filter(a => a.sandboxId === id);
         if (!owned.length) throw new Error('Unknown owned ID');
         for (const a of owned) Object.assign(a, { state: 'sdk-reported-absent', absenceAt: new Date().toISOString() });
+      });
+    },
+    nativeTerminal(id, oracle, status) {
+      observe(() => {
+        if (provider !== '@computesdk/createos-sandbox' ||
+            oracle !== 'createos-destroyed-metadata' || status !== 'destroyed') {
+          throw new Error('Unreviewed native cleanup oracle');
+        }
+        const owned = attempts.filter(a => a.sandboxId === id);
+        if (!owned.length) throw new Error('Unknown owned ID');
+        for (const a of owned) Object.assign(a, {
+          state: 'native-reported-terminal', terminalAt: new Date().toISOString(),
+          terminalObservation: { oracle, status },
+        });
       });
     },
     assertHealthy() { if (unhealthy) throw new Error('Compute resource journal is incomplete'); },
@@ -84,8 +113,15 @@ export function loadProfiles(root = ROOT) {
     for (const flag of ['supportsFilesystem', 'supportsGetUrl', 'supportsBackground']) {
       if (typeof p.suite[flag] !== 'boolean') throw new Error('Missing explicit suite selection');
     }
-    if (!['needs-review', 'source-reviewed-sdk-absence'].includes(p.cleanup?.status) ||
+    if (!['needs-review', 'source-reviewed-sdk-absence', 'source-reviewed-native-terminal'].includes(p.cleanup?.status) ||
         typeof p.cleanup.reason !== 'string' || !p.cleanup.reason) throw new Error('Missing compute cleanup review');
+    if (p.cleanup.status === 'source-reviewed-native-terminal' &&
+        (p.id !== '@computesdk/createos-sandbox' || p.cleanup.oracle !== 'createos-destroyed-metadata')) {
+      throw new Error('Unreviewed native terminal cleanup oracle');
+    }
+    if (p.cleanup.oracle !== undefined && p.cleanup.status !== 'source-reviewed-native-terminal') {
+      throw new Error('Unexpected compute cleanup oracle');
+    }
     if (p.readiness === 'blocked' && (Object.keys(p.config).length ||
         Object.values(p.suite).some(v => v === true))) throw new Error('Blocked profile selects live operations');
     for (const evidence of p.sourceEvidence) {
@@ -130,9 +166,18 @@ export function vaultEnvdef(metadata, profile, env) {
   return selected.size ? [...selected].sort(([a], [b]) => a.localeCompare(b)).map(([name, id]) => `${name}=${id}`).join('\n') + '\n' : '';
 }
 
+export function reviewedCleanup(profile) {
+  return (profile.cleanup?.status === 'source-reviewed-sdk-absence' && profile.cleanup.oracle === undefined) ||
+    (profile.id === '@computesdk/createos-sandbox' &&
+      profile.cleanup?.status === 'source-reviewed-native-terminal' &&
+      profile.cleanup.oracle === 'createos-destroyed-metadata');
+}
+
 export function blockedReason(profile, env) {
   if (profile.readiness !== 'wired') return 'needs-reviewed-live-profile';
-  if (profile.cleanup.status !== 'source-reviewed-sdk-absence') return 'needs-reviewed-cleanup-contract';
+  if (!reviewedCleanup(profile)) {
+    return 'needs-reviewed-cleanup-contract';
+  }
   const missing = profile.requiredEnvironment.filter(name => !env[name]?.trim());
   return missing.length ? `missing configuration: ${missing.join(', ')}` : null;
 }
@@ -168,7 +213,7 @@ export function sourceFingerprint(root = ROOT) {
     (/^packages\/[^/]+\/src\//.test(file) && !/(?:__tests__|fixtures|__mocks__|node_modules|dist)\//.test(file) &&
       !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file)) ||
     (/^scripts\//.test(file) && !/(?:__tests__|fixtures)\//.test(file)) ||
-    /^conformance\/(?:compute-native\.test\.ts|compute-profiles\.json|providers\.json|vitest\.compute\.config\.mts|tsconfig\.compute\.json)$/.test(file) ||
+    /^conformance\/(?:compute-native\.test\.ts|compute-cleanup-probe\.ts|compute-profiles\.json|providers\.json|vitest\.(?:compute|unit)\.config\.mts|tsconfig\.compute\.json)$/.test(file) ||
     /^\.computesdk\/workflows\/provider-conformance\.yml$/.test(file)
   ).sort().map(file => ({ file, sha256: sha(readFileSync(resolve(root, file))) }));
   return { sha256: sha(JSON.stringify(inputs)), inputs };
@@ -262,7 +307,7 @@ export function main(args = process.argv.slice(2)) {
   const write = report => writeFileSync(output, JSON.stringify(report, null, 2) + '\n');
   const suite = env.COMPUTE_CONFORMANCE_SUITE || 'shared';
   const blocked = (command === 'prepare' ? (profile.readiness !== 'wired' ? 'needs-reviewed-live-profile' :
-    profile.cleanup.status !== 'source-reviewed-sdk-absence' ? 'needs-reviewed-cleanup-contract' : null) :
+    !reviewedCleanup(profile) ? 'needs-reviewed-cleanup-contract' : null) :
     blockedReason(profile, env)) || (!['shared', 'crud'].includes(suite) ? 'unknown suite' :
     suite === 'crud' && profile.id !== '@computesdk/isorun' ? 'needs-reviewed-crud-profile' : null);
   if (blocked) {
