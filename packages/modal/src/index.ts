@@ -220,11 +220,14 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
 
       getById: async (config: ModalInternalConfig, sandboxId: string) => {
-        try {
-          const client = config._client;
-          const sandbox = await client.sandboxes.fromId(sandboxId);
-          return { instance: { instance: sandbox, instanceId: sandboxId }, instanceId: sandboxId };
-        } catch { return null; }
+        const sandbox = await config._client.sandboxes.fromId(sandboxId);
+        if (sandbox.sandboxId !== sandboxId) throw new Error('Modal sandbox identity mismatch');
+        // modal@0.11.0 fromId only reconstructs a handle. poll performs a
+        // native query; numeric exit codes still describe retained sandboxes.
+        // Its raw gRPC failures have no public HTTP-404/typed-absence contract,
+        // so propagate them rather than fabricate nullable absence.
+        await sandbox.poll();
+        return { instance: { instance: sandbox, instanceId: sandboxId }, instanceId: sandboxId };
       },
 
       list: async (_config: ModalConfig) => {
@@ -232,11 +235,9 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
 
       destroy: async (config: ModalInternalConfig, sandboxId: string) => {
-        try {
-          const client = config._client;
-          const sandbox = await client.sandboxes.fromId(sandboxId);
-          if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate();
-        } catch { /* already terminated */ }
+        const sandbox = await config._client.sandboxes.fromId(sandboxId);
+        if (sandbox.sandboxId !== sandboxId) throw new Error('Modal sandbox identity mismatch');
+        await sandbox.terminate();
       },
 
       runCommand: async (modalSandbox: ModalSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {

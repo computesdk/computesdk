@@ -98,13 +98,15 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       getById: async (config: SpritesConfig, sandboxId: string) => {
         const token = config.apiKey || (typeof process !== 'undefined' && process.env?.SPRITES_TOKEN) || '';
         const baseUrl = config.baseUrl || 'https://api.sprites.dev/v1';
-        try {
-          const res = await fetch(`${baseUrl}/sprites/${encodeURIComponent(sandboxId)}`, { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
-          if (!res.ok) return null;
-          const data = await res.json() as SpritesSandbox;
-          data._token = token; data._baseUrl = baseUrl;
-          return { instance: data, instanceId: data.name };
-        } catch { return null; }
+        const res = await fetch(`${baseUrl}/sprites/${encodeURIComponent(sandboxId)}`, { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
+        // The public V1 API defines 404 as "Sprite not found"; other HTTP
+        // failures, rejected fetches and decoding errors are not absence.
+        if (res.status === 404) return null;
+        if (!res.ok) throw new Error(`Sprites API error (${res.status})`);
+        const data = await res.json() as SpritesSandbox;
+        if (!data || data.name !== sandboxId) throw new Error('Sprites sandbox identity mismatch');
+        data._token = token; data._baseUrl = baseUrl;
+        return { instance: data, instanceId: data.name };
       },
 
       list: async (config: SpritesConfig) => {
@@ -121,7 +123,10 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       destroy: async (config: SpritesConfig, sandboxId: string) => {
         const token = config.apiKey || (typeof process !== 'undefined' && process.env?.SPRITES_TOKEN) || '';
         const baseUrl = config.baseUrl || 'https://api.sprites.dev/v1';
-        try { await fetch(`${baseUrl}/sprites/${encodeURIComponent(sandboxId)}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); } catch { /* ignore */ }
+        const res = await fetch(`${baseUrl}/sprites/${encodeURIComponent(sandboxId)}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+        // DELETE's documented 404 proves it is already absent, not that a
+        // failed authentication/transport operation successfully deleted it.
+        if (!res.ok && res.status !== 404) throw new Error(`Sprites API error (${res.status})`);
       },
 
       runCommand: async (sandbox: SpritesSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
