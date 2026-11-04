@@ -62,6 +62,31 @@ function lifecycleSdk(apiKey: string, method: 'GET' | 'POST' | 'DELETE', path: s
   return { sdk, getStatus: () => status };
 }
 
+type NativeClient = Awaited<ReturnType<CodesandboxSandbox['connect']>>;
+
+// Native connect creates a fresh, auto-reconnecting session on every call.
+// Own only the session opened for this operation, never raw getInstance clients.
+async function withClient<T>(
+  sandbox: CodesandboxSandbox,
+  operation: (client: NativeClient) => Promise<T>,
+): Promise<T> {
+  const client = await sandbox.connect();
+  let operationFailed = false;
+  try {
+    return await operation(client);
+  } catch (error) {
+    operationFailed = true;
+    throw error;
+  } finally {
+    try {
+      client.dispose();
+    } catch {
+      // Preserve the original operation error if disposal fails as well.
+      if (!operationFailed) throw new Error('Failed to dispose CodeSandbox client.');
+    }
+  }
+}
+
 export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({
   name: 'codesandbox',
   methods: {
@@ -150,30 +175,31 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
       runCommand: async (sandbox: CodesandboxSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
-          const client = await sandbox.connect();
-          let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(v)}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          // commands.run returns a bare output string — capture the real exit
-          // code and stderr in-band via a delimiter + stderr file.
-          const errFile = `/tmp/.computesdk-stderr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          const delim = `__COMPUTESDK_EXIT_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
-          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __cs_ec=$?; echo "${delim}$__cs_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
-          const output = await client.commands.run(wrapped);
-          const delimIdx = output.lastIndexOf(delim);
-          if (delimIdx === -1) {
-            return { stdout: output, stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
-          }
-          const after = output.substring(delimIdx + delim.length);
-          const newlineIdx = after.indexOf('\n');
-          const exitCode = parseInt(newlineIdx === -1 ? after : after.substring(0, newlineIdx), 10) || 0;
-          const stderr = newlineIdx === -1 ? '' : after.substring(newlineIdx + 1);
-          const stdout = output.substring(0, delimIdx).replace(/\n$/, '');
-          return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
+          return await withClient(sandbox, async client => {
+            let fullCommand = command;
+            if (options?.env && Object.keys(options.env).length > 0) {
+              const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(v)}"`).join(' ');
+              fullCommand = `${envPrefix} ${fullCommand}`;
+            }
+            if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+            if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+            // commands.run returns a bare output string — capture the real exit
+            // code and stderr in-band via a delimiter + stderr file.
+            const errFile = `/tmp/.computesdk-stderr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            const delim = `__COMPUTESDK_EXIT_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
+            const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __cs_ec=$?; echo "${delim}$__cs_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+            const output = await client.commands.run(wrapped);
+            const delimIdx = output.lastIndexOf(delim);
+            if (delimIdx === -1) {
+              return { stdout: output, stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
+            }
+            const after = output.substring(delimIdx + delim.length);
+            const newlineIdx = after.indexOf('\n');
+            const exitCode = parseInt(newlineIdx === -1 ? after : after.substring(0, newlineIdx), 10) || 0;
+            const stderr = newlineIdx === -1 ? '' : after.substring(newlineIdx + 1);
+            const stdout = output.substring(0, delimIdx).replace(/\n$/, '');
+            return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
+          });
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
@@ -195,34 +221,32 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
 
       filesystem: {
         readFile: async (sandbox: CodesandboxSandbox, path: string): Promise<string> => {
-          const client = await sandbox.connect();
-          return client.fs.readTextFile(path);
+          return withClient(sandbox, client => client.fs.readTextFile(path));
         },
         writeFile: async (sandbox: CodesandboxSandbox, path: string, content: string): Promise<void> => {
-          const client = await sandbox.connect();
-          await client.fs.writeTextFile(path, content);
+          await withClient(sandbox, client => client.fs.writeTextFile(path, content));
         },
         mkdir: async (sandbox: CodesandboxSandbox, path: string): Promise<void> => {
-          const client = await sandbox.connect();
-          await client.commands.run(`mkdir -p "${path}"`);
+          await withClient(sandbox, client => client.commands.run(`mkdir -p "${path}"`));
         },
         readdir: async (sandbox: CodesandboxSandbox, path: string): Promise<FileEntry[]> => {
-          const client = await sandbox.connect();
-          const entries = await client.fs.readdir(path);
-          return entries.map((entry: any) => ({
-            name: entry.name,
-            type: entry.isDirectory ? 'directory' as const : 'file' as const,
-            size: entry.size || 0,
-            modified: entry.lastModified ? new Date(entry.lastModified) : new Date()
-          }));
+          return withClient(sandbox, async client => {
+            const entries = await client.fs.readdir(path);
+            return entries.map((entry: any) => ({
+              name: entry.name,
+              type: entry.isDirectory ? 'directory' as const : 'file' as const,
+              size: entry.size || 0,
+              modified: entry.lastModified ? new Date(entry.lastModified) : new Date()
+            }));
+          });
         },
         exists: async (sandbox: CodesandboxSandbox, path: string): Promise<boolean> => {
-          const client = await sandbox.connect();
-          try { await client.commands.run(`ls "${path}"`); return true; } catch { return false; }
+          return withClient(sandbox, async client => {
+            try { await client.commands.run(`ls "${path}"`); return true; } catch { return false; }
+          });
         },
         remove: async (sandbox: CodesandboxSandbox, path: string): Promise<void> => {
-          const client = await sandbox.connect();
-          await client.fs.remove(path);
+          await withClient(sandbox, client => client.fs.remove(path));
         }
       },
 
