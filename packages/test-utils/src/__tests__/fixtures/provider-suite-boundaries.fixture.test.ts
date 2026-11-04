@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { defineProviderTests, runIntegrationTests, runUnitTests } from '../../provider-test-suite';
 import type { Provider, ProviderInstance } from '@computesdk/provider';
@@ -17,13 +17,20 @@ if (process.env.PROVIDER_SUITE_BOUNDARIES_FIXTURE !== '1') {
   };
   const save = () => writeFileSync(process.env.PROVIDER_SUITE_BOUNDARIES_OBSERVATIONS!, JSON.stringify(observations));
   save();
-  afterAll(save);
+  const fakeCreationTiming = scenario?.startsWith('creation-timing-') ?? false;
+  if (fakeCreationTiming) vi.useFakeTimers();
+  afterAll(() => { save(); if (fakeCreationTiming) vi.useRealTimers(); });
   const provider = (name: string) => ({
     sandbox: {
       create: async () => {
         const id = `${name}-${observations.create.length + 1}`;
         observations.create.push(id);
         save();
+        if (fakeCreationTiming) {
+          const allocated = new Promise<void>((resolve) => setTimeout(resolve, 61_146));
+          await vi.advanceTimersByTimeAsync(61_146);
+          await allocated;
+        }
         if (scenario === 'create-rejection' && observations.create.length === 2) throw new Error('create failed');
         return {
           sandboxId: id,
@@ -55,7 +62,16 @@ if (process.env.PROVIDER_SUITE_BOUNDARIES_FIXTURE !== '1') {
       },
     },
   }) as unknown as Provider;
+  const invalidCreationBudgets: Record<string, number> = {
+    'creation-invalid-zero': 0, 'creation-invalid-negative': -1, 'creation-invalid-nan': NaN,
+    'creation-invalid-string': '90000' as unknown as number, 'creation-invalid-infinite': Infinity,
+    'creation-invalid-fraction': 1.5, 'creation-invalid-unsafe': Number.MAX_SAFE_INTEGER + 1,
+    'creation-invalid-over-cap': 900_001,
+    'creation-invalid-framework': 0,
+  };
   const config = (name: string) => ({
+    createTimeoutMs: scenario === 'creation-timing-90k' ? 90_000 : invalidCreationBudgets[scenario!],
+    ...(scenario === 'creation-timing-body-only' ? { timeout: 90_000 } : {}),
     provider: provider(name), name, supportsGetUrl: false,
     supportsBackground: scenario === 'background-default' ? undefined : false,
     ...(['presence-failure', 'verification-success', 'cleanup-verification-failure', 'framework-verification'].includes(scenario!) ? {
@@ -81,7 +97,7 @@ if (process.env.PROVIDER_SUITE_BOUNDARIES_FIXTURE !== '1') {
   describe('caller scope', () => {
     if (scenario === 'skip' || scenario === 'strict-skip') {
       defineProviderTests({ ...config('alpha'), skipIntegration: true })();
-    } else if (scenario === 'framework' || scenario === 'strict-framework' || scenario === 'framework-verification') {
+    } else if (scenario === 'framework' || scenario === 'strict-framework' || scenario === 'framework-verification' || scenario === 'creation-invalid-framework') {
       runUnitTests(config('alpha'));
     } else if (scenario === 'native-helper') {
       runIntegrationTests({ ...config('alpha'), skipIntegration: true, executionMode: 'framework-mocked' });

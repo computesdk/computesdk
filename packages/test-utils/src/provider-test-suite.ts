@@ -22,6 +22,12 @@ export interface ProviderTestConfig {
   supportsFilesystem?: boolean;
   /** Custom test timeout in milliseconds */
   timeout?: number;
+  /**
+   * Allocation client deadline, separate from the test body timeout (default:
+   * 60,000ms; positive safe integer, at most 15 minutes). Not cancellation:
+   * ownership is retained and cleanup still attempts to destroy late allocations.
+   */
+  createTimeoutMs?: number;
   /** Skip native tests without substituting a mock (for example, missing credentials). */
   skipIntegration?: boolean;
   /**
@@ -78,6 +84,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
     name,
     supportsFilesystem = false,
     timeout = 60000,
+    createTimeoutMs = 60_000,
     skipIntegration = false,
     executionMode = 'native',
     supportsBackground = true,
@@ -90,6 +97,12 @@ export function defineProviderTests(config: ProviderTestConfig) {
     supportsStreaming = false,
     supportsProcesses = false,
   } = config;
+
+  // Reject invalid client budgets before registering hooks or creating resources.
+  if (!Number.isSafeInteger(createTimeoutMs) || createTimeoutMs <= 0 || createTimeoutMs > 900_000) {
+    throw new Error('createTimeoutMs must be a positive safe integer no greater than 900000 milliseconds');
+  }
+  const setupHookTimeoutMs = Math.max(90_000, createTimeoutMs + 15_000);
 
   return () => {
     const frameworkMocked = executionMode === 'framework-mocked';
@@ -121,7 +134,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
         // test's sandbox. A local attempt also fences late setup completion.
         sandbox = undefined!;
         const ownedAttempt = createProviderSuiteAttempt(
-          createSandbox, undefined, undefined, frameworkMocked ? undefined : verifyCleanup,
+          createSandbox, createTimeoutMs, undefined, frameworkMocked ? undefined : verifyCleanup,
           frameworkMocked ? undefined : observeCleanup,
         );
         attempt = ownedAttempt;
@@ -136,7 +149,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
             );
           }
         }
-      }, 90000);
+      }, setupHookTimeoutMs);
 
       afterEach(async () => {
         const ownedAttempt = attempt;

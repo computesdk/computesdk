@@ -154,4 +154,32 @@ describe('existing provider suite registration boundaries (injected fakes, no na
     expect(result.calls.verified).toEqual([]);
     expect(result.calls.cleanupVerified).toEqual([]);
   }, 25_000);
+
+  it('accepts a 61,146ms fake allocation within an explicit 90s creation deadline and cleans once', () => {
+    const result = runFixture('creation-timing-90k');
+    expect(result.status, result.output).toBe(0);
+    expect(result.calls.create).toHaveLength(7);
+    expect(result.calls.destroy).toEqual(result.calls.create);
+  }, 25_000);
+
+  for (const scenario of ['creation-timing-default', 'creation-timing-body-only']) {
+    it(`keeps the default 60s creation deadline separate from body timeout (${scenario})`, () => {
+      const result = runFixture(scenario);
+      expect(result.status).not.toBe(0);
+      expect(result.report.numFailedTests).toBe(7);
+      expect(result.calls.create).toHaveLength(7);
+      expect(result.calls.destroy).toEqual(result.calls.create);
+      expect(result.output).toContain('Sandbox creation failed or timed out');
+    }, 25_000);
+  }
+
+  it('rejects invalid creation budgets before hook registration or any allocation', () => {
+    for (const suffix of ['zero', 'negative', 'nan', 'string', 'infinite', 'fraction', 'unsafe', 'over-cap', 'framework']) {
+      const result = runFixture(`creation-invalid-${suffix}`);
+      expect(result.status).not.toBe(0);
+      expect(result.calls.create).toEqual([]);
+      expect(result.output).toContain('createTimeoutMs must be a positive safe integer');
+    }
+  }, 25_000);
+
 });
