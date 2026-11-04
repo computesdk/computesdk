@@ -456,7 +456,7 @@ function detachedStatusScript(paths: DetachedPaths): string {
     `test -f ${paths.code} && exit 0;` +
     ` test -f ${paths.pid} || exit 3;` +
     ` P=$(cat ${paths.pid});` +
-    ` [ -n "$P" ] && ! kill -0 "$P" 2>/dev/null && exit 2;` +
+    ` [ -n "$P" ] && ! kill -0 "$P" 2>/dev/null && { test -f ${paths.code} && exit 0; exit 2; };` +
     ` exit 1`
   );
 }
