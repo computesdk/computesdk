@@ -365,6 +365,82 @@ test('cleanup diagnostics preserve the destroy ACK separately from later lookup 
     assert.equal(JSON.parse(readFileSync(file, 'utf8')).attempts[0].state, 'sdk-reported-absent');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+test('public SDK progress is bounded fixed-label detail; old cleanup/terminal fields stay identical', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-progress-'));
+  try {
+    const file = join(dir, 'resources.json');
+    const journal = createResourceJournal(file, '@computesdk/createos-sandbox', '1'.repeat(64));
+    const id = 'owned-unit-id';
+    journal.requested(1); journal.returned(1, { sandboxId: id, body: 'RAW-BODY' });
+    journal.cleanupObserved(id, 'destroy-acknowledged');
+    journal.cleanupObserved(id, 'lookup-error');
+    journal.nativeTerminal(id, 'createos-destroyed-metadata', 'destroyed');
+    const read = () => JSON.parse(readFileSync(file, 'utf8')).attempts[0];
+    const before = read();
+    for (let n = 0; n < 100; n++) {
+      journal.sdkProgress(id, 'presence', 'lookup-started');
+      journal.sdkProgress(id, 'presence', 'lookup-wrong-identity');
+      journal.sdkProgress(id, 'cleanup', 'lookup-started');
+      journal.sdkProgress(id, 'cleanup', 'lookup-returned');
+      journal.sdkProgress(id, 'cleanup', 'lookup-valid');
+      journal.sdkProgress(id, 'cleanup', 'info-started');
+      journal.sdkProgress(id, 'cleanup', 'info-deadline');
+    }
+    journal.assertHealthy();
+    const { publicSdk, ...oldFields } = read();
+    assert.deepEqual(oldFields, before);
+    assert.equal(publicSdk.presence.phase, 'lookup-wrong-identity');
+    assert.equal(publicSdk.cleanup.phase, 'info-deadline');
+    assert.equal(Object.keys(publicSdk.presence.timestamps).length, 2);
+    assert.equal(Object.keys(publicSdk.cleanup.timestamps).length, 5);
+    for (const detail of Object.values(publicSdk)) {
+      assert.ok(Number.isFinite(Date.parse(detail.observedAt)));
+      for (const timestamp of Object.values(detail.timestamps)) assert.ok(Number.isFinite(Date.parse(timestamp)));
+    }
+    assert.ok(!readFileSync(file, 'utf8').includes('RAW-'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('public SDK progress rejects unknown labels/IDs without inspecting or serializing raw values', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-progress-'));
+  try {
+    const file = join(dir, 'resources.json');
+    const journal = createResourceJournal(file, e2b.id, '1'.repeat(64));
+    journal.requested(1); journal.returned(1, { sandboxId: 'owned-unit-id' });
+    let getterCalls = 0;
+    const raw = {
+      message: 'RAW-MESSAGE', cause: 'RAW-CAUSE', stack: 'RAW-STACK',
+      code: 'RAW-CODE', httpStatus: 599, body: 'RAW-BODY', url: 'https://RAW-URL',
+      wrongId: 'RAW-WRONG-ID', config: { credential: 'RAW-CREDENTIAL' },
+      get private() { getterCalls++; throw new Error('RAW-GETTER'); },
+      toJSON() { getterCalls++; throw new Error('RAW-TOJSON'); },
+    };
+    journal.sdkProgress('RAW-UNKNOWN-ID', 'presence', 'lookup-returned');
+    journal.sdkProgress('owned-unit-id', 'RAW-VERIFICATION', 'lookup-returned');
+    journal.sdkProgress('owned-unit-id', 'cleanup', 'RAW-PHASE');
+    journal.sdkProgress('owned-unit-id', raw, raw);
+    journal.sdkProgress('owned-unit-id', 'cleanup', raw);
+    assert.throws(() => journal.assertHealthy(), /journal is incomplete/);
+    assert.equal(getterCalls, 0);
+    const text = readFileSync(file, 'utf8');
+    assert.ok(!text.includes('RAW-'));
+    assert.equal(JSON.parse(text).attempts[0].publicSdk, undefined);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('progress persistence failure does not hide owned resources or cleanup outcomes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-progress-'));
+  try {
+    const file = join(dir, 'resources.json');
+    const journal = createResourceJournal(file, e2b.id, '1'.repeat(64));
+    const sandbox = { sandboxId: 'owned-unit-id' };
+    journal.requested(1); journal.returned(1, sandbox);
+    rmSync(file); mkdirSync(file);
+    assert.doesNotThrow(() => journal.sdkProgress(sandbox.sandboxId, 'cleanup', 'lookup-null'));
+    assert.doesNotThrow(() => journal.cleanupObserved(sandbox.sandboxId, 'sdk-absent'));
+    assert.doesNotThrow(() => journal.absent(sandbox.sandboxId));
+    assert.equal(journal.returned(1, sandbox), sandbox);
+    assert.throws(() => journal.assertHealthy(), /journal is incomplete/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 test('unknown cleanup targets or labels cannot fabricate evidence or leak arbitrary text', () => {
   const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
   try {

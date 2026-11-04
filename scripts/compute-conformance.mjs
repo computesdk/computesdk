@@ -70,6 +70,28 @@ export function createResourceJournal(file, provider, fingerprint) {
     rejected(number) {
       observe(() => { attempts.find(a => a.number === number).state = 'rejected-id-unknown'; });
     },
+    sdkProgress(id, verification, phase) {
+      // Bounded last timestamp per fixed public-SDK event, never error values,
+      // wrong IDs, native objects or arbitrary callback-supplied properties.
+      const allowed = ['lookup-started', 'lookup-returned', 'lookup-rejected',
+        'lookup-null', 'lookup-wrong-identity', 'lookup-valid', 'info-unavailable',
+        'info-started', 'info-returned', 'info-rejected', 'info-invalid', 'info-valid',
+        'lookup-deadline', 'info-deadline', 'callback-deadline'];
+      observe(() => {
+        if (!['presence', 'cleanup'].includes(verification) || !allowed.includes(phase)) {
+          throw new Error('Invalid public SDK progress');
+        }
+        const owned = attempts.filter(a => a.sandboxId === id);
+        if (!owned.length) throw new Error('Unknown owned ID');
+        for (const a of owned) {
+          const observedAt = new Date().toISOString();
+          a.publicSdk ??= {};
+          const previous = a.publicSdk[verification];
+          a.publicSdk[verification] = { phase, observedAt,
+            timestamps: { ...previous?.timestamps, [phase]: observedAt } };
+        }
+      });
+    },
     cleanupObserved(id, phase) {
       // Fixed operation labels only: never serialize native errors, response
       // bodies or SDK objects. An ACK is deliberately not an absence claim.
