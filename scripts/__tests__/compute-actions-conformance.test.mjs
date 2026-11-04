@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadProfiles, selectProfiles, blockedReason, credentialPattern, providerModule,
-  sourceFingerprint, acceptedLiveResult, expectedCases, vaultEnvdef, createResourceJournal, reportPath, reviewedCleanup } from '../compute-conformance.mjs';
+  sourceFingerprint, acceptedLiveResult, expectedCases, vaultEnvdef, createResourceJournal, reportPath, reviewedCleanup,
+  profileCreateTimeoutMs } from '../compute-conformance.mjs';
 import { summarizeNative } from '../compute-conformance-reporter.mjs';
 
 const profiles = loadProfiles();
@@ -25,6 +26,18 @@ test('selection is exact, including canonical subpaths; all is explicit', () => 
   assert.equal(selectProfiles(profiles, 'all').length, profiles.length);
   for (const id of ['', 'cloud-run', 'agentcore', 'e2b;echo anything']) {
     assert.throws(() => selectProfiles(profiles, id));
+  }
+});
+test('only the explicit Sprites cold-create deadline differs; budgets do not select cases or retries', () => {
+  const sprites = profiles.find(p => p.id === '@computesdk/sprites');
+  assert.equal(profileCreateTimeoutMs(sprites), 90_000);
+  assert.ok(profiles.filter(p => p !== sprites).every(p => profileCreateTimeoutMs(p) === 60_000));
+  assert.deepEqual(expectedCases(sprites), expectedCases({ ...sprites, suite: { ...sprites.suite, createTimeoutMs: undefined } }));
+  for (const value of [null, 0, -1, 0.5, '90000', true, Infinity, NaN, 120001, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => profileCreateTimeoutMs({ suite: { createTimeoutMs: value } }));
+  }
+  for (const value of [1, 60_000, 90_000, 120_000]) {
+    assert.equal(profileCreateTimeoutMs({ suite: { createTimeoutMs: value } }), value);
   }
 });
 test('blocked profiles and missing configuration cannot become native pass', () => {

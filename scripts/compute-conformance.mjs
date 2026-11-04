@@ -124,6 +124,15 @@ export function createResourceJournal(file, provider, fingerprint) {
   };
 }
 
+/** Actions accepts only a bounded explicit create deadline, not a retry policy. */
+export function profileCreateTimeoutMs(profile) {
+  const value = profile.suite.createTimeoutMs === undefined ? 60_000 : profile.suite.createTimeoutMs;
+  if (!Number.isSafeInteger(value) || value <= 0 || value > 120_000) {
+    throw new Error('Invalid compute profile create deadline');
+  }
+  return value;
+}
+
 export function loadProfiles(root = ROOT) {
   const profiles = readJSON(resolve(root, 'conformance/compute-profiles.json')).profiles;
   const inventory = readJSON(resolve(root, 'conformance/providers.json')).providers;
@@ -150,6 +159,7 @@ export function loadProfiles(root = ROOT) {
     for (const flag of ['supportsFilesystem', 'supportsGetUrl', 'supportsBackground']) {
       if (typeof p.suite[flag] !== 'boolean') throw new Error('Missing explicit suite selection');
     }
+    profileCreateTimeoutMs(p);
     if (!['needs-review', 'source-reviewed-sdk-absence', 'source-reviewed-native-terminal'].includes(p.cleanup?.status) ||
         typeof p.cleanup.reason !== 'string' || !p.cleanup.reason) throw new Error('Missing compute cleanup review');
     if (p.cleanup.status === 'source-reviewed-native-terminal' &&

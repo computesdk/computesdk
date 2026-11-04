@@ -2992,7 +2992,7 @@
         },
         {
           "file": "packages/test-utils/src/provider-test-suite.ts",
-          "contains": "}, 90000);"
+          "contains": "const setupHookTimeoutMs = Math.max(90_000, createTimeoutMs + 15_000);"
         }
       ],
       "cleanup": {
@@ -3084,7 +3084,7 @@
         },
         {
           "file": "packages/test-utils/src/provider-test-suite.ts",
-          "contains": "}, 90000);"
+          "contains": "const setupHookTimeoutMs = Math.max(90_000, createTimeoutMs + 15_000);"
         }
       ],
       "cleanup": {
@@ -3284,7 +3284,7 @@
       "exportSubpath": ".",
       "symbol": "sprites",
       "readiness": "wired",
-      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh generated sprite only. Native create rate limits and failed-delete/absence checks remain failures, not permission to reuse a persistent sprite.",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh generated sprite only. Native create rate limits and failed-delete/absence checks remain failures, not permission to reuse a persistent sprite. Explicit create deadline 90000ms: live f878ea5f returned a valid owned allocation after 61146ms, beyond the former internal 60000ms deadline. This bounded cold-start allowance changes no case, retry, assertion or cleanup requirement; it is not a performance pass.",
       "requiredEnvironment": [
         "SPRITES_TOKEN"
       ],
@@ -3294,6 +3294,7 @@
       },
       "config": {},
       "suite": {
+        "createTimeoutMs": 90000,
         "supportsFilesystem": true,
         "supportsGetUrl": true,
         "supportsBackground": false,
@@ -3502,7 +3503,7 @@
         },
         {
           "file": "packages/test-utils/src/provider-test-suite.ts",
-          "contains": "}, 90000);"
+          "contains": "const setupHookTimeoutMs = Math.max(90_000, createTimeoutMs + 15_000);"
         }
       ],
       "cleanup": {
