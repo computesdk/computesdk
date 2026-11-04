@@ -279,6 +279,22 @@ test('source fingerprint is stable and includes new source/config files, not res
   assert.ok(first.inputs.every(input => !input.file.startsWith('conformance-results/')));
   assert.ok(first.inputs.every(input => !input.file.includes('.bundled_')));
 });
+test('source fingerprint includes every immediate canonical Actions YAML workflow', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-workflow-fingerprint-'));
+  try {
+    assert.equal(spawnSync('git', ['init', '--quiet', dir]).status, 0);
+    mkdirSync(join(dir, '.computesdk/workflows/nested'), { recursive: true });
+    writeFileSync(join(dir, '.computesdk/workflows/owned-probe.yaml'), 'name: fixture\n');
+    writeFileSync(join(dir, '.computesdk/workflows/another-owned-probe.yml'), 'name: another\n');
+    writeFileSync(join(dir, '.computesdk/workflows/nested/ignored.yml'), 'name: not-discovered\n');
+    const first = sourceFingerprint(dir);
+    assert.deepEqual(first.inputs.map(input => input.file), [
+      '.computesdk/workflows/another-owned-probe.yml', '.computesdk/workflows/owned-probe.yaml',
+    ]);
+    writeFileSync(join(dir, '.computesdk/workflows/owned-probe.yaml'), 'name: changed\n');
+    assert.notEqual(sourceFingerprint(dir).sha256, first.sha256);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 test('workflow is manual, bounded to five parallel legs, and checks metadata before install/build', () => {
   const text = readFileSync(new URL('../../.computesdk/workflows/provider-conformance.yml', import.meta.url), 'utf8');
   for (const fragment of ['workflow_dispatch:', 'max-parallel: 5', 'fail-fast: false', 'expected_source:', 'max_create_attempts:',

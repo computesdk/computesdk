@@ -266,7 +266,7 @@ export function sourceFingerprint(root = ROOT) {
       !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file)) ||
     (/^scripts\//.test(file) && !/(?:__tests__|fixtures)\//.test(file)) ||
     /^conformance\/(?:compute-native\.test\.ts|compute-cleanup-probe\.ts|compute-profiles\.json|providers\.json|vitest\.(?:compute|unit)\.config\.mts|tsconfig\.compute\.json)$/.test(file) ||
-    /^\.computesdk\/workflows\/(?:provider-conformance|compute-static)\.yml$/.test(file)
+    /^\.computesdk\/workflows\/[^/]+\.ya?ml$/.test(file)
   ).sort().map(file => ({ file, sha256: sha(readFileSync(resolve(root, file))) }));
   return { sha256: sha(JSON.stringify(inputs)), inputs };
 }
