@@ -139,15 +139,10 @@ async function openTunnel(
 }
 
 function isNotFound(error: unknown): boolean {
-  return (
-    (error instanceof RunCloudError && error.status === 404) ||
-    (
-      error !== null &&
-      typeof error === 'object' &&
-      'status' in error &&
-      (error as { status?: unknown }).status === 404
-    )
-  );
+  // The native SDK turns HTTP failures into RunCloudError, but rethrows
+  // transport/custom-fetch exceptions unchanged. A status-shaped exception
+  // is not authoritative evidence that this API target is missing.
+  return error instanceof RunCloudError && error.status === 404;
 }
 
 function millisecondsToSeconds(
