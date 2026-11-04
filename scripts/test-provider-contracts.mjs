@@ -30,6 +30,7 @@ const suites = [
   ['@computesdk/upstash', 'lifecycle-contract.test.ts'],
   ['@computesdk/codesandbox', 'lifecycle-contract.test.ts'],
   ['@computesdk/givemeanode', 'lifecycle-contract.test.ts'],
+  ['@computesdk/run-cloud', 'lifecycle-contract.test.ts'],
 ];
 
 const env = {
@@ -65,6 +66,8 @@ const env = {
   UPSTASH_BOX_API_KEY: '',
   CSB_API_KEY: '',
   GMN_TOKEN: '',
+  RUN_CLOUD_API_KEY: '',
+  RUN_CLOUD_API_TOKEN: '',
 };
 const cwd = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 

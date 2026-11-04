@@ -2903,11 +2903,7 @@
         },
         {
           "file": "packages/run-cloud/src/index.ts",
-          "contains": "(error instanceof RunCloudError && error.status === 404)"
-        },
-        {
-          "file": "packages/run-cloud/src/index.ts",
-          "contains": "(error as { status?: unknown }).status === 404"
+          "contains": "return error instanceof RunCloudError && error.status === 404;"
         },
         {
           "file": "packages/run-cloud/README.md",
@@ -2916,7 +2912,7 @@
       ],
       "cleanup": {
         "status": "needs-review",
-        "reason": "BLOCKED: review native RunCloudError and remove or justify the status-only duck-typed 404 branch; only this sandbox GET/DELETE missing-target errors may count. Installed SDK models destroyed/destroying state and destroyedAt while GET returns normalized records; retained destroyed metadata may legitimately prevent the null-only oracle. Confirm native post-delete semantics and fresh create readiness; consider separately reviewed terminal-state oracle, never filter destroyed rows from SDK getById merely to pass. Tunnel creation is a remote mutation and stays unselected."
+        "reason": "BLOCKED: typed native 404 handling is source-reviewed, but the original owned cleanup incident remains unresolved. Installed SDK models destroyed/destroying state and destroyedAt while GET returns normalized records; retained destroyed metadata may legitimately prevent the null-only oracle. Confirm native post-delete semantics and fresh create readiness; consider separately reviewed terminal-state oracle, never filter destroyed rows from SDK getById merely to pass. Tunnel creation is a remote mutation and stays unselected."
       }
     },
     {
