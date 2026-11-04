@@ -350,6 +350,64 @@ test('unknown cleanup targets or labels cannot fabricate evidence or leak arbitr
     assert.equal(JSON.parse(text).attempts[0].cleanup, undefined);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+test('destroy rejection records only fixed diagnostic fields and never establishes cleanup', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
+  try {
+    const file = join(dir, 'resources.json');
+    const journal = createResourceJournal(file, '@computesdk/codesandbox', '1'.repeat(64));
+    journal.requested(1); journal.returned(1, { sandboxId: 'owned-unit-id' });
+    journal.cleanupObserved('owned-unit-id', 'destroy-started');
+    const error = Object.assign(new Error('PRIVATE-NATIVE-BODY'), {
+      code: 'CODESANDBOX_LIFECYCLE_ERROR', provider: 'codesandbox',
+      operation: 'delete', httpStatus: 404, cause: { token: 'PRIVATE-TOKEN' },
+      request: { url: 'PRIVATE-URL' }, status: 'PRIVATE-STATUS',
+    });
+    journal.cleanupRejected('owned-unit-id', error);
+    journal.assertHealthy();
+    const text = readFileSync(file, 'utf8');
+    const attempt = JSON.parse(text).attempts[0];
+    assert.equal(attempt.state, 'returned');
+    assert.equal(attempt.absenceAt, undefined);
+    assert.equal(attempt.terminalAt, undefined);
+    assert.equal(attempt.cleanup.phase, 'destroy-rejected');
+    assert.equal(attempt.cleanup.destroyAcknowledgedAt, undefined);
+    assert.ok(attempt.cleanup.destroyStartedAt);
+    assert.ok(attempt.cleanup.destroyRejectedAt);
+    assert.deepEqual(attempt.cleanup.failure, {
+      code: 'CODESANDBOX_LIFECYCLE_ERROR', provider: 'codesandbox',
+      operation: 'delete', httpStatus: 404,
+    });
+    assert.ok(!text.includes('PRIVATE-'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('cleanup diagnostics never invoke getters, infer status or retain a stale HTTP response', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
+  try {
+    let getters = 0;
+    const accessor = Object.defineProperty({}, 'code', { get() { getters++; throw new Error('PRIVATE'); } });
+    const matching = { code: 'CODESANDBOX_LIFECYCLE_ERROR', provider: 'codesandbox', operation: 'delete' };
+    for (const error of [
+      new Error('PRIVATE'), accessor,
+      new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('PRIVATE'); } }),
+      { ...matching, provider: 'PRIVATE' },
+      { ...matching, operation: 'PRIVATE' },
+      ...[undefined, null, '404', NaN, 99, 600].map(httpStatus => ({ ...matching, httpStatus })),
+    ]) {
+      const file = join(dir, 'resources.json');
+      const journal = createResourceJournal(file, '@computesdk/codesandbox', '1'.repeat(64));
+      journal.requested(1); journal.returned(1, { sandboxId: 'owned-unit-id' });
+      journal.cleanupRejected('owned-unit-id', { ...matching, httpStatus: 503 });
+      journal.cleanupRejected('owned-unit-id', error);
+      journal.assertHealthy();
+      const text = readFileSync(file, 'utf8'), attempt = JSON.parse(text).attempts[0];
+      assert.equal(attempt.cleanup.phase, 'destroy-rejected');
+      assert.equal(attempt.cleanup.failure?.httpStatus, undefined);
+      assert.equal(attempt.state, 'returned');
+      assert.ok(!text.includes('PRIVATE'));
+    }
+    assert.equal(getters, 0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 test('reviewed native terminal evidence never fabricates SDK absence', () => {
   const dir = mkdtempSync(join(tmpdir(), 'compute-journal-unit-'));
   try {

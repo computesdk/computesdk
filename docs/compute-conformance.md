@@ -300,6 +300,14 @@ implementations. Generic consumers without these verification callbacks still
 establish only destroy acknowledgement. Neither path proves physical deletion,
 cessation of billing, or correctness of the vendor's server response.
 
+Cleanup observations distinguish original destroy entry, rejection and acknowledgement.
+An acknowledgement is never absence, and a missing acknowledgement alone cannot
+distinguish an immediate SDK rejection from a still-pending operation.
+Rejection diagnostics retain only allowlisted fixed adapter codes/operations and
+scoped numeric HTTP statuses, never native messages, causes, headers or response
+bodies. Observation failures cannot prevent the original SDK destroy or its
+cleanup verification.
+
 A private resource journal records SDK create requests and IDs returned to the
 suite, without SDK objects, credentials or raw errors. Post-allocation journal
 failure never hides a returned instance from cleanup; it instead fails the

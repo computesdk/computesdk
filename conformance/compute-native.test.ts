@@ -80,6 +80,10 @@ if (process.env.COMPUTESDK_CONFORMANCE_NATIVE !== '1') {
   } else {
     runIntegrationTests({
       ...profile.suite, provider: selected, name: provider.name,
+      observeCleanup: {
+        started: sandbox => journal.cleanupObserved(sandbox.sandboxId, 'destroy-started'),
+        rejected: (sandbox, error) => journal.cleanupRejected(sandbox.sandboxId, error),
+      },
       verifySandbox: async sandbox => {
         const found = await withDeadline(() => selected.sandbox.getById(sandbox.sandboxId),
           8000, 'SDK presence lookup failed or timed out');

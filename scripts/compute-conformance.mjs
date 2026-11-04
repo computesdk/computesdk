@@ -18,6 +18,23 @@ const nativeRules = new Map([
 export const reportPath = (id, root = ROOT) =>
   resolve(root, 'conformance-results', `${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
 
+function safeCleanupFailure(error) {
+  // Read data properties only: never invoke native getters or copy an error.
+  const own = key => {
+    const descriptor = Object.getOwnPropertyDescriptor(error, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  };
+  try {
+    if (!error || typeof error !== 'object' ||
+        own('code') !== 'CODESANDBOX_LIFECYCLE_ERROR' || own('provider') !== 'codesandbox') return;
+    const operation = own('operation');
+    if (!['get', 'resume', 'delete'].includes(operation)) return;
+    const httpStatus = own('httpStatus');
+    return { code: 'CODESANDBOX_LIFECYCLE_ERROR', provider: 'codesandbox', operation,
+      ...(Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? { httpStatus } : {}) };
+  } catch { /* Hostile/proxy errors still get a fixed rejection observation. */ }
+}
+
 /** Recovery metadata only. Never serialize SDK objects, errors or credentials. */
 export function createResourceJournal(file, provider, fingerprint) {
   const attempts = [];
@@ -56,7 +73,7 @@ export function createResourceJournal(file, provider, fingerprint) {
     cleanupObserved(id, phase) {
       // Fixed operation labels only: never serialize native errors, response
       // bodies or SDK objects. An ACK is deliberately not an absence claim.
-      const allowed = ['destroy-acknowledged', 'lookup-pending', 'sdk-present', 'sdk-absent', 'lookup-error'];
+      const allowed = ['destroy-started', 'destroy-acknowledged', 'lookup-pending', 'sdk-present', 'sdk-absent', 'lookup-error'];
       observe(() => {
         if (!allowed.includes(phase)) throw new Error('Invalid cleanup observation');
         const owned = attempts.filter(a => a.sandboxId === id);
@@ -64,7 +81,20 @@ export function createResourceJournal(file, provider, fingerprint) {
         for (const a of owned) {
           const observedAt = new Date().toISOString();
           a.cleanup = { ...a.cleanup, phase, observedAt };
+          if (phase === 'destroy-started') a.cleanup.destroyStartedAt = observedAt;
           if (phase === 'destroy-acknowledged') a.cleanup.destroyAcknowledgedAt = observedAt;
+        }
+      });
+    },
+    cleanupRejected(id, error) {
+      observe(() => {
+        const owned = attempts.filter(a => a.sandboxId === id);
+        if (!owned.length) throw new Error('Unknown owned ID');
+        const failure = safeCleanupFailure(error);
+        for (const a of owned) {
+          const observedAt = new Date().toISOString();
+          a.cleanup = { ...a.cleanup, phase: 'destroy-rejected', observedAt,
+            destroyRejectedAt: observedAt, failure };
         }
       });
     },
