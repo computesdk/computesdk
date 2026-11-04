@@ -1,0 +1,101 @@
+{
+  "provider": "@computesdk/leap0",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/leap0/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Leap0 lifecycle contract', () => {"
+    }
+  ],
+  "claims": [
+    "Named HTTP-boundary cases preserve canonical IDs and client mappings after failed deletion, propagate nonmissing failures and honor native void deletion acknowledgements.",
+    "Caller and returned references reject ambiguous route syntax while preserving tested safe name aliases."
+  ],
+  "limitations": [
+    "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+    "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+    "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+    "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+    "The pre-existing ID-keyed client cache is not proven isolated across accounts/configurations. List may drop failed item hydration."
+  ],
+  "command": "pnpm --filter @computesdk/leap0 --fail-if-no-match exec vitest run src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "61c9176a5b19f5302dbabf3845ad0f96e75b9f42",
+  "recordedAt": "2026-11-03T20:38:42.353643+00:00",
+  "executionFinishedAt": "2026-11-03T20:26:48.165913+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "SKIP_INTEGRATION": "true",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "COMPUTESDK_INTEGRATION": "0",
+    "COMPUTESDK_API_KEY": "",
+    "AGENTUITY_SDK_KEY": "",
+    "DECLAW_API_KEY": "",
+    "TENSORLAKE_API_KEY": "",
+    "LEAP0_API_KEY": "",
+    "LELANTOS_API_KEY": "",
+    "E2B_API_KEY": "",
+    "UPSTASH_BOX_API_KEY": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 109,
+  "liveProviderVerification": false,
+  "mockBoundary": "Real factory and installed vendor SDK with controlled HTTP fetch responses.",
+  "scope": "Historical component-input-specific local regression evidence, not all-capability, live-provider or future-tree certification.",
+  "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "26497777d51296d2606cd09e53a19292340962457b28de12ee7e52f31e234d98"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/leap0/package.json",
+      "sha256": "5a64633f26bbb9df923bddce19c56f1cfb0ed709223c152ec1b5de2151313fb9"
+    },
+    {
+      "file": "packages/leap0/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "203fb06ddcae5b1cd62c0e66570cad63deaa157836b54af3dce3340c19e0f3d7"
+    },
+    {
+      "file": "packages/leap0/src/index.ts",
+      "sha256": "f95143f64b935d9ec3582d111238c54ed3111fbeba5735234153b1951eacb051"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/leap0/dist/index.mjs",
+      "sha256": "5f2e4b05f9e0145651853f96bcdbc8007faac6b1caff872ffa30b322470a0928"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "leap0",
+    "version": "0.6.0",
+    "manifestSha256": "1d5dfdae74d5bff4d3ef99815b34760af9d48633625444402fb0c4190c53defd"
+  }
+}

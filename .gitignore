@@ -107,3 +107,6 @@ CONCEPTS.md
 workbench-cheatsheet.md
 # Superset
 .superset/
+
+# Sanitized, per-run compute conformance results (never upload local run state).
+/conformance-results/

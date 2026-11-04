@@ -18,6 +18,26 @@ import type {
 
 type RunCommandFn = (sandbox: SandboxInstance, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
 
+class CommandResultProtocolError extends Error {
+  readonly code = 'COMMAND_RESULT_PROTOCOL_ERROR';
+  constructor() {
+    super('Beam command did not return a valid completed exit code');
+    this.name = 'CommandResultProtocolError';
+  }
+}
+
+class LifecycleProtocolError extends Error {
+  readonly code = 'SDK_LIFECYCLE_PROTOCOL_ERROR';
+  readonly provider = 'beam';
+  constructor(
+    readonly operation: 'getById' | 'destroy',
+    readonly reason: 'invalid_identity' | 'unconfirmed_destroy',
+  ) {
+    super('Beam lifecycle response violated the native contract');
+    this.name = 'LifecycleProtocolError';
+  }
+}
+
 export interface BeamConfig {
   token?: string;
   workspaceId?: string;
@@ -281,21 +301,28 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
       getById: async (config: BeamConfig, sandboxId: string) =>
         withBeamConfig(config, async () => {
-          if (!beamOpts.token) return null;
-          try {
-            const instance = await Sandbox.connect(sandboxId);
-            return { instance: beamStamp.stamp(instance, config), instanceId: instance.containerId };
-          } catch { return null; }
+          // beam-js 1.0.22 performs a gateway request here, but exposes no
+          // typed absence discriminator. A failed connection is not proof of
+          // absence (including auth, network, or unclassified 404 failures).
+          const instance = await Sandbox.connect(sandboxId);
+          if (!instance || typeof instance !== 'object' || instance.containerId !== sandboxId) {
+            throw new LifecycleProtocolError('getById', 'invalid_identity');
+          }
+          // This is the same public connect used by ensureSandboxReady;
+          // native filesystem reads need not reconnect this verified handle.
+          sandboxReadiness.set(instance, Promise.resolve());
+          return { instance: beamStamp.stamp(instance, config), instanceId: instance.containerId };
         }),
 
       list: async (_config: BeamConfig) => [],
 
       destroy: async (config: BeamConfig, sandboxId: string) =>
         withBeamConfig(config, async () => {
-          if (!beamOpts.token) return;
-          try {
-            await Sandbox.terminate(sandboxId);
-          } catch { /* Sandbox might already be destroyed */ }
+          // The native method returns Boolean(response.data?.ok); false
+          // does not acknowledge termination and must not become success.
+          if (await Sandbox.terminate(sandboxId) !== true) {
+            throw new LifecycleProtocolError('destroy', 'unconfirmed_destroy');
+          }
         }),
 
       runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> =>
@@ -318,18 +345,32 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             ? new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), options.timeout); })
             : undefined;
           let timedOut = false;
+          let completedExitCode: unknown;
           let proc: Awaited<ReturnType<SandboxInstance['exec']>>;
           try {
             proc = await sandbox.exec(
               ['sh', '-c', fullCommand],
               { wait: options?.timeout === undefined } as Parameters<SandboxInstance['exec']>[1],
             );
+            const completion = proc.wait().then((code) => {
+              // beam-js 1.0.22 documents wait(): Promise<number>. Its running
+              // flag is not refreshed by wait(), so it is not completion proof.
+              // The handle's exitCode may still be startup state: only the
+              // required wait result supplies the completed numeric outcome.
+              completedExitCode = code;
+              return 'done' as const;
+            });
             const outcome = deadline
-              ? await Promise.race([proc.wait().then(() => 'done' as const), deadline])
-              : (await proc.wait(), 'done' as const);
+              ? await Promise.race([completion, deadline])
+              : await completion;
             if (outcome === 'timeout') {
               timedOut = true;
               await proc.kill().catch(() => {});
+            } else if (typeof completedExitCode !== 'number' ||
+              !Number.isSafeInteger(completedExitCode) || completedExitCode < 0) {
+              // In this native SDK negative codes are the running sentinel;
+              // wait() itself polls while exitCode < 0. Do not cap at 255.
+              throw new CommandResultProtocolError();
             }
           } finally {
             clearTimeout(timer);
@@ -339,8 +380,9 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           const stderr = timedOut
             ? `Command timed out after ${options?.timeout}ms` + (stderrStr ? `\n${stderrStr}` : '')
             : stderrStr || '';
-          return { stdout: stdoutStr || '', stderr, exitCode: timedOut ? 124 : (proc.exitCode || 0), durationMs: Date.now() - startTime };
+          return { stdout: stdoutStr || '', stderr, exitCode: timedOut ? 124 : completedExitCode as number, durationMs: Date.now() - startTime };
         } catch (error) {
+          if (error instanceof CommandResultProtocolError) throw error;
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
         }),

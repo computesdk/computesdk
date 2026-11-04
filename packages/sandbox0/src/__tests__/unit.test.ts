@@ -62,6 +62,12 @@ function makeSandbox() {
   const guestFiles = new Map<string, string>();
   const ctxScripts = new Map<string, string>();
   const canned = { out: 'ok\n', err: '', code: '0' };
+  const readOverrides = new Map<string, string[]>();
+  const readContextStatuses = new Map<string, number | undefined>();
+  const readTerminalStatuses = new Map<string, number | undefined>();
+  const readContextErrors = new Set<string>();
+  const readStreamOutputs = new Map<string, string>();
+  const reads: string[] = [];
   let ctxSeq = 122;
   return {
     id: 'sb_123',
@@ -70,6 +76,12 @@ function makeSandbox() {
     clusterId: 'cluster_1',
     canned,
     guestFiles,
+    readOverrides,
+    readContextStatuses,
+    readTerminalStatuses,
+    readContextErrors,
+    readStreamOutputs,
+    reads,
     cmd: vi.fn().mockImplementation(async (script: string) => {
       const contextId = `ctx_${++ctxSeq}`;
       ctxScripts.set(contextId, script);
@@ -87,16 +99,38 @@ function makeSandbox() {
       }
       return { contextId, stdout: 'ok\n', stderr: '', exitCode: undefined };
     }),
-    connectWsContext: vi.fn().mockResolvedValue(contextStream),
+    connectWsContext: vi.fn().mockImplementation(async (contextId: string) => {
+      const cat = ctxScripts.get(contextId)?.match(/^cat (\S+)/);
+      const suffix = cat?.[1].split('.').pop() ?? '';
+      if (!cat) return contextStream;
+      return {
+        ...contextStream,
+        outputs: async function* () {
+          yield { source: 'stdout', data: readStreamOutputs.get(suffix) ?? 'ok\n' };
+        },
+        wait: async () => ({
+          contextId,
+          exitCode: readTerminalStatuses.has(suffix) ? readTerminalStatuses.get(suffix) : 0,
+          state: 'exited',
+        }),
+      };
+    }),
     getContext: vi.fn().mockImplementation(async (contextId: string) => {
       const script = ctxScripts.get(contextId) ?? '';
       const cat = script.match(/^cat (\S+)/);
+      const suffix = cat?.[1].split('.').pop() ?? '';
+      if (cat) reads.push(suffix);
+      if (cat && readContextErrors.has(suffix)) throw new Error('PRIVATE_NATIVE_CAPTURE_SECRET');
+      const override = readOverrides.get(suffix);
+      const stdout = override
+        ? (override.length > 1 ? override.shift()! : override[0])
+        : (cat ? guestFiles.get(cat[1]) ?? '' : '');
       return {
         id: contextId,
         running: false,
-        stdout: cat ? (guestFiles.get(cat[1]) ?? '') : '',
+        stdout,
         stderr: '',
-        exitCode: 0,
+        exitCode: readContextStatuses.has(suffix) ? readContextStatuses.get(suffix) : 0,
         state: 'exited',
       };
     }),
@@ -227,6 +261,203 @@ describe('sandbox0 provider', () => {
     });
     expect(sandbox.sandboxId).toBe('sb_123');
     expect(sandbox.getInstance()).toBe(nativeSandbox);
+  });
+
+  describe('capture read native success', () => {
+    async function rejectsCapture(promise: Promise<unknown>, reason: string, stream?: string) {
+      const error = await promise.then(() => null, (error) => error);
+      expect(error).toMatchObject({ code: 'COMMAND_OUTPUT_INTEGRITY', reason, ...(stream ? { stream } : {}) });
+      expect(`${error.message} ${JSON.stringify(error)}`).not.toContain('PRIVATE_NATIVE_CAPTURE_SECRET');
+      expect(error).not.toHaveProperty('cause');
+      expect(nativeSandbox.guestFiles.size).toBe(0);
+      expect(nativeSandbox.cmd.mock.calls.filter(([script]) => script.startsWith('( '))).toHaveLength(1);
+    }
+
+    describe.each(['out', 'err'] as const)('%s stream', (stream) => {
+      it.each(['', 'é🙂'])('rejects failed Context cat even with exact capture %j', async (text) => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, [String(Buffer.byteLength(text))]);
+        nativeSandbox.readOverrides.set(stream, [text]);
+        nativeSandbox.readContextStatuses.set(stream, 1);
+        await rejectsCapture(sandbox.runCommand('true'), 'output-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it('rejects failed terminal cat even when Context reports success', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+        nativeSandbox.readOverrides.set(stream, ['']);
+        nativeSandbox.readTerminalStatuses.set(stream, 1);
+        await rejectsCapture(sandbox.runCommand('true'), 'output-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it.each([NaN, -1, 0.5])('rejects invalid Context status %j despite terminal zero', async (status) => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+        nativeSandbox.readOverrides.set(stream, ['']);
+        nativeSandbox.readContextStatuses.set(stream, status);
+        await rejectsCapture(sandbox.runCommand('true'), 'output-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it('rejects a failed terminal cat when Context is unavailable', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+        nativeSandbox.readContextErrors.add(stream);
+        nativeSandbox.readStreamOutputs.set(stream, '');
+        nativeSandbox.readTerminalStatuses.set(stream, 1);
+        await rejectsCapture(sandbox.runCommand('true'), 'output-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it('rejects cat with neither native completion status available', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+        nativeSandbox.readOverrides.set(stream, ['']);
+        nativeSandbox.readContextStatuses.set(stream, undefined);
+        nativeSandbox.readTerminalStatuses.set(stream, undefined);
+        await rejectsCapture(sandbox.runCommand('true'), 'output-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it('rejects failed byte-count reads even when their content is plausible', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+        nativeSandbox.readOverrides.set(stream, ['']);
+        nativeSandbox.readContextStatuses.set(`${stream}len`, 1);
+        await rejectsCapture(sandbox.runCommand('true'), 'length-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it('accepts a successful Context cat when terminal status is absent', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+        nativeSandbox.readOverrides.set(stream, ['']);
+        nativeSandbox.readTerminalStatuses.set(stream, undefined);
+        const result = await sandbox.runCommand('true');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('');
+      });
+
+      it('accepts successful terminal status with Context status absent', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+        nativeSandbox.readOverrides.set(stream, ['']);
+        nativeSandbox.readContextStatuses.set(stream, undefined);
+        const result = await sandbox.runCommand('true');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('');
+      });
+
+      it('accepts a successful terminal cat when Context is unavailable', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+        nativeSandbox.readContextErrors.add(stream);
+        nativeSandbox.readStreamOutputs.set(stream, '');
+        const result = await sandbox.runCommand('true');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('');
+      });
+    });
+
+    it('rejects a failed child-code read even when it returns a valid nonzero code', async () => {
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+      nativeSandbox.readOverrides.set('code', ['23']);
+      nativeSandbox.readContextStatuses.set('code', 1);
+      await rejectsCapture(sandbox.runCommand('true'), 'invalid-exit-code');
+    });
+  });
+
+  describe('completed command output integrity', () => {
+    describe.each(['out', 'err'] as const)('%s stream', (stream) => {
+      it('rejects two truncated captures rather than returning the longer one', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['100']);
+        nativeSandbox.readOverrides.set(stream, ['x'.repeat(40), 'x'.repeat(60)]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+          reason: 'byte-length-mismatch',
+          stream: stream === 'out' ? 'stdout' : 'stderr',
+          expectedBytes: 100,
+          actualBytes: 60,
+          attempts: 2,
+        });
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      });
+
+      it('accepts an exact second capture only, including UTF-8 bytes', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, [' 7\n']);
+        nativeSandbox.readOverrides.set(stream, ['é', 'é🙂\n']);
+        const result = await sandbox.runCommand('echo hello');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('é🙂\n');
+        expect(nativeSandbox.reads.filter((suffix) => suffix === stream)).toHaveLength(2);
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      });
+
+      it('does not reread an exact first UTF-8 capture', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['6']);
+        nativeSandbox.readOverrides.set(stream, ['é🙂', 'must not be read']);
+        const result = await sandbox.runCommand('echo hello');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('é🙂');
+        expect(nativeSandbox.reads.filter((suffix) => suffix === stream)).toHaveLength(1);
+      });
+
+      it('rejects an oversized second capture too', async () => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set(`${stream}len`, ['3']);
+        nativeSandbox.readOverrides.set(stream, ['x', 'xxxx']);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+        });
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      });
+    });
+
+    it.each(['', 'garbage', '100junk', '-1', '1.5', '1e2', 'Infinity', '9007199254740992'])(
+      'rejects missing or invalid byte count %j', async (length) => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set('outlen', [length]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+        });
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      },
+    );
+
+    it('accepts empty output only with verified zero lengths', async () => {
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+      for (const stream of ['out', 'err']) {
+        nativeSandbox.readOverrides.set(stream, ['']);
+        nativeSandbox.readOverrides.set(`${stream}len`, ['0']);
+      }
+      await expect(sandbox.runCommand('true')).resolves.toMatchObject({
+        stdout: '', stderr: '', exitCode: 0,
+      });
+      expect(nativeSandbox.guestFiles.size).toBe(0);
+    });
+
+    it('verifies stdout and stderr independently without mixing captures', async () => {
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+      nativeSandbox.readOverrides.set('outlen', ['3']);
+      nativeSandbox.readOverrides.set('out', ['out']);
+      nativeSandbox.readOverrides.set('errlen', ['4']);
+      nativeSandbox.readOverrides.set('err', ['e', 'err!']);
+      await expect(sandbox.runCommand('echo hello')).resolves.toMatchObject({
+        stdout: 'out', stderr: 'err!', exitCode: 0,
+      });
+    });
+
+    it.each(['', 'garbage', '0junk', '-1', '256', '1.5', '1e2', '9007199254740992'])(
+      'rejects missing or invalid child exit code %j despite native exit zero', async (code) => {
+        const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+        nativeSandbox.readOverrides.set('code', [code]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+          reason: 'invalid-exit-code',
+        });
+        expect(nativeSandbox.guestFiles.size).toBe(0);
+      },
+    );
+
+    it('preserves a known nonzero child exit code', async () => {
+      const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+      nativeSandbox.readOverrides.set('code', [' 23\n']);
+      await expect(sandbox.runCommand('echo hello; exit 23')).resolves.toMatchObject({ exitCode: 23 });
+    });
   });
 
   it('runs shell commands with cwd, env, and timeout', async () => {

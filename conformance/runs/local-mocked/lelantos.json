@@ -1,0 +1,111 @@
+{
+  "provider": "@computesdk/lelantos",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/lelantos/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Lelantos lifecycle contract', () => {"
+    }
+  ],
+  "claims": [
+    "Named vendor-boundary cases use metadata getInfo before public connect and direct boolean kill for deletion, preserving post-positive failures and existing domain/config forwarding.",
+    "Caller and returned reference guards reject routing ambiguity; method-spy identity checks do not establish returned HTTP wire identity."
+  ],
+  "limitations": [
+    "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
+    "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
+    "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
+    "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
+    "Installed e2b2.30.1 can convert body code404 to typed missing before checking actual HTTP status; actual HTTP auth/error provenance is not guaranteed.",
+    "Public native connect stamps the requested ID instead of validating returned wire identity and can resume/renew. Vendor-method spies do not prove wire behavior; dynamic undici is not intercepted by a global fetch stub.",
+    "Existing ambient domain/endpoint behavior and list catchalls are unchanged; retained terminal metadata may not be connectable."
+  ],
+  "command": "pnpm --filter @computesdk/lelantos --fail-if-no-match exec vitest run src/__tests__/lifecycle-contract.test.ts src/__tests__/connection-opts.test.ts src/__tests__/run-command-env.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "61c9176a5b19f5302dbabf3845ad0f96e75b9f42",
+  "recordedAt": "2026-11-03T20:38:42.622934+00:00",
+  "executionFinishedAt": "2026-11-03T20:26:48.165913+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "SKIP_INTEGRATION": "true",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "COMPUTESDK_INTEGRATION": "0",
+    "COMPUTESDK_API_KEY": "",
+    "AGENTUITY_SDK_KEY": "",
+    "DECLAW_API_KEY": "",
+    "TENSORLAKE_API_KEY": "",
+    "LEAP0_API_KEY": "",
+    "LELANTOS_API_KEY": "",
+    "E2B_API_KEY": "",
+    "UPSTASH_BOX_API_KEY": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 136,
+  "liveProviderVerification": false,
+  "mockBoundary": "Real factory with public vendor-method spies and actual exported error classes; forwarding fixtures are framework-only.",
+  "scope": "Historical component-input-specific local regression evidence, not all-capability, live-provider or future-tree certification.",
+  "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "26497777d51296d2606cd09e53a19292340962457b28de12ee7e52f31e234d98"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/lelantos/package.json",
+      "sha256": "b20baf9834b4106e9b5a14c17710a1d6e61cae2959abea6ee810330f9e378208"
+    },
+    {
+      "file": "packages/lelantos/src/__tests__/connection-opts.test.ts",
+      "sha256": "c712ae750d2c73db640ad9dda2b34bc49f2b40463d2867b828b8dcbf96b2bf48"
+    },
+    {
+      "file": "packages/lelantos/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "7dc81553658b812f04780dfb1632045dca930d9eefbd1896655e1e92a3f0a847"
+    },
+    {
+      "file": "packages/lelantos/src/__tests__/run-command-env.test.ts",
+      "sha256": "53c9783da36c577723c470cba156a4e260d135a7e4a4dd2572034d1d788a3ef6"
+    },
+    {
+      "file": "packages/lelantos/src/index.ts",
+      "sha256": "a075e603003c175c54f2e33fa0c1353f8f011f0d07b01ac46d3e8642c5ebc446"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/lelantos/dist/index.mjs",
+      "sha256": "ada14f04f52c40a36ed61a93ada710f29513f2551a69fa0134725941a99fb550"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "e2b",
+    "version": "2.30.1",
+    "manifestSha256": "248514a1c593bc2aa78b304df9d5a26af358bd65739af14caa0e3abb9f730aa8"
+  }
+}

@@ -11,7 +11,7 @@
  * - Preview URLs for accessing sandbox services
  */
 
-import { Sandbox as HopxSandbox } from '@hopx-ai/sdk';
+import { Sandbox as HopxSandbox, APIError as HopxAPIError, ErrorCode } from '@hopx-ai/sdk';
 import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
@@ -33,6 +33,61 @@ export interface HopxConfig {
   template?: string;
   /** Base API URL for custom/staging environments */
   baseURL?: string;
+}
+
+function isMissingSandbox(error: unknown): boolean {
+  // Generic NotFound/FileNotFound/Expired errors do not identify authoritative
+  // sandbox absence. Require the native HTTP status AND sandbox-specific code.
+  return error instanceof HopxAPIError
+    && error.statusCode === 404
+    && error.code === ErrorCode.SANDBOX_NOT_FOUND;
+}
+
+async function lookupSandbox(config: HopxConfig, sandboxId: string): Promise<HopxSandbox | null> {
+  const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
+  if (!apiKey) {
+    throw new Error(`Missing HopX API key. Provide 'apiKey' in config or set HOPX_API_KEY environment variable.`);
+  }
+  let sandbox: HopxSandbox;
+  try {
+    // Native connect already performs getInfo, resumes paused VMs and refreshes
+    // JWT credentials. Preserve those effects rather than creating a bare handle.
+    sandbox = await HopxSandbox.connect(sandboxId, apiKey, config.baseURL);
+  } catch (error) {
+    if (isMissingSandbox(error)) return null;
+    throw error;
+  }
+  if (!sandbox || typeof sandbox.sandboxId !== 'string' || !sandbox.sandboxId || sandbox.sandboxId !== sandboxId) {
+    throw new Error('HopX sandbox lookup returned an invalid identity.');
+  }
+  return sandbox;
+}
+
+/** Invalid native completion data, without command/output/cause disclosure. */
+export class HopxCommandProtocolError extends Error {
+  readonly code = 'HOPX_COMMAND_PROTOCOL_ERROR';
+  readonly provider = 'hopx';
+
+  constructor(reason: 'invalid-completion' | 'invalid-output') {
+    super(reason === 'invalid-completion'
+      ? 'HopX command completion status is invalid.'
+      : 'HopX command output is invalid.');
+    this.name = 'HopxCommandProtocolError';
+  }
+}
+
+function commandResult(result: unknown): Pick<CommandResult, 'stdout' | 'stderr' | 'exitCode'> {
+  if (typeof result !== 'object' || result === null) throw new HopxCommandProtocolError('invalid-completion');
+  const { exit_code, stdout, stderr } = result as { exit_code?: unknown; stdout?: unknown; stderr?: unknown };
+  // Commands.run returns HTTP data without runtime validation. Native types
+  // specify a number, not a 0..255 range; preserve negative signal statuses.
+  if (typeof exit_code !== 'number' || !Number.isInteger(exit_code)) {
+    throw new HopxCommandProtocolError('invalid-completion');
+  }
+  if (typeof stdout !== 'string' || typeof stderr !== 'string') {
+    throw new HopxCommandProtocolError('invalid-output');
+  }
+  return { stdout, stderr, exitCode: exit_code };
 }
 
 /**
@@ -140,24 +195,11 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * Connect to an existing HopX sandbox by ID
        * 
        * Uses Sandbox.connect() to reconnect to a running sandbox.
-       * Returns null if sandbox doesn't exist or can't be accessed.
+       * Returns null only for authoritative native sandbox absence.
        */
       getById: async (config: HopxConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
-
-        if (!apiKey) {
-          return null;
-        }
-
-        try {
-          // Connect to existing sandbox using Sandbox.connect()
-          const sandbox = await HopxSandbox.connect(sandboxId, apiKey, config.baseURL);
-
-          return { instance: sandbox, instanceId: sandboxId };
-        } catch (error) {
-          // Sandbox doesn't exist or can't be accessed
-          return null;
-        }
+        const sandbox = await lookupSandbox(config, sandboxId);
+        return sandbox ? { instance: sandbox, instanceId: sandboxId } : null;
       },
 
       /**
@@ -193,19 +235,13 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
        * Uses sandbox.kill() to terminate and clean up the sandbox.
        */
       destroy: async (config: HopxConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.HOPX_API_KEY) || '';
-
-        if (!apiKey) {
-          return;
-        }
-
+        const sandbox = await lookupSandbox(config, sandboxId);
+        if (!sandbox) return;
         try {
-          // Connect to sandbox and kill it
-          const sandbox = await HopxSandbox.connect(sandboxId, apiKey, config.baseURL);
+          // Native kill awaits DELETE and returns void, with no status payload.
           await sandbox.kill();
         } catch (error) {
-          // Sandbox might already be destroyed or doesn't exist
-          // This is acceptable for destroy operations
+          if (!isMissingSandbox(error)) throw error;
         }
       },
 
@@ -245,19 +281,19 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           });
       
           return {
-            stdout: result.stdout || '',
-            stderr: result.stderr || '',
-            exitCode: result.exit_code || 0,  // Note: HopX uses snake_case
+            ...commandResult(result),
             durationMs: Date.now() - startTime
           };
         } catch (error) {
-          // Extract result from error if available (some errors include partial results)
-          const result = (error as any)?.result;
-          if (result) {
+          if (error instanceof HopxCommandProtocolError) throw error;
+          // Retain complete nonzero results on the existing compatibility path.
+          // The native SDK has no error.result contract authorizing success
+          // credit after an exception, even if the attached shape looks valid.
+          if (typeof error === 'object' && error !== null && 'result' in error) {
+            const result = commandResult(error.result);
+            if (result.exitCode === 0) throw new HopxCommandProtocolError('invalid-completion');
             return {
-              stdout: result.stdout || '',
-              stderr: result.stderr || '',
-              exitCode: result.exit_code || 1,
+              ...result,
               durationMs: Date.now() - startTime
             };
           }

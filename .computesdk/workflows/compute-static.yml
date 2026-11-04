@@ -1,0 +1,44 @@
+name: Compute provider static contracts
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_source:
+        description: Exact source fingerprint printed by the local candidate
+        required: true
+        type: string
+
+jobs:
+  compute-static:
+    runs-on: namespace-profile-default
+    timeout-minutes: 30
+    env:
+      EXPECTED_SOURCE: ${{ inputs.expected_source }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.15.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact candidate source without loading providers
+        run: |
+          node --input-type=module - <<'JS'
+          import { sourceFingerprint } from './scripts/compute-conformance.mjs';
+          const actual = sourceFingerprint().sha256;
+          if (!/^[a-f0-9]{64}$/.test(process.env.EXPECTED_SOURCE || '') ||
+              process.env.EXPECTED_SOURCE !== actual) {
+            throw new Error('Candidate source fingerprint mismatch');
+          }
+          console.log(`Candidate source: ${actual}`);
+          console.log(`Node: ${process.version}`);
+          JS
+      - name: Install locked dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build the checked-out SDK
+        run: pnpm build
+      - name: Verify provider inventory without provider calls
+        run: pnpm check:provider-conformance
+      - name: Typecheck every canonical compute provider and its tests
+        run: pnpm typecheck:compute

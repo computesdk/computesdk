@@ -31,6 +31,10 @@ function makeSandbox(
 	streamImpl?: (pid: string, opts: StreamOptions) => { close: () => void; wait: () => Promise<void> }
 ): SandboxInstance {
 	return {
+		// @blaxel/core 0.3.21 get() queries a Sandbox model whose
+		// metadata.name is required; the old process-only fake was invalid.
+		// Match the owned lookup ID used by runEcho below.
+		metadata: { name: 'test-sandbox' },
 		process: {
 			exec: vi.fn(execImpl),
 			logs: vi.fn(logsImpl ?? (async () => '')),
@@ -141,7 +145,7 @@ describe('blaxel runCommand output capture', () => {
 		expect(result.stderr).toBe('boom');
 	});
 
-	it('returns nonzero exit code when the API reports status failed', async () => {
+	it('rejects contradictory failed status with explicit zero instead of inventing a guest exit code', async () => {
 		const sandbox = makeSandbox(async () => ({
 			status: 'failed',
 			exitCode: 0,
@@ -149,9 +153,11 @@ describe('blaxel runCommand output capture', () => {
 			stderr: 'boom',
 		}));
 
-		const result = await runEcho(sandbox);
-
-		expect(result.exitCode).not.toBe(0);
+		await expect(runEcho(sandbox)).rejects.toMatchObject({
+			name: 'CommandResultProtocolError',
+			code: 'COMMAND_RESULT_PROTOCOL_ERROR',
+			message: 'Blaxel command did not return a valid terminal result',
+		});
 	});
 
 	it('waits for a still-running process and recovers output from the finished process', async () => {
@@ -251,10 +257,19 @@ describe('blaxel runCommand output capture', () => {
 		);
 		(sandbox.process as unknown as { kill: typeof kill }).kill = kill;
 
-		const result = await runEcho(sandbox);
+		const error = await runEcho(sandbox).then(
+			() => null,
+			(error: unknown) => error
+		);
 
-		expect(result.exitCode).not.toBe(0);
-		expect(result.stderr).toContain('did not reach a terminal state');
+		expect(error).toMatchObject({
+			name: 'CommandResultProtocolError',
+			code: 'COMMAND_RESULT_PROTOCOL_ERROR',
+			message: 'Blaxel command did not return a valid terminal result',
+		});
+		expect(error).not.toHaveProperty('cause');
+		expect(String(error)).not.toContain('p1');
+		expect(String(error)).not.toContain('running');
 		expect(kill).toHaveBeenCalledWith('p1');
 	});
 

@@ -2,7 +2,7 @@
  * Leap0 Provider - Factory-based Implementation
  */
 
-import { Leap0Client } from 'leap0';
+import { Leap0Client, Leap0NotFoundError } from 'leap0';
 import type { Sandbox as Leap0Sandbox } from 'leap0';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from 'computesdk';
@@ -21,6 +21,23 @@ export interface Leap0Config {
 }
 
 const sandboxToClient = new Map<string, Leap0Client>();
+
+function validateSandboxId(id: unknown): asserts id is string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error('Leap0 sandbox ID must be a non-empty string.');
+  }
+  // Native lifecycle methods interpolate a raw path segment. Reject routing
+  // syntax (including encoded forms), not undocumented ID/name alphabets.
+  let decoded = id;
+  for (;;) {
+    if (/[/\\?#\u0000-\u001f\u007f]/.test(decoded) || decoded === '.' || decoded === '..') {
+      throw new Error('Leap0 sandbox ID must be a route-safe reference.');
+    }
+    const next = decoded.replace(/%([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+    if (next === decoded) break;
+    decoded = next;
+  }
+}
 
 function createLeap0Client(config: Leap0Config): Leap0Client {
   const apiKey = config.apiKey ?? (typeof process !== 'undefined' && process.env?.LEAP0_API_KEY) ?? '';
@@ -59,19 +76,25 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
           envVars: envs,
           ...providerOptions,
         });
+        validateSandboxId(sandbox?.id);
         sandboxToClient.set(sandbox.id, client);
         return { instance: sandbox, instanceId: sandbox.id };
       },
 
       getById: async (config: Leap0Config, sandboxId: string) => {
+        validateSandboxId(sandboxId);
+        const client = createLeap0Client(config);
+        let sandbox: Leap0Sandbox;
         try {
-          const client = createLeap0Client(config);
-          const sandbox = await client.sandboxes.get(sandboxId);
-          sandboxToClient.set(sandboxId, client);
-          return { instance: sandbox, instanceId: sandbox.id };
-        } catch {
-          return null;
+          // Native get performs only the resource GET and local hydration.
+          sandbox = await client.sandboxes.get(sandboxId);
+        } catch (error) {
+          if (error instanceof Leap0NotFoundError) return null;
+          throw error;
         }
+        validateSandboxId(sandbox?.id);
+        sandboxToClient.set(sandbox.id, client);
+        return { instance: sandbox, instanceId: sandbox.id };
       },
 
       list: async (config: Leap0Config) => {
@@ -91,11 +114,14 @@ const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
       },
 
       destroy: async (_config: Leap0Config, sandboxId: string) => {
+        validateSandboxId(sandboxId);
+        const client = sandboxToClient.get(sandboxId) ?? createLeap0Client(_config);
         try {
-          const client = sandboxToClient.get(sandboxId) ?? createLeap0Client(_config);
           await client.sandboxes.delete(sandboxId);
-        } catch {
-          // already destroyed
+        } catch (error) {
+          // This native method sends only the resource DELETE; its void
+          // acknowledgement is valid. Unclassified failures must remain visible.
+          if (!(error instanceof Leap0NotFoundError)) throw error;
         }
         sandboxToClient.delete(sandboxId);
       },

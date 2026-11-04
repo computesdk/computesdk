@@ -53,6 +53,17 @@ class FakeSandbox {
     const wrapped = command[2]?.match(/^\( ([\s\S]*?)\n?\) > (\S+)\.out /);
     const inner = wrapped ? wrapped[1] : command[2];
     if (inner === 'pwd' && pwdFails) {
+      if (wrapped) {
+        // The wrapper completes successfully even when its child fails: it
+        // records that child's streams, byte lengths and status in guest files.
+        const base = wrapped[2];
+        files.set(`${base}.out`, '');
+        files.set(`${base}.outlen`, '0');
+        files.set(`${base}.err`, 'boom');
+        files.set(`${base}.errlen`, '4');
+        files.set(`${base}.code`, '1');
+        return empty;
+      }
       return {
         stdout: { readText: async () => '' },
         stderr: { readText: async () => 'boom' },

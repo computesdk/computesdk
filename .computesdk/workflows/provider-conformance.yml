@@ -1,0 +1,141 @@
+name: Compute provider contracts
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Canonical compute provider or short name; all includes explicit blocked profiles"
+        required: true
+        type: string
+      execute:
+        description: "Run real provider workloads (paid); false only prepares the matrix (Actions itself still costs compute)"
+        type: boolean
+        default: false
+      attempt_unreviewed_cleanup:
+        description: "Attempt wired needs-review cleanup with owned-ID SDK verification; not cleanup certification"
+        type: boolean
+        default: false
+      suite:
+        description: "Existing shared contracts, or opt-in CRUD (initially isorun; other profiles block)"
+        type: choice
+        options: [shared, crud]
+        default: shared
+      expected_source:
+        description: "Required for execution: node scripts/compute-conformance.mjs fingerprint"
+        type: string
+      max_create_attempts:
+        description: "Required for execution: SDK create requests PER provider; not a VM/build/retry/USD cap"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: namespace-profile-default
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - id: matrix
+        env:
+          COMPUTE_CONFORMANCE_PROVIDER: ${{ inputs.provider }}
+          COMPUTE_CONFORMANCE_WORKFLOW_EXECUTE: ${{ inputs.execute }}
+        run: |
+          matrix=$(node scripts/compute-conformance.mjs workflow-plan)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  conformance:
+    needs: plan
+    if: ${{ inputs.execute == true || inputs.execute == 'true' }}
+    runs-on: namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Fail closed on blocked configuration or wrong candidate
+        env: &conformance_env
+          COMPUTE_CONFORMANCE_PROVIDER: ${{ matrix.id }}
+          COMPUTE_CONFORMANCE_SUITE: ${{ inputs.suite }}
+          COMPUTE_CONFORMANCE_EXPECTED_SOURCE: ${{ inputs.expected_source }}
+          COMPUTE_CONFORMANCE_MAX_CREATES: ${{ inputs.max_create_attempts }}
+          COMPUTE_CONFORMANCE_ATTEMPT_UNREVIEWED_CLEANUP: ${{ inputs.attempt_unreviewed_cleanup }}
+        run: node scripts/compute-conformance.mjs prepare
+      # Same remote auth/bootstrap convention as benchmarks-stealth. Never run
+      # this on the developer VM or export provider values into local files.
+      - name: Prepare Namespace vault authentication
+        env:
+          NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          token = os.environ.get("NSC_TOKEN", "")
+          path = Path("/var/run/nsc/token.json")
+          if not token:
+              raise SystemExit("BLOCKED: missing Namespace vault authentication")
+          if not path.exists():
+              try:
+                  parsed = json.loads(token) if token.lstrip().startswith("{") else {"bearer_token": token}
+              except json.JSONDecodeError:
+                  raise SystemExit("BLOCKED: invalid Namespace vault authentication") from None
+              path.parent.mkdir(parents=True, exist_ok=True)
+              fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+              with os.fdopen(fd, "w") as stream:
+                  json.dump(parsed, stream)
+              with open(os.environ["GITHUB_ENV"], "a") as stream:
+                  stream.write("COMPUTE_CONFORMANCE_OWN_NSC_TOKEN_FILE=1\n")
+          with open(os.environ["GITHUB_ENV"], "a") as stream:
+              stream.write("NSC_DOCKER_LOGIN=1\nNSC_CONTAINER_REGISTRY=nscr.io\n")
+          PY
+      - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc
+      - name: Check required vault names without revealing values
+        env: *conformance_env
+        run: |
+          set -euo pipefail
+          nsc vault list --output json 2>/dev/null | node scripts/compute-conformance.mjs vault-check
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build SDK candidate
+        run: pnpm build
+      - name: Typecheck native entrypoint
+        run: pnpm exec tsc -p conformance/tsconfig.compute.json
+      - name: Run existing shared suite against the real provider
+        env: *conformance_env
+        run: |
+          set -euo pipefail
+          KEYS=$(node scripts/compute-conformance.mjs keys)
+          if [ -n "$KEYS" ]; then
+            . ./scripts/load-compute-vault.sh
+          fi
+          node scripts/compute-conformance.mjs check
+          node scripts/compute-conformance.mjs run --execute
+      - name: Remove only the temporary Namespace token created by this job
+        if: ${{ always() && env.COMPUTE_CONFORMANCE_OWN_NSC_TOKEN_FILE == '1' }}
+        run: rm -f -- /var/run/nsc/token.json
+      - name: Finalize incomplete stage outcomes without claiming native success
+        if: ${{ always() }}
+        env: *conformance_env
+        run: node scripts/compute-conformance.mjs incomplete
+      - name: Upload sanitized outcomes (never raw Vitest error JSON)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: compute-conformance-${{ strategy.job-index }}
+          path: conformance-results/*.json
+          if-no-files-found: error

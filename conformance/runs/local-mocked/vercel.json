@@ -1,0 +1,123 @@
+{
+  "provider": "@computesdk/vercel",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "tests": [
+    {
+      "file": "packages/vercel/src/__tests__/command-contract.test.ts",
+      "contains": "describe('Vercel real-adapter command contract"
+    },
+    {
+      "file": "packages/vercel/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Vercel real-factory lifecycle contract (native SDK boundary)', () => {"
+    }
+  ],
+  "claims": [
+    "Named native-only-mocked tests reject missing, null or malformed foreground exit status, preserve valid integer statuses and exact captured text, and acknowledge only explicit detached null as launched rather than completed.",
+    "Named tests preserve ordinary native-error handling and timeout forwarding without replaying the command.",
+    "Named lifecycle regressions map genuine native sandbox APIError404 only, validate matching native names, permanently delete instead of stop, await void deletion, and retain orphan snapshots/drives through manager and instance paths."
+  ],
+  "limitations": [
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
+    "No clean dependency installation or native-provider execution was performed; the existing installed dependency store was reused.",
+    "Installed native SDK contracts were inspected at the recorded version; compatibility throughout the declared dependency range is unverified.",
+    "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
+    "The native SDK itself masks some missing finished wire exit status to zero; adapter-boundary checks cannot recover that omission.",
+    "Detached exit0 is an explicit launch acknowledgement only, not proof of child completion or complete streams.",
+    "Permanent native delete and later SDK-null verification have not run live. Orphan snapshots and separately owned drives are deliberately retained and may keep storage charges; no all-artifact/billing cleanup claim."
+  ],
+  "command": "pnpm --filter @computesdk/vercel --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:31.010399+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
+  "executionGroup": "pnpm test:provider-contracts",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0",
+    "VERCEL_TOKEN": "",
+    "VERCEL_OIDC_TOKEN": "",
+    "HOPX_API_KEY": "",
+    "BEAM_TOKEN": "",
+    "BEAM_WORKSPACE_ID": "",
+    "BL_API_KEY": "",
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 66,
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "packages/vercel/package.json",
+      "sha256": "5762fb05207081f68712e220bb070f090fd95f1cf35059b15d55544ae3b2f546"
+    },
+    {
+      "file": "packages/vercel/src/__tests__/command-contract.test.ts",
+      "sha256": "e73b3b1eb78c8ba32f072f1a4eadc1b4cfd29ae43edaa3c752713565250e3cbd"
+    },
+    {
+      "file": "packages/vercel/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "c6f579c9aa5e675d1dda59ae6f3ad3ec95191871041b0956aa5cad4ba14ca124"
+    },
+    {
+      "file": "packages/vercel/src/index.ts",
+      "sha256": "ae064a3ac111b55b49245cf9020e75ed1b8d67dac7605d3e403e5d9981db4a65"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/vercel/dist/index.mjs",
+      "sha256": "7a9e6ea29d854b529cfc2b9be780acd6cd7528fee2ef8385f84193b963d74134"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "@vercel/sandbox",
+    "version": "3.8.0",
+    "manifestSha256": "a8d5fea391c4574a6c8c0e443a4b68cef7e28f212908da846f948f3b056ec313"
+  }
+}

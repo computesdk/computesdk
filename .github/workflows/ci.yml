@@ -50,6 +50,22 @@ jobs:
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm build
 
+    - name: Check provider conformance inventory (no provider calls)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm check:provider-conformance
+
+    - name: Typecheck every canonical compute provider and its tests (no provider calls)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm typecheck:compute
+
+    - name: Run provider reliability contracts (local mocks only)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm test:provider-contracts
+
+    - name: Check compute Actions coverage and acceptance gates (no provider calls)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm check:compute-conformance
+
     - name: Run all tests (mock mode)
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm test
@@ -66,7 +82,8 @@ jobs:
     - name: Run type checking
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm typecheck
-    
+
+
     - name: Run linting
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm lint

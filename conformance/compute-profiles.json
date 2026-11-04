@@ -1,0 +1,3805 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "@computesdk/agentuity",
+      "packageDirectory": "packages/agentuity",
+      "exportSubpath": ".",
+      "symbol": "agentuity",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Existing caller supplies the restricted filesystem base. URL coverage is deliberately unselected: adapter getUrl can synthesize a best-guess hostname instead of proving a native preview URL.",
+      "requiredEnvironment": [
+        "AGENTUITY_SDK_KEY"
+      ],
+      "optionalEnvironment": [
+        "AGENTUITY_REGION",
+        "AGENTUITY_SANDBOX_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "AGENTUITY_SDK_KEY",
+        "region": "AGENTUITY_REGION",
+        "baseURL": "AGENTUITY_SANDBOX_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/home/agentuity"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "export const agentuity = defineProvider<AgentuityHandle, AgentuityConfig>({"
+        },
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "agentuityFetch(handle, 'POST', '/sandbox', body)"
+        },
+        {
+          "file": "packages/agentuity/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "AGENTUITY_SDK_KEY"
+        },
+        {
+          "file": "packages/agentuity/src/index.ts",
+          "contains": "destroy: async (config: AgentuityConfig, sandboxId: string): Promise<void> => {"
+        },
+        {
+          "file": "packages/agentuity/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/agentuity/src/__tests__/index.test.ts",
+          "contains": "filesystemBasePath: '/home/agentuity',"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/archil",
+      "packageDirectory": "packages/archil",
+      "exportSubpath": ".",
+      "symbol": "archil",
+      "readiness": "wired",
+      "reason": "Constructor-selected execution=persistent routes shared create({}) to a fresh client.sandboxes.create call with a dedicated backing disk; no ARCHIL_DISK_ID, sandboxId, snapshotId or borrowed disk is selected. Installed disk 1.1.2 requires Node >=22 and documents default ubuntu:26.04: the selected shared suite needs POSIX sh/coreutils, nonempty HOME and writable /tmp, not guest Node. baseImage and maxTtlSeconds are CREATE-only, so this profile does not copy benchmark sandboxOptions or claim a TTL cap. Persistent resources require explicit cleanup/account approval before native execution. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "ARCHIL_API_KEY",
+        "ARCHIL_REGION"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "ARCHIL_API_KEY",
+        "region": "ARCHIL_REGION"
+      },
+      "config": {
+        "execution": "persistent"
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/archil/src/index.ts",
+          "contains": "execution?: ArchilExecutionMode;"
+        },
+        {
+          "file": "packages/archil/src/index.ts",
+          "contains": "execution: config.execution ?? 'exec'"
+        },
+        {
+          "file": "packages/archil/src/index.ts",
+          "contains": "vm = await client.sandboxes.create(toSandboxRequest(options), {"
+        },
+        {
+          "file": "packages/archil/src/index.ts",
+          "contains": "baseImage: options?.baseImage ?? options?.image ?? options?.templateId,"
+        },
+        {
+          "file": "packages/archil/src/index.ts",
+          "contains": "async function stopAndDeleteVm(vm: ArchilVm): Promise<void> {"
+        },
+        {
+          "file": "packages/archil/README.md",
+          "contains": "long-running Linux VM with a dedicated disk"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Do not approve borrowed exec disks. Persistent getById catches every error and can resume/start the owned VM; stopAndDeleteVm returns early for deleting/deleted states without observing disk deletion. Narrow lookup to typed resource absence, propagate auth/transport failures, and verify owned VM plus backing-disk reclamation with reviewed account scope. Shared caller cannot set maxTtlSeconds or image through the constructor; review indefinite/default lifetime and create rejection recovery before execution."
+      }
+    },
+    {
+      "id": "@computesdk/arker",
+      "packageDirectory": "packages/arker",
+      "exportSubpath": ".",
+      "symbol": "arker",
+      "readiness": "blocked",
+      "reason": "BLOCKED: installed @arker-ai/sdk 1.2.4 ForkRequest resolves source_vm_name in the caller organization FIRST, then ArkerHQ, and normally inherits disk+memory and network policy. Adapter passes an unscoped name (default ubuntu-small); ArkerConfig exposes no source_org_name, source_vm_id default, or layers field. Before wiring, obtain explicit approval for a dedicated empty test organization plus an audited authorized source name and placement; otherwise extend the adapter with real source-organization/id and inheritance controls before selecting it. Do not silently clone a caller VM or invent constructor fork options. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "ARKER_API_KEY",
+        "ARKER_SOURCE"
+      ],
+      "optionalEnvironment": [
+        "ARKER_PROVIDER",
+        "ARKER_REGION",
+        "ARKER_PLATFORMS"
+      ],
+      "configEnvironment": {
+        "apiKey": "ARKER_API_KEY",
+        "source": "ARKER_SOURCE",
+        "provider": "ARKER_PROVIDER",
+        "region": "ARKER_REGION"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/arker/src/index.ts",
+          "contains": "export interface ArkerConfig {"
+        },
+        {
+          "file": "packages/arker/src/index.ts",
+          "contains": "const vm = options?.snapshotId"
+        },
+        {
+          "file": "packages/arker/src/index.ts",
+          "contains": "source_vm_name:"
+        },
+        {
+          "file": "packages/arker/src/index.ts",
+          "contains": "options?.templateId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE,"
+        },
+        {
+          "file": "packages/arker/src/index.ts",
+          "contains": "env('ARKER_PLATFORMS')?.split(',').map((p) => p.trim()).filter(Boolean);"
+        },
+        {
+          "file": "packages/arker/src/index.ts",
+          "contains": "await client.vm(sandboxId).delete();"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Typed ArkerError status404 handling is a promising source shape, not approval. First pin/approve the source organization and inherited disk/memory/network state; then review native delete, allocations before fork rejection and observed absence of the returned owned ID. ARKER_PLATFORMS is read and CSV-parsed by the adapter; never map its string directly to the string[] constructor field."
+      }
+    },
+    {
+      "id": "@computesdk/aws/agentcore",
+      "packageDirectory": "packages/aws",
+      "exportSubpath": "./agentcore",
+      "symbol": "agentcore",
+      "readiness": "blocked",
+      "reason": "BLOCKED pending explicit operator approval of a dedicated AWS account/region and a session-management IAM principal. Actual source uses managed Code Interpreter StartCodeInterpreterSession with codeInterpreterIdentifier (default aws.codeinterpreter.v1), NOT an agent runtime ARN or a ComputeSDK bridge; do not point it at an arbitrary production agent runtime. Required AWS credential names below select an explicit environment-credential route, not inferred machine/profile credentials, but their account and permission scope were not inspected or approved. Existing factory creates fresh service-assigned session IDs; shell/coreutils and /tmp are the candidate runtime/FS contract. Installed AWS clients 3.1078.0 support Node >=20. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "AWS_REGION",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY"
+      ],
+      "optionalEnvironment": [
+        "AWS_SESSION_TOKEN"
+      ],
+      "configEnvironment": {
+        "region": "AWS_REGION"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/aws/src/agentcore/index.ts",
+          "contains": "const DEFAULT_CODE_INTERPRETER = 'aws.codeinterpreter.v1';"
+        },
+        {
+          "file": "packages/aws/src/agentcore/index.ts",
+          "contains": "export interface AgentCoreConfig {"
+        },
+        {
+          "file": "packages/aws/src/agentcore/index.ts",
+          "contains": "new StartCodeInterpreterSessionCommand({"
+        },
+        {
+          "file": "packages/aws/src/agentcore/index.ts",
+          "contains": "instanceId: `${codeInterpreterIdentifier}::${response.sessionId}`"
+        },
+        {
+          "file": "packages/aws/src/agentcore/index.ts",
+          "contains": "if (response.status && response.status !== CodeInterpreterSessionStatus.READY) return null;"
+        },
+        {
+          "file": "packages/aws/src/agentcore/index.ts",
+          "contains": "new StopCodeInterpreterSessionCommand({ codeInterpreterIdentifier, sessionId }),"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "getById returns null for every lookup error and non-READY status; destroy swallows every StopCodeInterpreterSession error. Propagate auth/transport failures and accept only typed missing-resource errors. Review a native terminal-session oracle separately: retained non-READY session metadata is not strict resource absence. Approve account/region/interpreter and IAM Start/Invoke/Get/List/Stop session permissions before any native request; no runtime ARN or production runtime deletion is selected."
+      }
+    },
+    {
+      "id": "@computesdk/aws/ec2",
+      "packageDirectory": "packages/aws",
+      "exportSubpath": "./ec2",
+      "symbol": "ec2",
+      "readiness": "blocked",
+      "reason": "BLOCKED: an operator must approve an explicitly scoped AWS test account/role, region, version-pinned launch template, AMI, subnet/VPC, security groups and SSM instance profile before any RunInstances/Fleet or TerminateInstances call. AWS_EC2_LAUNCH_TEMPLATE and the optional launch-template/version/type names below are proposed conformance string-to-constructor bindings, not SDK-native env fallbacks. Shared create({}) cannot establish safe networking/IAM or root-volume DeleteOnTermination; a generic computesdk:managed tag is not campaign ownership. Avoid Fleet/Spot/subnet fallback and default VPC unless explicitly approved. Installed AWS clients 3.1078.0 support Node >=20; candidate coverage is shell-only, filesystem unselected. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "AWS_REGION",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_EC2_LAUNCH_TEMPLATE"
+      ],
+      "optionalEnvironment": [
+        "AWS_SESSION_TOKEN",
+        "AWS_EC2_LAUNCH_TEMPLATE_VERSION",
+        "AWS_EC2_INSTANCE_TYPE"
+      ],
+      "configEnvironment": {
+        "region": "AWS_REGION",
+        "launchTemplate": "AWS_EC2_LAUNCH_TEMPLATE",
+        "launchTemplateVersion": "AWS_EC2_LAUNCH_TEMPLATE_VERSION",
+        "instanceType": "AWS_EC2_INSTANCE_TYPE"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/aws/src/ec2/index.ts",
+          "contains": "launchTemplate: string;"
+        },
+        {
+          "file": "packages/aws/src/ec2/index.ts",
+          "contains": "subnetIds?: string[];"
+        },
+        {
+          "file": "packages/aws/src/ec2/index.ts",
+          "contains": "if (!instance || isGone(instance) || !isManaged(instance)) return null;"
+        },
+        {
+          "file": "packages/aws/src/ec2/index.ts",
+          "contains": "return state === 'terminated' || state === 'shutting-down';"
+        },
+        {
+          "file": "packages/aws/src/ec2/index.ts",
+          "contains": "await terminate(context, instanceId);"
+        },
+        {
+          "file": "packages/aws/README.md",
+          "contains": "The launch template owns the AMI, IMDS settings, root volume, security group, networking, and an instance profile"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Approve account/VPC/IAM/template ownership before execution; never terminate existing broadly tagged infrastructure. getById hides terminated/shutting-down/untagged rows, so null can precede resource disappearance. Review terminal-state oracle separately, root/EBS volume deletion, ENI/EIP/S3 retention and create/Fleet partial-allocation cleanup; provider destroy merely submits termination and checks a generic managed tag. Do not satisfy strict absence by filtering terminal metadata."
+      }
+    },
+    {
+      "id": "@computesdk/beam",
+      "packageDirectory": "packages/beam",
+      "exportSubpath": ".",
+      "symbol": "beam",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. The adapter caches sandbox definitions, not permission to reuse arbitrary live instances. Cleanup must verify absence of the container ID returned by this create.",
+      "requiredEnvironment": [
+        "BEAM_TOKEN",
+        "BEAM_WORKSPACE_ID"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "token": "BEAM_TOKEN",
+        "workspaceId": "BEAM_WORKSPACE_ID"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "export const beam = defineProvider<SandboxInstance, BeamConfig>({"
+        },
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "sandbox.create({ waitForReady: false })"
+        },
+        {
+          "file": "packages/beam/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "BEAM_TOKEN"
+        },
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "BEAM_WORKSPACE_ID"
+        },
+        {
+          "file": "packages/beam/src/index.ts",
+          "contains": "destroy: async (config: BeamConfig, sandboxId: string) =>"
+        },
+        {
+          "file": "packages/beam/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Lookup/termination errors now propagate and native true acknowledgement is required, but installed 1.0.22 connect failures lack a documented sandbox-absence discriminator. SDK Boolean-normalizes the underlying acknowledgement. Remains blocked."
+      }
+    },
+    {
+      "id": "@computesdk/blaxel",
+      "packageDirectory": "packages/blaxel",
+      "exportSubpath": ".",
+      "symbol": "blaxel",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Use unnamed fresh creation; never attach via sandboxId or reuse a caller-chosen persistent name. Native adapter enforces its minimum TTL. Also an existing compute-core integration target.",
+      "requiredEnvironment": [
+        "BL_API_KEY",
+        "BL_WORKSPACE"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "BL_API_KEY",
+        "workspace": "BL_WORKSPACE"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "SandboxInstance.createIfNotExists({"
+        },
+        {
+          "file": "packages/blaxel/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "BL_API_KEY"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "BL_WORKSPACE"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "blaxel: 'blaxel'"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "destroy: async (config: BlaxelConfig, sandboxId: string) =>"
+        },
+        {
+          "file": "packages/blaxel/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,   // Blaxel supports filesystem operations via fs API"
+        },
+        {
+          "file": "packages/blaxel/src/index.ts",
+          "contains": "const blaxelStatus = typeof nativeStatus === 'string' &&"
+        },
+        {
+          "file": "conformance/compute-cleanup-probe.ts",
+          "contains": "options.oracle === 'blaxel-terminated-metadata'"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-native-terminal",
+        "oracle": "blaxel-terminated-metadata",
+        "reason": "Fresh SDK lookup must return the identical owned ID. SDK-null is absence; otherwise only getInfo metadata.blaxelStatus exactly TERMINATED is the separately reviewed native-terminal observation. Installed @blaxel/core 0.3.21 explicitly treats TERMINATED as non-reusable terminal; SDK stopped and native STANDBY are not oracles. The reserved status is captured from the public native getter after labels, with no spoofing or private state. Retained metadata remains present; this does not manufacture null or prove physical/billing deletion. Original failed shared run remains failed; supplemental DELETE versus timing causality is unknown."
+      }
+    },
+    {
+      "id": "@computesdk/brezel",
+      "packageDirectory": "packages/brezel",
+      "exportSubpath": ".",
+      "symbol": "brezel",
+      "readiness": "wired",
+      "reason": "Conditional configuration wiring: require an operator-qualified immutable BREZEL_ENVIRONMENT_REVISION in a dedicated BREZEL_PROJECT_ID and trusted BREZEL_API_URL, plus a project-scoped token. Factory forwards these real string fields to BrezelClient/createSandbox; explicit environmentRevision avoids native template/environment preparation, and no workspace mounts or borrowed sandbox are selected. Qualification must include /bin/sh, HOME, writable /tmp and GNU find -printf/coreutils. Outbound internet is explicitly disabled; no optional endpoint override, build or template mutation is selected. Installed @infercrane/brezel 0.1.1 requires Node >=20 and is bundled by this package tsup config. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "BREZEL_API_KEY",
+        "BREZEL_API_URL",
+        "BREZEL_PROJECT_ID",
+        "BREZEL_ENVIRONMENT_REVISION"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "BREZEL_API_KEY",
+        "baseUrl": "BREZEL_API_URL",
+        "project": "BREZEL_PROJECT_ID",
+        "environmentRevision": "BREZEL_ENVIRONMENT_REVISION"
+      },
+      "config": {
+        "allowInternet": false
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/brezel/src/index.ts",
+          "contains": "environmentRevision?: string"
+        },
+        {
+          "file": "packages/brezel/src/index.ts",
+          "contains": "project: required(config.project ?? process.env.BREZEL_PROJECT_ID, 'BREZEL_PROJECT_ID'),"
+        },
+        {
+          "file": "packages/brezel/src/index.ts",
+          "contains": "const sandbox = await getClient(config).createSandbox({"
+        },
+        {
+          "file": "packages/brezel/src/index.ts",
+          "contains": "environmentRevision: environmentRevision(config, options),"
+        },
+        {
+          "file": "packages/brezel/src/index.ts",
+          "contains": "if (terminal(sandbox.resource.state)) return null"
+        },
+        {
+          "file": "packages/brezel/src/index.ts",
+          "contains": "'-printf',"
+        },
+        {
+          "file": "packages/brezel/tsup.config.ts",
+          "contains": "noExternal: ['@infercrane/brezel'],"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Require operator qualification of endpoint/project/revision before native execution. getById null-filters deleted/expired rows and waitUntilDeleted accepts those retained terminal states; that is not strict physical/account absence. Its internal deletion wait is 120s versus the shared cleanup budget, so reconcile bounded deletion and native terminal-row semantics without weakening the harness. Review allocations before create rejection. URL preview POSTs a port lease and is unselected."
+      }
+    },
+    {
+      "id": "@computesdk/buddy",
+      "packageDirectory": "packages/buddy",
+      "exportSubpath": ".",
+      "symbol": "buddy",
+      "readiness": "wired",
+      "reason": "Conditional configuration wiring for a dedicated operator-approved BUDDY_WORKSPACE/BUDDY_PROJECT and SANDBOX_MANAGE token on the US installation. Real BuddyConfig string fields feed BuddyApiClient, whose installed source scopes addSandbox with project_name; fresh generated name/identifier and no snapshot/template source create a new Ubuntu sandbox. Pin ubuntu:24.04 and a 15-minute lifetime; expose no ports. FS base /buddy matches the adapter home and native content API; mandatory shell quoting also writes owned /tmp. Installed @buddy-works/sandbox-sdk 0.3.0 requires Node ^20.19.0 or >=22.12.0, compatible with the parent-reported 22.23.4 pilot runner, not an executed load test. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "BUDDY_TOKEN",
+        "BUDDY_WORKSPACE",
+        "BUDDY_PROJECT"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "token": "BUDDY_TOKEN",
+        "workspace": "BUDDY_WORKSPACE",
+        "project": "BUDDY_PROJECT"
+      },
+      "config": {
+        "region": "US",
+        "os": "ubuntu:24.04",
+        "timeout": 900000,
+        "ports": []
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/buddy"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/buddy/src/index.ts",
+          "contains": "const created = await getClient(resolved).addSandbox({"
+        },
+        {
+          "file": "packages/buddy/src/index.ts",
+          "contains": "const name = options.name ?? generateSandboxName();"
+        },
+        {
+          "file": "packages/buddy/src/index.ts",
+          "contains": "const snapshotId = options.snapshotId ?? options.templateId;"
+        },
+        {
+          "file": "packages/buddy/src/utils.ts",
+          "contains": "project_name: config.project,"
+        },
+        {
+          "file": "packages/buddy/src/utils.ts",
+          "contains": "export const SANDBOX_HOME = '/buddy';"
+        },
+        {
+          "file": "packages/buddy/src/utils.ts",
+          "contains": "return status === 400 && /not (found|find)/i.test(messageOf(error));"
+        },
+        {
+          "file": "packages/buddy/package.json",
+          "contains": "^20.19.0 || >=22.12.0"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Approve dedicated project/installation/token scope first. Sandbox lookup uses generic isNotFound including status400 text matching plus invalid-url heuristics; distinguish sandbox absence from content-path/auth/schema errors using installed native call graph. Review delete retries, unknown-ID create failure cleanup and bounded post-delete lookup. Lifetime stops the sandbox and does not prove deletion. getUrl opens/updates tunnels, so URL remains unselected."
+      }
+    },
+    {
+      "id": "@computesdk/cloudflare",
+      "packageDirectory": "packages/cloudflare",
+      "exportSubpath": ".",
+      "symbol": "cloudflare",
+      "readiness": "blocked",
+      "reason": "BLOCKED: provision/approve a dedicated sandbox demo Worker and SANDBOX_API_KEY secret, then bind its trusted deployed URL/key through CLOUDFLARE_SANDBOX_URL and CLOUDFLARE_SANDBOX_API_KEY. These are harness mappings, not process.env fallbacks in CloudflareConfig. Approve Worker/account scope and a default image providing sh/coreutils, HOME and writable /tmp; image/vcpu/memoryMib/diskMb are create-only, so the current harness cannot select builder through factory config. Shared create({}) allocates a fresh bridge ID only when the deployed Worker contract is correct. No external native SDK: in-package fetch bridge; direct Durable Object bindings are unavailable in a Node22 job. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "CLOUDFLARE_SANDBOX_URL",
+        "CLOUDFLARE_SANDBOX_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "sandboxUrl": "CLOUDFLARE_SANDBOX_URL",
+        "sandboxApiKey": "CLOUDFLARE_SANDBOX_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/cloudflare/src/index.ts",
+          "contains": "sandboxUrl?: string;"
+        },
+        {
+          "file": "packages/cloudflare/src/index.ts",
+          "contains": "sandboxApiKey?: string;"
+        },
+        {
+          "file": "packages/cloudflare/src/index.ts",
+          "contains": "(await createBridgeSandboxId(config, startOptions));"
+        },
+        {
+          "file": "packages/cloudflare/src/index.ts",
+          "contains": "const result = await bridgeExec(sandbox, 'true');"
+        },
+        {
+          "file": "packages/cloudflare/src/index.ts",
+          "contains": "'DELETE',"
+        },
+        {
+          "file": "packages/cloudflare/README.md",
+          "contains": "Without `image`, it uses the Worker's default image."
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "getById executes true against the bridge instead of querying authoritative existence, catches every remote error, and may access/restart a Durable Object after destroy. Establish a non-recreating existence/deletion endpoint and typed missing-resource semantics in the approved Worker/adapter before accepting strict absence; auth/transport failures must propagate. Review Worker/container teardown and any retained durable state under explicit account scope."
+      }
+    },
+    {
+      "id": "@computesdk/codesandbox",
+      "packageDirectory": "packages/codesandbox",
+      "exportSubpath": ".",
+      "symbol": "codesandbox",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh default creation, not resume/snapshot reuse. Native List is explicitly unavailable; this profile does not opt into universal List/CRUD assertions. URL unselected: current adapter synthesizes a URL differing from the native preview generator; syntax checks cannot prove a valid preview.",
+      "requiredEnvironment": [
+        "CSB_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "CSB_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({"
+        },
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "await sdk.sandboxes.create(createOptions)"
+        },
+        {
+          "file": "packages/codesandbox/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "CSB_API_KEY"
+        },
+        {
+          "file": "packages/codesandbox/src/index.ts",
+          "contains": "destroy: async (config: CodesandboxConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/codesandbox/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,  // CodeSandbox supports filesystem operations"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/collimate",
+      "packageDirectory": "packages/collimate",
+      "exportSubpath": ".",
+      "symbol": "collimate",
+      "readiness": "wired",
+      "reason": "Configuration/source review only, not a native pass, credential-readiness claim or dispatch authorization. Adapter 0.1.17 uses its own dependency-free fetch CollimateClient({serverUrl,apiKey}), not an external native SDK. Exported collimate requires templateId; pin vendor-documented stock node via factory config so shared caller can create a new unnamed session with no per-case options. Node 22 worker supplies native fetch; stock guest must supply bash -lc plus sh/HOME/coreutils/writable /tmp for selected operations. No separate Node/Python guest test, build or local toolchain requirement. Required COLLIMATE_API_KEY maps apiKey. Optional COLLIMATE_API_URL maps serverUrl explicitly (not automatic adapter fallback), and must remain unset unless trusted origin is reviewed. COLLIMATE_TEMPLATE_ID is only a package-test/config convention, deliberately NOT allowlisted/mapped: an unchecked tenant template must not override stock node. Human prerequisite: the approved isolated tenant must have vendor stock node; if absent, block setup rather than build, fork or substitute an unchecked source. Config.timeout is metadata derived from 900 seconds, not a sent resource lease or request deadline; no automatic 15-minute reclamation claim. Fetch create has no adapter request deadline/cancellation option, so allocated-before-rejection/late-create recovery remains a separate execution review, not a proven bound. Thirteen fresh creates for selected shared cases before retries. URL/background/streaming/processes are UNSELECTED; URL implementation throws, no publication is selected. No borrowed session, fixed name, snapshot, volume or template build.",
+      "requiredEnvironment": [
+        "COLLIMATE_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "COLLIMATE_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "COLLIMATE_API_KEY",
+        "serverUrl": "COLLIMATE_API_URL"
+      },
+      "config": {
+        "templateId": "node"
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "supportsStreaming": false,
+        "supportsProcesses": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/collimate/package.json",
+          "contains": "\"version\": \"0.1.17\""
+        },
+        {
+          "file": "packages/collimate/package.json",
+          "contains": "\"import\": \"./dist/index.mjs\""
+        },
+        {
+          "file": "packages/collimate/src/index.ts",
+          "contains": "export const collimate = defineProvider<CollimateSandbox, CollimateConfig>({"
+        },
+        {
+          "file": "packages/collimate/src/index.ts",
+          "contains": "new CollimateClient({ serverUrl, apiKey })"
+        },
+        {
+          "file": "packages/collimate/src/index.ts",
+          "contains": "process.env?.COLLIMATE_API_KEY"
+        },
+        {
+          "file": "packages/collimate/src/__tests__/index.test.ts",
+          "contains": "serverUrl: process.env.COLLIMATE_API_URL || 'https://api.collimate.ai',"
+        },
+        {
+          "file": "packages/collimate/README.md",
+          "contains": "templateId: \"node\","
+        },
+        {
+          "file": "packages/collimate/src/index.ts",
+          "contains": "const session = await client.createSession(templateId);"
+        },
+        {
+          "file": "packages/collimate/src/client.ts",
+          "contains": "template_id: templateId,"
+        },
+        {
+          "file": "packages/collimate/src/index.ts",
+          "contains": "commands: [[\"bash\", \"-lc\", fullCmd]],"
+        },
+        {
+          "file": "packages/collimate/src/index.ts",
+          "contains": "await client.deleteSession(sandboxId, true);"
+        },
+        {
+          "file": "packages/collimate/src/client.ts",
+          "contains": "if (err instanceof CollimateError && err.status === 404) return null;"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution remains blocked pending separate parent review, despite favorable source shape: getSession accepts typed CollimateError404 only and destroy directly DELETEs /v1/sessions/{ownedId}?force=true, tolerating typed404 only. Parent must verify owned-session force-delete semantics, origin trust, bounded post-delete SDK-null timing and allocated-before-create-error/late-completion recovery. Neither the README's timeout wording nor getInfo's running metadata proves a lease, reclamation, guest readiness or physical deletion. Do not promote this card to source-reviewed-sdk-absence without separate approval."
+      }
+    },
+    {
+      "id": "@computesdk/createos-sandbox",
+      "packageDirectory": "packages/createos-sandbox",
+      "exportSubpath": ".",
+      "symbol": "createosSandbox",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Cold create with adapter-resolved shape/rootfs; URL coverage is deliberately unselected because ingress defaults off. No snapshot, existing disk, ingress or SSH configuration is supplied.",
+      "requiredEnvironment": [
+        "CREATEOS_SANDBOX_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "CREATEOS_SANDBOX_BASE_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "CREATEOS_SANDBOX_API_KEY",
+        "baseUrl": "CREATEOS_SANDBOX_BASE_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "timeout": 120000
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "await client.createSandbox(toCreateRequest(opts, shape, rootfs))"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "CREATEOS_SANDBOX_API_KEY"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "ingress_enabled: opts.ingressEnabled !== undefined ? Boolean(opts.ingressEnabled) : false"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "destroy: async (config: CreateosConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "supportsGetUrl: true,"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "ports: [3000, 8080],"
+        },
+        {
+          "file": "packages/createos-sandbox/src/__tests__/integration.test.ts",
+          "contains": "timeout: 120_000,"
+        },
+        {
+          "file": "packages/createos-sandbox/src/index.ts",
+          "contains": "createosStatus: v.status"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-native-terminal",
+        "oracle": "createos-destroyed-metadata",
+        "reason": "Native first-wave recovery confirmed that destroyed sandboxes retain their control-plane metadata. After SDK destroy, require exact owned SDK identity plus fresh getInfo metadata.createosStatus=destroyed, or exact SDK null; destroying/stopped/paused alone never qualifies. This is native-reported terminal metadata, not physical deletion, billing proof or an original-run pass."
+      }
+    },
+    {
+      "id": "@computesdk/daytona",
+      "packageDirectory": "packages/daytona",
+      "exportSubpath": ".",
+      "symbol": "daytona",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory and fresh-sandbox lifecycle; the existing compute-core integration supports Daytona even though the package index suite is disabled. Native filesystem and preview methods are selected from adapter source, not claimed as verified. Background remains unselected pending behavior verification, not unsupported. Native transport, SSH, authentication and cleanup failures must fail; no mock fallback or dispatch authorization is implied.",
+      "requiredEnvironment": [
+        "DAYTONA_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "DAYTONA_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "DAYTONA_API_KEY"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "await daytona.create(createParams as any, createOptions)"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "filesystem: {"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "await sandbox.getPreviewLink(options.port)"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "daytona: 'daytona'"
+        },
+        {
+          "file": "packages/daytona/src/__tests__/index.test.ts",
+          "contains": "describe.skip('daytona'"
+        },
+        {
+          "file": "packages/daytona/src/index.ts",
+          "contains": "destroy: async (config: DaytonaConfig, sandboxId: string) => {"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "All public get errors now propagate: SDK 0.224.0 first finds the sandbox then may fail a separate toolbox-proxy lookup with the same generic 404. Nullable lookup/idempotent missing destroy cannot be classified safely. Delete(wait=false) is only acknowledgement. Remains blocked."
+      }
+    },
+    {
+      "id": "@computesdk/declaw",
+      "packageDirectory": "packages/declaw",
+      "exportSubpath": ".",
+      "symbol": "declaw",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh default node-template sandbox. Provider lookup/delete can mask native failures, so owned-ID absence checks must not be replaced with a delete acknowledgement.",
+      "requiredEnvironment": [
+        "DECLAW_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "DECLAW_DOMAIN"
+      ],
+      "configEnvironment": {
+        "apiKey": "DECLAW_API_KEY",
+        "domain": "DECLAW_DOMAIN"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({"
+        },
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "await DeclawSandbox.create({"
+        },
+        {
+          "file": "packages/declaw/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "DECLAW_API_KEY"
+        },
+        {
+          "file": "packages/declaw/src/index.ts",
+          "contains": "destroy: async (config: DeclawConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/declaw/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/docker",
+      "packageDirectory": "packages/docker",
+      "exportSubpath": ".",
+      "symbol": "docker",
+      "readiness": "blocked",
+      "reason": "BLOCKED: current workflow does not provision a dedicated Docker daemon/socket. Add an explicitly isolated daemon or ephemeral runner-owned socket and prequalified existing image, without mounting a shared production daemon or host paths. Real DockerConfig requires nested image:{name,pullPolicy}; connection is a DockerOptions object, not a DOCKER_HOST string. DOCKER_HOST/DOCKER_TLS_VERIFY/DOCKER_CERT_PATH are read by installed docker-modem and must not be mapped into fictional top-level factory fields. Pin runtime python and a compatible image with sh/coreutils, HOME and writable /tmp only after daemon approval. Installed dockerode 4.0.9 supports Node >=8; local-container coverage is not cloud-provider coverage. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "DOCKER_HOST"
+      ],
+      "optionalEnvironment": [
+        "DOCKER_TLS_VERIFY",
+        "DOCKER_CERT_PATH"
+      ],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/docker/src/types/types.ts",
+          "contains": "image: DockerImage;"
+        },
+        {
+          "file": "packages/docker/src/index.ts",
+          "contains": "const docker = new Docker(cfg.connection as any);"
+        },
+        {
+          "file": "packages/docker/src/index.ts",
+          "contains": "await ensureImage(docker, chosenImage);"
+        },
+        {
+          "file": "packages/docker/src/index.ts",
+          "contains": "const container = await docker.createContainer(createOptions);"
+        },
+        {
+          "file": "packages/docker/src/index.ts",
+          "contains": "await c.remove({ force: true });"
+        },
+        {
+          "file": "packages/docker/src/index.ts",
+          "contains": "} catch { return null; }"
+        },
+        {
+          "file": ".computesdk/workflows/provider-conformance.yml",
+          "contains": "node-version: '22'"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Dedicated daemon required before any container/image operation. Adapter getById catches every inspect error and destroy swallows stop/remove errors; propagate daemon/auth/transport failures and classify only native missing-container errors. Review create/start failure leakage, image retention, exact owned container IDs and bounded removal; do not prune account/host resources or trust generic labels as campaign ownership. URL synthesis is unselected."
+      }
+    },
+    {
+      "id": "@computesdk/e2b",
+      "packageDirectory": "packages/e2b",
+      "exportSubpath": ".",
+      "symbol": "e2b",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Also an existing compute-core integration target. Use newly created sandboxes, not a live sandbox or snapshot ID.",
+      "requiredEnvironment": [
+        "E2B_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "E2B_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "export const e2b = defineProvider<E2BSandbox, E2BConfig>({"
+        },
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "E2BSandbox.create(createOpts)"
+        },
+        {
+          "file": "packages/e2b/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "E2B_API_KEY"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "e2b: 'e2b'"
+        },
+        {
+          "file": "packages/e2b/src/index.ts",
+          "contains": "destroy: async (config: E2BConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/e2b/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,  // E2B supports filesystem operations"
+        },
+        {
+          "file": "packages/e2b/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]  // Enable getUrl tests"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Typed static getInfo404 only; static kill boolean contract; positive connect retains existing resume/timeout effects. List remains unreviewed. Installed e2b 2.30.1 static getInfo/kill can derive typed missing from JSON body code 404 before checking actual HTTP status; that native information-erasure remains outside this adapter proof. No actual HTTP auth-provenance or wire-identity certification."
+      }
+    },
+    {
+      "id": "@computesdk/ec2-firecrab",
+      "packageDirectory": "packages/ec2-firecrab",
+      "exportSubpath": ".",
+      "symbol": "ec2Firecrab",
+      "readiness": "blocked",
+      "reason": "BLOCKED: approve an explicitly owned AWS account/VPC and dedicated nested-virtualization firecrab host, non-overlapping MicroNetwork, pre-imported shell+sshd image and trusted SSH/SSM transport before fresh VM allocation. No host provisioning or network creation is selected. Required network ID/template names below prevent accidental alpine fallback; operator must choose either a reviewed tunnel/API route or SSH target/key route from optional names. sshTargets is string[] and must not receive a raw CSV via configEnvironment; existing transport parses EC2_FIRECRAB_SSH_TARGETS itself. Built-in fetch/OpenSSH implementation has no external native SDK; local/loopback reachability is not proof of a cloud host. Configuration audit only: installed SDK exports/source and Node 22-compatible engine metadata were read, not imported or executed. No native pass, credential availability, account approval or dispatch authorization. Background and URL coverage are UNSELECTED, not declarations of unsupported capability; cleanup remains held.",
+      "requiredEnvironment": [
+        "EC2_FIRECRAB_MICRO_NETWORK_ID",
+        "EC2_FIRECRAB_TEMPLATE"
+      ],
+      "optionalEnvironment": [
+        "EC2_FIRECRAB_API_URL",
+        "EC2_FIRECRAB_SSH_TARGET",
+        "EC2_FIRECRAB_SSH_TARGETS",
+        "EC2_FIRECRAB_SSH_KEY",
+        "EC2_FIRECRAB_SSH_KEY_PATH",
+        "EC2_FIRECRAB_SSH_USER",
+        "EC2_FIRECRAB_SSH_PROXY_COMMAND"
+      ],
+      "configEnvironment": {
+        "microNetworkId": "EC2_FIRECRAB_MICRO_NETWORK_ID",
+        "template": "EC2_FIRECRAB_TEMPLATE",
+        "apiUrl": "EC2_FIRECRAB_API_URL",
+        "sshTarget": "EC2_FIRECRAB_SSH_TARGET",
+        "sshIdentityPem": "EC2_FIRECRAB_SSH_KEY",
+        "sshIdentityPath": "EC2_FIRECRAB_SSH_KEY_PATH",
+        "sshUser": "EC2_FIRECRAB_SSH_USER",
+        "sshProxyCommand": "EC2_FIRECRAB_SSH_PROXY_COMMAND"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/ec2-firecrab/src/index.ts",
+          "contains": "const access = pickAccess(await ensureAccesses(config));"
+        },
+        {
+          "file": "packages/ec2-firecrab/src/index.ts",
+          "contains": "const created = await firecrab<unknown>(apiUrl, 'POST', '/api/vms', {"
+        },
+        {
+          "file": "packages/ec2-firecrab/src/index.ts",
+          "contains": "microNetworkId,"
+        },
+        {
+          "file": "packages/ec2-firecrab/src/index.ts",
+          "contains": "// not on this host \u2014 try the next"
+        },
+        {
+          "file": "packages/ec2-firecrab/src/index.ts",
+          "contains": "await firecrab(access.apiUrl, 'POST', vmPath(instanceId, '/stop')).catch(() => {});"
+        },
+        {
+          "file": "packages/ec2-firecrab/src/transport.ts",
+          "contains": "if (csv) return csv.split(',').map((s) => s.trim()).filter(Boolean);"
+        },
+        {
+          "file": "packages/ec2-firecrab/src/ssh.ts",
+          "contains": "import { spawn } from 'node:child_process';"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Scope host/network/template/SSH identity to a dedicated approved test account before any request. getById suppresses every host lookup failure; destroy skips hosts on every lookup error, swallows stop errors, and immediately DELETEs although graceful shutdown is approximately 30s. Reconcile stop-to-stopped polling and actual shared teardown budget, propagate transport/auth errors, verify owned VM/disk removal, and review tunnel/temp-key reclamation. Filesystem block and URL remain unselected; never clean host pools or existing infrastructure by name prefix."
+      }
+    },
+    {
+      "id": "@computesdk/freestyle",
+      "packageDirectory": "packages/freestyle",
+      "exportSubpath": ".",
+      "symbol": "freestyle",
+      "readiness": "blocked",
+      "reason": "BLOCKED: require an explicitly approved, already-existing runtime snapshot via FREESTYLE_SNAPSHOT_ID, and a reviewed wall-clock resource deadline. The fallback builds an extra VM and persistent account-wide runtime snapshot, installs packages, and reassigns a shared builder slug; that path is not approved. An explicit snapshot avoids baking but does not fix the deadline: adapter boot omits native ttlSeconds, timeout is command-only, and idleTimeoutSeconds is not a lifetime limit. Review snapshot provenance and only fresh owned VM deletion; never reconnect an unrelated VM. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [
+        "FREESTYLE_API_KEY",
+        "FREESTYLE_SNAPSHOT_ID"
+      ],
+      "optionalEnvironment": [
+        "FREESTYLE_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "FREESTYLE_API_KEY",
+        "snapshotId": "FREESTYLE_SNAPSHOT_ID",
+        "baseUrl": "FREESTYLE_API_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/freestyle/src/index.ts",
+          "contains": "export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleSnapshot>({"
+        },
+        {
+          "file": "packages/freestyle/src/index.ts",
+          "contains": "const requested = options?.snapshotId || options?.templateId || resolved.snapshotId;"
+        },
+        {
+          "file": "packages/freestyle/src/index.ts",
+          "contains": "async function bakeRuntimeSnapshot(client: Freestyle): Promise<string> {"
+        },
+        {
+          "file": "packages/freestyle/src/index.ts",
+          "contains": "reassignSlug: true,"
+        },
+        {
+          "file": "packages/freestyle/src/index.ts",
+          "contains": "autoDeleteSeconds: persistent ? AUTO_DELETE_NEVER : AUTO_DELETE_EPHEMERAL,"
+        },
+        {
+          "file": "packages/freestyle/README.md",
+          "contains": "FREESTYLE_SNAPSHOT_ID"
+        },
+        {
+          "file": "packages/freestyle/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/freestyle/package.json",
+          "contains": "\"freestyle\": \"^0.2.11\""
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Setup remains blocked. Separately review native FreestyleApiError absence classification and vms.delete/get on the exact fresh returned ID, plus no hidden builder/snapshot creation; idle auto-delete is not proof of a hard deadline or observed absence."
+      }
+    },
+    {
+      "id": "@computesdk/givemeanode",
+      "packageDirectory": "packages/givemeanode",
+      "exportSubpath": ".",
+      "symbol": "givemeanode",
+      "readiness": "wired",
+      "reason": "Configuration/source review only, not a native pass, credential-readiness claim or dispatch authorization. Adapter 1.2.13 has its own dependency-free GmnClient, not an external native SDK. Exported givemeanode constructs GmnClient(config); select warm=off so construction does no connection warmup, fastToken=off so no prime or signed-token 401 retry occurs, execRetries=0 to avoid replaying delivered commands, transport=fetch on Node 22 and timeout=60000 per-request ms including response body. These existing options bound the fresh single create request below the fixed 90000ms hook without installing local HTTP2/SSH tooling. Required GMN_TOKEN maps apiKey; optional GMN_API_HOST maps baseUrl, must be unset unless its regional HTTPS origin is separately trusted. Fresh unnamed POST /preview/sandboxes uses vendor-curated sbx-base; no image preparation, env-* fork, snapshot/template/name/volume/setup override or egress change. Guest selected operations require sh/HOME, writable /tmp and coreutils including cat/mkdir/dirname/printf/base64 -d/ls/test/rm; no guest language version test. URL is UNSELECTED because expose creates a public capability route. Thirteen fresh creates for selected shared cases before external retries. Background/streaming/processes are UNSELECTED, not unsupported.",
+      "requiredEnvironment": [
+        "GMN_TOKEN"
+      ],
+      "optionalEnvironment": [
+        "GMN_API_HOST"
+      ],
+      "configEnvironment": {
+        "apiKey": "GMN_TOKEN",
+        "baseUrl": "GMN_API_HOST"
+      },
+      "config": {
+        "warm": "off",
+        "fastToken": "off",
+        "execRetries": 0,
+        "transport": "fetch",
+        "timeout": 60000
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "supportsStreaming": false,
+        "supportsProcesses": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/givemeanode/package.json",
+          "contains": "\"version\": \"1.2.13\""
+        },
+        {
+          "file": "packages/givemeanode/package.json",
+          "contains": "\"import\": \"./dist/index.mjs\""
+        },
+        {
+          "file": "packages/givemeanode/src/index.ts",
+          "contains": "export const givemeanode = (config: ConfigWithClient) => {"
+        },
+        {
+          "file": "packages/givemeanode/src/index.ts",
+          "contains": "config.__client = new GmnClient(config)"
+        },
+        {
+          "file": "packages/givemeanode/src/client.ts",
+          "contains": "options.apiKey ?? process.env.GMN_TOKEN"
+        },
+        {
+          "file": "packages/givemeanode/src/client.ts",
+          "contains": "options.baseUrl ?? process.env.GMN_API_HOST ?? DEFAULT_BASE_URL"
+        },
+        {
+          "file": "packages/givemeanode/src/client.ts",
+          "contains": "if (this.warmMode === 'off') return Promise.resolve()"
+        },
+        {
+          "file": "packages/givemeanode/src/client.ts",
+          "contains": "if (this.fastToken === 'off'"
+        },
+        {
+          "file": "packages/givemeanode/src/client.ts",
+          "contains": "const timer = setTimeout(() => controller.abort(), timeoutMs ?? this.timeout)"
+        },
+        {
+          "file": "packages/givemeanode/src/operations.ts",
+          "contains": "export const DEFAULT_IMAGE = 'sbx-base'"
+        },
+        {
+          "file": "packages/givemeanode/src/operations.ts",
+          "contains": "image: named ?? DEFAULT_IMAGE,"
+        },
+        {
+          "file": "packages/givemeanode/src/operations.ts",
+          "contains": "await client.request('POST', '/preview/sandboxes/deletes', { sandboxes: [sandboxId] })"
+        },
+        {
+          "file": "packages/givemeanode/README.md",
+          "contains": "the default, has python3, node 24, git, curl and a compiler;"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution remains blocked. Destroy sends only [ownedId] to bulk /preview/sandboxes/deletes but ignores successful HTTP body's per-item results; HTTP success can hide a per-item deletion failure. Lookup depends on account-list completeness, signed/plain ID equivalence and stats.items ?? [] treating a missing items field as empty. Parent must review per-item failure honesty, list/schema completeness and bounded strict owned-ID SDK-null verification; never use account-wide deletion. Selected request/exec retry caps are configuration only, not deletion approval, physical reclamation proof or a native pass."
+      }
+    },
+    {
+      "id": "@computesdk/gravixlayer",
+      "packageDirectory": "packages/gravixlayer",
+      "exportSubpath": ".",
+      "symbol": "gravixlayer",
+      "readiness": "wired",
+      "reason": "Configuration/source review only, not a native pass, credential-readiness claim or dispatch authorization. Installed gravixlayer 0.1.36 (declared ^0.1.36; Node >=20) uses new GravixLayer({apiKey,baseUrl,cloud,region,timeout,maxRetries,http2}); the public gravixlayer wrapper calls runtime.create for a fresh unnamed stock base-small runtime, default managed aws/us-east-1. Node 22 worker and stock guest sh/HOME/coreutils/writable /tmp suffice for selected shell/native-files operations; no local cloud CLI or AWS credentials. Pin timeout=60000 HTTP ms and maxRetries=0: adapter only injects its otherwise-unsafe 180000ms create requestTimeoutMs when config.timeout is undefined. Installed native nonstream transport uses the client timeout and keeps its abort timer through response-body consumption, so this existing config cap fits below the fixed 90000ms setup hook without an SDK change; it is not a sandbox lifetime cap or late-allocation guarantee. Optional mapped GRAVIXLAYER_BASE_URL/CLOUD/REGION are not required: leave unset unless separately reviewed for trusted origin and approved placement. Inherited GRAVIXLAYER_ENABLE_TELEMETRY is not an adapter mapping or credential prerequisite. URL is UNSELECTED because sandbox.service publishes a public port. Thirteen fresh creates for selected shared cases before external retries. No template/snapshot/image/name override, build, volume or borrowed resource. Background/streaming/processes are UNSELECTED, not unsupported.",
+      "requiredEnvironment": [
+        "GRAVIXLAYER_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "GRAVIXLAYER_BASE_URL",
+        "GRAVIXLAYER_CLOUD",
+        "GRAVIXLAYER_REGION"
+      ],
+      "configEnvironment": {
+        "apiKey": "GRAVIXLAYER_API_KEY",
+        "baseUrl": "GRAVIXLAYER_BASE_URL",
+        "cloud": "GRAVIXLAYER_CLOUD",
+        "region": "GRAVIXLAYER_REGION"
+      },
+      "config": {
+        "timeout": 60000,
+        "maxRetries": 0,
+        "http2": true
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "supportsStreaming": false,
+        "supportsProcesses": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/gravixlayer/package.json",
+          "contains": "\"import\": \"./dist/index.mjs\""
+        },
+        {
+          "file": "pnpm-lock.yaml",
+          "contains": "gravixlayer@0.1.36:"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "export function gravixlayer(config: GravixLayerConfig = {}): GravixLayerProvider {"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "client = new GravixLayer({"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "config.apiKey ?? process.env.GRAVIXLAYER_API_KEY"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "config.baseUrl ?? process.env.GRAVIXLAYER_BASE_URL"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "config.cloud ?? process.env.GRAVIXLAYER_CLOUD"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "config.region ?? process.env.GRAVIXLAYER_REGION"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "const CREATE_HTTP_TIMEOUT_MS = 180_000"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "if (!options.snapshotId && config.timeout === undefined) {"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "const sandbox = await client.runtime.create(body)"
+        },
+        {
+          "file": "packages/gravixlayer/src/__tests__/unit.test.ts",
+          "contains": "it('does not set a request deadline when the provider sets a client timeout'"
+        },
+        {
+          "file": "packages/gravixlayer/README.md",
+          "contains": "boots `base-small`."
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "await client.runtime.kill(sandboxId)"
+        },
+        {
+          "file": "packages/gravixlayer/src/index.ts",
+          "contains": "if (ENDED_STATUSES.has(sandbox.status)) return null"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution remains blocked. Direct runtime.kill DELETE catches status404 only, but getById also maps stopped/failed/terminated/timed_out retained records to null. Parent must separately review ended-row semantics versus reclamation, genuine endpoint-specific 404s, allocated-before-timeout recovery and bounded owned-ID SDK-null observation. The selected 60000ms request cap addresses the known 180s setup mismatch only, not cleanup approval; per-request lookup/delete caps still exceed existing verification/teardown budgets. No public service publication is selected."
+      }
+    },
+    {
+      "id": "@computesdk/hopx",
+      "packageDirectory": "packages/hopx",
+      "exportSubpath": ".",
+      "symbol": "hopx",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Uses the adapter default template for a fresh sandbox; no existing sandbox or volume is selected.",
+      "requiredEnvironment": [
+        "HOPX_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "HOPX_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "export const hopx = defineProvider<HopxSandbox, HopxConfig>({"
+        },
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "HopxSandbox.create(createOptions)"
+        },
+        {
+          "file": "packages/hopx/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "HOPX_API_KEY"
+        },
+        {
+          "file": "packages/hopx/src/index.ts",
+          "contains": "destroy: async (config: HopxConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/hopx/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Lookup accepts only APIError404 plus semantic SANDBOX_NOT_FOUND; native message heuristics can rewrite actual missing responses into ambiguous errors. Destroy still connects/resumes first and cannot handle stopped sandboxes through that flow. Remains blocked pending reviewed native absence/terminal semantics."
+      }
+    },
+    {
+      "id": "@computesdk/isorun",
+      "packageDirectory": "packages/isorun",
+      "exportSubpath": ".",
+      "symbol": "isorun",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Cold create only: no snapshot restore, externally supplied live ID or mounted persistent volume.",
+      "requiredEnvironment": [
+        "ISORUN_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "ISORUN_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({"
+        },
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "await client.create({"
+        },
+        {
+          "file": "packages/isorun/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "ISORUN_API_KEY"
+        },
+        {
+          "file": "packages/isorun/src/index.ts",
+          "contains": "destroy: async (config: ConfigWithClient, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/isorun/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/isorun/src/__tests__/index.test.ts",
+          "contains": "supportsGetUrl: true,"
+        },
+        {
+          "file": "packages/isorun/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080],"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Pinned isorun 1.0.0 GET returns null only on native status404; DELETE errors propagate."
+      }
+    },
+    {
+      "id": "@computesdk/just-bash",
+      "packageDirectory": "packages/just-bash",
+      "exportSubpath": ".",
+      "symbol": "justBash",
+      "readiness": "wired",
+      "reason": "Source-reviewed local justBash factory with a new real Bash interpreter and default in-memory filesystem per create. No cloud credentials, daemon, container, host filesystem mount, custom command, Python download, or network service is required. Explicit python=false and cwd=/home/user preserve the default isolated shell-only profile. Node 22 runner executes the actual installed ESM just-bash peer; this is native adapter coverage, not a claim of an OS VM or a framework mock. Resource lifetime is process-local memory, not a paid persistent instance. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {
+        "python": false,
+        "cwd": "/home/user"
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/just-bash/src/index.ts",
+          "contains": "const _provider = defineProvider<JustBashSandbox, JustBashConfig>({"
+        },
+        {
+          "file": "packages/just-bash/src/index.ts",
+          "contains": "const bash = new Bash({"
+        },
+        {
+          "file": "packages/just-bash/src/index.ts",
+          "contains": "activeSandboxes.set(sandboxId, sandbox);"
+        },
+        {
+          "file": "packages/just-bash/src/index.ts",
+          "contains": "if (!sandbox) return null;"
+        },
+        {
+          "file": "packages/just-bash/src/index.ts",
+          "contains": "activeSandboxes.delete(sandboxId);"
+        },
+        {
+          "file": "packages/just-bash/src/__tests__/index.test.ts",
+          "contains": "it('should create and destroy a sandbox with no args', async () => {"
+        },
+        {
+          "file": "packages/just-bash/README.md",
+          "contains": "No environment variables are required."
+        },
+        {
+          "file": "packages/just-bash/README.md",
+          "contains": "InMemoryFs"
+        },
+        {
+          "file": "packages/just-bash/package.json",
+          "contains": "\"just-bash\": \"^2.11.5\""
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "New wiring is not cleanup approval. Review that the fresh process-local activeSandboxes ID is positively found, destroy removes that ID, and a later SDK lookup returns null without masking errors; this does not certify stale external Bash handles as revoked."
+      }
+    },
+    {
+      "id": "@computesdk/k8s",
+      "packageDirectory": "packages/k8s",
+      "exportSubpath": ".",
+      "symbol": "k8s",
+      "readiness": "blocked",
+      "reason": "BLOCKED: provision and approve an actual isolated Kubernetes namespace/context with least-privilege Pod/exec/read/delete RBAC, and provide KUBECONFIG_B64 for that cluster; no local cluster or daemon is presumed. Select the approved namespace explicitly rather than default, review managed-label ownership on lookup/destroy and sibling <pod>-svc deletion, and add/review a Pod lifetime deadline. Adapter timeout only bounds startup; Pod spec has no activeDeadlineSeconds. A trusted stock image can be selected through typed image config after scope approval, but none is authorized here. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [
+        "KUBECONFIG_B64"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/k8s/src/index.ts",
+          "contains": "const createK8sProvider = defineProvider<K8sSandboxHandle, K8sConfig>({"
+        },
+        {
+          "file": "packages/k8s/src/index.ts",
+          "contains": "return { type: 'env', value: Buffer.from(env.KUBECONFIG_B64, 'base64').toString('utf8') };"
+        },
+        {
+          "file": "packages/k8s/src/index.ts",
+          "contains": "return options?.namespace || config.namespace || 'default';"
+        },
+        {
+          "file": "packages/k8s/src/index.ts",
+          "contains": "return runtime === 'python' ? 'python:3.11-slim' : 'node:20-alpine';"
+        },
+        {
+          "file": "packages/k8s/src/index.ts",
+          "contains": "await core.createNamespacedPod({ namespace, body: pod });"
+        },
+        {
+          "file": "packages/k8s/src/index.ts",
+          "contains": "await core.deleteNamespacedService({ namespace, name: serviceNameForPod(name) }).catch(error => {"
+        },
+        {
+          "file": "packages/k8s/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: false,"
+        },
+        {
+          "file": "packages/k8s/README.md",
+          "contains": "Kubeconfig loading precedence:"
+        },
+        {
+          "file": "packages/k8s/package.json",
+          "contains": "\"@kubernetes/client-node\": \"^1.2.0\""
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Review namespace and label ownership before executing: getById/destroy accept namespace/name without a managed-label check and destroy also deletes a namesake Service. Separately validate installed Kubernetes ApiException status shape and poll exact owned Pod lookup to typed absence; deletion acknowledgement alone is insufficient."
+      }
+    },
+    {
+      "id": "@computesdk/leap0",
+      "packageDirectory": "packages/leap0",
+      "exportSubpath": ".",
+      "symbol": "leap0",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh adapter-default creation. Existing catch-all lookup/delete behavior is not proof of native absence or a completed native certification.",
+      "requiredEnvironment": [
+        "LEAP0_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "LEAP0_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "const _provider = defineProvider<Leap0Sandbox, Leap0Config>({"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "await client.sandboxes.create({"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "LEAP0_API_KEY"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "destroy: async (_config: Leap0Config, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080],"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "const client = createLeap0Client(config);"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "sandbox = await client.sandboxes.get(sandboxId);"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "if (error instanceof Leap0NotFoundError) return null;"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "await client.sandboxes.delete(sandboxId);"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "if (!(error instanceof Leap0NotFoundError)) throw error;"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "return { instance: sandbox, instanceId: sandbox.id };"
+        },
+        {
+          "file": "packages/leap0/src/index.ts",
+          "contains": "function validateSandboxId(id: unknown): asserts id is string {"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('does not turn retained deleted metadata into absence'"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('the installed native get maps scoped 404 to its actual class'"
+        },
+        {
+          "file": "packages/leap0/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('keeps the cached canonical client after failed delete'"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Installed leap0 0.6.0 uses fresh POST /v1/sandbox, not attach/create-if-exists; getById performs fresh scoped resource GET and returns null only for native Leap0NotFoundError derived from HTTP response.status 404, not body code/message. Nonmissing HTTP, transport and schema failures propagate. Canonical returned IDs are validated and retained. DELETE uses the same owned-ID route and honest native HTTP-success void acknowledgement, tolerating typed 404 only; acknowledgement is not absence. Existing bounded shared cleanup must observe a later fresh SDK getById(ownedId) === null after successful positive owned-ID lookup. Retained deleted/paused/deleting metadata remains present; no terminal-state oracle is approved. Source qualification only, not a native pass, physical deletion/billing proof or dispatch authorization."
+      }
+    },
+    {
+      "id": "@computesdk/lelantos",
+      "packageDirectory": "packages/lelantos",
+      "exportSubpath": ".",
+      "symbol": "lelantos",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Require a provider-specific key rather than inheriting E2B_API_KEY. Endpoint overrides belong to this profile; do not run against an unrelated E2B account.",
+      "requiredEnvironment": [
+        "LELANTOS_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "LELANTOS_DOMAIN",
+        "LELANTOS_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "LELANTOS_API_KEY",
+        "domain": "LELANTOS_DOMAIN",
+        "apiUrl": "LELANTOS_API_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({"
+        },
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "await E2BSandbox.create("
+        },
+        {
+          "file": "packages/lelantos/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "LELANTOS_API_KEY"
+        },
+        {
+          "file": "packages/lelantos/src/index.ts",
+          "contains": "destroy: async (config: LelantosConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/lelantos/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,  // Lelantos supports filesystem operations"
+        },
+        {
+          "file": "packages/lelantos/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]  // Enable getUrl tests"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/lightning",
+      "packageDirectory": "packages/lightning",
+      "exportSubpath": ".",
+      "symbol": "lightning",
+      "readiness": "wired",
+      "reason": "Source-reviewed Lightning factory uses explicit LIGHTNING_API_KEY mapping, native curated node24 runtime, cpu-1, spot=false, persistent=false, and a 300000-ms native auto-stop lifetime. No snapshot, foreign sandbox, custom image, public port, or publishing is selected. Installed @lightningai/sdk is ESM-only and requires Node >=22; existing conformance workflow selects Node 22. This profile requires the canonical LIGHTNING_API_KEY rather than relying on the SDK alternate credential name. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [
+        "LIGHTNING_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "LIGHTNING_CLOUD_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "LIGHTNING_API_KEY",
+        "baseUrl": "LIGHTNING_CLOUD_URL"
+      },
+      "config": {
+        "runtime": "node24",
+        "instanceType": "cpu-1",
+        "persistent": false,
+        "spot": false,
+        "timeout": 300000
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/lightning/src/index.ts",
+          "contains": "export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({"
+        },
+        {
+          "file": "packages/lightning/src/index.ts",
+          "contains": "if (config.persistent !== undefined) params.persistent = config.persistent;"
+        },
+        {
+          "file": "packages/lightning/src/index.ts",
+          "contains": "if (config.runtime) params.runtime = config.runtime;"
+        },
+        {
+          "file": "packages/lightning/src/index.ts",
+          "contains": "const timeout = optTimeout ?? config.timeout;"
+        },
+        {
+          "file": "packages/lightning/src/index.ts",
+          "contains": "const sandbox = await withSandbox(config, (Sandbox) => Sandbox.create(params));"
+        },
+        {
+          "file": "packages/lightning/src/index.ts",
+          "contains": "await sandbox.delete();"
+        },
+        {
+          "file": "packages/lightning/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/lightning/README.md",
+          "contains": "requires **Node.js 22+**"
+        },
+        {
+          "file": "packages/lightning/README.md",
+          "contains": "\"node24\""
+        },
+        {
+          "file": "packages/lightning/package.json",
+          "contains": "\"@lightningai/sdk\": \"^2026.7.8\""
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "New wiring is blocked from native execution pending cleanup review: getById catches every failure as null and destroy swallows get/delete failures. Use a reviewed typed native missing-resource discriminator, propagate auth/transport failures, and verify positive presence then null after deleting only the fresh owned ID. Auto-stop is not deletion proof."
+      }
+    },
+    {
+      "id": "@computesdk/lizard",
+      "packageDirectory": "packages/lizard",
+      "exportSubpath": ".",
+      "symbol": "lizard",
+      "readiness": "wired",
+      "reason": "Source-reviewed Lizard factory uses exact LIZARD_PROJECT_ID (no project-name resolution) and project-scoped LIZARD_API_KEY, trusted built-in interpreter template, small size, and 300000-ms native lifetime. No snapshot, persistent volume, injected guest API key, reconnect/create override, or image build is selected. Installed native Sandbox.connect performs a metadata GET without resuming the instance; the stock interpreter documents Node 22. Host runner uses Node 22. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [
+        "LIZARD_API_KEY",
+        "LIZARD_PROJECT_ID"
+      ],
+      "optionalEnvironment": [
+        "LIZARD_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "LIZARD_API_KEY",
+        "projectId": "LIZARD_PROJECT_ID",
+        "apiUrl": "LIZARD_API_URL"
+      },
+      "config": {
+        "template": "interpreter",
+        "size": "small",
+        "timeout": 300000
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "const createLizard = defineProvider<Sandbox, LizardConfig>({"
+        },
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "const template = options.templateId ?? config.template ?? 'interpreter';"
+        },
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "const sandbox = await Sandbox.create(template, {"
+        },
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "projectId: project,"
+        },
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "const sandbox = await Sandbox.connect(id, connection(config));"
+        },
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "if (error instanceof NotFoundError) return null;"
+        },
+        {
+          "file": "packages/lizard/src/index.ts",
+          "contains": "await new Sandbox({ sandboxId: id, ...connection(config) }).kill();"
+        },
+        {
+          "file": "packages/lizard/src/standard.test.ts",
+          "contains": "provider: lizard({ size: 'small', timeout: 300000 }),"
+        },
+        {
+          "file": "packages/lizard/README.md",
+          "contains": "The project ID is required."
+        },
+        {
+          "file": "packages/lizard/package.json",
+          "contains": "\"@lizard-build/sdk\": \"^0.1.60\""
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "New wiring is not cleanup approval. Confirm scoped project/account authorization, native kill semantics and retained terminal records, then positively find and delete only the fresh returned ID and require typed NotFoundError-derived SDK null. Never treat a stopped/expired record as absence or expose a port to prove cleanup."
+      }
+    },
+    {
+      "id": "@computesdk/microsandbox",
+      "packageDirectory": "packages/microsandbox",
+      "exportSubpath": ".",
+      "symbol": "microsandbox",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Explicit cloud credentials/backend with ephemeral deletion, using the documented cloud image. The existing integration caller is local-only; cloud wiring is source/README-reviewed, not cloud-tested. Cloud published ports/snapshots are not selected. Never fall back to local runtime or convert native SSH/runtime failures into guest exits or successful mocks.",
+      "requiredEnvironment": [
+        "MSB_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "MSB_API_KEY"
+      },
+      "config": {
+        "backend": "cloud",
+        "ephemeral": true,
+        "image": "node:22"
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "timeout": 120000
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "const _microsandbox = defineProvider<"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "native = await builder.create()"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "MSB_API_KEY"
+        },
+        {
+          "file": "packages/microsandbox/README.md",
+          "contains": "image: 'node:22'"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "requireLocal(sandbox.backendKind, 'published ports')"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "builder = builder.ephemeral(options?.ephemeral ?? config.ephemeral ?? true)"
+        },
+        {
+          "file": "packages/microsandbox/src/index.ts",
+          "contains": "destroy: async (config, sandboxId) => withBackend(selectBackend(config), async ({ Sandbox }) => {"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "provider: microsandbox({ backend: 'local', ports: [3000, 8080] }),"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "supportsGetUrl: true,"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "ports: [3000, 8080],"
+        },
+        {
+          "file": "packages/microsandbox/src/__tests__/integration.test.ts",
+          "contains": "timeout: 120_000,"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Documented sandboxNotFound applies to persisted native database-handle lookup; public JS does not establish a fresh remote cloud-control-plane absence query. Stop/remove errors now propagate after positive lookup, with existing retries. Cloud profile remains blocked pending a reviewed cleanup oracle."
+      }
+    },
+    {
+      "id": "@computesdk/miosa",
+      "packageDirectory": "packages/miosa",
+      "exportSubpath": ".",
+      "symbol": "miosa",
+      "readiness": "wired",
+      "reason": "Source-reviewed MIOSA factory explicitly selects runnerMode=false and lazyCreate=false: fresh creates, commands, files and destroy stay on the configured account API with real returned IDs, not placeholders or regional fallback. The create body sends persistent=false and timeout_sec=300 from typed timeout=300000, with native default sandbox boot and no template, snapshot, custom image, persistent graduation, or attached volume. Filesystem base is absolute /tmp; shared tests promise no path normalization. Use the existing Node 22 runner; imports may preconnect HTTP/2 when credentials are available, so disable with MIOSA_PRECONNECT=0 for an approved run requiring no import-time connection. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [
+        "MIOSA_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "MIOSA_BASE_URL",
+        "MIOSA_PRECONNECT"
+      ],
+      "configEnvironment": {
+        "apiKey": "MIOSA_API_KEY",
+        "baseUrl": "MIOSA_BASE_URL"
+      },
+      "config": {
+        "runnerMode": false,
+        "lazyCreate": false,
+        "timeout": 300000
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "const createMiosaProvider = defineProvider<"
+        },
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "runnerMode?: boolean;"
+        },
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "lazyCreate?: boolean;"
+        },
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "persistent: false,"
+        },
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "timeout_sec: Math.ceil(timeoutMs / 1000),"
+        },
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "const created = await createSandboxRecord(auth, body);"
+        },
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "if (error instanceof MiosaApiError && error.status === 404)"
+        },
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "const known = sandboxTransport.get(sandboxId);"
+        },
+        {
+          "file": "packages/miosa/src/index.ts",
+          "contains": "MIOSA_PRECONNECT=0"
+        },
+        {
+          "file": "packages/miosa/src/__tests__/index.test.ts",
+          "contains": "timeout_sec: 120,"
+        },
+        {
+          "file": "packages/miosa/README.md",
+          "contains": "runnerMode: true,"
+        },
+        {
+          "file": "packages/miosa/package.json",
+          "contains": "\"@miosa/sdk\": \"^3.7.14\""
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "New wiring is not cleanup approval. Review account-API typed MiosaApiError 404 vs auth/transport failures, destroy busy/retry budget and transport ownership record, then verify positive lookup and SDK null for only the fresh account-created ID. Do not borrow older regional/foreign IDs, equate acknowledgement with absence, or graduate persistent desktops."
+      }
+    },
+    {
+      "id": "@computesdk/modal",
+      "packageDirectory": "packages/modal",
+      "exportSubpath": ".",
+      "symbol": "modal",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Existing app/image bootstrap is provider infrastructure; cleanup must target only sandboxes returned by this attempt. Also an existing compute-core integration target.",
+      "requiredEnvironment": [
+        "MODAL_TOKEN_ID",
+        "MODAL_TOKEN_SECRET"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "tokenId": "MODAL_TOKEN_ID",
+        "tokenSecret": "MODAL_TOKEN_SECRET"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "client.sandboxes.create(app, image, sandboxOptions)"
+        },
+        {
+          "file": "packages/modal/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "MODAL_TOKEN_ID"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "MODAL_TOKEN_SECRET"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "modal: 'modal'"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "destroy: async (config: ModalInternalConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/modal/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,  // Modal supports filesystem operations"
+        },
+        {
+          "file": "packages/modal/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]  // Enable getUrl tests"
+        },
+        {
+          "file": "packages/modal/src/index.ts",
+          "contains": "modalExitCode"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-native-terminal",
+        "oracle": "modal-finished-exitcode",
+        "reason": "Fresh SDK lookup and getInfo must both match the owned ID; reserved modalSandboxId must match too. SDK null remains absence. Otherwise only a fresh safe-integer metadata.modalExitCode from public Modal 0.11.0 Sandbox.poll (SandboxWait/V2 for the original sandbox main process) is native terminal execution evidence. Null poll is running and omitted, errors propagate, retained handles stay present, and snapshots restore a new sandbox ID. This is not SDK absence, physical deletion or cessation of billing. Source qualification is not a live-suite pass; the existing owned-resource incident must be resolved before a new live attempt."
+      }
+    },
+    {
+      "id": "@computesdk/mosaic",
+      "packageDirectory": "packages/mosaic",
+      "exportSubpath": ".",
+      "symbol": "mosaic",
+      "readiness": "blocked",
+      "reason": "BLOCKED: supply an approved existing owned Mosaic deployment endpoint via MOSAIC_API_URL and its MOSAIC_API_TOKEN; no local Mosaic server is presumed. Native REST create accepts stock node-22 without builds, but adapter exposes no native sandbox lifetime in its create body: requestTimeoutMs and options.timeout only abort HTTP requests. Require a reviewed native lifetime mechanism or owned-ID expiry/reaper before wiring; verify deployment scope and ephemeral disk destruction. Do not build an environment or attach another account sandbox/snapshot to fill the gap. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [
+        "MOSAIC_API_URL",
+        "MOSAIC_API_TOKEN"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "baseUrl": "MOSAIC_API_URL",
+        "apiKey": "MOSAIC_API_TOKEN"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/mosaic/src/index.ts",
+          "contains": "export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot, MosaicSnapshot>({"
+        },
+        {
+          "file": "packages/mosaic/src/index.ts",
+          "contains": "  'node-22',"
+        },
+        {
+          "file": "packages/mosaic/src/index.ts",
+          "contains": "const baseUrl = config.baseUrl || env('MOSAIC_API_URL') || '';"
+        },
+        {
+          "file": "packages/mosaic/src/index.ts",
+          "contains": "requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS,"
+        },
+        {
+          "file": "packages/mosaic/src/index.ts",
+          "contains": "network_enabled: resolved.networkEnabled,"
+        },
+        {
+          "file": "packages/mosaic/src/index.ts",
+          "contains": "if (error instanceof MosaicApiError && (error.status === 400 || error.status === 404)) return null;"
+        },
+        {
+          "file": "packages/mosaic/src/__tests__/index.test.ts",
+          "contains": "await provider.sandbox.create({ runtime: 'python', memoryMiB: 2048, cpus: 1 });"
+        },
+        {
+          "file": "packages/mosaic/README.md",
+          "contains": "`baseUrl` should point to a Mosaic API deployment"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Setup remains blocked. Separately replace/review the broad HTTP 400-or-404 missing classification in getById/destroy against the actual native error schema; malformed-request 400 is not proof of absence. Confirm exact owned-ID deletion and no retained disk before allowing native execution."
+      }
+    },
+    {
+      "id": "@computesdk/namespace",
+      "packageDirectory": "packages/namespace",
+      "exportSubpath": ".",
+      "symbol": "namespace",
+      "readiness": "blocked",
+      "reason": "BLOCKED: approve an isolated Namespace organization/account token and its create/read/destroy scope; do not reuse an unrelated Actions/vault organization credential. Factory config cannot select image or deadline: only per-create options.image and options.timeout do so, while the shared entrypoint passes only ports. Default builtin:base runtime prerequisites are unproven, with a one-hour default deadline. Expose/review a fresh stock-image, shorter bounded create profile without persistent volumes or snapshots, and review org-wide list plus exact-ID lookup/deletion. Current getById maps DESTROYING/DESTROYED metadata to null, which is not strict native not-found evidence. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [
+        "NSC_TOKEN"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "token": "NSC_TOKEN"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/namespace/src/index.ts",
+          "contains": "export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({"
+        },
+        {
+          "file": "packages/namespace/src/index.ts",
+          "contains": "const image = options?.image;"
+        },
+        {
+          "file": "packages/namespace/src/index.ts",
+          "contains": "? { known_image_id: 'builtin:base' }"
+        },
+        {
+          "file": "packages/namespace/src/index.ts",
+          "contains": "persistency_kind: 'PERSISTENT',"
+        },
+        {
+          "file": "packages/namespace/src/index.ts",
+          "contains": "if (isGoneInstance(responseData.metadata)) return null;"
+        },
+        {
+          "file": "packages/namespace/src/index.ts",
+          "contains": "instance_id: sandboxId,"
+        },
+        {
+          "file": "packages/namespace/src/__tests__/create-deadline.test.ts",
+          "contains": "expect(calls[0].body.deadline)"
+        },
+        {
+          "file": "packages/namespace/README.md",
+          "contains": "NSC_TOKEN=your_namespace_token"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Setup and org/resource ownership need explicit review. Native SDK-absence cannot be certified by synthesizing null for DESTROYING/DESTROYED while DescribeInstance still returns metadata; require reviewed genuine native not-found/error honesty or a separately designed native-terminal oracle, never hidden status filtering. No shared volume cleanup is authorized."
+      }
+    },
+    {
+      "id": "@computesdk/neevcloud",
+      "packageDirectory": "packages/neevcloud",
+      "exportSubpath": ".",
+      "symbol": "neevcloud",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Require explicit org/project as well as the API key; the key-only gate in the old caller is insufficient. Cold sandbox creation, no snapshot or persistent mount.",
+      "requiredEnvironment": [
+        "NEEV_API_KEY",
+        "NEEV_ORG_ID",
+        "NEEV_PROJECT_ID"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "NEEV_API_KEY",
+        "orgId": "NEEV_ORG_ID",
+        "projectId": "NEEV_PROJECT_ID"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "export const neevcloud = defineProvider<Sandbox, NeevCloudConfig, SandboxTemplate, NeevCloudSnapshot>({"
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "await clientFor(config).sandboxes.create(toCreateParams(options))"
+        },
+        {
+          "file": "packages/neevcloud/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "NEEV_API_KEY"
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "NEEV_ORG_ID"
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "NEEV_PROJECT_ID"
+        },
+        {
+          "file": "packages/neevcloud/README.md",
+          "contains": "export NEEV_ORG_ID=org-..."
+        },
+        {
+          "file": "packages/neevcloud/README.md",
+          "contains": "export NEEV_PROJECT_ID=prj-..."
+        },
+        {
+          "file": "packages/neevcloud/src/index.ts",
+          "contains": "destroy: async (config, sandboxId) => {"
+        },
+        {
+          "file": "packages/neevcloud/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true, // NeevCloud supports filesystem operations"
+        },
+        {
+          "file": "packages/neevcloud/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080], // Enable getUrl tests"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Typed NotFoundError only; DELETE errors propagate."
+      }
+    },
+    {
+      "id": "@computesdk/northflank",
+      "packageDirectory": "packages/northflank",
+      "exportSubpath": ".",
+      "symbol": "northflank",
+      "readiness": "blocked",
+      "reason": "BLOCKED: approve an isolated Northflank project and token, plus teamId for organization tokens. Exact existing mappings are NORTHFLANK_TOKEN, NORTHFLANK_PROJECT_ID, optional NORTHFLANK_TEAM_ID and NORTHFLANK_API_URL. Each create starts a fresh deployment service and may use stock node:20-slim with no ports/volumes/build, but config.timeout is only first-exec readiness budget, not service lifetime. Require a reviewed owned-ID automatic expiry/reaper or native deadline before wiring; no pre-existing project service or build-service ID may be borrowed. Review service-prefix ownership and project/team scope. Background and URL coverage are unselected, not unsupported. Configuration metadata is not a native pass or permission to run.",
+      "requiredEnvironment": [
+        "NORTHFLANK_TOKEN",
+        "NORTHFLANK_PROJECT_ID"
+      ],
+      "optionalEnvironment": [
+        "NORTHFLANK_TEAM_ID",
+        "NORTHFLANK_API_URL"
+      ],
+      "configEnvironment": {
+        "token": "NORTHFLANK_TOKEN",
+        "projectId": "NORTHFLANK_PROJECT_ID",
+        "teamId": "NORTHFLANK_TEAM_ID",
+        "host": "NORTHFLANK_API_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/northflank/src/index.ts",
+          "contains": "const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, NorthflankConfig>({"
+        },
+        {
+          "file": "packages/northflank/src/utils.ts",
+          "contains": "token: string;"
+        },
+        {
+          "file": "packages/northflank/src/utils.ts",
+          "contains": "teamId?: string;"
+        },
+        {
+          "file": "packages/northflank/src/utils.ts",
+          "contains": "node: 'node:20-slim',"
+        },
+        {
+          "file": "packages/northflank/src/utils.ts",
+          "contains": "export const DEFAULT_KEEP_ALIVE_COMMAND = 'sleep infinity';"
+        },
+        {
+          "file": "packages/northflank/src/index.ts",
+          "contains": "const created = await client.create.service.deployment({"
+        },
+        {
+          "file": "packages/northflank/src/index.ts",
+          "contains": "if (!serviceRes.data.name.startsWith(prefix(config))) {"
+        },
+        {
+          "file": "packages/northflank/src/index.ts",
+          "contains": "await client.delete.service({ parameters: params });"
+        },
+        {
+          "file": "packages/northflank/README.md",
+          "contains": "getUrl` will patch the service"
+        },
+        {
+          "file": "packages/northflank/src/__tests__/index.test.ts",
+          "contains": "token: process.env.NORTHFLANK_TOKEN!,"
+        },
+        {
+          "file": "packages/northflank/package.json",
+          "contains": "\"@northflank/js-client\": \"^0.9.2\""
+        },
+        {
+          "file": "packages/workbench/src/cli/providers.ts",
+          "contains": "teamId: 'NORTHFLANK_TEAM_ID', host: 'NORTHFLANK_API_URL'"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Setup remains blocked. Separately review typed NorthflankApiCallError status-only REST absence classification: current is404 also accepts arbitrary error text containing 404/not found. Verify exact newly created prefixed service in the approved project/team, successful delete, and positive-then-null SDK lookup. URL remains unselected because getUrl may publish a service port."
+      }
+    },
+    {
+      "id": "@computesdk/novita",
+      "packageDirectory": "packages/novita",
+      "exportSubpath": ".",
+      "symbol": "novita",
+      "readiness": "wired",
+      "reason": "Configuration/source review only, not a native pass, credential-readiness claim or dispatch authorization. Installed novita-sandbox 2.1.1 (declared ^2.1.1; Node >=20) uses new Novita({apiKey}); the exported novita wrapper creates a fresh unnamed stock base sandbox. Node 22 worker meets local prerequisites; selected guest operations require sh, HOME, echo, cat, writable /tmp and native files, not Node/Python in the guest. Explicit timeout 300000 is sandbox lifetime in ms, not request timeout. Default nonlegacy native request deadline is 60000ms. The only selected credential is NOVITA_API_KEY; no adapter optional environment mapping. Inherited NOVITA_DOMAIN, NOVITA_API_URL, NOVITA_SANDBOX_URL, NOVITA_DEBUG and NOVITA_ACCESS_TOKEN are NOT vault prerequisites/allowlisted and must be unset for this default-origin profile; legacy domain overrides change the request budget to 1800000ms. URL coverage is selected only because getHost is pure hostname synthesis: no publish/expose request, listener, traffic-token or reachability proof. Fifteen fresh creates for selected shared cases before retries. No name/template/snapshot/volume override, build or borrowed resource. Background/streaming/processes are UNSELECTED, not declared unsupported.",
+      "requiredEnvironment": [
+        "NOVITA_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "NOVITA_API_KEY"
+      },
+      "config": {
+        "timeout": 300000
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "supportsStreaming": false,
+        "supportsProcesses": false,
+        "filesystemBasePath": "/tmp",
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/novita/package.json",
+          "contains": "\"import\": \"./dist/index.mjs\""
+        },
+        {
+          "file": "pnpm-lock.yaml",
+          "contains": "novita-sandbox@2.1.1:"
+        },
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "export function novita(config: NovitaConfig): NovitaProvider {"
+        },
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "return new Novita({ apiKey });"
+        },
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "process.env.NOVITA_API_KEY"
+        },
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "timeoutMs: options?.timeout ?? config.timeout ?? 300_000,"
+        },
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "const sandbox = await sdk.sandbox.create(options?.templateId || options?.snapshotId || 'base', createOptions);"
+        },
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "getUrl: async (sandbox, options) => `${options.protocol || 'https'}://${sandbox.getHost(options.port)}`"
+        },
+        {
+          "file": "packages/novita/README.md",
+          "contains": "the URL itself"
+        },
+        {
+          "file": "packages/novita/src/__tests__/integration.test.ts",
+          "contains": "ports: [3000, 8080],"
+        },
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "if (error instanceof NotFoundError) return null;"
+        },
+        {
+          "file": "packages/novita/src/index.ts",
+          "contains": "await client(config).sandbox.kill(sandboxId);"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution remains blocked. Lookup uses native connect: POST /sandboxes/{ownedId}/connect can resume a paused sandbox and reset its lease. Kill is direct DELETE with genuine API 404 handled by the native SDK, but this is not independent cleanup approval. Parent must separately accept bounded positive presence, connect/lease effects, kill error honesty and strict owned-ID SDK-null observation within the existing 8s absence/30s teardown budgets. SDK absence is not physical deletion/billing proof; never list-clean unrelated IDs."
+      }
+    },
+    {
+      "id": "@computesdk/opencomputer",
+      "packageDirectory": "packages/opencomputer",
+      "exportSubpath": ".",
+      "symbol": "opencomputer",
+      "readiness": "wired",
+      "reason": "Existing public opencomputer(config) factory creates a fresh owned stock base sandbox with the installed @opencomputer/sdk 2.3.1; no attach ID, checkpoint, secret store or image build is selected. Linux shell/native files use /tmp on the stock VM; SDK supports the Node 22 worker. Native execution remains BLOCKED by the connect-before-kill cleanup race and heuristic lookup absence handling. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [
+        "OPENCOMPUTER_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "OPENCOMPUTER_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "OPENCOMPUTER_API_KEY",
+        "apiUrl": "OPENCOMPUTER_API_URL"
+      },
+      "config": {
+        "template": "base"
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "export const opencomputer = (config: OpenComputerConfig = {}) => _provider(config);"
+        },
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "const sandbox = await Sandbox.create(opts);"
+        },
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "template: options?.templateId || config.template,"
+        },
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "apiKey: config.apiKey || env('OPENCOMPUTER_API_KEY'),"
+        },
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "await sandbox.kill();"
+        },
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "error.message.includes('404') || error.message.includes('not found')"
+        },
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "sandbox.files.write(path, content)"
+        },
+        {
+          "file": "packages/opencomputer/src/index.ts",
+          "contains": "Defaults to OpenComputer's `base` template."
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED: adapter destroy first connects, then kills, and swallows message-substring 404/not-found. Installed @opencomputer/sdk 2.3.1 explicitly warns a transient GET 404 skips DELETE and leaks a live sandbox. Add the existing public static Sandbox.destroy(id, opts) signature to the SDK facade and call it directly; preserve all non-delete-missing failures. Replace getById substring absence with reviewed exact/structured sandbox-GET absence semantics and regressions for auth/network/wrong-resource/transient misses before independent owned-ID presence/absence review. No cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/platform",
+      "packageDirectory": "packages/platform",
+      "exportSubpath": ".",
+      "symbol": "platform",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: dedicated, user-owned non-production test organization AND project/access approval are mandatory. COMPUTE_PLATFORM_TEST_API_KEY and the profile-only COMPUTE_PLATFORM_TEST_ORG -> org mapping must select that exact test scope, never a production org or ambient login. An org-scoped key cannot be retargeted by org. Confirm sandbox access, own provider key in the test org vault, and pin defaults.providerOrder to that approved provider with no market fallback. There is no public projectId config to invent. Defaults and suite remain unselected until this and a stock runtime/filesystem base are confirmed; key presence alone is insufficient. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [
+        "COMPUTE_PLATFORM_TEST_API_KEY",
+        "COMPUTE_PLATFORM_TEST_ORG"
+      ],
+      "optionalEnvironment": [
+        "COMPUTE_PLATFORM_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "COMPUTE_PLATFORM_TEST_API_KEY",
+        "org": "COMPUTE_PLATFORM_TEST_ORG",
+        "baseUrl": "COMPUTE_PLATFORM_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/platform/src/provider.ts",
+          "contains": "export const platform = defineProvider<PlatformInstance, PlatformConfig>({"
+        },
+        {
+          "file": "packages/platform/src/provider.ts",
+          "contains": "org?: string;"
+        },
+        {
+          "file": "packages/platform/src/provider.ts",
+          "contains": "providerOrder?: string[];"
+        },
+        {
+          "file": "packages/platform/src/provider.ts",
+          "contains": "if (error instanceof PlatformApiError && error.status === 404) return null;"
+        },
+        {
+          "file": "packages/platform/src/provider.ts",
+          "contains": "detail.status === 'destroyed'"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "apiKey: requireEnv('COMPUTE_PLATFORM_TEST_API_KEY'),"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "own provider key and providerOrder pinned to that provider"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED pending dedicated non-production test-org/project authorization and native lifecycle review. DELETE uses PlatformApiError status 404 only, but getById returns any sandbox detail including destroyed rows. Retained destroyed/destroyError metadata can violate the present null-only oracle without proving a delete failure. Review a separate terminal-state oracle if appropriate; do not filter SDK lookup results to manufacture absence."
+      }
+    },
+    {
+      "id": "@computesdk/promigence",
+      "packageDirectory": "packages/promigence",
+      "exportSubpath": ".",
+      "symbol": "promigence",
+      "readiness": "wired",
+      "reason": "Existing public promigence(config) factory creates a fresh owned sandbox from the built-in base snapshot, not an image (which would trigger a billed build). Stock base documents Node/Python/Go and shell tools; native files plus shell mkdir/remove use /tmp. Installed @promigence/sdk 0.1.0-beta.9 supports Node >=20 and the Node 22 worker. Require an explicit remote PROMIGENCE_SPEND_CAP, consumed numerically by the adapter rather than mapped as a string config value; a five-minute sandbox lifetime is selected. Cleanup remains blocked because ended sandbox records are retained. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [
+        "PROMIGENCE_API_KEY",
+        "PROMIGENCE_SPEND_CAP"
+      ],
+      "optionalEnvironment": [
+        "PROMIGENCE_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "PROMIGENCE_API_KEY",
+        "apiUrl": "PROMIGENCE_API_URL"
+      },
+      "config": {
+        "snapshot": "base",
+        "timeout": 300000
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/promigence/src/index.ts",
+          "contains": "export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({"
+        },
+        {
+          "file": "packages/promigence/src/index.ts",
+          "contains": "await Sandbox.create(snapshot ?? config.snapshot ?? 'base', opts);"
+        },
+        {
+          "file": "packages/promigence/src/index.ts",
+          "contains": "const env = fromEnv('PROMIGENCE_SPEND_CAP');"
+        },
+        {
+          "file": "packages/promigence/src/index.ts",
+          "contains": "await client.sandboxes.kill(instanceId);"
+        },
+        {
+          "file": "packages/promigence/src/index.ts",
+          "contains": "const sandbox = await Sandbox.connect(instanceId, { client });"
+        },
+        {
+          "file": "packages/promigence/src/index.ts",
+          "contains": "status: rec.state === 'ended' ? 'stopped' : 'running',"
+        },
+        {
+          "file": "packages/promigence/README.md",
+          "contains": "The built-in base snapshot comes with Python, Node.js and Go, plus git and common build tools."
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED: native kill returns state ended/already_ended and Sandbox.connect performs a sandbox-record GET with no terminal filtering. SDK models retain ended outcome/capture/billing metadata. Current getById maps only typed NotFoundError to null, so successful kill need not satisfy null-only absence. Preserve retained terminal records; review provider terminal lifecycle/evidence and a separately approved terminal-state oracle instead of changing getById to fake absence. Keep typed non-missing auth/network/operational errors fatal."
+      }
+    },
+    {
+      "id": "@computesdk/quilt",
+      "packageDirectory": "packages/quilt",
+      "exportSubpath": ".",
+      "symbol": "quilt",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: approve a dedicated Quilt backend and tenant-scoped API key (selected API-key mode; access-token mode is an alternate, not a requirement). Confirm backend provisioning, tenant isolation and an existing trusted stock QUILT_IMAGE with POSIX shell/coreutils and writable /tmp. The default image name prod is deployment-specific, not reviewed stock-image evidence, so do not launch it blindly or add image builds. No independent vendor package is used: tracked adapter fetches Quilt directly. All suite operations remain unselected. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [
+        "QUILT_BASE_URL",
+        "QUILT_API_KEY",
+        "QUILT_TENANT_ID",
+        "QUILT_IMAGE"
+      ],
+      "optionalEnvironment": [
+        "QUILT_ACCESS_TOKEN",
+        "QUILT_API_BASE_URL",
+        "QUILT_TIMEOUT_MS",
+        "QUILT_POLL_INTERVAL_MS",
+        "QUILT_PUBLISHED_SERVICE_AUTH_MODE",
+        "QUILT_PUBLISHED_SERVICE_TTL_SECS"
+      ],
+      "configEnvironment": {
+        "baseUrl": "QUILT_BASE_URL",
+        "apiKey": "QUILT_API_KEY",
+        "tenantId": "QUILT_TENANT_ID",
+        "image": "QUILT_IMAGE"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/quilt/src/index.ts",
+          "contains": "export const quilt = defineProvider<QuiltSandboxHandle, QuiltConfig, never, Snapshot>({"
+        },
+        {
+          "file": "packages/quilt/src/index.ts",
+          "contains": "const DEFAULT_IMAGE = 'prod';"
+        },
+        {
+          "file": "packages/quilt/src/index.ts",
+          "contains": "const baseUrl = config.baseUrl ?? getEnv('QUILT_BASE_URL') ?? getEnv('QUILT_API_BASE_URL');"
+        },
+        {
+          "file": "packages/quilt/src/index.ts",
+          "contains": "const container = await requestJson<QuiltContainer>(resolved, '/api/containers', {"
+        },
+        {
+          "file": "packages/quilt/src/index.ts",
+          "contains": "if (options.allow404 && response.status === 404)"
+        },
+        {
+          "file": "packages/quilt/src/index.ts",
+          "contains": "{ method: 'DELETE' },"
+        },
+        {
+          "file": "packages/quilt/README.md",
+          "contains": "Filesystem operations are implemented over shell exec for portability across Quilt containers"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED pending dedicated backend/tenant/key and trusted stock-image approval, then review GET container/DELETE container endpoint status 404 semantics, propagation of all other errors, creation readiness and retained exited records versus null-only oracle. Published services mutate remote resources and stay unselected. Do not infer physical cleanup from an HTTP acknowledgment."
+      }
+    },
+    {
+      "id": "@computesdk/railway",
+      "packageDirectory": "packages/railway",
+      "exportSubpath": ".",
+      "symbol": "railway",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: provision and approve a dedicated non-production Railway project/environment with Sandbox access and a token scoped to it; RAILWAY_ENVIRONMENT_ID is required even though the adapter makes it optional. Existing public railway(config) and native Sandbox.create use the default stock image, never a template build; verify POSIX shell/coreutils and writable /tmp in that environment. Installed railway 3.3.1 requires Node >=22, matching the worker. Destroy currently swallows every connect/delete failure, so native execution is also cleanup-blocked. All suite operations remain unselected until scope/image prerequisites are confirmed. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [
+        "RAILWAY_API_TOKEN",
+        "RAILWAY_ENVIRONMENT_ID"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "token": "RAILWAY_API_TOKEN",
+        "environmentId": "RAILWAY_ENVIRONMENT_ID"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/railway/src/index.ts",
+          "contains": "export const railway = defineProvider<RailwaySandbox, RailwayConfig>({"
+        },
+        {
+          "file": "packages/railway/src/index.ts",
+          "contains": "const sandbox = await Sandbox.create({"
+        },
+        {
+          "file": "packages/railway/src/index.ts",
+          "contains": "environmentId: client.environmentId,"
+        },
+        {
+          "file": "packages/railway/src/index.ts",
+          "contains": "if (error instanceof SandboxNotFoundError) return null;"
+        },
+        {
+          "file": "packages/railway/src/index.ts",
+          "contains": "await sandbox.destroy();"
+        },
+        {
+          "file": "packages/railway/src/index.ts",
+          "contains": "/* already destroyed or unreachable */"
+        },
+        {
+          "file": "packages/railway/README.md",
+          "contains": "**Requires Node.js >= 22**"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED: remove broad destroy catch; native auth/network/permission/delete failures must propagate, and only exact missing-target outcomes may be idempotent. Native SDK connect does an environment-scoped GraphQL get, so missing in the wrong environment is not owned-resource absence. Review safe direct-ID deletion availability and GraphQL terminal DESTROYED records/null semantics in the approved environment before independent presence/absence verification; do not filter terminal rows to pass."
+      }
+    },
+    {
+      "id": "@computesdk/run-cloud",
+      "packageDirectory": "packages/run-cloud",
+      "exportSubpath": ".",
+      "symbol": "runCloud",
+      "readiness": "wired",
+      "reason": "Run Cloud is the separate run.cloud provider and IS IN SCOPE; it is not Google Cloud Run or either excluded CloudRun alias. Existing public runCloud(config) calls native sandboxes.create for a fresh owned VM from the registered stock runcloud/agent-base image, not a new build or snapshot. Native SDK 0.15.0 requires Node >=20, matching the Node 22 worker. Shell plus native reads/shell writes use /tmp; GNU find/coreutils are part of the stock-agent-image prerequisite to confirm before execution. A five-minute native lifetime is selected. Native execution remains blocked pending typed-error, post-delete record/absence and create-readiness review. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [
+        "RUN_CLOUD_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "RUN_CLOUD_API_TOKEN",
+        "RUN_CLOUD_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "RUN_CLOUD_API_KEY",
+        "apiUrl": "RUN_CLOUD_API_URL"
+      },
+      "config": {
+        "image": "runcloud/agent-base",
+        "timeout": 300000
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "const DEFAULT_IMAGE = 'runcloud/agent-base';"
+        },
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "export const runCloud = (config: RunCloudConfig = {}) => _provider(config);"
+        },
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "sandbox = await client.sandboxes.create(createOptions(config, options));"
+        },
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "const sandbox = await client.sandboxes.get(sandboxId);"
+        },
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "await createClient(config).sandboxes.destroy(sandboxId);"
+        },
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "(error instanceof RunCloudError && error.status === 404)"
+        },
+        {
+          "file": "packages/run-cloud/src/index.ts",
+          "contains": "(error as { status?: unknown }).status === 404"
+        },
+        {
+          "file": "packages/run-cloud/README.md",
+          "contains": "templateId` and `image` both select a registered Run Cloud OCI image."
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED: review native RunCloudError and remove or justify the status-only duck-typed 404 branch; only this sandbox GET/DELETE missing-target errors may count. Installed SDK models destroyed/destroying state and destroyedAt while GET returns normalized records; retained destroyed metadata may legitimately prevent the null-only oracle. Confirm native post-delete semantics and fresh create readiness; consider separately reviewed terminal-state oracle, never filter destroyed rows from SDK getById merely to pass. Tunnel creation is a remote mutation and stays unselected."
+      }
+    },
+    {
+      "id": "@computesdk/runloop",
+      "packageDirectory": "packages/runloop",
+      "exportSubpath": ".",
+      "symbol": "runloop",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: HARNESS cold-create budget incompatibility, not an SDK bug, provider failure or unsupported capability; a maximum wait does not mean healthy creates actually take that long. Known setup deadline mismatch with no safe existing factory cap, not merely absent credentials. Installed @runloop/api-client 1.30.0 (declared ^1.30.0) uses new RunloopSDK({bearerToken:apiKey,http2:true}); public runloop calls api.devboxes.createAndAwaitRunning for a fresh unnamed default devbox with no blueprint/snapshot/mount. Native src/resources/devboxes/devboxes.ts performs POST /v1/devboxes/create_and_await_running BEFORE applying the separate awaitRunning longPoll budget; src/core.ts defaults to 30000ms per request and maxRetries=5. Adapter config.timeout feeds keep_alive_time_seconds and longPoll.timeoutMs only, not initial POST request timeout/retries. Even a short configured timeout cannot bound six initial attempts below the fixed 90000ms setup hook. Human action: parent must review a declared per-profile creation/late-observation budget aligned with the native public request/retry and readiness deadlines, or expose/review a genuine initial-request cap; preserve allocated-before-rejection journaling. Native HTTP/longPoll budgets and factory timeout are ms, keep_alive_time_seconds is seconds; keep-alive is not the create-call deadline; increasing suite.timeout is not a fix. Required RUNLOOP_API_KEY maps apiKey. RUNLOOP_BASE_URL and RUNLOOP_CUSTOM_HEADERS are inherited native-only knobs, NOT adapter mappings or vault prerequisites; unset until trusted origin/header review. Do not invent baseUrl config or require RUNLOOP_INTEGRATION. Node 22 worker meets local package runtime needs; future stock guest slice needs sh/HOME/writable /tmp plus GNU stat -c, find, base64 and tr. No package README exists in this checkout; source/integration test, manifest and installed SDK were reviewed instead. Config empty/all suite flags UNSELECTED, not unsupported; URL would enableTunnel/public mutation and stays unselected.",
+      "requiredEnvironment": [
+        "RUNLOOP_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "RUNLOOP_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "supportsStreaming": false,
+        "supportsProcesses": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/runloop/package.json",
+          "contains": "\"import\": \"./dist/index.mjs\""
+        },
+        {
+          "file": "pnpm-lock.yaml",
+          "contains": "'@runloop/api-client@1.30.0':"
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "export const runloop = defineProvider<"
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "const client = new RunloopSDK({"
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "bearerToken: apiKey,"
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "process.env?.RUNLOOP_API_KEY"
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "const dbx = await client.api.devboxes.createAndAwaitRunning("
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "keep_alive_time_seconds: keepAliveSeconds,"
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "return timeoutMs ? ({ longPoll: { timeoutMs } } as TOptions) : undefined;"
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "await client.api.devboxes.shutdown(sandboxId);"
+        },
+        {
+          "file": "packages/runloop/src/index.ts",
+          "contains": "const devbox = await client.api.devboxes.retrieve(sandboxId);"
+        },
+        {
+          "file": "packages/runloop/src/__tests__/integration.test.ts",
+          "contains": "const runLive = process.env.RUNLOOP_INTEGRATION"
+        },
+        {
+          "file": "packages/test-utils/src/provider-test-suite.ts",
+          "contains": "const setupHookTimeoutMs = Math.max(90_000, createTimeoutMs + 15_000);"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Separate cleanup blocker: destroy performs shutdown, not account-row deletion; getById returns every successful retrieve response including shutdown. A permanently stopped devbox can remain retrievable, so the unchanged strict SDK-null absence check may fail forever. Parent must reconcile retained terminal-row semantics without filtering rows merely to fake absence; review timeout/retry bounds, late allocations and owned-ID cleanup separately. Keep-alive is not an absolute deletion/maximum-billing guarantee. No tunnels or account-list cleanup selected."
+      }
+    },
+    {
+      "id": "@computesdk/runtime",
+      "packageDirectory": "packages/runtime",
+      "exportSubpath": ".",
+      "symbol": "runtime",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: HARNESS cold-create budget incompatibility, not an SDK bug, provider failure or unsupported capability; a maximum wait does not mean healthy creates actually take that long. Known fresh-create capacity/request budget mismatch, not merely a Node prerequisite. Installed withruntime 0.6.1 (declared ^0.6.1; native and adapter Node >=22) is dynamically imported and constructed as new Runtime({apiKey,baseUrl}); worker Node 22 satisfies that prerequisite. Current factory forwards only those constructor options. Native dist/transport.js defaults waitForCapacityMs=120000, timeoutMs=300000, maxRetries=4; dist/client.js sandboxes.create additionally waits for running. No current factory mapping caps capacity wait, transport timeout/retries or native per-call options, and shared caller supplies no signal. These can exceed the fixed 90000ms setup hook. Human action: parent must review a declared per-profile creation/late-observation budget aligned with native public capacity/request/readiness deadlines, or expose/review genuine native caps with late-allocation recovery before selecting operations; capacity/request controls are ms (120000ms=120s, 300000ms=300s), whereas create.timeoutSeconds is sandbox lease seconds, not a request/capacity deadline; do not use wait:false (not proven ready), change hook deadlines or claim suite.timeout fixes it. Future fresh-only configuration should explicitly use create:{timeoutSeconds:300,onLeaseEnd:stop,persistent:false,getOrCreate:false}, previewVisibility:private with no name/image/snapshot/volumes; these are proposed only, NOT selected while blocked. Required explicit RUNTIME_API_KEY maps apiKey to prevent fallback to machine-saved withruntime login credentials; never inspect/use those credentials. Optional RUNTIME_API_URL maps baseUrl and needs trusted-origin review. Native HTTPS_PROXY/HTTP_PROXY/NO_PROXY and lowercase equivalents are inherited routing knobs, NOT allowlisted service credentials; RUNTIME_AUTH_URL concerns excluded saved-login flow. Stock warm 2vCPU/4GiB default is vendor-owned, not guaranteed free. Future guest shell/native-files slice requires bash/sh/HOME/writable /tmp, not language certification. Config empty/all flags UNSELECTED, not unsupported; URL would create signed private previews and remains unselected.",
+      "requiredEnvironment": [
+        "RUNTIME_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "RUNTIME_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "RUNTIME_API_KEY",
+        "baseUrl": "RUNTIME_API_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "supportsStreaming": false,
+        "supportsProcesses": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/runtime/package.json",
+          "contains": "\"import\": \"./dist/index.mjs\""
+        },
+        {
+          "file": "pnpm-lock.yaml",
+          "contains": "withruntime@0.6.1:"
+        },
+        {
+          "file": "packages/runtime/README.md",
+          "contains": "Requires Node.js 22 or later."
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "export const runtime = defineProvider<RuntimeSandbox, RuntimeConfig, never, RuntimeSnapshot>({"
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "sdk ??= import('withruntime')"
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "return new Runtime({"
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "...(config.apiKey ? { apiKey: config.apiKey } : {}),"
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),"
+        },
+        {
+          "file": "packages/runtime/README.md",
+          "contains": "`RUNTIME_API_KEY`"
+        },
+        {
+          "file": "packages/runtime/README.md",
+          "contains": "`RUNTIME_API_URL`"
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "const body: CreateSandbox = { ...config.create }"
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "const sandbox = await client.sandboxes.create("
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "if (sandbox.state === 'stopped' || sandbox.state === 'stopping') return null"
+        },
+        {
+          "file": "packages/runtime/src/index.ts",
+          "contains": "await sandbox.stop()"
+        },
+        {
+          "file": "packages/test-utils/src/provider-test-suite.ts",
+          "contains": "const setupHookTimeoutMs = Math.max(90_000, createTimeoutMs + 15_000);"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Separate cleanup review required: destroy reads then stop()s the owned sandbox or waits for stopped; it does not DELETE the account row. getById already returns null for stopping as well as stopped, so SDK absence can precede full stop. Parent must review persistent:false disk/reclamation semantics, bounded stop completion and meaningful owned-ID absence without claiming physical deletion. Proposed onLeaseEnd:stop/300s lease is not selected while blocked and not a substitute for cleanup. No borrowed credential, previews, retained disks, volumes or account-list deletion authorized."
+      }
+    },
+    {
+      "id": "@computesdk/sail",
+      "packageDirectory": "packages/sail",
+      "exportSubpath": ".",
+      "symbol": "sail",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: approve a dedicated Sail organization/app and app-manager permission before create. SAIL_APP must select that test app; adapter resolveApp uses mintIfMissing true and otherwise defaults to computesdk, so key presence is insufficient and implicit app creation is not authorized. Installed SDK 0.5.1 needs Node >=22 plus the platform-native bridge; verify the Node 22 worker native bridge prerequisites without new installation/build. Stock Image.devbox(arm64) is prebuilt-only and /tmp is the existing suite base, but no custom image/build is selected. Current lookup hides terminating/terminated metadata, requiring cleanup review. All suite operations remain unselected. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [
+        "SAIL_API_KEY",
+        "SAIL_APP"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "SAIL_API_KEY",
+        "app": "SAIL_APP"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/sail/src/index.ts",
+          "contains": "export const sail = defineProvider<Sailbox, SailConfig>({"
+        },
+        {
+          "file": "packages/sail/src/index.ts",
+          "contains": "const DEFAULT_APP = 'computesdk';"
+        },
+        {
+          "file": "packages/sail/src/index.ts",
+          "contains": "mintIfMissing: true,"
+        },
+        {
+          "file": "packages/sail/src/index.ts",
+          "contains": "image: config.image ?? Image.devbox('arm64'),"
+        },
+        {
+          "file": "packages/sail/src/index.ts",
+          "contains": "if (GONE_STATUSES.has(sandbox.status)) return null;"
+        },
+        {
+          "file": "packages/sail/src/index.ts",
+          "contains": "await resolve(config).client.terminateSailbox(sandboxId);"
+        },
+        {
+          "file": "packages/sail/src/__tests__/index.test.ts",
+          "contains": "filesystemBasePath: '/tmp',"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED: dedicated org/app bootstrap and native bridge prerequisites must be ready. getById currently treats terminating (not even terminated) and terminated native records as null; this is terminal-state masking, not proven absence. Review preserving real records and approve a separate native terminal oracle if needed, rather than extending filtering. Terminate acknowledgment, late-abort cleanup swallowed failures and native missing/auth error distinctions need full review; no source-reviewed absence claim."
+      }
+    },
+    {
+      "id": "@computesdk/sandbox0",
+      "packageDirectory": "packages/sandbox0",
+      "exportSubpath": ".",
+      "symbol": "sandbox0",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Uses the existing caller hardTtl and template-based claim; only the returned sandbox ID is owned. Team ID is needed when the supplied credential is an access token rather than a team API key. No public-port coverage is selected.",
+      "requiredEnvironment": [
+        "SANDBOX0_TOKEN"
+      ],
+      "optionalEnvironment": [
+        "SANDBOX0_TEAM_ID",
+        "SANDBOX0_BASE_URL",
+        "SANDBOX0_TEMPLATE"
+      ],
+      "configEnvironment": {
+        "token": "SANDBOX0_TOKEN",
+        "teamId": "SANDBOX0_TEAM_ID",
+        "baseUrl": "SANDBOX0_BASE_URL",
+        "templateId": "SANDBOX0_TEMPLATE"
+      },
+      "config": {
+        "hardTtl": 600
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "filesystemBasePath": "/tmp",
+        "timeout": 60000
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({"
+        },
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "await client.sandboxes.claim(template, claimOptions)"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "SANDBOX0_TOKEN"
+        },
+        {
+          "file": "packages/sandbox0/src/index.ts",
+          "contains": "destroy: async (config, sandboxId) => {"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "hardTtl: 600,"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "supportsGetUrl: false,"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "filesystemBasePath: '/tmp',"
+        },
+        {
+          "file": "packages/sandbox0/src/__tests__/index.test.ts",
+          "contains": "timeout: 60_000,"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Numeric native404 only; terminal GET/delete retry failures propagate."
+      }
+    },
+    {
+      "id": "@computesdk/secure-exec",
+      "packageDirectory": "packages/secure-exec",
+      "exportSubpath": ".",
+      "symbol": "secureExec",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: local secureExec is not a credential-free native pass. A real disposable Linux x64 GNU harness with the secure-exec V8 runtime binary and Node 22 compatibility must be provisioned/verified. Adapter filesystem is in-memory /workspace, but its child-process executor spawns on the host with inherited process.env and host cwd; shared commands also write /tmp directly. Do not run it on a credential-bearing Actions worker or mistake the VFS for host command isolation. getById always null, list empty and destroy no-op prevent required positive presence and meaningful cleanup. Implement real instance ownership/runtime disposal and an isolated subprocess/environment/filesystem harness before selecting any shared-suite operations. There is no tracked package README. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [],
+      "optionalEnvironment": [],
+      "configEnvironment": {},
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "export const secureExec = defineProvider<SecureExecInstance, SecureExecConfig>({"
+        },
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "v8Runtime = await createNodeV8Runtime();"
+        },
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "const child = spawn(command, args, {"
+        },
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "env: { ...process.env, ...(options.env ?? {}) }"
+        },
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "processConfig: { cwd: '/workspace', env: options?.envs ?? {} },"
+        },
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "getById: async (_config: SecureExecConfig, _sandboxId: string) => null,"
+        },
+        {
+          "file": "packages/secure-exec/src/index.ts",
+          "contains": "destroy: async (_config: SecureExecConfig, _sandboxId: string) => {},"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED: constant-null lookup cannot prove initial presence and no-op destroy cannot dispose the isolate or terminate spawned host children. Provision an actual disposable native-runtime harness, sanitized child environment, host/VFS-consistent filesystem confinement and owned-instance lifecycle/disposal registry. Then review post-destroy lookup plus subprocess termination, never substitute framework mocks or execute on a secret-bearing host."
+      }
+    },
+    {
+      "id": "@computesdk/sprites",
+      "packageDirectory": "packages/sprites",
+      "exportSubpath": ".",
+      "symbol": "sprites",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Fresh generated sprite only. Native create rate limits and failed-delete/absence checks remain failures, not permission to reuse a persistent sprite. Explicit create deadline 90000ms: live f878ea5f returned a valid owned allocation after 61146ms, beyond the former internal 60000ms deadline. This bounded cold-start allowance changes no case, retry, assertion or cleanup requirement; it is not a performance pass.",
+      "requiredEnvironment": [
+        "SPRITES_TOKEN"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "SPRITES_TOKEN"
+      },
+      "config": {},
+      "suite": {
+        "createTimeoutMs": 90000,
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({"
+        },
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "name: name || optSandboxId || `sprite-${Date.now()}`"
+        },
+        {
+          "file": "packages/sprites/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "SPRITES_TOKEN"
+        },
+        {
+          "file": "packages/sprites/src/index.ts",
+          "contains": "destroy: async (config: SpritesConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/sprites/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/sprites/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Official HTTP API 0.1.12 GET/DELETE sprite-name routes document 404 absence. Lookup validates organization-scoped name; other HTTP/network/decoding failures propagate. Strict later SDK-null verification remains required. Source review only."
+      }
+    },
+    {
+      "id": "@computesdk/superserve",
+      "packageDirectory": "packages/superserve",
+      "exportSubpath": ".",
+      "symbol": "superserve",
+      "readiness": "wired",
+      "reason": "Configuration/source review only, not a native pass, credential-readiness claim or dispatch authorization. Installed @superserve/sdk 0.9.3 (declared ^0.9.3; adapter 0.2.18) exposes native Sandbox static create/connect/killById, not new Superserve(). Exported superserve calls static create with an internally random cs-<uuid-prefix> name; caller selects no fixed/shared name and no fromTemplate/fromSnapshot, so native vendor stock superserve/base is used. Node 22 worker suffices locally; selected stock guest slice needs sh/HOME, writable /tmp, mkdir/test/rm and GNU find -printf with native text files. Base need not contain Node; do not borrow benchmark's node-22 sandboxOptions or invent default-template factory mapping. Required SUPERSERVE_API_KEY maps apiKey; optional SUPERSERVE_BASE_URL maps baseUrl, must remain unset unless trusted-origin review approves it. Native endpoint otherwise derives from key region or default; do not hardcode a different origin and discard regional routing. Pin timeout=300000ms, converted to timeoutSeconds auto-pause, NOT auto-delete or a hard maximum-running guarantee. Native POST create default HTTP deadline is 30000ms without create retries; autoDeleteSeconds is omitted and paused sandboxes are retained forever by native default, with no factory default exposing that field. URL is UNSELECTED because publishPreviewPort mutates public routes. Thirteen fresh creates for selected shared cases before external retries. Background/streaming/processes are UNSELECTED, not unsupported. No secret-store attachment, snapshot, volume or template build.",
+      "requiredEnvironment": [
+        "SUPERSERVE_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "SUPERSERVE_BASE_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "SUPERSERVE_API_KEY",
+        "baseUrl": "SUPERSERVE_BASE_URL"
+      },
+      "config": {
+        "timeout": 300000
+      },
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "supportsStreaming": false,
+        "supportsProcesses": false,
+        "filesystemBasePath": "/tmp"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/superserve/package.json",
+          "contains": "\"import\": \"./dist/index.mjs\""
+        },
+        {
+          "file": "pnpm-lock.yaml",
+          "contains": "'@superserve/sdk@0.9.3':"
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({"
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "Sandbox as SuperserveSandbox,"
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "config.apiKey || process.env.SUPERSERVE_API_KEY"
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "config.baseUrl || process.env.SUPERSERVE_BASE_URL || undefined"
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "return `cs-${randomUUID().slice(0, 8)}`;"
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "const sandbox = await SuperserveSandbox.create({"
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "name: name ?? generateSandboxName(),"
+        },
+        {
+          "file": "packages/superserve/README.md",
+          "contains": "defaults to superserve/base"
+        },
+        {
+          "file": "packages/superserve/README.md",
+          "contains": "public by default."
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "await SuperserveSandbox.killById(sandboxId, { apiKey, baseUrl });"
+        },
+        {
+          "file": "packages/superserve/src/index.ts",
+          "contains": "/* already destroyed */"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Hard native-execution blocker despite configuration wiring: adapter getById catches every connect error to null and destroy catches every killById error as already destroyed; auth/network failures can fake deletion/absence. Native killById itself is missing-only direct DELETE, but adapter discards that honesty. Native connect POST /activate resumes paused sandboxes; verification is not read-only. Commands also collapse native errors to exit127. Parent must narrow adapter error handling and separately review activation effects, bounded owned-ID lookup/delete/absence, invalid-command semantics and paused retention before any dispatch. Auto-pause is not fallback deletion; keep cleanup needs-review."
+      }
+    },
+    {
+      "id": "@computesdk/tenki",
+      "packageDirectory": "packages/tenki",
+      "exportSubpath": ".",
+      "symbol": "tenki",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: HARNESS cold-create budget incompatibility, not an SDK bug, provider failure or unsupported capability; a maximum wait does not mean healthy creates actually take that long. Known setup deadline mismatch, not merely absent credentials. Installed @tenkicloud/sandbox 1.4.0 (declared ^1.4.0; native Node >=18, adapter >=20) uses new TenkiSandbox({authToken:apiKey,baseUrl}); tenki calls createAndWait(toCreateOptions(config,options)) for fresh unnamed default sessions. Native DEFAULT_SESSION_CREATE_TIMEOUT_MS is 180000 in dist/index.mjs and createAndWait inherits it; current factory forwards neither waitTimeoutMs/timeoutMs nor cancellation for this path. Factory config.timeout controls runCommand, not create readiness, and shared caller supplies only ports. Human action: parent must review a declared per-profile creation/late-observation budget aligned with the native 180000ms (180s) readiness allowance and recover WaitReadyFailedError's allocated session, or expose/review a native readiness cap below the current 90000ms (90s) hook; config.timeout in ms is command-only and options.maxDurationMs is a resource lifetime, not this readiness cap; do not raise the case-body timeout as a workaround. Workspace-key profile requires explicit TENKI_API_KEY; TENKI_AUTH_TOKEN is a recognized alternate fallback, NOT an allowed substitute or selected vault key. Optional TENKI_API_URL maps baseUrl; TENKI_WORKSPACE_ID maps workspaceId only for separately approved owned workspace/service-credential scope. Inherited TENKI_API_ENDPOINT and TENKI_SANDBOX_GATEWAY_URL are NOT mappings/prerequisites and must be unset unless trusted routing is reviewed. Node 22 worker needs no local SSH/private-host setup; future guest slice needs sh/HOME, writable /tmp and /home/tenki with native data plane. URL would exposePort and remains UNSELECTED. Config is empty and every suite flag is UNSELECTED, not unsupported. No borrowed session, name/image/template/snapshot override or volumes.",
+      "requiredEnvironment": [
+        "TENKI_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "TENKI_API_URL",
+        "TENKI_WORKSPACE_ID"
+      ],
+      "configEnvironment": {
+        "apiKey": "TENKI_API_KEY",
+        "baseUrl": "TENKI_API_URL",
+        "workspaceId": "TENKI_WORKSPACE_ID"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false,
+        "supportsStreaming": false,
+        "supportsProcesses": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/tenki/package.json",
+          "contains": "\"import\": \"./dist/index.mjs\""
+        },
+        {
+          "file": "pnpm-lock.yaml",
+          "contains": "'@tenkicloud/sandbox@1.4.0':"
+        },
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "export const tenki = defineProvider<Session, TenkiConfig>({"
+        },
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "client = new TenkiSandbox({"
+        },
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "authToken: resolveApiKey(config),"
+        },
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "config.apiKey ?? process.env.TENKI_API_KEY ?? process.env.TENKI_AUTH_TOKEN"
+        },
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "baseUrl: config.baseUrl ?? process.env.TENKI_API_URL"
+        },
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "config.workspaceId ?? process.env.TENKI_WORKSPACE_ID"
+        },
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "const session = await client.createAndWait(toCreateOptions(config, options));"
+        },
+        {
+          "file": "packages/tenki/README.md",
+          "contains": "Workspace API keys infer their workspace server-side."
+        },
+        {
+          "file": "packages/tenki/src/__tests__/index.test.ts",
+          "contains": "filesystemBasePath: '/home/tenki',"
+        },
+        {
+          "file": "packages/tenki/src/index.ts",
+          "contains": "await session.close();"
+        },
+        {
+          "file": "packages/test-utils/src/provider-test-suite.ts",
+          "contains": "const setupHookTimeoutMs = Math.max(90_000, createTimeoutMs + 15_000);"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Separately blocked pending cleanup review: native session.close terminates the owned session, but native get constructs a Session for any successful getSession response and the adapter does not null-filter TERMINATED records. A terminal row can remain retrievable indefinitely; mocked not-found tests do not establish SDK-null after termination. Parent must reconcile terminal-row visibility with the unchanged strict absence oracle, preserve genuine auth/transport errors and recover newly allocated sessions carried by create/readiness errors. No get/list-wide cleanup or public preview mutation is selected."
+      }
+    },
+    {
+      "id": "@computesdk/tensorlake",
+      "packageDirectory": "packages/tensorlake",
+      "exportSubpath": ".",
+      "symbol": "tensorlake",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Cold sandbox creation only. Selected preview coverage exposes the requested port publicly through the native API; run only in an approved isolated test account.",
+      "requiredEnvironment": [
+        "TENSORLAKE_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "TENSORLAKE_API_URL"
+      ],
+      "configEnvironment": {
+        "apiKey": "TENSORLAKE_API_KEY",
+        "apiUrl": "TENSORLAKE_API_URL"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "export const tensorlake = defineProvider<"
+        },
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "await Sandbox.create(params)"
+        },
+        {
+          "file": "packages/tensorlake/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "TENSORLAKE_API_KEY"
+        },
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "allowUnauthenticatedAccess: true"
+        },
+        {
+          "file": "packages/tensorlake/src/index.ts",
+          "contains": "destroy: async (config: TensorlakeConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/tensorlake/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/tensorlake/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080],"
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "Native execution blocked until lookup/delete error honesty and owned-ID absence verification are reviewed; configuration readiness is not cleanup approval."
+      }
+    },
+    {
+      "id": "@computesdk/uno",
+      "packageDirectory": "packages/uno",
+      "exportSubpath": ".",
+      "symbol": "uno",
+      "readiness": "blocked",
+      "reason": "needs-reviewed-live-profile: exact existing public uno(config) mapping and fresh owned createBox path are identified, but a dedicated non-production user-owned test account/project, active Uno plan, permitted region and purchase/resource budget must be explicitly approved before selecting creates. API token needs boxes:read, boxes:write and infra:purchase; key presence alone does not establish a paid plan or authority. Stock ubuntu-24.04 template supplies Linux shell/coreutils with /tmp as the candidate base; no bootstrap/install/custom image is authorized. Node 22 worker supplies fetch/AbortSignal.any/crypto. All suite operations remain unselected until plan/scope approval and cleanup review. Source/configuration review only, not a native pass or dispatch authorization. Background is unselected, not declared unsupported; URL coverage is unselected pending a pure-URL scope review. All credential and account values remain in the remote vault.",
+      "requiredEnvironment": [
+        "UNO_API_KEY"
+      ],
+      "optionalEnvironment": [
+        "UNO_API_URL",
+        "UNO_REGION"
+      ],
+      "configEnvironment": {
+        "apiKey": "UNO_API_KEY",
+        "baseUrl": "UNO_API_URL",
+        "region": "UNO_REGION"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": false,
+        "supportsBackground": false
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/uno/src/index.ts",
+          "contains": "export const uno = defineProvider<UnoSandbox, ConfigWithClient>({"
+        },
+        {
+          "file": "packages/uno/src/index.ts",
+          "contains": "const DEFAULT_TEMPLATE = 'ubuntu-24.04'"
+        },
+        {
+          "file": "packages/uno/src/index.ts",
+          "contains": "box = await client.createBox("
+        },
+        {
+          "file": "packages/uno/src/index.ts",
+          "contains": "await getClient(config).deleteBox(instanceId)"
+        },
+        {
+          "file": "packages/uno/src/client.ts",
+          "contains": "boxes:read`, `boxes:write` and `infra:purchase`"
+        },
+        {
+          "file": "packages/uno/src/client.ts",
+          "contains": "err.status === 404 || err.code === 'INVALID_ID'"
+        },
+        {
+          "file": "packages/uno/src/client.ts",
+          "contains": "?purge=now"
+        },
+        {
+          "file": "packages/uno/README.md",
+          "contains": "Creating machines needs an Uno plan."
+        }
+      ],
+      "cleanup": {
+        "status": "needs-review",
+        "reason": "BLOCKED: approve paid test-account plan/region/purchase budget and existing stock runtime first. Direct DELETE purge=now accepts 202 as acknowledgment, not completed absence; getBox treats INVALID_ID as null regardless of status. Review exact owned-ID HTTP/code missing semantics and retained terminal rows; do not convert auth/validation/wrong-scope errors or destroy acknowledgments into observed absence. Review swallowed create-recovery cleanup errors and delayed-create orphan risk."
+      }
+    },
+    {
+      "id": "@computesdk/upstash",
+      "packageDirectory": "packages/upstash",
+      "exportSubpath": ".",
+      "symbol": "upstash",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Only the default full Box profile is selected. Do not pass ephemeral:true: lightweight ephemeral boxes have a different lifecycle/URL surface, and no ephemeral certification is implied. Filesystem base explicitly matches native cwd; do not assume a nested tmp directory exists.",
+      "requiredEnvironment": [
+        "UPSTASH_BOX_API_KEY"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "apiKey": "UPSTASH_BOX_API_KEY"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": true,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8080
+        ],
+        "filesystemBasePath": "/workspace/home"
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "await Box.create({"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "UPSTASH_BOX_API_KEY"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "destroy: async (config: UpstashConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: true,"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8080]"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "box = await Box.get(sandboxId, { apiKey });"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "if (error instanceof BoxError && error.statusCode === 404) return null;"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "await box.delete();"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('does not filter retained stopped metadata', async () => {"
+        },
+        {
+          "file": "packages/upstash/src/__tests__/lifecycle-contract.test.ts",
+          "contains": "it('deletes using canonical native identity and accepts void acknowledgement', async () => {"
+        },
+        {
+          "file": "packages/upstash/src/index.ts",
+          "contains": "upstashStatus"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-native-terminal",
+        "oracle": "upstash-deleted-metadata",
+        "reason": "Fresh SDK lookup and getInfo must both match the owned ID; reserved upstashBoxId must match too. SDK null remains absence. Otherwise only metadata.upstashStatus exactly deleted from public Box 0.5.5 getStatus (fresh GET /v2/box/id/status) is the reviewed irreversible original-box terminal observation. Official Box lifecycle documentation distinguishes irreversible deleted from resumable paused; snapshots can remain. Paused, error, broad SDK stopped and unknown values are never terminal evidence. Retained metadata stays present. No physical deletion or billing claim; the existing owned-resource incident must be resolved before a new live attempt."
+      }
+    },
+    {
+      "id": "@computesdk/vercel",
+      "packageDirectory": "packages/vercel",
+      "exportSubpath": ".",
+      "symbol": "vercel",
+      "readiness": "wired",
+      "reason": "Source-reviewed factory/environment mapping and owned create/destroy path for the existing shared provider suite; not a native pass or a dispatch authorization. Background is unselected pending behavior verification, not declared unsupported. Native transport, SSH, authentication and cleanup failures must fail rather than become mock success. Token/team/project authentication is selected, not OIDC fallback. Filesystem coverage is not selected by the existing caller. No assumption that ephemeral Vercel sandboxes support List.",
+      "requiredEnvironment": [
+        "VERCEL_TOKEN",
+        "VERCEL_TEAM_ID",
+        "VERCEL_PROJECT_ID"
+      ],
+      "optionalEnvironment": [],
+      "configEnvironment": {
+        "token": "VERCEL_TOKEN",
+        "teamId": "VERCEL_TEAM_ID",
+        "projectId": "VERCEL_PROJECT_ID"
+      },
+      "config": {},
+      "suite": {
+        "supportsFilesystem": false,
+        "supportsGetUrl": true,
+        "supportsBackground": false,
+        "ports": [
+          3000,
+          8000
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "export const vercel = defineProvider<VercelSandbox, VercelConfig>({"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "VercelSandbox.create(params)"
+        },
+        {
+          "file": "packages/vercel/src/__tests__/index.test.ts",
+          "contains": "runProviderTestSuite({"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "VERCEL_TOKEN"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "VERCEL_TEAM_ID"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "VERCEL_PROJECT_ID"
+        },
+        {
+          "file": "packages/computesdk/src/__tests__/compute-provider-integration.test.ts",
+          "contains": "vercel: 'vercel'"
+        },
+        {
+          "file": "packages/vercel/src/index.ts",
+          "contains": "destroy: async (config: VercelConfig, sandboxId: string) => {"
+        },
+        {
+          "file": "packages/vercel/src/__tests__/index.test.ts",
+          "contains": "supportsFilesystem: false,   // Vercel sandboxes don't support filesystem operations"
+        },
+        {
+          "file": "packages/vercel/src/__tests__/index.test.ts",
+          "contains": "ports: [3000, 8000],"
+        }
+      ],
+      "cleanup": {
+        "status": "source-reviewed-sdk-absence",
+        "reason": "Installed SDK 3.8.0 metadata lookup maps genuine APIError HTTP 404 only. Destroy permanently deletes the sandbox without stop or orphan-snapshot/drive deletion; strict later SDK-null verification remains required. Source review only, no live result."
+      }
+    }
+  ]
+}

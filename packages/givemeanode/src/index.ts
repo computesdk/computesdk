@@ -131,6 +131,33 @@ function getClient(config: ConfigWithClient): GmnClient {
   return config.__client
 }
 
+async function destroyOwnedSandbox(config: ConfigWithClient, sandboxId: string): Promise<void> {
+  // IDs are opaque: do not trim, decode, or substitute a listing alias.
+  // The public contract explicitly does not guarantee an ID shape or length.
+  // This ID is JSON data, never a route segment; the API validates its identity.
+  if (typeof sandboxId !== 'string' || sandboxId.length === 0) {
+    throw new Error('Invalid givemeanode sandbox ID.')
+  }
+  try {
+    // Official contract: an HTTP success can contain refused deletions.
+    // `deleted` is the count, not an acknowledgement of every input:
+    // https://givemeanode.com/openapi.json, POST /preview/sandboxes/deletes
+    // https://givemeanode.com/llms.txt, delete_sandbox
+    // One requested sandbox requires exactly one confirmed deletion. Unknown
+    // response shapes must not turn an acknowledgement into cleanup success.
+    const result: unknown = await getClient(config).request(
+      'POST', '/preview/sandboxes/deletes', { sandboxes: [sandboxId] },
+    )
+    if (!result || typeof result !== 'object' || Array.isArray(result) ||
+        !('deleted' in result) || result.deleted !== 1) {
+      throw new Error('Deletion was not confirmed.')
+    }
+  } catch {
+    // Native errors can include credentials, capability IDs and response bodies.
+    throw new Error('givemeanode sandbox deletion was not confirmed.')
+  }
+}
+
 type FsRunCommand = (
   sandbox: GivemeanodeSandbox,
   command: string,
@@ -168,7 +195,7 @@ const provider = defineProvider<
       },
 
       destroy: async (config: ConfigWithClient, sandboxId: string) => {
-        await ops.destroySandbox(getClient(config), sandboxId)
+        await destroyOwnedSandbox(config, sandboxId)
       },
 
       runCommand: (sandbox: GivemeanodeSandbox, command: string, options?: RunCommandOptions) =>

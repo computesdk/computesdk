@@ -38,7 +38,7 @@ import type {
   SandboxStatus,
   Shape,
 } from "@nodeops-createos/sandbox";
-import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from "@computesdk/provider";
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, readVerifiedCommandOutput, parseCommandExitCode } from "@computesdk/provider";
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -523,26 +523,33 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         try {
           const readFile = async (path: string): Promise<string> => {
             const r = await sandbox.runCommand("cat", [path]);
-            return r.result.stdout;
+            const captured = r?.result;
+            // Buffered CreateOS results require exit_code, and error signals
+            // an agent-start failure even when that status happens to be zero.
+            if (!captured || captured.exit_code !== 0 || typeof captured.stdout !== "string" ||
+                (captured.error !== undefined && captured.error !== "")) {
+              throw new Error("Capture file read failed");
+            }
+            return captured.stdout;
           };
-          const readVerified = async (path: string, lenPath: string): Promise<string> => {
-            const expected = Number.parseInt((await readFile(lenPath)).trim(), 10);
-            const first = await readFile(path);
-            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
-            const second = await readFile(path);
-            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
-          };
-
-          const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
-          const capturedStderr = await readVerified(`${base}.err`, `${base}.errlen`);
+          const stdout = await readVerifiedCommandOutput({
+            stream: "stdout",
+            readLength: () => readFile(`${base}.outlen`),
+            read: () => readFile(`${base}.out`),
+          });
+          const capturedStderr = await readVerifiedCommandOutput({
+            stream: "stderr",
+            readLength: () => readFile(`${base}.errlen`),
+            read: () => readFile(`${base}.err`),
+          });
           const codeText = await readFile(`${base}.code`).catch(() => "");
 
-          const fileExit = Number.parseInt(codeText.trim(), 10);
           const stderr = result.error ? `${capturedStderr}${result.error}` : capturedStderr;
           return {
             stdout,
             stderr,
-            exitCode: Number.isInteger(fileExit) ? fileExit : result.exit_code,
+            // The wrapper can succeed even when the child's status was lost.
+            exitCode: parseCommandExitCode(codeText),
             durationMs: exec_ms,
           };
         } finally {

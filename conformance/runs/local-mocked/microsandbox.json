@@ -1,0 +1,129 @@
+{
+  "provider": "@computesdk/microsandbox",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "command": "pnpm --filter @computesdk/microsandbox --fail-if-no-match exec vitest run src/__tests__/index.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0",
+    "VERCEL_TOKEN": "",
+    "VERCEL_OIDC_TOKEN": "",
+    "HOPX_API_KEY": "",
+    "BEAM_TOKEN": "",
+    "BEAM_WORKSPACE_ID": "",
+    "BL_API_KEY": "",
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
+  },
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:31.006402+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 113,
+  "tests": [
+    {
+      "file": "packages/microsandbox/src/__tests__/index.test.ts",
+      "contains": "describe('completed command output integrity'"
+    },
+    {
+      "file": "packages/microsandbox/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Microsandbox native lifecycle contract', () => {"
+    }
+  ],
+  "claims": [
+    "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+    "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
+    "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command.",
+    "Completed exec fallback reads validate the native code getter; successful empty native FS reads and explicitly best-effort timeout124 behavior are preserved.",
+    "Named lifecycle regressions use the documented sandboxNotFound discriminator only around initial database-handle lookup, return canonical names through the real factory, and propagate post-positive stop/remove/configuration errors with existing retries preserved."
+  ],
+  "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/microsandbox/package.json",
+      "sha256": "94b623850aeea8b606a706cfe22aec149da1f48a4d965e1174adedcbe5adb989"
+    },
+    {
+      "file": "packages/microsandbox/src/__tests__/index.test.ts",
+      "sha256": "5d40fbc7bc44da13b94f2dcb1c0e897ac30f9ed04abafd4eaa3c7e71b5d675f5"
+    },
+    {
+      "file": "packages/microsandbox/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "1093138acbf2b2c7b52b6238c441e459b5409ab17c8322cd2591b66ccb306e5a"
+    },
+    {
+      "file": "packages/microsandbox/src/index.ts",
+      "sha256": "60d323f9508c9ae60051094937fd68d8716dfbbcb397d17dbdd4069c81092dae"
+    },
+    {
+      "file": "packages/provider/src/command-output.ts",
+      "sha256": "877ad798c0e5b112a368b96a6a423d929816499376a8bc18d465405d58ad5020"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "limitations": [
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
+    "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+    "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+    "Timeout exit 124 intentionally returns best-effort partial output; background launch is not completed-capture verification.",
+    "Early poll-failure cleanup remains outside these cases; real provider FS/exec behavior remains unverified.",
+    "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
+    "Persisted native database-handle absence is not a fresh remote-cloud VM query. Cloud cleanup stays blocked pending a reviewed oracle; connection/start effects and native retries remain unchanged."
+  ],
+  "executionGroup": "pnpm test:provider-contracts",
+  "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/microsandbox/dist/index.mjs",
+      "sha256": "ceceb10585de667b201b3730ead49dafe360a32624ce75f1a3ef934ee2181993"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "microsandbox",
+    "version": "0.6.18",
+    "manifestSha256": "39c24f2c9100654811d633981c481f0861cc1fdcb60a3de68e735855413bdcba"
+  }
+}

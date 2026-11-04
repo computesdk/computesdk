@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { defineProvider, resolveVolumeRef, createConfigGate, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, createConfigGate, isUnifiedVolumeMounts, withVolumeSettle, readVerifiedCommandOutput, parseCommandExitCode } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -228,7 +228,16 @@ function errorMessage(error: unknown): string {
 }
 
 function isNotFound(error: unknown): boolean {
+  // Public MicrosandboxError.code / SandboxNotFoundError discriminator in
+  // microsandbox 0.6.18. Message text and generic HTTP errors are not absence.
   return !!error && typeof error === 'object' && (error as { code?: string }).code === 'sandboxNotFound';
+}
+
+function requireSandboxName(handle: NativeSandboxHandle): string {
+  if (!handle || typeof handle.name !== 'string' || handle.name.length === 0) {
+    throw new Error('Microsandbox lookup returned a handle without a valid native name.');
+  }
+  return handle.name;
 }
 
 function requireLocal(backendKind: 'local' | 'cloud', capability: string): void {
@@ -485,12 +494,27 @@ async function execShort(native: NativeSandbox, script: string) {
   return native.execWith('/bin/sh', (builder) => builder.args(['-c', script]));
 }
 
-async function readGuestFile(native: NativeSandbox, path: string): Promise<string> {
+async function readGuestFileViaExec(
+  native: NativeSandbox,
+  path: string,
+  requireSuccessfulExec: boolean,
+): Promise<string> {
+  const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
+  if (requireSuccessfulExec && output.code !== 0) {
+    throw new Error('Microsandbox capture read did not exit successfully.');
+  }
+  return output.stdout();
+}
+
+async function readGuestFile(
+  native: NativeSandbox,
+  path: string,
+  requireSuccessfulExec = false,
+): Promise<string> {
   try {
     return await native.fs().readToString(path);
   } catch {
-    const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
-    return output.stdout();
+    return readGuestFileViaExec(native, path, requireSuccessfulExec);
   }
 }
 
@@ -498,21 +522,19 @@ async function readGuestFile(native: NativeSandbox, path: string): Promise<strin
  *  stdout alike) — a truncated read returns successfully and is
  *  indistinguishable from real output. The worker records the byte count
  *  next to each output file, so compare and retry once through the other
- *  transport before trusting the result. */
+ *  transport before trusting the result. Reject if neither read is exact. */
 async function readGuestFileChecked(
   native: NativeSandbox,
   path: string,
   lenPath: string,
+  stream: 'stdout' | 'stderr',
 ): Promise<string> {
-  const lenText = await readGuestFile(native, lenPath).catch(() => '');
-  const expected = Number.parseInt(lenText.trim(), 10);
-  const first = await readGuestFile(native, path);
-  if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
-  const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
-  const second = output.stdout();
-  // A second bad read is still better than dropping the whole result —
-  // return whichever capture got more bytes.
-  return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+  return readVerifiedCommandOutput({
+    readLength: () => readGuestFile(native, lenPath, true),
+    read: () => readGuestFile(native, path, true),
+    reread: () => readGuestFileViaExec(native, path, true),
+    stream,
+  });
 }
 
 async function runCommand(
@@ -600,9 +622,11 @@ async function runCommand(
     const remaining = deadline - performance.now();
     if (remaining <= 0) {
       await execShort(native, detachedKillScript(paths)).catch(() => undefined);
+      // A timed-out worker need not have written completion byte counts.
+      // Preserve best-effort partial output, not verified-completion semantics.
       const [stdout, stderr] = await Promise.all([
-        readGuestFileChecked(native, paths.out, paths.outLen).catch(() => ''),
-        readGuestFileChecked(native, paths.err, paths.errLen).catch(() => ''),
+        readGuestFile(native, paths.out).catch(() => ''),
+        readGuestFile(native, paths.err).catch(() => ''),
       ]);
       await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
       return {
@@ -617,15 +641,14 @@ async function runCommand(
 
   try {
     const [stdout, stderr, codeText] = await Promise.all([
-      readGuestFileChecked(native, paths.out, paths.outLen),
-      readGuestFileChecked(native, paths.err, paths.errLen),
-      readGuestFile(native, paths.code),
+      readGuestFileChecked(native, paths.out, paths.outLen, 'stdout'),
+      readGuestFileChecked(native, paths.err, paths.errLen, 'stderr'),
+      readGuestFile(native, paths.code, true).catch(() => ''),
     ]);
-    const exitCode = Number.parseInt(codeText.trim(), 10);
     return {
       stdout,
       stderr,
-      exitCode: Number.isNaN(exitCode) ? 1 : exitCode,
+      exitCode: parseCommandExitCode(codeText),
       durationMs: performance.now() - startedAt,
     };
   } finally {
@@ -855,16 +878,20 @@ const _microsandbox = defineProvider<
       }),
 
       getById: async (config, sandboxId) => withBackend(selectBackend(config), async ({ Sandbox }) => {
+        let handle: NativeSandboxHandle;
         try {
-          const handle = await Sandbox.get(sandboxId);
-          return {
-            sandbox: handleFromNative(handle, selectBackend(config), config.timeout ?? DEFAULT_TIMEOUT_MS),
-            sandboxId,
-          };
+          // The public get performs an existing-sandbox database lookup, not
+          // merely construction of a lightweight local handle.
+          handle = await Sandbox.get(sandboxId);
         } catch (error) {
           if (isNotFound(error)) return null;
           throw error;
         }
+        const instanceId = requireSandboxName(handle);
+        return {
+          instance: handleFromNative(handle, selectBackend(config), config.timeout ?? DEFAULT_TIMEOUT_MS),
+          instanceId,
+        };
       }),
 
       list: async (config) => withBackend(selectBackend(config), async ({ Sandbox }) => {
@@ -886,11 +913,17 @@ const _microsandbox = defineProvider<
       }),
 
       destroy: async (config, sandboxId) => withBackend(selectBackend(config), async ({ Sandbox }) => {
+        let handle: NativeSandboxHandle;
         try {
-          await removeSandbox(await Sandbox.get(sandboxId));
+          handle = await Sandbox.get(sandboxId);
         } catch (error) {
-          if (!isNotFound(error)) throw error;
+          if (isNotFound(error)) return;
+          throw error;
         }
+        requireSandboxName(handle);
+        // stopWithTimeout/remove return void. Keep retries, but never hide
+        // their failures after a positive lookup (including deletion races).
+        await removeSandbox(handle);
       }),
 
       runCommand,

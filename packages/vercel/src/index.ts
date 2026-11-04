@@ -2,7 +2,7 @@
  * Vercel Provider - Factory-based Implementation
  */
 
-import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive } from '@vercel/sandbox';
+import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive, APIError as VercelAPIError } from '@vercel/sandbox';
 import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import { Writable } from 'node:stream';
 
@@ -58,6 +58,30 @@ function validateCredentials(creds: ResolvedCredentials): void {
   if (!creds.projectId) throw new Error(`Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID.`);
 }
 
+function isMissingSandbox(error: unknown): boolean {
+  // Match the installed SDK's own authoritative sandbox-not-found check.
+  return error instanceof VercelAPIError && error.response.status === 404;
+}
+
+async function lookupSandbox(config: VercelConfig, sandboxId: string): Promise<VercelSandbox | null> {
+  const creds = resolveCredentials(config);
+  validateCredentials(creds);
+  let sandbox: VercelSandbox;
+  try {
+    // Native get performs a metadata request and retains its resume behavior.
+    sandbox = creds.useOidc
+      ? await VercelSandbox.get({ name: sandboxId })
+      : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
+  } catch (error) {
+    if (isMissingSandbox(error)) return null;
+    throw error;
+  }
+  if (!sandbox || typeof sandbox.name !== 'string' || !sandbox.name || sandbox.name !== sandboxId) {
+    throw new Error('Vercel sandbox lookup returned an invalid identity.');
+  }
+  return sandbox;
+}
+
 function getUtf8Sink() {
   const chunks: string[] = [];
   const sink = new Writable({
@@ -67,6 +91,28 @@ function getUtf8Sink() {
     },
   });
   return { sink, value: () => chunks.join("") };
+}
+
+/** The native SDK did not supply a valid command completion/launch status. */
+export class VercelCommandProtocolError extends Error {
+  readonly code = 'VERCEL_COMMAND_PROTOCOL_ERROR';
+  readonly provider = 'vercel';
+
+  constructor() {
+    super('Vercel command completion status is invalid.');
+    this.name = 'VercelCommandProtocolError';
+  }
+}
+
+function commandExitCode(result: unknown, background?: boolean): number {
+  if (typeof result !== 'object' || result === null) throw new VercelCommandProtocolError();
+  const status = (result as { exitCode?: unknown }).exitCode;
+  // @vercel/sandbox's detached Command uses null while it is still running.
+  // Zero here acknowledges launch, not successful completion of that command.
+  if (background && status === null) return 0;
+  // Native types impose no unsigned byte range; retain negative signal statuses.
+  if (typeof status !== 'number' || !Number.isInteger(status)) throw new VercelCommandProtocolError();
+  return status;
 }
 
 export const vercel = defineProvider<VercelSandbox, VercelConfig>({
@@ -152,13 +198,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
       },
 
       getById: async (config: VercelConfig, sandboxId: string) => {
-        const creds = resolveCredentials(config);
-        try {
-          const sandbox = creds.useOidc
-            ? await VercelSandbox.get({ name: sandboxId })
-            : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          return { instance: sandbox, instanceId: sandboxId };
-        } catch { return null; }
+        const sandbox = await lookupSandbox(config, sandboxId);
+        return sandbox ? { instance: sandbox, instanceId: sandboxId } : null;
       },
 
       list: async (_config: VercelConfig) => {
@@ -166,13 +207,16 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
       },
 
       destroy: async (config: VercelConfig, sandboxId: string) => {
-        const creds = resolveCredentials(config);
+        const sandbox = await lookupSandbox(config, sandboxId);
+        if (!sandbox) return;
         try {
-          const sandbox = creds.useOidc
-            ? await VercelSandbox.get({ name: sandboxId })
-            : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          await sandbox.stop();
-        } catch { /* already destroyed or doesn't exist */ }
+          // stop only ends a resumable session. Permanently delete this sandbox,
+          // without extending teardown to snapshots or separately owned drives.
+          // Native delete awaits its request and returns void.
+          await sandbox.delete({ deleteOrphanSnapshots: false });
+        } catch (error) {
+          if (!isMissingSandbox(error)) throw error;
+        }
       },
 
       runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
@@ -191,8 +235,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
             stdout: stdout?.sink, stderr: stderr?.sink,
             timeoutMs: options?.timeout,
           });
-          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
+          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: commandExitCode(result, options?.background), durationMs: Date.now() - startTime };
         } catch (error) {
+          if (error instanceof VercelCommandProtocolError) throw error;
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
       },

@@ -3,6 +3,8 @@
  */
 
 import { Daytona, DaytonaNotFoundError, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
+import { Configuration, SandboxApi } from '@daytona/api-client';
+import axios, { isAxiosError } from 'axios';
 import { resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, errorText } from '@computesdk/provider';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
@@ -14,10 +16,110 @@ import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, Run
 export interface DaytonaConfig {
   /** Daytona API key - if not provided, will fallback to DAYTONA_API_KEY environment variable */
   apiKey?: string;
+  /** Daytona API URL; defaults to DAYTONA_API_URL or the native SDK's public endpoint. */
+  apiUrl?: string;
+  /** Organization used by the native Daytona client. */
+  organizationId?: string;
+  /** Default native Daytona region. */
+  target?: string;
   /** Default runtime environment (e.g. 'python', 'node') */
   runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+}
+
+/** The wrapper did not supply trustworthy child completion metadata. */
+export class DaytonaCommandProtocolError extends Error {
+  readonly code = 'DAYTONA_COMMAND_PROTOCOL_ERROR';
+  readonly provider = 'daytona';
+
+  constructor(readonly reason: 'missing-completion' | 'invalid-completion') {
+    super(reason === 'invalid-completion'
+      ? 'Daytona command completion status is invalid.'
+      : 'Daytona command response did not contain a valid completion record.');
+    this.name = 'DaytonaCommandProtocolError';
+  }
+}
+
+function requireDaytonaLookupIdentity(identity: unknown): string {
+  // Treat IDs/names as opaque, not URLs. Even encodeURIComponent leaves dot
+  // segments intact; percent escapes, separators, and controls can be routed
+  // differently by HTTP clients/proxies. Reject rather than rewrite or trim.
+  if (typeof identity !== 'string' || identity.length === 0
+    || identity !== identity.trim() || identity === '.' || identity === '..'
+    || /[\u0000-\u001f\u007f:/\\?#%]/u.test(identity)
+    || /[\uD800-\uDFFF]/u.test(identity)) {
+    throw new Error('Daytona lookup requires an unambiguous native ID or name.');
+  }
+  return identity;
+}
+
+function requireDaytonaSandboxIdentity(sandbox: Pick<DaytonaSandbox, 'id'>): string {
+  if (!sandbox || typeof sandbox.id !== 'string' || sandbox.id.length === 0) {
+    throw new Error('Daytona lookup returned a sandbox without a valid native identity.');
+  }
+  return requireDaytonaLookupIdentity(sandbox.id);
+}
+
+/** Never retain raw Axios errors: their request/response/cause contain auth. */
+class DaytonaMetadataLookupError extends Error {
+  readonly code = 'DAYTONA_METADATA_LOOKUP_FAILED';
+
+  constructor(readonly statusCode?: number) {
+    super('Daytona sandbox metadata lookup failed.');
+    this.name = 'DaytonaMetadataLookupError';
+  }
+}
+
+/**
+ * A public Daytona.get() 404 is ambiguous: SDK 0.224.0 first GETs the resource,
+ * then may GET its toolbox proxy URL. Probe only the resource with the public
+ * generated client; never infer absence from full-handle hydration errors.
+ */
+async function lookupDaytonaSandbox(config: DaytonaConfig, sandboxId: string): Promise<DaytonaSandbox | null> {
+  requireDaytonaLookupIdentity(sandboxId);
+  const apiKey = config.apiKey || process.env.DAYTONA_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing Daytona API key. Provide 'apiKey' in config or set DAYTONA_API_KEY environment variable.");
+  }
+  // Resolve once and pass the same scope to both public clients. These defaults
+  // are DaytonaConfig's documented process-environment/default endpoint values,
+  // not inferred endpoints or private fields from a constructed Daytona client.
+  const nativeConfig = {
+    apiKey,
+    apiUrl: config.apiUrl || process.env.DAYTONA_API_URL || process.env.DAYTONA_SERVER_URL || 'https://app.daytona.io/api',
+    organizationId: config.organizationId || process.env.DAYTONA_ORGANIZATION_ID,
+    target: config.target || process.env.DAYTONA_TARGET,
+  };
+  let metadata;
+  try {
+    const metadataApi = new SandboxApi(new Configuration({
+      basePath: nativeConfig.apiUrl,
+      accessToken: nativeConfig.apiKey,
+    }), '', axios.create({
+      // Isolate caller-installed global interceptors and never forward credentials
+      // through a redirect. Match the installed SDK's default response deadline.
+      maxRedirects: 0,
+      timeout: 24 * 60 * 60 * 1000,
+    }));
+    metadata = (await metadataApi.getSandbox(sandboxId)).data;
+  } catch (error) {
+    // Only this exact resource request's typed HTTP response proves absence.
+    const status = isAxiosError(error) ? error.response?.status : undefined;
+    if (status === 404) return null;
+    throw new DaytonaMetadataLookupError(
+      typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+        ? status : undefined,
+    );
+  }
+  const canonicalId = requireDaytonaSandboxIdentity(metadata);
+  // Do not construct the high-level client on absence: its constructor opens
+  // an event connection. Obtain complete usable handles only via public get.
+  const session = await new Daytona(nativeConfig).get(canonicalId);
+  if (requireDaytonaSandboxIdentity(session) !== canonicalId) {
+    throw new Error('Daytona lookup returned a sandbox with an inconsistent native identity.');
+  }
+  return session;
 }
 
 /**
@@ -160,17 +262,9 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       getById: async (config: DaytonaConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        try {
-          const daytona = new Daytona({ apiKey: apiKey });
-          const session = await daytona.get(sandboxId);
-          return { instance: session, instanceId: sandboxId };
-        } catch (error) {
-          if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
-            return null;
-          }
-          throw new Error(`Failed to get Daytona sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        const session = await lookupDaytonaSandbox(config, sandboxId);
+        if (!session) return null;
+        return { instance: session, instanceId: requireDaytonaSandboxIdentity(session) };
       },
 
       list: async (config: DaytonaConfig) => {
@@ -190,31 +284,22 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       destroy: async (config: DaytonaConfig, sandboxId: string) => {
-        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
-        try {
-          const daytona = new Daytona({ apiKey: apiKey });
-          const sandbox = await daytona.get(sandboxId);
-          await sandbox.delete();
-        } catch (error) {
-          if (error instanceof Error && (error.message.includes('not found') || error.message.includes('404'))) {
-            return;
-          }
-          throw new Error(`Failed to destroy Daytona sandbox ${sandboxId}: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        const sandbox = await lookupDaytonaSandbox(config, sandboxId);
+        if (!sandbox) return;
+        // Native delete resolves void once accepted. Do not invent an
+        // acknowledgement shape or suppress failures after a positive lookup.
+        await sandbox.delete();
       },
 
       runCommand: async (sandbox: DaytonaSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
           let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
+          if (options?.background) {
+            // Group the whole payload in the native-selected shell (which can
+            // be zsh/bash/sh), ignore hangup, and detach its standard streams.
+            fullCommand = `(\ntrap '' HUP\n${command}\n) </dev/null >/dev/null 2>&1 &`;
           }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
 
           // executeCommand returns one merged `result` — separate stderr by
           // redirecting it to a file and cat'ing it back behind a delimiter.
@@ -222,25 +307,43 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           const delim = `__COMPUTESDK_STDERR_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
           // Capture the real exit code in-band — the wrapper's own exit code is
           // always the cleanup's (0), not the command's.
-          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __dy_ec=$?; echo "${delim}$__dy_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+          // Isolate `exit`, and place boundaries on their own lines so a
+          // trailing comment, heredoc or & cannot swallow/break the wrapper.
+          // Native env applies to this wrapper too; a custom PATH must not
+          // prevent stderr capture or cleanup from using standard utilities.
+          const wrapped = `(\n${fullCommand}\n) 2>"${escapeShellArg(errFile)}"\n__dy_ec=$?\nprintf '%s%s\\n' "${delim}" "$__dy_ec"\ncommand -p cat "${escapeShellArg(errFile)}" 2>/dev/null\ncommand -p rm -f "${escapeShellArg(errFile)}"`;
 
           const response = await sandbox.process.executeCommand(
             wrapped,
-            undefined,
-            undefined,
+            options?.cwd,
+            options?.env,
             options?.timeout !== undefined ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined,
           );
           const merged = response.result || '';
           const delimIdx = merged.lastIndexOf(delim);
           let stdout = merged;
           let stderr = '';
-          let exitCode = response.exitCode || 0;
+          let exitCode: number;
           if (delimIdx !== -1) {
-            stdout = merged.substring(0, delimIdx).replace(/\n$/, '');
             const after = merged.substring(delimIdx + delim.length);
             const newlineIdx = after.indexOf('\n');
-            exitCode = parseInt(newlineIdx === -1 ? after : after.substring(0, newlineIdx), 10) || 0;
-            stderr = newlineIdx === -1 ? '' : after.substring(newlineIdx + 1);
+            const status = newlineIdx === -1 ? '' : after.substring(0, newlineIdx);
+            if (!/^\d{1,3}$/.test(status) || Number(status) > 255) {
+              throw new DaytonaCommandProtocolError('invalid-completion');
+            }
+            stdout = merged.substring(0, delimIdx);
+            exitCode = Number(status);
+            stderr = after.substring(newlineIdx + 1);
+          } else {
+            // A native wrapper failure is useful failure information. Its
+            // success, however, may only be the cleanup's status—not proof that
+            // the child completed or its in-band status reached the caller.
+            const nativeCode = response.exitCode;
+            if (typeof nativeCode !== 'number' || !Number.isInteger(nativeCode)
+              || nativeCode < 1 || nativeCode > 255) {
+              throw new DaytonaCommandProtocolError('missing-completion');
+            }
+            exitCode = nativeCode;
           }
           return {
             stdout,
@@ -249,6 +352,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             durationMs: Date.now() - startTime
           };
         } catch (error) {
+          if (error instanceof DaytonaCommandProtocolError) throw error;
           throw new Error(`Daytona command execution failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       },

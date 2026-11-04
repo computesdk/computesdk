@@ -18,6 +18,10 @@ const mock = vi.hoisted(() => ({
   detachedLateClaim: false,
   detachedLaunches: 0,
   detachedCommandRuns: 0,
+  detachedReads: new Map<string, string[]>(),
+  fsReadFailures: new Set<string>(),
+  execReadStatuses: new Map<string, number | undefined>(),
+  fileReads: [] as Array<{ suffix: string; transport: 'fs' | 'exec' }>,
   removeError: null as Error | null,
   stopFailures: 0,
   stopAttempts: 0,
@@ -29,6 +33,16 @@ const mock = vi.hoisted(() => ({
 }));
 
 vi.mock('microsandbox', () => {
+  function readOverride(path: string, transport: 'fs' | 'exec'): string | undefined {
+    const suffix = path.split('.').pop() ?? '';
+    mock.fileReads.push({ suffix, transport });
+    if (transport === 'fs' && mock.fsReadFailures.has(suffix)) {
+      throw new Error('PRIVATE_NATIVE_CAPTURE_SECRET');
+    }
+    const values = mock.detachedReads.get(suffix);
+    return values ? (values.length > 1 ? values.shift()! : values[0]) : undefined;
+  }
+
   class ExecBuilder {
     options: Record<string, unknown> = {};
     args(value: string[]) { this.options.args = value; return this; }
@@ -41,6 +55,8 @@ vi.mock('microsandbox', () => {
     files = new Map<string, string>();
     directories = new Set<string>(['/', '/tmp']);
     async readToString(path: string) {
+      const override = readOverride(path, 'fs');
+      if (override !== undefined) return override;
       const value = this.files.get(path);
       if (value == null) throw new Error(`missing ${path}`);
       return value;
@@ -89,6 +105,8 @@ vi.mock('microsandbox', () => {
             this.fsOps.files.set(out, 'late-worker\n');
             this.fsOps.files.set(err, '');
             this.fsOps.files.set(code, '0');
+            this.fsOps.files.set(`${base}.outlen`, String(Buffer.byteLength('late-worker\n')));
+            this.fsOps.files.set(`${base}.errlen`, '0');
             mock.detachedCommandRuns++;
           }
           // The worker's pid write is noclobber: an existing sentinel means
@@ -98,7 +116,11 @@ vi.mock('microsandbox', () => {
             const failed = script.includes('missing-command');
             this.fsOps.files.set(out, script.includes('echo hello') ? 'hello\n' : '');
             this.fsOps.files.set(err, failed ? 'not found\n' : '');
-            if (!mock.detachedNeverDone) this.fsOps.files.set(code, failed ? '127' : '0');
+            if (!mock.detachedNeverDone) {
+              this.fsOps.files.set(`${base}.outlen`, String(Buffer.byteLength(this.fsOps.files.get(out)!)));
+              this.fsOps.files.set(`${base}.errlen`, String(Buffer.byteLength(this.fsOps.files.get(err)!)));
+              this.fsOps.files.set(code, failed ? '127' : '0');
+            }
             if (mock.detachedDies && firstLaunch) this.fsOps.files.delete(code);
             mock.detachedCommandRuns++;
           }
@@ -113,10 +135,16 @@ vi.mock('microsandbox', () => {
         }
         if (script.startsWith('cat ')) {
           const target = script.match(/'([^']+)'/)?.[1] ?? '';
-          return { code: 0, stdout: () => this.fsOps.files.get(target) ?? '', stderr: () => '' };
+          const text = readOverride(target, 'exec') ?? this.fsOps.files.get(target) ?? '';
+          const suffix = target.split('.').pop() ?? '';
+          const status = mock.execReadStatuses.has(suffix) ? mock.execReadStatuses.get(suffix) : 0;
+          return { get code() { return status; }, stdout: () => text, stderr: () => 'PRIVATE_NATIVE_CAPTURE_SECRET' };
         }
-        if (script.startsWith('rm -f') || script.includes('kill')) {
-          for (const path of [pid, out, err, code]) this.fsOps.files.delete(path);
+        if (script.startsWith('rm -f')) {
+          for (const path of [pid, out, err, code, `${base}.outlen`, `${base}.errlen`]) this.fsOps.files.delete(path);
+          return { code: 0, stdout: () => '', stderr: () => '' };
+        }
+        if (script.includes('kill')) {
           return { code: 0, stdout: () => '', stderr: () => '' };
         }
       }
@@ -272,6 +300,10 @@ beforeEach(async () => {
   mock.detachedLateClaim = false;
   mock.detachedLaunches = 0;
   mock.detachedCommandRuns = 0;
+  mock.detachedReads.clear();
+  mock.fsReadFailures.clear();
+  mock.execReadStatuses.clear();
+  mock.fileReads.length = 0;
   mock.removeError = null;
   mock.stopFailures = 0;
   mock.stopAttempts = 0;
@@ -594,6 +626,209 @@ describe('microsandbox provider', () => {
     expect((await sandboxes[0].getInfo()).metadata).toMatchObject({ owner: 'test' });
   });
 
+  describe('capture read native success', () => {
+    async function rejectsCapture(promise: Promise<unknown>, reason: string, stream?: string) {
+      const error = await promise.then(() => null, (error) => error);
+      expect(error).toMatchObject({ code: 'COMMAND_OUTPUT_INTEGRITY', reason, ...(stream ? { stream } : {}) });
+      expect(`${error.message} ${JSON.stringify(error)}`).not.toContain('PRIVATE_NATIVE_CAPTURE_SECRET');
+      expect(error).not.toHaveProperty('cause');
+      expect(mock.handles.get('capture-read-box').native.fsOps.files.size).toBe(0);
+      expect(mock.detachedCommandRuns).toBe(1);
+    }
+
+    describe.each(['out', 'err'] as const)('%s stream', (stream) => {
+      it.each(['', 'é🙂'])('rejects failed fallback cat even with exact capture %j', async (text) => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+        mock.detachedReads.set(`${stream}len`, [String(Buffer.byteLength(text))]);
+        mock.detachedReads.set(stream, [text]);
+        mock.fsReadFailures.add(stream);
+        mock.execReadStatuses.set(stream, 1);
+        await rejectsCapture(sandbox.runCommand('true'), 'output-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it.each([undefined, NaN, -1, 0.5])('rejects fallback cat with invalid native status %j', async (status) => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+        mock.detachedReads.set(`${stream}len`, ['0']);
+        mock.detachedReads.set(stream, ['']);
+        mock.fsReadFailures.add(stream);
+        mock.execReadStatuses.set(stream, status);
+        await rejectsCapture(sandbox.runCommand('true'), 'output-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it.each([1, undefined])('rejects alternate exact cat with native status %j', async (status) => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+        mock.detachedReads.set(`${stream}len`, ['6']);
+        mock.detachedReads.set(stream, ['x', 'é🙂']);
+        mock.execReadStatuses.set(stream, status);
+        await rejectsCapture(sandbox.runCommand('true'), 'output-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+        expect(mock.fileReads.filter((read) => read.suffix === stream)).toEqual([
+          { suffix: stream, transport: 'fs' }, { suffix: stream, transport: 'exec' },
+        ]);
+      });
+
+      it('rejects a failed byte-count fallback even with plausible numeric content', async () => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+        mock.detachedReads.set(`${stream}len`, ['0']);
+        mock.detachedReads.set(stream, ['']);
+        mock.fsReadFailures.add(`${stream}len`);
+        mock.execReadStatuses.set(`${stream}len`, 1);
+        await rejectsCapture(sandbox.runCommand('true'), 'length-read-failed', stream === 'out' ? 'stdout' : 'stderr');
+      });
+
+      it('accepts successful empty native FS reads without consulting failed exec', async () => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+        mock.detachedReads.set(`${stream}len`, ['0']);
+        mock.detachedReads.set(stream, ['']);
+        mock.execReadStatuses.set(stream, 1);
+        const result = await sandbox.runCommand('true');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('');
+        expect(mock.fileReads.filter((read) => read.suffix === stream)).toEqual([{ suffix: stream, transport: 'fs' }]);
+      });
+
+      it('accepts successful fallback empty cat after FS failure', async () => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+        mock.detachedReads.set(`${stream}len`, ['0']);
+        mock.detachedReads.set(stream, ['']);
+        mock.fsReadFailures.add(stream);
+        const result = await sandbox.runCommand('true');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('');
+      });
+    });
+
+    it('rejects a failed child-code fallback even with a plausible nonzero child code', async () => {
+      const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+      mock.detachedReads.set('code', ['23']);
+      mock.fsReadFailures.add('code');
+      mock.execReadStatuses.set('code', 1);
+      await rejectsCapture(sandbox.runCommand('true'), 'invalid-exit-code');
+    });
+
+    it('accepts a nonzero child code from successful fallback cat', async () => {
+      const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+      mock.detachedReads.set('code', ['23']);
+      mock.fsReadFailures.add('code');
+      await expect(sandbox.runCommand('exit 23')).resolves.toMatchObject({ exitCode: 23 });
+      expect(mock.fileReads.filter((read) => read.suffix === 'code')).toEqual([
+        { suffix: 'code', transport: 'fs' }, { suffix: 'code', transport: 'exec' },
+      ]);
+    });
+
+    it('keeps timeout124 partial reads best-effort even if fallback cat exits nonzero', async () => {
+      const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'capture-read-box' });
+      mock.detachedNeverDone = true;
+      for (const stream of ['out', 'err']) {
+        mock.fsReadFailures.add(stream);
+        mock.execReadStatuses.set(stream, 1);
+        mock.detachedReads.set(stream, [`partial ${stream}`]);
+      }
+      await expect(sandbox.runCommand('sleep 60', { timeout: 5 })).resolves.toMatchObject({
+        stdout: 'partial out', stderr: 'partial err', exitCode: 124,
+      });
+      expect(mock.handles.get('capture-read-box').native.fsOps.files.size).toBe(0);
+      expect(mock.detachedCommandRuns).toBe(1);
+    });
+  });
+
+  describe('completed command output integrity', () => {
+    describe.each(['out', 'err'] as const)('%s stream', (stream) => {
+      it('rejects two truncated captures rather than returning the longer one', async () => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+        mock.detachedReads.set(`${stream}len`, ['100']);
+        mock.detachedReads.set(stream, ['x'.repeat(40), 'x'.repeat(60)]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+          reason: 'byte-length-mismatch',
+          stream: stream === 'out' ? 'stdout' : 'stderr',
+          expectedBytes: 100,
+          actualBytes: 60,
+          attempts: 2,
+        });
+        expect(mock.handles.get('integrity-box').native.fsOps.files.size).toBe(0);
+      });
+
+      it('accepts an exact second capture only, including UTF-8 bytes', async () => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+        mock.detachedReads.set(`${stream}len`, [' 7\n']);
+        mock.detachedReads.set(stream, ['é', 'é🙂\n']);
+        const result = await sandbox.runCommand('echo hello');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('é🙂\n');
+        expect(mock.fileReads.filter((read) => read.suffix === stream)).toEqual([{ suffix: stream, transport: 'fs' }, { suffix: stream, transport: 'exec' }]);
+        expect(mock.handles.get('integrity-box').native.fsOps.files.size).toBe(0);
+      });
+
+      it('does not reread an exact first UTF-8 capture', async () => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+        mock.detachedReads.set(`${stream}len`, ['6']);
+        mock.detachedReads.set(stream, ['é🙂', 'must not be read']);
+        const result = await sandbox.runCommand('echo hello');
+        expect(result[stream === 'out' ? 'stdout' : 'stderr']).toBe('é🙂');
+        expect(mock.fileReads.filter((read) => read.suffix === stream)).toEqual([{ suffix: stream, transport: 'fs' }]);
+      });
+
+      it('rejects an oversized second capture too', async () => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+        mock.detachedReads.set(`${stream}len`, ['3']);
+        mock.detachedReads.set(stream, ['x', 'xxxx']);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+        });
+        expect(mock.handles.get('integrity-box').native.fsOps.files.size).toBe(0);
+      });
+    });
+
+    it.each(['', 'garbage', '100junk', '-1', '1.5', '1e2', 'Infinity', '9007199254740992'])(
+      'rejects missing or invalid byte count %j', async (length) => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+        mock.detachedReads.set('outlen', [length]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+        });
+        expect(mock.handles.get('integrity-box').native.fsOps.files.size).toBe(0);
+      },
+    );
+
+    it('accepts empty output only with verified zero lengths', async () => {
+      const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+      for (const stream of ['out', 'err']) {
+        mock.detachedReads.set(stream, ['']);
+        mock.detachedReads.set(`${stream}len`, ['0']);
+      }
+      await expect(sandbox.runCommand('true')).resolves.toMatchObject({
+        stdout: '', stderr: '', exitCode: 0,
+      });
+      expect(mock.handles.get('integrity-box').native.fsOps.files.size).toBe(0);
+    });
+
+    it('verifies stdout and stderr independently without mixing captures', async () => {
+      const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+      mock.detachedReads.set('outlen', ['3']);
+      mock.detachedReads.set('out', ['out']);
+      mock.detachedReads.set('errlen', ['4']);
+      mock.detachedReads.set('err', ['e', 'err!']);
+      await expect(sandbox.runCommand('echo hello')).resolves.toMatchObject({
+        stdout: 'out', stderr: 'err!', exitCode: 0,
+      });
+    });
+
+    it.each(['', 'garbage', '0junk', '-1', '256', '1.5', '1e2', '9007199254740992'])(
+      'rejects missing or invalid child exit code %j despite native exit zero', async (code) => {
+        const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+        mock.detachedReads.set('code', [code]);
+        await expect(sandbox.runCommand('echo hello')).rejects.toMatchObject({
+          code: 'COMMAND_OUTPUT_INTEGRITY',
+          reason: 'invalid-exit-code',
+        });
+        expect(mock.handles.get('integrity-box').native.fsOps.files.size).toBe(0);
+      },
+    );
+
+    it('preserves a known nonzero child exit code', async () => {
+      const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'integrity-box' });
+      mock.detachedReads.set('code', [' 23\n']);
+      await expect(sandbox.runCommand('echo hello; exit 23')).resolves.toMatchObject({ exitCode: 23 });
+    });
+  });
+
   it('executes commands and streams stdout and stderr through native events', async () => {
     const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'exec-box' });
     expect(await sandbox.runCommand('echo hello')).toMatchObject({ stdout: 'hello\n', exitCode: 0 });
@@ -697,10 +932,33 @@ describe('microsandbox provider', () => {
   it('times out detached commands with partial output and exit 124', async () => {
     const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'slow-box' });
     mock.detachedNeverDone = true;
+    // A running worker has not published completion byte counts or a child
+    // exit sentinel. Partial timeout output is deliberately not verified as
+    // though it came from a normally completed command.
+    mock.detachedReads.set('out', ['partial stdout']);
+    mock.detachedReads.set('err', ['partial stderr']);
 
     const result = await sandbox.runCommand('sleep 60', { timeout: 5 });
 
-    expect(result.exitCode).toBe(124);
+    expect(result).toMatchObject({
+      stdout: 'partial stdout',
+      stderr: 'partial stderr',
+      exitCode: 124,
+    });
+    expect(mock.handles.get('slow-box').native.fsOps.files.size).toBe(0);
+  });
+
+  it('does not apply completed-output verification to background commands', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'background-box' });
+    mock.detachedReads.set('outlen', ['invalid']);
+    mock.detachedReads.set('errlen', ['invalid']);
+    mock.detachedReads.set('code', ['invalid']);
+
+    await expect(sandbox.runCommand('echo hello', { background: true })).resolves.toMatchObject({
+      exitCode: 0,
+    });
+    expect(mock.detachedLaunches).toBe(0);
+    expect(mock.fileReads).toEqual([]);
   });
 
   it('uses the native filesystem surface', async () => {

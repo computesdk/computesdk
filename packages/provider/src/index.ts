@@ -62,6 +62,12 @@ export type {
 export { calculateBackoff, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, errorText } from './utils';
 export type { VolumeRef } from './utils';
 
+export {
+  readVerifiedCommandOutput,
+  parseCommandExitCode,
+  CommandOutputIntegrityError,
+} from './command-output';
+
 // Export the process-API streaming helper for providers that stream natively
 export {
   streamCommandViaProcess,

@@ -18,7 +18,8 @@
  *      without any environment configuration beyond the API key.
  */
 
-import { Sandbox as E2BSandbox, CommandExitError } from 'e2b';
+import { Sandbox as E2BSandbox, CommandExitError, SandboxNotFoundError } from 'e2b';
+import type { SandboxInfo } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -108,6 +109,23 @@ export interface LelantosConfig {
 
 const env = (key: string): string | undefined =>
   (typeof process !== 'undefined' ? process.env?.[key] : undefined) || undefined;
+
+function validateSandboxId(id: unknown): asserts id is string {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new Error('Lelantos sandbox ID must be a non-empty string.');
+  }
+  // Native path serialization escapes delimiters, but leaves literal dot
+  // segments unescaped. Reject ambiguous references, without a slug/UUID rule.
+  let decoded = id;
+  for (;;) {
+    if (/[/\\?#\u0000-\u001f\u007f]/.test(decoded) || decoded === '.' || decoded === '..') {
+      throw new Error('Lelantos sandbox ID must be a route-safe reference.');
+    }
+    const next = decoded.replace(/%([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+    if (next === decoded) break;
+    decoded = next;
+  }
+}
 
 /**
  * Lelantos API keys are `lel_` + lowercase hex. The e2b SDK validates the key
@@ -207,7 +225,7 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
           } else {
             sandbox = await E2BSandbox.create(createOpts);
           }
-          if (!sandbox.sandboxId) throw new Error('Lelantos create() returned sandbox without an ID');
+          validateSandboxId(sandbox?.sandboxId);
           sandboxId = sandbox.sandboxId;
 
           return { instance: sandbox, instanceId: sandboxId };
@@ -225,10 +243,25 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
       },
 
       getById: async (config: LelantosConfig, sandboxId: string) => {
+        validateSandboxId(sandboxId);
+        const options = connectOpts(config);
+        let info: SandboxInfo;
         try {
-          const sandbox = await E2BSandbox.connect(sandboxId, connectOpts(config));
-          return { instance: sandbox, instanceId: sandboxId };
-        } catch { return null; }
+          info = await E2BSandbox.getInfo(sandboxId, options);
+        } catch (error) {
+          if (error instanceof SandboxNotFoundError) return null;
+          throw error;
+        }
+        if (!info || info.sandboxId !== sandboxId) {
+          throw new Error('Invalid Lelantos sandbox getInfo response.');
+        }
+        // Public connect supplies native execution tokens, but can resume/renew
+        // a sandbox. Any failure after positive lookup (even 404) must propagate.
+        const sandbox = await E2BSandbox.connect(sandboxId, options);
+        if (!sandbox || sandbox.sandboxId !== sandboxId) {
+          throw new Error('Invalid Lelantos sandbox connect response.');
+        }
+        return { instance: sandbox, instanceId: sandbox.sandboxId };
       },
 
       list: async (config: LelantosConfig) => {
@@ -244,10 +277,13 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
       },
 
       destroy: async (config: LelantosConfig, sandboxId: string) => {
-        try {
-          const sandbox = await E2BSandbox.connect(sandboxId, connectOpts(config));
-          await sandbox.kill();
-        } catch { /* already destroyed */ }
+        validateSandboxId(sandboxId);
+        // Static kill does not connect/resume paused sandboxes. Native false
+        // explicitly acknowledges missing; no thrown error means success.
+        const killed = await E2BSandbox.kill(sandboxId, connectOpts(config));
+        if (typeof killed !== 'boolean') {
+          throw new Error('Invalid Lelantos sandbox kill response.');
+        }
       },
 
       runCommand: async (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {

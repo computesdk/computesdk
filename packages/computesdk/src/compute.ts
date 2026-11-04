@@ -45,7 +45,7 @@ interface ProviderInstanceManager {
 
 interface ProviderSnapshotManager {
   create(instanceId: string, options?: { name?: string; metadata?: Record<string, any> }): Promise<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>;
-  list(): Promise<Array<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>>;
+  list(): Promise<Array<{ id: string; provider: string; createdAt?: Date | string | null; metadata?: Record<string, any> }>>;
   delete(snapshotId: string): Promise<void>;
 }
 
@@ -193,7 +193,9 @@ class ComputeManager {
   private fallbackOnError = true;
   private roundRobinCursor = 0;
   private instanceProviders = new Map<string, DirectProvider>();
-  private snapshotProviders = new Map<string, DirectProvider>();
+  // Snapshot IDs are provider-local. Preserve every observed owner rather
+  // than letting a later list/create silently replace destructive routing.
+  private snapshotProviders = new Map<string, Set<DirectProvider>>();
   private volumeProviders = new Map<string, DirectProvider>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
@@ -224,8 +226,34 @@ class ComputeManager {
     }
   }
 
-  private getCreateCandidates(preferredProviderName?: string): DirectProvider[] {
+  private registerSnapshotProvider(snapshotId: string, provider: DirectProvider): void {
+    const owners = this.snapshotProviders.get(snapshotId);
+    if (owners) {
+      owners.add(provider);
+    } else {
+      this.snapshotProviders.set(snapshotId, new Set([provider]));
+    }
+  }
+
+  private getCreateCandidates(preferredProviderName?: string, snapshotId?: string): DirectProvider[] {
     const providers = this.getProviders();
+    const snapshotOwners = snapshotId === undefined ? undefined : this.snapshotProviders.get(snapshotId);
+    if (snapshotOwners) {
+      if (preferredProviderName) {
+        // Resolve against actual owners, never substitute a global name match.
+        const matches = [...snapshotOwners].filter((owner) => owner.name === preferredProviderName);
+        if (matches.length > 1) {
+          throw new Error(`Snapshot "${snapshotId}" has ambiguous provider ownership for "${preferredProviderName}".`);
+        }
+        if (matches.length === 1) return matches;
+        this.getProviderByName(preferredProviderName); // Preserve the unconfigured-name error.
+        throw new Error(`Provider "${preferredProviderName}" does not own snapshot "${snapshotId}".`);
+      }
+      if (snapshotOwners.size > 1) {
+        throw new Error(`Snapshot "${snapshotId}" has ambiguous provider ownership. Specify an owning provider to restore it.`);
+      }
+      return [...snapshotOwners];
+    }
     if (preferredProviderName) {
       return [this.getProviderByName(preferredProviderName)];
     }
@@ -251,24 +279,28 @@ class ComputeManager {
 
   private getSnapshotDeleteCandidates(snapshotId: string): DirectProvider[] {
     const known = this.snapshotProviders.get(snapshotId);
-    const providers = this.getProviders().filter((p) => !!p.snapshot);
-    if (!known) return providers;
-    return [known, ...providers.filter((p) => p !== known)];
+    if (known) {
+      if (known.size > 1) {
+        throw new Error(`Snapshot "${snapshotId}" has ambiguous provider ownership. Delete it through the owning provider's direct API.`);
+      }
+      return [...known];
+    }
+    return this.getProviders().filter((p) => !!p.snapshot);
   }
 
   private getSnapshotCreateCandidates(instanceId: string, preferredProviderName?: string): DirectProvider[] {
-    if (preferredProviderName) {
-      return [this.getProviderByName(preferredProviderName)];
-    }
-
+    const preferred = preferredProviderName ? this.getProviderByName(preferredProviderName) : undefined;
     const known = this.instanceProviders.get(instanceId);
-    const providers = this.getProviders().filter((p) => !!p.snapshot);
-
-    if (known && known.snapshot) {
-      return [known, ...providers.filter((p) => p !== known)];
+    if (known) {
+      if (preferred && preferred !== known) {
+        throw new Error(`Provider "${preferredProviderName}" does not own instance "${instanceId}".`);
+      }
+      // An unsupported owner must fail here, not probe another backend with
+      // the same provider-local instance ID.
+      return [known];
     }
-
-    return providers;
+    if (preferred) return [preferred];
+    return this.getProviders().filter((p) => !!p.snapshot);
   }
 
   private async createWithFallback(options?: CreateInstanceOptions): Promise<InstanceInterface> {
@@ -279,8 +311,11 @@ class ComputeManager {
     // passing it via the index signature don't leak it into provider
     // create options, where strict validators (e.g. Sail) reject it.
     const { provider: _providerName, kind: _kind, ...providerOptions } = options || {};
-    const candidates = this.getCreateCandidates(preferredProviderName);
-    const canFallback = this.fallbackOnError && !preferredProviderName && providerOptions.sizeClass === undefined;
+    const candidates = this.getCreateCandidates(preferredProviderName, options?.snapshotId);
+    // Known snapshot restores are resource-affine, not resilient new creates.
+    const knownSnapshot = options?.snapshotId !== undefined && this.snapshotProviders.has(options.snapshotId);
+    const canFallback = this.fallbackOnError && !preferredProviderName &&
+      providerOptions.sizeClass === undefined && !knownSnapshot;
     const errors: string[] = [];
     const providerErrors: unknown[] = [];
 
@@ -416,6 +451,7 @@ class ComputeManager {
       const preferredProviderName = options?.provider;
       const { provider: _providerName, ...providerOptions } = options || {};
       const candidates = this.getSnapshotCreateCandidates(instanceId, preferredProviderName);
+      const knownOwner = this.instanceProviders.has(instanceId);
       const errors: string[] = [];
 
       for (const [index, provider] of candidates.entries()) {
@@ -426,12 +462,14 @@ class ComputeManager {
 
         try {
           const snapshot = await provider.snapshot.create(instanceId, providerOptions);
-          this.snapshotProviders.set(snapshot.id, provider);
+          this.registerSnapshotProvider(snapshot.id, provider);
           return {
             ...snapshot,
             createdAt: new Date(snapshot.createdAt),
           };
         } catch (error) {
+          // Owner-only operations must preserve native codes/cancellation metadata.
+          if (knownOwner) throw error;
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         }
       }
@@ -442,17 +480,27 @@ class ComputeManager {
       );
     },
 
-    list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
-      const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
+    /** Creation time is omitted when the provider does not report it. */
+    list: async (): Promise<Array<{ id: string; provider: string; createdAt?: Date; metadata?: Record<string, any> }>> => {
+      const snapshots: Array<{ id: string; provider: string; createdAt?: Date; metadata?: Record<string, any> }> = [];
 
       for (const provider of this.getProviders()) {
         if (!provider.snapshot) continue;
         const listed = await provider.snapshot.list();
         for (const snapshot of listed) {
-          this.snapshotProviders.set(snapshot.id, provider);
+          const { createdAt, ...details } = snapshot;
+          let normalizedCreatedAt: Date | undefined;
+          if (createdAt != null) {
+            normalizedCreatedAt = new Date(createdAt);
+            if (Number.isNaN(normalizedCreatedAt.getTime())) {
+              // Do not expose raw provider metadata or learn ownership for an invalid record.
+              throw new Error('Snapshot list returned an invalid createdAt timestamp.');
+            }
+          }
+          this.registerSnapshotProvider(snapshot.id, provider);
           snapshots.push({
-            ...snapshot,
-            createdAt: new Date(snapshot.createdAt),
+            ...details,
+            ...(normalizedCreatedAt === undefined ? {} : { createdAt: normalizedCreatedAt }),
           });
         }
       }
@@ -462,6 +510,7 @@ class ComputeManager {
 
     delete: async (snapshotId: string): Promise<void> => {
       const candidates = this.getSnapshotDeleteCandidates(snapshotId);
+      const knownOwner = this.snapshotProviders.has(snapshotId);
       const errors: string[] = [];
 
       for (const [index, provider] of candidates.entries()) {
@@ -471,6 +520,7 @@ class ComputeManager {
           this.snapshotProviders.delete(snapshotId);
           return;
         } catch (error) {
+          if (knownOwner) throw error;
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         }
       }

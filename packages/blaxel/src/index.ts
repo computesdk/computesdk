@@ -11,6 +11,48 @@ import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, re
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
+class CommandResultProtocolError extends Error {
+	readonly code = 'COMMAND_RESULT_PROTOCOL_ERROR';
+	constructor() {
+		super('Blaxel command did not return a valid terminal result');
+		this.name = 'CommandResultProtocolError';
+	}
+}
+
+class LifecycleProtocolError extends Error {
+	readonly code = 'SDK_LIFECYCLE_PROTOCOL_ERROR';
+	readonly provider = 'blaxel';
+	constructor(
+		readonly operation: 'getById' | 'destroy',
+		readonly reason: 'invalid_identity',
+	) {
+		super('Blaxel lifecycle response violated the native contract');
+		this.name = 'LifecycleProtocolError';
+	}
+}
+
+function assertBlaxelIdentity(
+	result: unknown,
+	sandboxId: string,
+	operation: 'getById' | 'destroy',
+): void {
+	// Both the GET and DELETE control-plane responses require Sandbox.metadata.name.
+	const name = (result as { metadata?: { name?: unknown } } | null | undefined)?.metadata?.name;
+	if (!result || typeof result !== 'object' || name !== sandboxId) {
+		throw new LifecycleProtocolError(operation, 'invalid_identity');
+	}
+}
+
+function isBlaxelLookupAbsence(error: unknown): boolean {
+	// get() calls getSandbox({throwOnError:true}); the installed fetch client
+	// throws the parsed API body. GetSandboxErrors documents 404 as absence,
+	// and _Error requires `error: string`, with numeric HTTP status in `code`.
+	// Do not classify messages, class names, arbitrary status fields, or strings.
+	if (!error || typeof error !== 'object') return false;
+	const body = error as { code?: unknown; error?: unknown };
+	return body.code === 404 && typeof body.error === 'string';
+}
+
 /**
  * Blaxel rejects sandboxes with a ttl under 5 minutes
  * (`ttl 120s is too short: the minimum is 5m`). Any timeout below the floor
@@ -245,21 +287,17 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 			getById: async (config: BlaxelConfig, sandboxId: string) =>
 				withBlaxelConfig(config, async () => {
+					let sandbox: SandboxInstance;
 					try {
-						const sandbox = await SandboxInstance.get(sandboxId);
-
-						if (!sandbox) {
-							return null;
-						}
-
-						return {
-							sandbox: blaxelStamp.stamp(sandbox, config),
-							sandboxId,
-						};
+						// This public method queries control-plane metadata before
+						// constructing the handle; it is not a local-only attach.
+						sandbox = await SandboxInstance.get(sandboxId);
 					} catch (error) {
-						// Sandbox doesn't exist or can't be accessed
-						return null;
+						if (isBlaxelLookupAbsence(error)) return null;
+						throw error;
 					}
+					assertBlaxelIdentity(sandbox, sandboxId, 'getById');
+					return { instance: blaxelStamp.stamp(sandbox, config), instanceId: sandbox.metadata.name };
 				}),
 
 			list: async (config: BlaxelConfig) =>
@@ -271,11 +309,11 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 			destroy: async (config: BlaxelConfig, sandboxId: string) =>
 				withBlaxelConfig(config, async () => {
-					try {
-						await SandboxInstance.delete(sandboxId);
-					} catch (error) {
-						// Sandbox might already be destroyed or doesn't exist
-					}
+					const deleted = await SandboxInstance.delete(sandboxId);
+					// DELETE's documented success returns Sandbox, not void.
+					// It need not carry a particular lifecycle status label:
+					// acknowledgement and subsequent absence are separate facts.
+					assertBlaxelIdentity(deleted, sandboxId, 'destroy');
 				}),
 
 			// Instance operations (map to individual Sandbox methods)
@@ -314,6 +352,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					durationMs: Date.now() - startTime
 				};
 			} catch (error) {
+				if (error instanceof CommandResultProtocolError) throw error;
 				return {
 					stdout: '',
 					stderr: error instanceof Error ? error.message : String(error),
@@ -325,15 +364,23 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 			getInfo: async (sandbox: SandboxInstance): Promise<InstanceInfo> => {
 				const runtime = sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node';
+				// Public native snapshot only: no refresh request or raw API state.
+				// Preserve bounded strings losslessly; never coerce or truncate an
+				// invalid value into something that could look terminal.
+				const nativeStatus = sandbox.status;
+				const blaxelStatus = typeof nativeStatus === 'string' &&
+					nativeStatus.length > 0 && nativeStatus.length <= 128 ? nativeStatus : undefined;
 				return {
 					id: sandbox.metadata?.name || 'blaxel-unknown',
 					provider: 'blaxel',
-					status: convertSandboxStatus(sandbox.status),
+					status: convertSandboxStatus(blaxelStatus),
 					createdAt: sandbox.metadata?.createdAt ? new Date(sandbox.metadata.createdAt) : new Date(),
 					timeout: parseTTLToMilliseconds(sandbox.spec?.runtime?.ttl),
 					metadata: {
 						runtime,
-						...sandbox.metadata?.labels
+						...sandbox.metadata?.labels,
+						// Reserved even when undefined: labels cannot spoof native status.
+						blaxelStatus,
 					}
 				};
 			},
@@ -643,6 +690,9 @@ function initializeBlaxel(config: BlaxelConfig): void {
 }
 
 function convertSandboxStatus(status: string | undefined): 'running' | 'stopped' | 'error' {
+	// @blaxel/core 0.3.21 sandbox.js:17-28 explicitly classifies this exact
+	// native enum value as terminal/non-reusable. Do not infer other labels.
+	if (status === 'TERMINATED') return 'stopped';
 	switch (status?.toLowerCase()) {
 		case 'deployed': return 'running';
 		case 'deleting': return 'stopped';
@@ -696,6 +746,9 @@ async function executeWithStreaming(
 		status?: string;
 	};
 
+	if (!processResult || typeof processResult !== 'object') {
+		throw new CommandResultProtocolError();
+	}
 	let result = processResult as ExecResult;
 
 	// On current Blaxel infra, waitForCompletion is not honored server-side:
@@ -719,12 +772,12 @@ async function executeWithStreaming(
 			// @blaxel/core's wait() breaks its poll loop on a mid-poll error and
 			// returns the last (possibly still 'running') response, so a resolved
 			// promise doesn't guarantee a terminal state.
-			if (!finished.status || !TERMINAL_PROCESS_STATUSES.has(finished.status)) {
-				throw new Error(
-					`Process ${pid} did not reach a terminal state (status: ${finished.status ?? 'unknown'})`
-				);
+			if (!finished?.status || !TERMINAL_PROCESS_STATUSES.has(finished.status)) {
+				throw new CommandResultProtocolError();
 			}
-			result = { ...result, ...finished, pid };
+			// A startup response can contain exitCode: 0 while still running.
+			// Only the final response may supply the completed exit code.
+			result = { ...result, ...finished, exitCode: finished.exitCode, pid };
 		} catch (error) {
 			// Best-effort: don't leave the process running past its deadline.
 			try {
@@ -737,13 +790,16 @@ async function executeWithStreaming(
 			// The status poll and the log stream are separate requests — a
 			// terminal status can arrive before the stream's final bytes. Give
 			// the stream a bounded window to drain, then abort it.
+			let drainTimer: ReturnType<typeof setTimeout> | undefined;
 			try {
 				await Promise.race([
 					logStream.wait(),
-					new Promise((resolve) => setTimeout(resolve, STREAM_DRAIN_MS)),
+					new Promise((resolve) => { drainTimer = setTimeout(resolve, STREAM_DRAIN_MS); }),
 				]);
 			} catch {
 				// Fall through to abort
+			} finally {
+				clearTimeout(drainTimer);
 			}
 			logStream.close();
 			try {
@@ -752,6 +808,21 @@ async function executeWithStreaming(
 				// Stream teardown is best-effort; chunks already captured stand
 			}
 		}
+	}
+
+	// A resolved exec(), log-stream EOF, and a resolved wait() are not
+	// independently proof of completion in @blaxel/core 0.3.21.
+	if (!result.status || !TERMINAL_PROCESS_STATUSES.has(result.status)) {
+		throw new CommandResultProtocolError();
+	}
+	// ProcessResponse.exitCode is required by @blaxel/core 0.3.21. A
+	// terminal status proves completion, not the numeric outcome: do not
+	// infer zero (or a generic failure code) from a label. Negative native
+	// codes are preserved; unlike Beam, this SDK defines no running sentinel.
+	const exitCode = result.exitCode;
+	if (typeof exitCode !== 'number' || !Number.isSafeInteger(exitCode) ||
+		(result.status === 'failed' && exitCode === 0)) {
+		throw new CommandResultProtocolError();
 	}
 
 	// Streamed callbacks receive arbitrary chunks, not lines — concatenate
@@ -787,11 +858,6 @@ async function executeWithStreaming(
 	// otherwise it would duplicate stderr content into stdout.
 	if (!stdout && !stderr && result.logs) {
 		stdout = result.logs;
-	}
-
-	let exitCode = result.exitCode ?? 0;
-	if (result.status === 'failed' && exitCode === 0) {
-		exitCode = 1;
 	}
 
 	return { stdout, stderr, exitCode };

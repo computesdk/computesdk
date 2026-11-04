@@ -1,0 +1,107 @@
+{
+  "provider": "@computesdk/isorun",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "command": "pnpm --filter @computesdk/isorun --fail-if-no-match exec vitest run src/__tests__/command-integrity.test.ts --maxWorkers=1 --minWorkers=1",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0",
+    "VERCEL_TOKEN": "",
+    "VERCEL_OIDC_TOKEN": "",
+    "HOPX_API_KEY": "",
+    "BEAM_TOKEN": "",
+    "BEAM_WORKSPACE_ID": "",
+    "BL_API_KEY": "",
+    "BL_WORKSPACE": ""
+  },
+  "revision": "1a472184ae0d321dc219908d6bd9d5a8ab34dceb",
+  "recordedAt": "2026-11-03T13:35:57.444915+00:00",
+  "executionFinishedAt": "2026-11-03T13:35:57.342398+00:00",
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 80,
+  "tests": [
+    {
+      "file": "packages/isorun/src/__tests__/command-integrity.test.ts",
+      "contains": "describe(\"isorun command capture integrity"
+    }
+  ],
+  "claims": [
+    "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
+    "Named tests preserve verified empty output, Unicode byte counts, exact recovery reads, and completed nonzero child status.",
+    "Named capture-read tests require successful native read completion and reject failed zero-byte/exact-size output or plausible metadata without replaying the child command."
+  ],
+  "inputHashes": [
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/isorun/package.json",
+      "sha256": "320cbacb2a2458109fb2e66e85ea3ca14cc1a9f2cae6ad7a9b9dee5c027bf35b"
+    },
+    {
+      "file": "packages/isorun/src/__tests__/command-integrity.test.ts",
+      "sha256": "4e2a10fa2a00b1a6561907e426cc472346142b0f73c66a1df44a6115753ef872"
+    },
+    {
+      "file": "packages/isorun/src/index.ts",
+      "sha256": "8aff4169cca1fd7d0b64eed13db90d848d8d74697f3135c3babfaec6e05997be"
+    },
+    {
+      "file": "packages/provider/src/command-output.ts",
+      "sha256": "877ad798c0e5b112a368b96a6a423d929816499376a8bc18d465405d58ad5020"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "limitations": [
+    "Only named local command regression cases are covered; native behavior and other operation contracts remain unverified.",
+    "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+    "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+    "Initial launch failures precede the existing read-cleanup scope.",
+    "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
+  ],
+  "executionGroup": "pnpm test:provider-contracts",
+  "builtArtifacts": [
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    }
+  ],
+  "installedNativeDependency": {
+    "name": "isorun",
+    "version": "1.0.0",
+    "manifestSha256": "c5e4091666b2e0d63d6da117abdb796c40e4ce092e5f82bf0b4007521de08251"
+  }
+}

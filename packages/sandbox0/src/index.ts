@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 
 import { APIError, Client } from 'sandbox0';
 import type { Sandbox as Sandbox0Sandbox } from 'sandbox0';
-import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, readVerifiedCommandOutput, parseCommandExitCode } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -531,7 +531,7 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
         }
 
         try {
-          const completed = await observeCommandCompletion(
+          await observeCommandCompletion(
             sandbox,
             started.contextId,
             deadline,
@@ -551,28 +551,32 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
                 Date.now() + 60_000,
                 60_000,
               );
+              const exitCodes = [done.context?.exitCode, done.terminal?.exitCode]
+                .filter((code) => code !== undefined);
+              // Empty/exact stdout alone cannot certify a successful cat.
+              // Either native source may be unavailable, but any reported
+              // failure conflicts with success and must fail closed.
+              if (exitCodes.length === 0 || exitCodes.some((code) => code !== 0)) {
+                throw new Error('Sandbox0 capture read did not exit successfully.');
+              }
               return done.context?.stdout ?? done.output.stdout;
             } finally {
               deleteContextBestEffort(sandbox, s.contextId);
             }
           };
-          const readVerified = async (path: string, lenPath: string): Promise<string> => {
-            const expected = Number.parseInt(
-              (await readViaCommand(`cat ${lenPath} 2>/dev/null`)).trim(),
-              10,
-            );
-            const first = await readViaCommand(`cat ${path}`);
-            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
-            const second = await readViaCommand(`cat ${path}`);
-            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
-          };
+          const readVerified = (path: string, lenPath: string, stream: 'stdout' | 'stderr') =>
+            readVerifiedCommandOutput({
+              readLength: () => readViaCommand(`cat ${lenPath} 2>/dev/null`),
+              read: () => readViaCommand(`cat ${path}`),
+              stream,
+            });
 
           let stdout: string;
           let stderr: string;
           let codeText: string;
           try {
-            stdout = await readVerified(`${base}.out`, `${base}.outlen`);
-            stderr = await readVerified(`${base}.err`, `${base}.errlen`);
+            stdout = await readVerified(`${base}.out`, `${base}.outlen`, 'stdout');
+            stderr = await readVerified(`${base}.err`, `${base}.errlen`, 'stderr');
             codeText = await readViaCommand(`cat ${base}.code 2>/dev/null`).catch(() => '');
           } finally {
             await readViaCommand(
@@ -580,13 +584,10 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
             ).catch(() => undefined);
           }
 
-          const fileExit = Number.parseInt(codeText.trim(), 10);
           return {
             stdout,
             stderr,
-            exitCode: Number.isInteger(fileExit)
-              ? fileExit
-              : (completed.context?.exitCode ?? completed.terminal?.exitCode ?? 1),
+            exitCode: parseCommandExitCode(codeText),
             durationMs: Date.now() - startedAt,
           };
         } catch (error) {

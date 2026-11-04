@@ -2,7 +2,7 @@
  * E2B Provider - Factory-based Implementation
  */
 
-import { Sandbox as E2BSandbox, Volume as E2BVolume } from 'e2b';
+import { Sandbox as E2BSandbox, SandboxNotFoundError, Volume as E2BVolume, type SandboxInfo, type SnapshotInfo } from 'e2b';
 import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -23,6 +23,10 @@ type E2BSandboxStatics = typeof E2BSandbox & {
   listTemplates?: (options: { apiKey?: string }) => Promise<unknown[]>;
   deleteTemplate?: (snapshotId: string, options: { apiKey?: string }) => Promise<unknown>;
 };
+
+function isSnapshotId(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
 
 export interface E2BConfig {
   /** E2B API key - if not provided, will fallback to E2B_API_KEY environment variable */
@@ -100,10 +104,25 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
       getById: async (config: E2BConfig, sandboxId: string) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        if (typeof sandboxId !== 'string' || sandboxId.trim().length === 0) {
+          throw new Error('E2B sandbox ID must be a non-empty string.');
+        }
+        let info: SandboxInfo;
         try {
-          const sandbox = await E2BSandbox.connect(sandboxId, { apiKey });
-          return { instance: sandbox, instanceId: sandboxId };
-        } catch { return null; }
+          info = await E2BSandbox.getInfo(sandboxId, { apiKey });
+        } catch (error) {
+          // Only an explicit absence from the read-only precheck is null.
+          if (error instanceof SandboxNotFoundError) return null;
+          throw error;
+        }
+        if (info === null || typeof info !== 'object' || Array.isArray(info) || info.sandboxId !== sandboxId) {
+          throw new Error('Invalid E2B sandbox getInfo response.');
+        }
+        // Retain public connect to obtain secure native execution tokens.
+        // Positive lookups may still resume/renew timeout (existing native
+        // semantics); failures here, including a not-found race, must throw.
+        const sandbox = await E2BSandbox.connect(sandboxId, { apiKey });
+        return { instance: sandbox, instanceId: sandboxId };
       },
 
       list: async (config: E2BConfig) => {
@@ -121,10 +140,13 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
       destroy: async (config: E2BConfig, sandboxId: string) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
-        try {
-          const sandbox = await E2BSandbox.connect(sandboxId, { apiKey });
-          await sandbox.kill();
-        } catch { /* already destroyed */ }
+        if (typeof sandboxId !== 'string' || sandboxId.trim().length === 0) {
+          throw new Error('E2B sandbox ID must be a non-empty string.');
+        }
+        // Static kill does not connect/resume paused sandboxes. Native false
+        // explicitly means not found; all thrown failures must remain visible.
+        const killed = await E2BSandbox.kill(sandboxId, { apiKey });
+        if (typeof killed !== 'boolean') throw new Error('Invalid E2B sandbox kill response.');
       },
 
       runCommand: async (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
@@ -198,22 +220,40 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
           throw new Error(`Failed to create E2B snapshot: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
-      list: async (config: E2BConfig) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.listTemplates === 'function') {
-            return await e2bStatic.listTemplates({ apiKey: config.apiKey || process.env.E2B_API_KEY });
+      list: async (config: E2BConfig, options) => {
+        const limit = options?.limit;
+        if (limit !== undefined && (!Number.isInteger(limit) || limit < 0)) {
+          throw new Error('Snapshot limit must be a non-negative integer.');
+        }
+        if (limit === 0) return [];
+        const paginator = E2BSandbox.listSnapshots({
+          apiKey: config.apiKey || process.env.E2B_API_KEY,
+          ...(options?.sandboxId !== undefined && { sandboxId: options.sandboxId }),
+        });
+        const snapshots: SnapshotInfo[] = [];
+        while (paginator.hasNext && (limit === undefined || snapshots.length < limit)) {
+          const page = await paginator.nextItems();
+          if (!Array.isArray(page)) throw new Error('Invalid E2B snapshot list response.');
+          // Validate the entire fetched page before exposing any cleanup IDs.
+          for (const snapshot of page) {
+            if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot) ||
+                !isSnapshotId(snapshot.snapshotId)) {
+              throw new Error('Invalid E2B snapshot list response.');
+            }
           }
-          return [];
-        } catch { return []; }
+          snapshots.push(...page);
+        }
+        // Native SnapshotInfo has no creation timestamp; preserve its fields
+        // and expose the ID used by the shared snapshot cleanup API.
+        return (limit === undefined ? snapshots : snapshots.slice(0, limit)).map(snapshot => ({
+          ...snapshot, id: snapshot.snapshotId, provider: 'e2b',
+        }));
       },
       delete: async (config: E2BConfig, snapshotId: string) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.deleteTemplate === 'function') {
-            await e2bStatic.deleteTemplate(snapshotId, { apiKey: config.apiKey || process.env.E2B_API_KEY });
-          }
-        } catch { /* ignore */ }
+        if (!isSnapshotId(snapshotId)) throw new Error('E2B snapshot ID must be a non-empty string.');
+        // Native false means not found (already deleted); other failures throw.
+        const deleted = await E2BSandbox.deleteSnapshot(snapshotId, { apiKey: config.apiKey || process.env.E2B_API_KEY });
+        if (typeof deleted !== 'boolean') throw new Error('Invalid E2B snapshot delete response.');
       }
     },
 
@@ -223,18 +263,21 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
       },
       list: async (config: E2BConfig) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.listTemplates === 'function') return await e2bStatic.listTemplates({ apiKey });
-          return [];
-        } catch { return []; }
+        const e2bStatic = E2BSandbox as E2BSandboxStatics;
+        if (typeof e2bStatic.listTemplates !== 'function') {
+          throw new Error('E2B template.list is not implemented by this adapter for the installed SDK.');
+        }
+        const templates = await e2bStatic.listTemplates({ apiKey });
+        if (!Array.isArray(templates)) throw new Error('Invalid E2B template list response.');
+        return templates;
       },
       delete: async (config: E2BConfig, templateId: string) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.deleteTemplate === 'function') await e2bStatic.deleteTemplate(templateId, { apiKey });
-        } catch { /* ignore */ }
+        const e2bStatic = E2BSandbox as E2BSandboxStatics;
+        if (typeof e2bStatic.deleteTemplate !== 'function') {
+          throw new Error('E2B template.delete is not implemented by this adapter for the installed SDK.');
+        }
+        await e2bStatic.deleteTemplate(templateId, { apiKey });
       }
     },
 

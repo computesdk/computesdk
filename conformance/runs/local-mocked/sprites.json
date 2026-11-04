@@ -1,0 +1,124 @@
+{
+  "provider": "@computesdk/sprites",
+  "status": "adapter-mocked",
+  "result": "passed",
+  "command": "pnpm --filter @computesdk/sprites --fail-if-no-match exec vitest run src/__tests__/command-contract.test.ts src/__tests__/lifecycle-contract.test.ts --maxWorkers=1 --minWorkers=1",
+  "environment": {
+    "COMPUTESDK_API_KEY": "",
+    "MODAL_TOKEN_ID": "",
+    "MODAL_TOKEN_SECRET": "",
+    "ISORUN_API_KEY": "",
+    "CREATEOS_SANDBOX_API_KEY": "",
+    "SANDBOX0_API_KEY": "",
+    "SANDBOX0_TOKEN": "",
+    "MICROSANDBOX_API_KEY": "",
+    "DAYTONA_API_KEY": "",
+    "SPRITES_API_KEY": "",
+    "SPRITES_TOKEN": "",
+    "SKIP_INTEGRATION": "true",
+    "E2B_API_KEY": "",
+    "COMPUTESDK_INTEGRATION": "0",
+    "VERCEL_TOKEN": "",
+    "VERCEL_OIDC_TOKEN": "",
+    "HOPX_API_KEY": "",
+    "BEAM_TOKEN": "",
+    "BEAM_WORKSPACE_ID": "",
+    "BL_API_KEY": "",
+    "BL_WORKSPACE": "",
+    "COMPUTESDK_CONFORMANCE_NATIVE": "0",
+    "MSB_API_KEY": ""
+  },
+  "revision": "ea98a93a104545c9846ea078bb11abde1a595deb",
+  "recordedAt": "2026-11-03T18:44:30.999431+00:00",
+  "executionFinishedAt": "2026-11-03T18:42:15.498369+00:00",
+  "runtime": {
+    "node": "v24.22.1",
+    "pnpm": "9.15.0"
+  },
+  "passedTests": 49,
+  "tests": [
+    {
+      "file": "packages/sprites/src/__tests__/command-contract.test.ts",
+      "contains": "Sprites real-adapter command contract"
+    },
+    {
+      "file": "packages/sprites/src/__tests__/lifecycle-contract.test.ts",
+      "contains": "describe('Sprites lifecycle contract (native HTTP mocks)', () => {"
+    }
+  ],
+  "claims": [
+    "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
+    "Named tests reject missing/malformed child completion and missing stderr separators with a safe protocol error.",
+    "Named HTTP-only lifecycle regressions use organization-scoped sprite names, validate returned name identity, classify only documented HTTP404 absence, and propagate other HTTP, JSON and transport errors."
+  ],
+  "inputHashes": [
+    {
+      "file": "package.json",
+      "sha256": "14bc5a60e76d0068fb618a44fc8778de194508de713e04daa21271732d779be6"
+    },
+    {
+      "file": "packages/computesdk/src/compute.ts",
+      "sha256": "2ad0c380188140ed3b3c96ca75de7502d662a1b669fdac922c1af650da5f40ca"
+    },
+    {
+      "file": "packages/provider/src/command-output.ts",
+      "sha256": "877ad798c0e5b112a368b96a6a423d929816499376a8bc18d465405d58ad5020"
+    },
+    {
+      "file": "packages/provider/src/factory.ts",
+      "sha256": "dbffb1036b45b6343095b0fe61fb51511507e7f4089c9772e7a32ded04078067"
+    },
+    {
+      "file": "packages/provider/src/index.ts",
+      "sha256": "f1eb3687328509585effaba40b519ae7f6645e225ec7e80adf0da4b942248b40"
+    },
+    {
+      "file": "packages/sprites/package.json",
+      "sha256": "77db41035ba3655856469844fc64e9a5f561e7cbab0e2bf1fa51b5e699817fa4"
+    },
+    {
+      "file": "packages/sprites/src/__tests__/command-contract.test.ts",
+      "sha256": "b99dabeb2b0752c61cf8d84db3fb174191883efa38212e43c42e82d9682b9830"
+    },
+    {
+      "file": "packages/sprites/src/__tests__/lifecycle-contract.test.ts",
+      "sha256": "d0d31998e3d691c914c6e661087aaa68d1ade39e4cbc72ff96a2d01bcf0d478b"
+    },
+    {
+      "file": "packages/sprites/src/index.ts",
+      "sha256": "2742ed0176cffab81a9b9b0cc617ed9db2732dd7be75d62429c3e29a7cb64c9d"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "fd7d175f40811fe0ac6cf31de4a9c0f65f00811e63941e2a6f0718cf6de18c85"
+    }
+  ],
+  "liveProviderVerification": false,
+  "scope": "Historical revision-specific local regression evidence, not all-capability or current/future-tree native certification.",
+  "limitations": [
+    "Only named local command and lifecycle regression cases are covered; live native behavior, other operations and full capability coverage remain unverified.",
+    "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
+    "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
+    "Remote timeout/cancellation remains unchanged and unverified.",
+    "The delimiter protocol is not a byte-count/checksum or truncated-stderr guarantee; long-running trailing-background output/lifetime is unverified.",
+    "HTTP metadata absence is not proof of physical deletion or billing cessation. Background/timeouts and complete capability coverage remain unverified."
+  ],
+  "executionGroup": "pnpm test:provider-contracts",
+  "builtArtifacts": [
+    {
+      "file": "packages/computesdk/dist/index.mjs",
+      "sha256": "690c9225327d29a41f9dd014b20cece08281486649d0b955d8d04a9304791892"
+    },
+    {
+      "file": "packages/provider/dist/index.mjs",
+      "sha256": "70b54cb22e7b49e8cc5db9b4d157907aec2fe83cbe7ff8e690c8f4872a07a495"
+    },
+    {
+      "file": "packages/sprites/dist/index.mjs",
+      "sha256": "ff94ae0feef5dc0836539aa4c019ba330a7c5359c640869207ef4959a4a10b66"
+    }
+  ],
+  "installedNativeDependency": {
+    "kind": "in-repository client; no external native SDK dependency"
+  }
+}

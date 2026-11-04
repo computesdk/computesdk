@@ -30,7 +30,8 @@ runProviderTestSuite({
 
 function mockSandbox() {
   const process = {
-    wait: vi.fn().mockResolvedValue(undefined),
+    // beam-js 1.0.22 returns the completed numeric status from wait().
+    wait: vi.fn().mockResolvedValue(0),
     stdout: { read: vi.fn().mockResolvedValue('') },
     stderr: { read: vi.fn().mockResolvedValue('') },
     exitCode: 0,

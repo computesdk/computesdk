@@ -2,7 +2,7 @@
  * Modal Provider - Factory-based Implementation
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, readVerifiedCommandOutput, parseCommandExitCode, CommandOutputIntegrityError } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -13,6 +13,16 @@ import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
 
+/** Configuration unsupported by the pinned native exec API, not a child exit. */
+export class ModalCommandTimeoutError extends Error {
+  readonly code = 'MODAL_COMMAND_TIMEOUT_UNSUPPORTED';
+  readonly provider = 'modal';
+
+  constructor() {
+    super('Modal command timeout must be a positive whole multiple of 1000 milliseconds; omit it to use the native default.');
+    this.name = 'ModalCommandTimeoutError';
+  }
+}
 
 const DEFAULT_IMAGE = 'node:20';
 const DEFAULT_APP_NAME = 'computesdk-modal';
@@ -210,11 +220,14 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
 
       getById: async (config: ModalInternalConfig, sandboxId: string) => {
-        try {
-          const client = config._client;
-          const sandbox = await client.sandboxes.fromId(sandboxId);
-          return { instance: { instance: sandbox, instanceId: sandboxId }, instanceId: sandboxId };
-        } catch { return null; }
+        const sandbox = await config._client.sandboxes.fromId(sandboxId);
+        if (sandbox.sandboxId !== sandboxId) throw new Error('Modal sandbox identity mismatch');
+        // modal@0.11.0 fromId only reconstructs a handle. poll performs a
+        // native query; numeric exit codes still describe retained sandboxes.
+        // Its raw gRPC failures have no public HTTP-404/typed-absence contract,
+        // so propagate them rather than fabricate nullable absence.
+        await sandbox.poll();
+        return { instance: { instance: sandbox, instanceId: sandboxId }, instanceId: sandboxId };
       },
 
       list: async (_config: ModalConfig) => {
@@ -222,14 +235,20 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
       },
 
       destroy: async (config: ModalInternalConfig, sandboxId: string) => {
-        try {
-          const client = config._client;
-          const sandbox = await client.sandboxes.fromId(sandboxId);
-          if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate();
-        } catch { /* already terminated */ }
+        const sandbox = await config._client.sandboxes.fromId(sandboxId);
+        if (sandbox.sandboxId !== sandboxId) throw new Error('Modal sandbox identity mismatch');
+        await sandbox.terminate();
       },
 
       runCommand: async (modalSandbox: ModalSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+        const timeout = options?.timeout;
+        // modal@0.11.0 accepts positive whole seconds expressed as milliseconds.
+        // Reject unsupported configuration before exec, not as guest exit127.
+        // Do not silently round deadlines or invent a universal zero policy.
+        if (timeout !== undefined && (typeof timeout !== 'number' ||
+            !Number.isFinite(timeout) || timeout <= 0 || timeout % 1000 !== 0)) {
+          throw new ModalCommandTimeoutError();
+        }
         const startTime = Date.now();
         try {
           let fullCommand = command;
@@ -257,41 +276,54 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             ` printf '%s' "$C" > ${base}.code`;
 
           const proc = await modalSandbox.instance.exec(['sh', '-c', wrapped], { stdout: 'pipe', stderr: 'pipe', timeoutMs: options?.timeout });
-          const exitCode = await proc.wait();
+          await proc.wait();
 
           try {
             const readFile = async (path: string): Promise<string> => {
               const p = await modalSandbox.instance.exec(['cat', path], { stdout: 'pipe', stderr: 'pipe' });
-              return (await p.stdout.readText()) || '';
+              // Drain while waiting: successful text delivery alone does not
+              // prove cat succeeded, even when the expected capture is empty.
+              const [text, status] = await Promise.all([p.stdout.readText(), p.wait()]);
+              if (status !== 0 || typeof text !== 'string') {
+                throw new Error('Command capture read failed');
+              }
+              return text;
             };
-            const readVerified = async (path: string, lenPath: string): Promise<string> => {
-              const expected = Number.parseInt((await readFile(lenPath)).trim(), 10);
-              const first = await readFile(path);
-              if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
-              const second = await readFile(path);
-              return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
-            };
-
-            const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
-            const stderr = await readVerified(`${base}.err`, `${base}.errlen`);
+            const stdout = await readVerifiedCommandOutput({
+              readLength: () => readFile(`${base}.outlen`),
+              read: () => readFile(`${base}.out`),
+              stream: 'stdout',
+            });
+            const stderr = await readVerifiedCommandOutput({
+              readLength: () => readFile(`${base}.errlen`),
+              read: () => readFile(`${base}.err`),
+              stream: 'stderr',
+            });
             const codeText = await readFile(`${base}.code`).catch(() => '');
 
-            const fileExit = Number.parseInt(codeText.trim(), 10);
-            return { stdout, stderr, exitCode: Number.isInteger(fileExit) ? fileExit : (exitCode || 0), durationMs: Date.now() - startTime };
+            return { stdout, stderr, exitCode: parseCommandExitCode(codeText), durationMs: Date.now() - startTime };
           } finally {
+            // Keep safe numeric diagnostics on failure, not raw capture files.
+            // Cleanup remains best-effort rather than retaining secrets forever.
             void modalSandbox.instance.exec(['rm', '-f', `${base}.out`, `${base}.err`, `${base}.outlen`, `${base}.errlen`, `${base}.code`]).then((p) => p.wait()).catch(() => undefined);
           }
         } catch (error) {
+          if (error instanceof CommandOutputIntegrityError) throw error;
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
       },
 
       getInfo: async (modalSandbox: ModalSandbox): Promise<InstanceInfo> => {
-        let status: 'running' | 'stopped' | 'error' = 'running';
-        try {
-          const pollResult = await modalSandbox.instance.poll();
-          if (pollResult !== null) status = pollResult === 0 ? 'stopped' : 'error';
-        } catch { status = 'running'; }
+        if (modalSandbox.instance.sandboxId !== modalSandbox.instanceId) throw new Error('Modal sandbox identity mismatch');
+        // Public Sandbox.poll() queries this Sandbox's main process, not an
+        // exec child. A numeric result is terminal execution evidence for this
+        // ID, not backend absence; restoring a snapshot creates a new Sandbox.
+        // Never turn poll errors into a fabricated running/terminal result.
+        const pollResult = await modalSandbox.instance.poll();
+        if (pollResult !== null && (typeof pollResult !== 'number' || !Number.isSafeInteger(pollResult))) {
+          throw new Error('Modal sandbox poll returned an invalid exit code');
+        }
+        const status = pollResult === null ? 'running' : pollResult === 0 ? 'stopped' : 'error';
 
         return {
           id: modalSandbox.instanceId,
@@ -299,7 +331,12 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           status,
           createdAt: new Date(),
           timeout: 300000,
-          metadata: { modalSandboxId: modalSandbox.instanceId, realModalImplementation: true, runtime: 'node' }
+          metadata: {
+            modalSandboxId: modalSandbox.instanceId, realModalImplementation: true, runtime: 'node',
+            // Reserved native evidence, set after labels and only for a fresh
+            // numeric result. Retained Sandbox handles remain retrievable.
+            ...(pollResult === null ? {} : { modalExitCode: pollResult }),
+          }
         };
       },
 
