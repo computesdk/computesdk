@@ -7,8 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { runIntegrationTests, type ProviderTestConfig } from '../packages/test-utils/src/provider-test-suite';
 import { runProviderCrudTest } from '../packages/test-utils/src/provider-crud-test';
 import { loadProfiles, blockedReason, providerModule, sourceFingerprint, reportPath, createResourceJournal } from '../scripts/compute-conformance.mjs';
-import { withDeadline } from '../packages/test-utils/src/provider-lifecycle';
-import { probeCleanup, type CleanupProbeOptions } from './compute-cleanup-probe';
+import { probeCleanup, probePresence, withSdkProgress, type CleanupProbeOptions } from './compute-cleanup-probe';
 
 interface LiveProfile {
   id: string;
@@ -85,9 +84,17 @@ if (process.env.COMPUTESDK_CONFORMANCE_NATIVE !== '1') {
         rejected: (sandbox, error) => journal.cleanupRejected(sandbox.sandboxId, error),
       },
       verifySandbox: async sandbox => {
-        const found = await withDeadline(() => selected.sandbox.getById(sandbox.sandboxId),
-          8000, 'SDK presence lookup failed or timed out');
-        if (found?.sandboxId !== sandbox.sandboxId) throw new Error('SDK presence lookup did not return the owned ID');
+        const progressDeadline = Date.now() + 8000;
+        const found = await withSdkProgress(observe => probePresence(selected.sandbox, sandbox.sandboxId, observe),
+          8000, 'SDK presence lookup failed or timed out',
+          progress => journal.sdkProgress(sandbox.sandboxId, 'presence', progress));
+        if (found?.sandboxId !== sandbox.sandboxId) {
+          if (Date.now() < progressDeadline) {
+            journal.sdkProgress(sandbox.sandboxId, 'presence', found === null ? 'lookup-null' : 'lookup-wrong-identity');
+          }
+          throw new Error('SDK presence lookup did not return the owned ID');
+        }
+        if (Date.now() < progressDeadline) journal.sdkProgress(sandbox.sandboxId, 'presence', 'lookup-valid');
       },
       verifyCleanup: async sandbox => {
         // This callback starts only AFTER the original destroy fulfilled.
@@ -99,10 +106,11 @@ if (process.env.COMPUTESDK_CONFORMANCE_NATIVE !== '1') {
           journal.cleanupObserved(sandbox.sandboxId, 'lookup-pending');
           let observation;
           try {
-            observation = await withDeadline(
-              () => probeCleanup(selected.sandbox, sandbox.sandboxId, {
-                profileId: profile.id, oracle: profile.cleanup.oracle,
+            observation = await withSdkProgress(
+              observe => probeCleanup(selected.sandbox, sandbox.sandboxId, {
+                profileId: profile.id, oracle: profile.cleanup.oracle, observe,
               }), deadline - Date.now(), failure,
+              progress => journal.sdkProgress(sandbox.sandboxId, 'cleanup', progress),
             );
           } catch {
             journal.cleanupObserved(sandbox.sandboxId, 'lookup-error');

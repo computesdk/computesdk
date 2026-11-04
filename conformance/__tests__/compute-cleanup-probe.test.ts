@@ -5,6 +5,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   probeCleanup,
+  probePresence,
+  withSdkProgress,
+  type SdkProgress,
   type CleanupManager,
   type CleanupProbeOptions,
   type CleanupSandbox,
@@ -518,6 +521,181 @@ describe('Upstash exact deleted scalar contract (local mocks only)', () => {
       expect(error).toBeInstanceOf(Error);
       expect(error.message).toBe('Cleanup info did not return valid owned SDK metadata');
       expect(error.cause).toBeUndefined();
+    },
+  );
+});
+
+describe('fixed public SDK progress (local harness only)', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it.each(['null', 'wrong', 'valid', 'lookup rejection', 'info rejection', 'invalid info', 'missing info'])(
+    'labels %s without copying SDK data',
+    async outcome => {
+      const f = fixture();
+      const events: SdkProgress[] = [];
+      const sentinel = new Error('RAW-ERROR-URL-CREDENTIAL-SENTINEL');
+      if (outcome === 'null') f.getById.mockResolvedValue(null);
+      if (outcome === 'wrong') f.getById.mockResolvedValue({ sandboxId: 'RAW-WRONG-ID', getInfo: f.getInfo });
+      if (outcome === 'lookup rejection') f.getById.mockRejectedValue(sentinel);
+      if (outcome === 'info rejection') f.getInfo.mockRejectedValue(sentinel);
+      if (outcome === 'invalid info') f.getInfo.mockResolvedValue({ id: 'RAW-WRONG-ID', body: sentinel });
+      if (outcome === 'missing info') f.getById.mockResolvedValue({ sandboxId: ownedId } as CleanupSandbox);
+      const result = await probeCleanup(f.manager, ownedId, { ...createos,
+        observe: event => events.push(event),
+      }).catch(error => error);
+      const prefix: SdkProgress[] = ['lookup-started'];
+      const expected: Record<string, SdkProgress[]> = {
+        null: ['lookup-returned', 'lookup-null'],
+        wrong: ['lookup-returned', 'lookup-wrong-identity'],
+        valid: ['lookup-returned', 'lookup-valid', 'info-started', 'info-returned', 'info-valid'],
+        'lookup rejection': ['lookup-rejected'],
+        'info rejection': ['lookup-returned', 'lookup-valid', 'info-started', 'info-rejected'],
+        'invalid info': ['lookup-returned', 'lookup-valid', 'info-started', 'info-returned', 'info-invalid'],
+        'missing info': ['lookup-returned', 'lookup-valid', 'info-unavailable'],
+      };
+      expect(events).toEqual([...prefix, ...expected[outcome]]);
+      if (outcome.endsWith('rejection')) expect(result).toBe(sentinel);
+      expect(JSON.stringify(events)).not.toContain('RAW-');
+      expect(f.getById).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['lookup', 'info'])('observes synchronous %s throws without changing the error', async stage => {
+    const f = fixture();
+    const error = Object.freeze({ private: 'RAW-SENTINEL' });
+    const events: SdkProgress[] = [];
+    if (stage === 'lookup') f.getById.mockImplementation(() => { throw error; });
+    else f.getInfo.mockImplementation(() => { throw error; });
+    await expect(probeCleanup(f.manager, ownedId, { ...createos,
+      observe: event => events.push(event),
+    })).rejects.toBe(error);
+    expect(events.at(-1)).toBe(`${stage}-rejected`);
+  });
+
+  it.each(['throw', 'reject', 'pending'])('ignores observers that %s for both values and errors', async mode => {
+    const f = fixture();
+    const observe = () => {
+      if (mode === 'throw') throw new Error('RAW-OBSERVER');
+      if (mode === 'reject') return Promise.reject(new Error('RAW-OBSERVER'));
+      return new Promise(() => {});
+    };
+    expect(await probeCleanup(f.manager, ownedId, { ...createos, observe })).toMatchObject({ kind: 'native-terminal' });
+    expect(await probePresence(f.manager, ownedId, observe)).toBe(f.sandbox);
+    const error = new Error('RAW-SDK');
+    f.getById.mockRejectedValue(error);
+    await expect(probeCleanup(f.manager, ownedId, { ...createos, observe })).rejects.toBe(error);
+    await expect(probePresence(f.manager, ownedId, observe)).rejects.toBe(error);
+    // Flush ignored observer rejections; the runner detects unhandled ones.
+    await Promise.resolve();
+  });
+
+  it.each(['lookup', 'info'])('fences late %s resolution after the caller deadline and next probe', async stage => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const events: SdkProgress[] = [];
+    let finish!: (value: never) => void;
+    const pending = new Promise<never>(resolve => { finish = resolve; });
+    if (stage === 'lookup') f.getById.mockReturnValueOnce(pending);
+    else f.getInfo.mockReturnValueOnce(pending);
+    const result = withSdkProgress(observe => probeCleanup(f.manager, ownedId, { ...createos, observe }),
+      8000, 'SAFE-DEADLINE', event => events.push(event)).catch(error => error);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect((await result).message).toBe('SAFE-DEADLINE');
+    expect(events.at(-1)).toBe(`${stage}-deadline`);
+    expect(events).not.toContain(`${stage}-rejected`);
+    await withSdkProgress(observe => probeCleanup(f.manager, ownedId, { ...createos, observe }),
+      8000, 'SAFE-DEADLINE', event => events.push(event));
+    const nextProbe = [...events];
+    finish((stage === 'lookup' ? f.sandbox : { id: ownedId, metadata: { createosStatus: 'destroyed' } }) as never);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(events).toEqual(nextProbe);
+  });
+
+  it('fences late rejection and does not relabel a presence deadline as an SDK rejection', async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    let reject!: (error: unknown) => void;
+    f.getById.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    const events: SdkProgress[] = [];
+    const result = withSdkProgress(observe => probePresence(f.manager, ownedId, observe),
+      8000, 'SAFE-DEADLINE', event => events.push(event)).catch(error => error);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect((await result).message).toBe('SAFE-DEADLINE');
+    expect(events).toEqual(['lookup-started', 'lookup-deadline']);
+    reject(new Error('RAW-LATE-REJECTION'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(events).toEqual(['lookup-started', 'lookup-deadline']);
+  });
+
+  it.each([null, { sandboxId: 'RAW-WRONG-ID', getInfo: async () => ({}) }])(
+    'preserves the presence lookup value %j for the existing caller identity check',
+    async found => {
+      const f = fixture();
+      f.getById.mockResolvedValue(found);
+      const events: SdkProgress[] = [];
+      expect(await probePresence(f.manager, ownedId, event => events.push(event))).toBe(found);
+      expect(events).toEqual(['lookup-started', 'lookup-returned']);
+      expect(f.getInfo).not.toHaveBeenCalled();
+    },
+  );
+
+  it('distinguishes a public SDK rejection from the sanitizing callback deadline', async () => {
+    const f = fixture();
+    const events: SdkProgress[] = [];
+    f.getById.mockRejectedValue(new Error('RAW-SDK'));
+    await expect(withSdkProgress(observe => probePresence(f.manager, ownedId, observe),
+      8000, 'SAFE-FAILURE', event => events.push(event))).rejects.toThrow('SAFE-FAILURE');
+    expect(events).toEqual(['lookup-started', 'lookup-rejected']);
+  });
+
+  it.each(['throw', 'reject', 'pending'])('a deadline observer that %s cannot hide the caller timeout', async mode => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.getById.mockReturnValue(new Promise(() => {}));
+    const result = withSdkProgress(observe => probePresence(f.manager, ownedId, observe),
+      8000, 'SAFE-DEADLINE', () => {
+        if (mode === 'throw') throw new Error('RAW-OBSERVER');
+        if (mode === 'reject') return Promise.reject(new Error('RAW-OBSERVER'));
+        return new Promise(() => {});
+      }).catch(error => error);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect((await result).message).toBe('SAFE-DEADLINE');
+  });
+
+  it('fences progress by elapsed time even before a delayed timer fires, without changing the SDK value', async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    let finish!: (value: CleanupSandbox) => void;
+    f.getById.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const events: SdkProgress[] = [];
+    const result = withSdkProgress(observe => probePresence(f.manager, ownedId, observe),
+      8000, 'SAFE-DEADLINE', event => events.push(event));
+    await vi.advanceTimersByTimeAsync(0);
+    vi.setSystemTime(Date.now() + 8001);
+    finish(f.sandbox);
+    expect(await result).toBe(f.sandbox);
+    expect(events).toEqual(['lookup-started', 'lookup-deadline']);
+  });
+
+  it('does not guess an SDK endpoint when only the verification callback is pending', async () => {
+    vi.useFakeTimers();
+    const events: SdkProgress[] = [];
+    const result = withSdkProgress(() => new Promise<never>(() => {}), 8000, 'SAFE-DEADLINE',
+      event => events.push(event)).catch(error => error);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect((await result).message).toBe('SAFE-DEADLINE');
+    expect(events).toEqual(['callback-deadline']);
+  });
+
+  it.each([0, -1, NaN, Infinity, -Infinity])(
+    'does not call invalid-duration validation (%s) a timer expiry',
+    async duration => {
+      const operation = vi.fn(async () => 'unexpected');
+      const events: SdkProgress[] = [];
+      await expect(withSdkProgress(operation, duration, 'SAFE-DEADLINE',
+        event => events.push(event))).rejects.toThrow('Lifecycle durations must be finite positive milliseconds');
+      expect(operation).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
     },
   );
 });
