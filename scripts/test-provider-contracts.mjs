@@ -29,6 +29,7 @@ const suites = [
   ['@computesdk/lelantos', 'lifecycle-contract.test.ts', 'connection-opts.test.ts', 'run-command-env.test.ts'],
   ['@computesdk/upstash', 'lifecycle-contract.test.ts'],
   ['@computesdk/codesandbox', 'lifecycle-contract.test.ts'],
+  ['@computesdk/givemeanode', 'lifecycle-contract.test.ts'],
 ];
 
 const env = {
@@ -63,6 +64,7 @@ const env = {
   LELANTOS_API_KEY: '',
   UPSTASH_BOX_API_KEY: '',
   CSB_API_KEY: '',
+  GMN_TOKEN: '',
 };
 const cwd = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
