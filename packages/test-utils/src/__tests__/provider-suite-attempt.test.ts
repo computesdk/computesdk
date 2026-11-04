@@ -154,4 +154,96 @@ describe('provider-suite attempt ownership and bounded cleanup (no adapters)', (
     expect(verifyCleanup).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('observes the exact owned sandbox before original destroy and verification', async () => {
+    const events: string[] = [];
+    const instance = { destroy: vi.fn(async () => { events.push('destroy'); }) };
+    const started = vi.fn((owned: typeof instance) => {
+      expect(owned).toBe(instance);
+      events.push('started');
+    });
+    const attempt = createProviderSuiteAttempt(async () => instance, 50, 20,
+      async () => { events.push('verified'); }, { started });
+    await attempt.ready;
+    await attempt.cleanup();
+    await attempt.cleanup();
+    expect(events).toEqual(['started', 'destroy', 'verified']);
+    expect(started).toHaveBeenCalledTimes(1);
+    expect(instance.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('observes the unchanged original destroy rejection, not a cleanup verification error', async () => {
+    const original = new Error('native-private-error');
+    const rejected = vi.fn((_owned: { destroy(): Promise<void> }, error: unknown) => {
+      expect(error).toBe(original);
+      throw new Error('observer-private-error');
+    });
+    const failed = { destroy: async () => { throw original; } };
+    const attempt = createProviderSuiteAttempt(async () => failed, 50, 20, undefined, { rejected });
+    await attempt.ready;
+    await expect(attempt.cleanup()).rejects.toThrow(/^Sandbox cleanup failed or timed out$/);
+    expect(rejected).toHaveBeenCalledWith(failed, original);
+    const verified = sandbox();
+    const verification = createProviderSuiteAttempt(async () => verified, 50, 20,
+      async () => { throw new Error('verification-private-error'); }, { rejected });
+    await verification.ready;
+    await expect(verification.cleanup()).rejects.toThrow(/^Sandbox cleanup failed or timed out$/);
+    expect(rejected).toHaveBeenCalledTimes(1);
+  });
+
+  it('still destroys and verifies when the synchronous started observer throws', async () => {
+    const instance = sandbox();
+    const verify = vi.fn(async () => {});
+    const rejected = vi.fn();
+    const attempt = createProviderSuiteAttempt(async () => instance, 50, 20, verify, {
+      started: () => { throw new Error('observer-private-error'); }, rejected,
+    });
+    await attempt.ready;
+    await expect(attempt.cleanup()).rejects.toThrow(/^Sandbox cleanup failed or timed out$/);
+    expect(instance.destroy).toHaveBeenCalledTimes(1);
+    expect(verify).toHaveBeenCalledWith(instance);
+    expect(rejected).not.toHaveBeenCalled();
+  });
+
+  it('observes a late owned allocation once without observing a different attempt', async () => {
+    vi.useFakeTimers();
+    const pending = deferred<ReturnType<typeof sandbox>>();
+    const started = vi.fn();
+    const attempt = createProviderSuiteAttempt(() => pending.promise, 10, 20, undefined, { started });
+    const failure = expect(attempt.ready).rejects.toThrow('Sandbox creation failed or timed out');
+    await vi.advanceTimersByTimeAsync(10);
+    await failure;
+    const cleanup = attempt.cleanup();
+    const nextInstance = sandbox();
+    const next = createProviderSuiteAttempt(async () => nextInstance, 10, 20);
+    await next.ready;
+    const late = sandbox();
+    pending.resolve(late);
+    await cleanup;
+    await attempt.cleanup();
+    expect(started).toHaveBeenCalledTimes(1);
+    expect(started).toHaveBeenCalledWith(late);
+    expect(late.destroy).toHaveBeenCalledTimes(1);
+    expect(nextInstance.destroy).not.toHaveBeenCalled();
+    await next.cleanup();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not await an accidentally async observer and observes its rejection safely', async () => {
+    vi.useFakeTimers();
+    const instance = sandbox();
+    const pending = deferred<void>();
+    const observer = pending.promise.then(() => { throw new Error('observer-private-error'); });
+    const attempt = createProviderSuiteAttempt(async () => instance, 50, 20, undefined, {
+      started: () => observer,
+    });
+    await attempt.ready;
+    await expect(attempt.cleanup()).rejects.toThrow(/^Sandbox cleanup failed or timed out$/);
+    expect(instance.destroy).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    pending.resolve();
+    await vi.runAllTimersAsync();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
 });

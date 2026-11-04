@@ -8,6 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createProviderSuiteAttempt } from './provider-suite-attempt';
+import type { ProviderSuiteCleanupObserver } from './provider-suite-attempt';
 import { withDeadline } from './provider-lifecycle';
 // @ts-ignore - workspace reference
 import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOptions, InstanceInfo } from '@computesdk/provider';
@@ -40,6 +41,12 @@ export interface ProviderTestConfig {
    * cleanup budget. SDK-reported absence is not physical deletion proof.
    */
   verifyCleanup?: (sandbox: ProviderInstance) => Promise<void>;
+  /**
+   * Optional synchronous native-only diagnostics around the original destroy.
+   * Rejection observers receive the original SDK error; do not log it raw.
+   * Diagnostic failures cannot prevent destroy or verification, but fail cleanup.
+   */
+  observeCleanup?: ProviderSuiteCleanupObserver<ProviderInstance>;
   /** Ports to expose when creating sandboxes (needed for getUrl tests on some providers) */
   ports?: number[];
   /** Whether this provider should run getUrl coverage tests */
@@ -76,6 +83,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
     supportsBackground = true,
     verifySandbox,
     verifyCleanup,
+    observeCleanup,
     ports,
     supportsGetUrl = true,
     filesystemBasePath = '/tmp',
@@ -114,6 +122,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
         sandbox = undefined!;
         const ownedAttempt = createProviderSuiteAttempt(
           createSandbox, undefined, undefined, frameworkMocked ? undefined : verifyCleanup,
+          frameworkMocked ? undefined : observeCleanup,
         );
         attempt = ownedAttempt;
         const created = await ownedAttempt.ready;
