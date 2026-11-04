@@ -12,6 +12,47 @@ import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, Run
 
 export type UpstashSandboxInstance = Box | EphemeralBox;
 
+// Native Box.get discards BoxData.status. Keep only the connection used for
+// this particular full Box; never borrow credentials by ID or from later env.
+type FullBoxContext = { apiKey: string; baseUrl: string; id: string };
+const fullBoxContexts = new WeakMap<Box, FullBoxContext>();
+function boxBaseUrl(override?: string): string {
+  return (override ?? process.env.UPSTASH_BOX_BASE_URL ?? 'https://us-east-1.box.upstash.com').replace(/\/$/, '');
+}
+
+async function readWholeBoxStatus(box: Box, id: string): Promise<{ status: string }> {
+  const context = fullBoxContexts.get(box);
+  if (!context || context.id !== id || box.id !== id) throw new Error('Unregistered box context');
+  const response = await fetch(`${context.baseUrl}/v2/box/${id}`, {
+    method: 'GET', redirect: 'manual', headers: { 'X-Box-Api-Key': context.apiKey },
+  });
+  if (response.status !== 200 || response.redirected) throw new Error('Invalid metadata response');
+  const text = await response.text();
+  const data: unknown = JSON.parse(text);
+  // JSON.parse alone silently accepts duplicate keys. Inspect top-level keys
+  // (including escaped spellings) before trusting identity or terminal state.
+  const tokens = text.match(/"(?:\\[\s\S]|[^"\\])*"|[{}[\],:]/g) ?? [];
+  let depth = 0;
+  const keys = new Set<string>();
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === '{' || token === '[') depth++;
+    else if (token === '}' || token === ']') depth--;
+    else if (depth === 1 && token.startsWith('"') && tokens[i + 1] === ':') {
+      const key = JSON.parse(token) as string;
+      if (keys.has(key)) throw new Error('Duplicate metadata key');
+      keys.add(key);
+    }
+  }
+  if (typeof data !== 'object' || data === null || Array.isArray(data) ||
+      !('id' in data) || data.id !== id || !('status' in data) ||
+      typeof data.status !== 'string' ||
+      !['creating', 'idle', 'running', 'paused', 'error', 'deleted'].includes(data.status)) {
+    throw new Error('Invalid box metadata');
+  }
+  return { status: data.status };
+}
+
 export function isEphemeralSandboxInstance(sandbox: UpstashSandboxInstance): sandbox is EphemeralBox {
   return (
     'expiresAt' in sandbox &&
@@ -96,6 +137,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
 
         try {
           let box: UpstashSandboxInstance;
+          let connection: Omit<FullBoxContext, 'id'> | undefined;
 
           if (options?.snapshotId) {
             const runtime = (optRuntime ?? config.runtime ?? 'node') as any;
@@ -112,8 +154,12 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               });
             } else {
               // Restore full box from snapshot
+              // This branch historically accepts only the factory API key
+              // and environment region, not advanced per-create overrides.
+              connection = { apiKey, baseUrl: boxBaseUrl() };
               box = await Box.fromSnapshot(options.snapshotId, {
                 apiKey,
+                baseUrl: connection.baseUrl,
                 runtime,
                 timeout,
                 env: options?.envs,
@@ -134,14 +180,20 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
               ...providerOptions
             } = options || {};
 
-            // Create new full box
-            box = await Box.create({
+            // Preserve original advanced-option precedence, including the
+            // native nullish API-key/region environment fallbacks.
+            const nativeOptions = {
               apiKey,
               runtime: (optRuntime ?? config.runtime ?? 'node') as any,
               timeout,
               env: envs,
               ...providerOptions,
-            } as Parameters<typeof Box.create>[0]);
+            } as NonNullable<Parameters<typeof Box.create>[0]>;
+            connection = {
+              apiKey: nativeOptions.apiKey ?? process.env.UPSTASH_BOX_API_KEY!,
+              baseUrl: boxBaseUrl(nativeOptions.baseUrl),
+            };
+            box = await Box.create({ ...nativeOptions, baseUrl: connection.baseUrl });
           } else {
             // create lightweight ephemeral box (exec + files only, instant ready)
             const ephemeralBox = await EphemeralBox.create({
@@ -156,6 +208,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
           }
 
           validateBoxId(box?.id);
+          if (box instanceof Box && connection) fullBoxContexts.set(box, { ...connection, id: box.id });
           return { instance: box, instanceId: box.id,
           };
         } catch (error) {
@@ -180,15 +233,17 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       getById: async (config: UpstashConfig, sandboxId: string) => {
         validateBoxId(sandboxId);
         const apiKey = config.apiKey || process.env.UPSTASH_BOX_API_KEY!;
+        const baseUrl = boxBaseUrl();
         let box: Box;
         try {
           // Native get sends only the box GET, then constructs a local full Box.
-          box = await Box.get(sandboxId, { apiKey });
+          box = await Box.get(sandboxId, { apiKey, baseUrl });
         } catch (error) {
           if (error instanceof BoxError && error.statusCode === 404) return null;
           throw error;
         }
         validateBoxId(box?.id);
+        fullBoxContexts.set(box, { apiKey, baseUrl, id: box.id });
         return { instance: box, instanceId: box.id };
       },
 
@@ -278,8 +333,17 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         try {
           // Fresh public status GET scoped to this instance, not cached metadata.
           data = await sandbox.getStatus();
-        } catch {
-          throw new Error('Upstash box info lookup failed.');
+        } catch (error) {
+          try {
+            // An auxiliary /status 404 is not absence. Only a separate fresh,
+            // identity-checked whole DTO may supply state for a registered Box.
+            if (!(sandbox instanceof Box) || !(error instanceof BoxError) || error.statusCode !== 404) {
+              throw error;
+            }
+            data = await readWholeBoxStatus(sandbox, id);
+          } catch {
+            throw new Error('Upstash box info lookup failed.');
+          }
         }
         if (typeof data !== 'object' || data === null || Array.isArray(data) ||
             !('status' in data) || typeof data.status !== 'string' ||

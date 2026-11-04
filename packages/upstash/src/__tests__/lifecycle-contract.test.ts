@@ -64,7 +64,7 @@ describe('Upstash full Box lifecycle contract', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe('Upstash box info lookup failed.');
     expect(error).not.toHaveProperty('cause');
-    expect(http).toHaveBeenCalledTimes(1);
+    expect(http).toHaveBeenCalledTimes(status === 404 ? 2 : 1);
   });
   it('maps scoped native 404 lookup to null', async () => {
     http.mockResolvedValueOnce(json({ error: 'missing' }, 404));
@@ -122,6 +122,160 @@ describe('Upstash full Box lifecycle contract', () => {
     http.mockResolvedValueOnce(json(resource('')));
     await expect(sdk().instances.destroy('bad-box')).rejects.toThrow();
     expect(http).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Upstash whole metadata fallback after auxiliary status 404', () => {
+  const lookup = async () => {
+    http.mockResolvedValueOnce(json(resource()));
+    return (await sdk().instances.getById('alias'))!;
+  };
+  it('reads canonical deleted metadata with captured account/region and manual redirect policy', async () => {
+    vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://region-a.example/');
+    const box = await lookup();
+    vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://region-b.example');
+    vi.stubEnv('UPSTASH_BOX_API_KEY', 'different-key');
+    http.mockReset();
+    http.mockResolvedValueOnce(json({ error: 'auxiliary missing' }, 404))
+      .mockResolvedValueOnce(json(resource('canonical-box', 'deleted')));
+    expect((await box.getInfo()).metadata).toMatchObject({
+      upstashBoxId: 'canonical-box', upstashStatus: 'deleted',
+    });
+    expect(http).toHaveBeenCalledTimes(2);
+    expect(String(http.mock.calls[1][0])).toBe('https://region-a.example/v2/box/canonical-box');
+    expect(http.mock.calls[1][1]).toMatchObject({
+      method: 'GET', redirect: 'manual', headers: { 'X-Box-Api-Key': 'local-test-key' },
+    });
+    expect(box.getInstance()).toBeInstanceOf(Box);
+  });
+  it.each(['creating', 'idle', 'running', 'paused', 'error', 'deleted'])(
+    'preserves exact whole DTO status %s without claiming absence', async status => {
+      const box = await lookup();
+      http.mockReset();
+      http.mockResolvedValueOnce(json({}, 404)).mockResolvedValueOnce(json(resource('canonical-box', status)));
+      const info = await box.getInfo();
+      expect(info.id).toBe('canonical-box');
+      expect(info.metadata?.upstashStatus).toBe(status);
+    },
+  );
+  it.each([
+    {}, [], null, { status: 'deleted' }, { id: 'other-box', status: 'deleted' },
+    { id: ['canonical-box', 'canonical-box'], status: 'deleted' },
+    { id: 'canonical-box', status: 'unknown' }, { id: 'canonical-box', status: ' deleted ' },
+    { id: 'canonical-box', status: null },
+  ])('rejects untrusted whole DTO %#', async body => {
+    const box = await lookup();
+    http.mockReset();
+    http.mockResolvedValueOnce(json({}, 404)).mockResolvedValueOnce(json(body));
+    await expect(box.getInfo()).rejects.toThrow('Upstash box info lookup failed.');
+  });
+  it.each([201, 204, 301, 302, 307, 308, 400, 401, 403, 404, 500])(
+    'rejects whole metadata HTTP %s, never treating body status as HTTP provenance', async status => {
+      const box = await lookup();
+      http.mockReset();
+      http.mockResolvedValueOnce(json({}, 404)).mockResolvedValueOnce(
+        status === 204 ? new Response(null, { status }) : json(resource('canonical-box', 'deleted'), status),
+      );
+      await expect(box.getInfo()).rejects.toThrow('Upstash box info lookup failed.');
+    },
+  );
+  it.each([
+    '{"id":"canonical-box","id":"canonical-box","status":"deleted"}',
+    '{"id":"other-box","\\u0069d":"canonical-box","status":"deleted"}',
+    '{"id":"canonical-box","status":"running","status":"deleted"}',
+  ])('rejects duplicate identity/state keys %#', async body => {
+    const box = await lookup();
+    http.mockReset();
+    http.mockResolvedValueOnce(json({}, 404)).mockResolvedValueOnce(new Response(body));
+    await expect(box.getInfo()).rejects.toThrow('Upstash box info lookup failed.');
+  });
+  it('does not fallback for HTTP400 with a body-only404 code', async () => {
+    const box = await lookup();
+    http.mockReset();
+    http.mockResolvedValueOnce(json({ error: '404', statusCode: 404 }, 400));
+    await expect(box.getInfo()).rejects.toThrow('Upstash box info lookup failed.');
+    expect(http).toHaveBeenCalledTimes(1);
+  });
+  it.each([false, true])('registers full native create/restore context (snapshot=%s)', async snapshot => {
+    vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://create-region.example');
+    http.mockImplementationOnce(async () => {
+      // Mutation during the awaited native operation must not alter capture.
+      vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://later-region.example');
+      return json(resource());
+    });
+    const box = await sdk().instances.create(snapshot ? { snapshotId: 'local-snapshot' } : {});
+    expect(box.getInstance()).toBeInstanceOf(Box);
+    expect(String(http.mock.calls[0][0])).toBe(
+      `https://create-region.example/v2/box${snapshot ? '/from-snapshot' : ''}`,
+    );
+    http.mockReset();
+    http.mockResolvedValueOnce(json({}, 404)).mockResolvedValueOnce(json(resource('canonical-box', 'deleted')));
+    expect((await box.getInfo()).metadata?.upstashStatus).toBe('deleted');
+    expect(String(http.mock.calls[1][0])).toBe('https://create-region.example/v2/box/canonical-box');
+  });
+  it.each(['override', 'undefined'])('preserves effective create API key precedence: %s', async mode => {
+    vi.stubEnv('UPSTASH_BOX_API_KEY', 'local-env-key');
+    vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://env-region.example');
+    http.mockResolvedValueOnce(json(resource()));
+    const box = await sdk().instances.create({
+      apiKey: mode === 'override' ? 'local-override-key' : undefined,
+      baseUrl: 'https://override-region.example',
+    } as Parameters<ReturnType<typeof sdk>['instances']['create']>[0]);
+    const effectiveKey = mode === 'override' ? 'local-override-key' : 'local-env-key';
+    expect(http.mock.calls[0][1].headers['X-Box-Api-Key']).toBe(effectiveKey);
+    expect(String(http.mock.calls[0][0])).toBe('https://override-region.example/v2/box');
+    vi.stubEnv('UPSTASH_BOX_API_KEY', 'later-key');
+    vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://later-region.example');
+    http.mockReset();
+    http.mockResolvedValueOnce(json({}, 404)).mockResolvedValueOnce(json(resource('canonical-box', 'deleted')));
+    expect((await box.getInfo()).metadata?.upstashStatus).toBe('deleted');
+    expect(http.mock.calls[1][1].headers['X-Box-Api-Key']).toBe(effectiveKey);
+    expect(String(http.mock.calls[1][0])).toBe('https://override-region.example/v2/box/canonical-box');
+  });
+  it('keeps advanced create key/region overrides ignored on snapshot restore', async () => {
+    vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://snapshot-region.example');
+    http.mockResolvedValueOnce(json(resource()));
+    const box = await sdk().instances.create({
+      snapshotId: 'local-snapshot', apiKey: 'ignored-key', baseUrl: 'https://ignored-region.example',
+    } as Parameters<ReturnType<typeof sdk>['instances']['create']>[0]);
+    expect(http.mock.calls[0][1].headers['X-Box-Api-Key']).toBe('local-test-key');
+    expect(String(http.mock.calls[0][0])).toBe('https://snapshot-region.example/v2/box/from-snapshot');
+    http.mockReset();
+    http.mockResolvedValueOnce(json({}, 404)).mockResolvedValueOnce(json(resource('canonical-box', 'deleted')));
+    await box.getInfo();
+    expect(http.mock.calls[1][1].headers['X-Box-Api-Key']).toBe('local-test-key');
+    expect(String(http.mock.calls[1][0])).toBe('https://snapshot-region.example/v2/box/canonical-box');
+  });
+  it('isolates two native Box objects with the same ID in different accounts/regions', async () => {
+    vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://account-a.example');
+    http.mockResolvedValueOnce(json(resource()));
+    const a = (await upstash({ apiKey: 'local-account-a' }).instances.getById('alias'))!;
+    vi.stubEnv('UPSTASH_BOX_BASE_URL', 'https://account-b.example');
+    http.mockResolvedValueOnce(json(resource()));
+    const b = (await upstash({ apiKey: 'local-account-b' }).instances.getById('alias'))!;
+    for (const [box, host, apiKey] of [[a, 'account-a', 'local-account-a'], [b, 'account-b', 'local-account-b']] as const) {
+      http.mockReset();
+      http.mockResolvedValueOnce(json({}, 404)).mockResolvedValueOnce(json(resource('canonical-box', 'deleted')));
+      await box.getInfo();
+      expect(String(http.mock.calls[1][0])).toBe(`https://${host}.example/v2/box/canonical-box`);
+      expect(http.mock.calls[1][1].headers['X-Box-Api-Key']).toBe(apiKey);
+    }
+  });
+  it('refuses fallback when public native identity differs from registered context', async () => {
+    const box = await lookup();
+    Reflect.set(box.getInstance(), 'id', 'different-id');
+    http.mockReset();
+    http.mockResolvedValueOnce(json({}, 404));
+    await expect(box.getInfo()).rejects.toThrow('Upstash box info lookup failed.');
+    expect(http).toHaveBeenCalledTimes(1);
+  });
+  it.each(['transport', 'invalid-json'])('sanitizes whole metadata %s failure', async failure => {
+    const box = await lookup();
+    http.mockReset();
+    http.mockResolvedValueOnce(json({}, 404));
+    if (failure === 'transport') http.mockRejectedValueOnce(new Error('private transport detail'));
+    else http.mockResolvedValueOnce(new Response('private non-json detail'));
+    await expect(box.getInfo()).rejects.toThrow('Upstash box info lookup failed.');
   });
 });
 
