@@ -38,6 +38,8 @@ export interface TensorlakeConfig {
 
 export interface TensorlakeSandboxContext {
   config: TensorlakeConfig;
+  /** Adapter-owned canonical ID, independent of the native handle's mutable routing identity. */
+  readonly sandboxId?: string;
   /** Connected SDK Sandbox instance — used for all proxy operations */
   sandbox: InstanceType<typeof Sandbox>;
 }
@@ -246,7 +248,7 @@ export const tensorlake = defineProvider<
           // A successful create must not be repeated if identity hydration
           // subsequently fails, even when the error text mentions quota.
           const instanceId = sandboxIdentity(instance);
-          const sandbox: TensorlakeSandboxContext = { config, sandbox: instance };
+          const sandbox: TensorlakeSandboxContext = { config, sandbox: instance, sandboxId: instanceId };
           return { instance: sandbox, instanceId, durationMs: Date.now() - startTime };
         }
         throw lastError;
@@ -270,7 +272,7 @@ export const tensorlake = defineProvider<
         }
         const instanceId = sandboxIdentity(info);
         sandboxIdentity(sandbox, instanceId);
-        const ctx: TensorlakeSandboxContext = { config, sandbox };
+        const ctx: TensorlakeSandboxContext = { config, sandbox, sandboxId: instanceId };
         return { instance: ctx, instanceId };
       },
 
@@ -389,28 +391,37 @@ export const tensorlake = defineProvider<
       getInfo: async (
         ctx: TensorlakeSandboxContext,
       ): Promise<ComputeSandboxInfo> => {
-        try {
-          const info = await ctx.sandbox.info();
-          return {
-            id: ctx.sandbox.sandboxId,
-            provider: "tensorlake",
-            status:
-              info.status === SandboxStatus.RUNNING ? "running" : "stopped",
-            createdAt: info.createdAt || new Date(),
-            timeout:
-              info.timeoutSecs != null ? info.timeoutSecs * 1000 : 300_000,
-            metadata: {},
-          };
-        } catch {
-          return {
-            id: ctx.sandbox.sandboxId,
-            provider: "tensorlake",
-            status: "running",
-            createdAt: new Date(),
-            timeout: 300_000,
-            metadata: {},
-          };
+        const expectedId = ctx.sandboxId ?? sandboxIdentity(ctx.sandbox);
+        validateSandboxReference(expectedId);
+        sandboxIdentity(ctx.sandbox, expectedId);
+        // Public info() performs a fresh management read on every call. A
+        // failed read is not evidence of a running (or deleted) sandbox.
+        const info = await ctx.sandbox.info();
+        const id = sandboxIdentity(info, expectedId);
+        sandboxIdentity(ctx.sandbox, expectedId);
+        if (!Object.values(SandboxStatus).includes(info.status)) {
+          throw new Error("Tensorlake: invalid sandbox info status");
         }
+        if (info.createdAt !== undefined &&
+            (!(info.createdAt instanceof Date) || !Number.isFinite(info.createdAt.getTime()))) {
+          throw new Error("Tensorlake: invalid sandbox info creation time");
+        }
+        if (info.timeoutSecs !== undefined &&
+            (typeof info.timeoutSecs !== "number" || !Number.isFinite(info.timeoutSecs) ||
+             info.timeoutSecs < 0 || !Number.isFinite(info.timeoutSecs * 1000))) {
+          throw new Error("Tensorlake: invalid sandbox info timeout");
+        }
+        return {
+          id,
+          provider: "tensorlake",
+          status: info.status === SandboxStatus.RUNNING ? "running"
+            : info.status === SandboxStatus.FAILED ? "error" : "stopped",
+          // These optional-field compatibility defaults apply only after a
+          // valid, positively observed DTO; never after an info() failure.
+          createdAt: info.createdAt ?? new Date(),
+          timeout: info.timeoutSecs !== undefined ? info.timeoutSecs * 1000 : 300_000,
+          metadata: {},
+        };
       },
 
       getUrl: async (

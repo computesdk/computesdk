@@ -148,3 +148,113 @@ describe('Tensorlake lifecycle contract', () => {
     }
   });
 });
+
+describe('Tensorlake fresh getInfo reliability', () => {
+  async function instanceWith(sandbox = handle()) {
+    native.create.mockResolvedValue(sandbox);
+    return { instance: await provider().instances.create(), sandbox };
+  }
+
+  it.each([
+    new RemoteAPIError(401, 'authentication'),
+    new RemoteAPIError(403, 'authorization'),
+    new RemoteAPIError(429, 'rate limit'),
+    new SandboxNotFoundError('sb-one'),
+    new Error('connection interrupted'),
+    new SyntaxError('native response decoding failed'),
+  ])('propagates fresh info failure instead of inventing running: %s', async (error) => {
+    const { instance, sandbox } = await instanceWith();
+    sandbox.info.mockRejectedValue(error);
+    await expect(instance.getInfo()).rejects.toBe(error);
+    expect(sandbox.info).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['pending', 'stopped'],
+    ['running', 'running'],
+    ['snapshotting', 'stopped'],
+    ['suspending', 'stopped'],
+    ['suspended', 'stopped'],
+    ['terminated', 'stopped'],
+    ['timeout', 'stopped'],
+    ['failed', 'error'],
+  ])('maps public native status %s without making a deletion claim', async (status, expected) => {
+    const { instance, sandbox } = await instanceWith();
+    const createdAt = new Date('2026-01-02T03:04:05Z');
+    sandbox.info.mockResolvedValue({ sandboxId: 'sb-one', status, createdAt, timeoutSecs: 27 } as any);
+    const info = await instance.getInfo();
+    expect(info).toMatchObject({
+      id: 'sb-one', provider: 'tensorlake', status: expected, timeout: 27_000,
+    });
+    expect(info.createdAt).toBe(createdAt);
+    expect(sandbox.info).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    null, {}, { sandboxId: 'other', status: 'running' },
+    { sandboxId: 7, status: 'running' },
+    { sandboxId: 'sb-one' },
+    { sandboxId: 'sb-one', status: null },
+    { sandboxId: 'sb-one', status: 7 },
+    { sandboxId: 'sb-one', status: 'PRIVATE_PROTOCOL_SENTINEL' },
+    { sandboxId: 'sb-one', status: 'running', createdAt: '2026-01-02' },
+    { sandboxId: 'sb-one', status: 'running', createdAt: new Date(NaN) },
+    { sandboxId: 'sb-one', status: 'running', timeoutSecs: -1 },
+    { sandboxId: 'sb-one', status: 'running', timeoutSecs: Infinity },
+    { sandboxId: 'sb-one', status: 'running', timeoutSecs: '30' },
+  ])('rejects malformed or wrong-owned fresh DTO %j rather than defaulting it to a healthy instance', async (dto) => {
+    const { instance, sandbox } = await instanceWith();
+    sandbox.info.mockResolvedValue(dto as any);
+    const error = await instance.getInfo().catch(e => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).not.toContain('PRIVATE_PROTOCOL_SENTINEL');
+    expect(error.cause).toBeUndefined();
+  });
+
+  it('queries fresh info on every call, including after a prior successful observation', async () => {
+    const { instance, sandbox } = await instanceWith();
+    const firstDate = new Date('2026-01-02T03:04:05Z');
+    const secondDate = new Date('2026-01-02T03:04:06Z');
+    const error = new Error('later read failed');
+    sandbox.info
+      .mockResolvedValueOnce({ sandboxId: 'sb-one', status: 'running', createdAt: firstDate, timeoutSecs: 5 } as any)
+      .mockResolvedValueOnce({ sandboxId: 'sb-one', status: 'terminated', createdAt: secondDate, timeoutSecs: 0 } as any)
+      .mockRejectedValueOnce(error);
+    expect(await instance.getInfo()).toMatchObject({ status: 'running', timeout: 5_000, createdAt: firstDate });
+    expect(await instance.getInfo()).toMatchObject({ status: 'stopped', timeout: 0, createdAt: secondDate });
+    await expect(instance.getInfo()).rejects.toBe(error);
+    expect(sandbox.info).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps compatibility defaults only after a valid positive DTO with optional fields omitted', async () => {
+    const { instance, sandbox } = await instanceWith();
+    sandbox.info.mockResolvedValue({ sandboxId: 'sb-one', status: 'running' });
+    const before = Date.now();
+    const info = await instance.getInfo();
+    expect(info.timeout).toBe(300_000);
+    expect(info.createdAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(info.createdAt.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('validates the locally retained target before attempting a fresh native info query', async () => {
+    const { instance, sandbox } = await instanceWith();
+    sandbox.sandboxId = 'sb-one ';
+    await expect(instance.getInfo()).rejects.toThrow(/identity/i);
+    expect(sandbox.info).not.toHaveBeenCalled();
+  });
+
+  it('does not follow a locally retargeted valid ID instead of the facade-owned ID', async () => {
+    const { instance, sandbox } = await instanceWith();
+    sandbox.sandboxId = 'other';
+    sandbox.info.mockResolvedValue({ sandboxId: 'other', status: 'running' });
+    await expect(instance.getInfo()).rejects.toThrow(/identity/i);
+    expect(sandbox.info).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt a wrong canonical ID that the native info method retained during a rejected observation', async () => {
+    const { instance, sandbox } = await instanceWith(handle('sb-one', 'other'));
+    await expect(instance.getInfo()).rejects.toThrow(/identity/i);
+    await expect(instance.getInfo()).rejects.toThrow(/identity/i);
+    expect(sandbox.info).toHaveBeenCalledOnce();
+  });
+});
