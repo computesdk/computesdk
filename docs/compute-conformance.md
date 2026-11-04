@@ -39,6 +39,13 @@ cost. A successful static run must never be counted as a native-provider pass.
 `conformance/compute-profiles.json` accounts for all **55 canonical, in-scope
 compute entrypoints in this checkout**. These are not 55 independent companies.
 
+The main baseline `2cec1227e6226802d5ae429a57faa6ac05d0fe91` replaces
+Declaw with Agent37; it does not add a 56th in-scope profile. Agent37 has a
+source-reviewed configuration mapping only and remains cleanup-blocked.
+Its URL/background cases are unselected, and no historical Declaw result
+qualifies Agent37. Browser/storage scope, both aliases and the Cloud Run
+exclusion are unchanged.
+
 * **35 configuration-wired** profiles have reviewed factory/credential mappings.
 * **20 configuration-blocked** profiles require reviewed setup first.
 * Of the 35, **11 shared-suite candidates** have source-reviewed observations:

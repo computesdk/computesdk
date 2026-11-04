@@ -18,6 +18,23 @@ test('catalog covers all 55 canonical compute entries without aliases, browser, 
   assert.ok(!profiles.some(p => /cloud-run|browser|tigris/.test(p.id)));
   assert.equal(profiles.filter(p => p.readiness === 'wired').length, 35);
   assert.equal(profiles.filter(p => p.readiness === 'blocked').length, 20);
+  assert.ok(profiles.some(p => p.id === '@computesdk/agent37'));
+  assert.ok(!profiles.some(p => p.id === '@computesdk/declaw'));
+});
+test('Agent37 configuration wiring does not inherit Declaw qualification or cleanup approval', () => {
+  const agent37 = selectProfiles(profiles, 'agent37')[0];
+  assert.equal(agent37.readiness, 'wired');
+  assert.deepEqual(agent37.requiredEnvironment, ['AGENT37_API_KEY']);
+  assert.deepEqual(agent37.configEnvironment, {
+    apiKey: 'AGENT37_API_KEY', baseUrl: 'AGENT37_BASE_URL', execUrl: 'AGENT37_EXEC_URL',
+  });
+  assert.deepEqual(agent37.config, {});
+  assert.deepEqual(agent37.suite, {
+    supportsFilesystem: true, supportsGetUrl: false, supportsBackground: false, filesystemBasePath: '/tmp',
+  });
+  assert.equal(agent37.cleanup.status, 'needs-review');
+  assert.equal(blockedReason(agent37, { AGENT37_API_KEY: 'unit-value' }), 'needs-reviewed-cleanup-contract');
+  assert.throws(() => selectProfiles(profiles, 'declaw'));
 });
 test('selection is exact, including canonical subpaths; all is explicit', () => {
   assert.equal(selectProfiles(profiles, 'e2b')[0], e2b);

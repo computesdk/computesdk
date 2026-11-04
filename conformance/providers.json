@@ -1,7 +1,35 @@
 {
   "schemaVersion": 1,
-  "baselineRevision": "41a638cc",
+  "baselineRevision": "2cec1227e6226802d5ae429a57faa6ac05d0fe91",
   "providers": [
+    {
+      "id": "@computesdk/agent37",
+      "kind": "compute",
+      "source": {
+        "file": "packages/agent37/src/index.ts",
+        "binding": "agent37",
+        "mechanism": "defineProvider"
+      },
+      "entrypoint": "packages/agent37/src/index.ts",
+      "symbol": "agent37",
+      "status": "unknown",
+      "review": {
+        "status": "included",
+        "reason": "Main replaces Declaw with Agent37. Source-reviewed configuration only; no adapter-mocked or native qualification recorded."
+      },
+      "evidence": [
+        {
+          "file": "packages/agent37/src/index.ts",
+          "contains": "export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({"
+        }
+      ],
+      "knownUnsupported": [],
+      "gaps": [
+        "No Agent37 adapter-scoped conformance run recorded; historical Declaw evidence does not transfer.",
+        "Configuration readiness is not cleanup approval. Native lookup/delete acknowledgements, execution completion/truncation, resource identity and cleanup require separate review."
+      ],
+      "claims": []
+    },
     {
       "id": "@computesdk/agentcore",
       "kind": "compute",
@@ -58,7 +86,8 @@
         "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
         "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
         "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
-        "Native resource metadata may remain after destruction; its cleanup oracle still needs separate review. Other pre-existing JSON parsers are not newly sanitized."
+        "Native resource metadata may remain after destruction; its cleanup oracle still needs separate review. Other pre-existing JSON parsers are not newly sanitized.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named HTTP-boundary cases query the supported sandbox resource endpoint, validate canonical identity, classify only resource404 as missing and preserve other lookup/delete failures.",
@@ -238,7 +267,8 @@
         "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
         "The native process constructor may normalize missing completed wire status to zero before the adapter sees it; these checks are not raw-wire validation.",
         "Launch, output reads and best-effort remote kill are not proven to fit a hard elapsed-time bound; remote termination and reaping remain unverified.",
-        "Public terminate Boolean-normalizes its wire acknowledgement, and connection errors lack an authoritative public absence discriminator. No raw-wire, observed absence or physical-termination claim; profile remains cleanup-blocked."
+        "Public terminate Boolean-normalizes its wire acknowledgement, and connection errors lack an authoritative public absence discriminator. No raw-wire, observed absence or physical-termination claim; profile remains cleanup-blocked.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named native-only-mocked tests require the numeric wait() result, reject missing/invalid/negative running-sentinel returns even when a stale handle contains zero, and preserve valid nonnegative native statuses without an unsigned-byte cap.",
@@ -279,7 +309,8 @@
         "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
         "Terminal status labels alone do not prove numeric success or failure; no output checksum or raw transport integrity is established.",
         "The bounded log-drain timer is not an overall timeout guarantee: final stream wait, kill and logs operations still depend on native settlement.",
-        "Numeric error code is optional in native404 bodies; code-absent errors remain errors, not invented absence. Returned delete metadata acknowledges acceptance only; no observed physical-deletion/billing claim."
+        "Numeric error code is optional in native404 bodies; code-absent errors remain errors, not invented absence. Returned delete metadata acknowledges acceptance only; no observed physical-deletion/billing claim.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named native-only-mocked tests require terminal state plus an explicit valid final numeric exit code, rejecting missing/invalid fields, still-running results and contradictory failed-plus-zero instead of inferring zero or one.",
@@ -588,7 +619,8 @@
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Two unchanged ingress-default tests fail (expected true, existing implementation false); no ingress behavior was changed.",
         "Native error decoration of captured stderr remains outside these claims.",
-        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
@@ -629,7 +661,8 @@
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Native zsh/custom images and survival of long-running detached processes remain unverified.",
         "Absent-footer native failures remain failure information only, not proof of child completion or full separated output.",
-        "Public get may fail toolbox-proxy hydration after finding the sandbox. No generic404 can safely prove absence; nullable lookup/idempotent missing destroy remain unresolved and cleanup-blocked. Native delete(wait=false) acknowledges acceptance only."
+        "Public get may fail toolbox-proxy hydration after finding the sandbox. No generic404 can safely prove absence; nullable lookup/idempotent missing destroy remain unresolved and cleanup-blocked. Native delete(wait=false) acknowledges acceptance only.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
@@ -640,44 +673,6 @@
       "verification": {
         "file": "conformance/runs/local-mocked/daytona.json",
         "sha256": "00cc12d25dcf61d9950c3ffab9719fe060e0a1f98ac928c71cc0657b5ecdf770"
-      }
-    },
-    {
-      "id": "@computesdk/declaw",
-      "kind": "compute",
-      "source": {
-        "file": "packages/declaw/src/index.ts",
-        "binding": "declaw",
-        "mechanism": "defineProvider"
-      },
-      "entrypoint": "packages/declaw/src/index.ts",
-      "symbol": "declaw",
-      "status": "adapter-mocked",
-      "review": {
-        "status": "included",
-        "reason": "Included; only the named local lifecycle contracts have recorded adapter-mocked evidence, not native certification."
-      },
-      "evidence": [
-        {
-          "file": "packages/declaw/src/index.ts",
-          "contains": "export const declaw = defineProvider<DeclawSandbox, DeclawConfig>({"
-        }
-      ],
-      "knownUnsupported": [],
-      "gaps": [
-        "Only the named local lifecycle/selected existing cases are recorded; this is not native API, full-provider, physical deletion or billing certification.",
-        "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
-        "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
-        "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
-        "Native kill queues cleanup and normalizes some wire acknowledgement data; typed boolean acceptance does not establish raw wire validity or resource absence."
-      ],
-      "claims": [
-        "Named vendor-boundary cases validate route-safe native identities, use scoped native NotFoundError only, and propagate other lookup/delete/create failures.",
-        "Native kill true/false are accepted only as the documented boolean acknowledgement, not observed absence."
-      ],
-      "verification": {
-        "file": "conformance/runs/local-mocked/declaw.json",
-        "sha256": "fcb13bf734901304b7ca9ecb6beac45ad412355b1781a77834db9beb39657cc4"
       }
     },
     {
@@ -751,7 +746,8 @@
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Legacy template shim cases are synthetic compatibility tests; those hooks are absent from the inspected native SDK and no builder or snapshot/template alias is added.",
         "Native service errors propagate with their original details; only locally generated malformed-response/unsupported diagnostics are fixed messages.",
-        "Positive lookup retains public native connect side effects (resume/timeout renewal); inventory list behavior remains unchanged and unverified."
+        "Positive lookup retains public native connect side effects (resume/timeout renewal); inventory list behavior remains unchanged and unverified.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named native-boundary-mocked tests cover snapshot pagination, source filtering, total limits, configuration precedence, and propagation of native failures.",
@@ -933,7 +929,8 @@
         "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
         "The inspected native SDK has no error.result contract; those tests cover legacy compatibility only and cannot establish a completed successful command after an exception.",
         "Shell env/cwd quoting, timeout policy and broader capability contracts remain outside these tests.",
-        "Destroy still requires connect: paused boxes may resume/refresh, stopped boxes refuse connection. Native heuristics can rewrite true missing responses into ambiguous Expired/FileNotFound errors; profile remains cleanup-blocked."
+        "Destroy still requires connect: paused boxes may resume/refresh, stopped boxes refuse connection. Native heuristics can rewrite true missing responses into ambiguous Expired/FileNotFound errors; profile remains cleanup-blocked.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named native-only-mocked tests validate required stdout/stderr strings and integer native exit_code, preserving valid nonzero/negative statuses and completed zero.",
@@ -1000,7 +997,8 @@
         "No clean dependency installation or live provider execution was performed; the existing installed dependency store was reused.",
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Initial launch failures precede the existing read-cleanup scope.",
-        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
@@ -1123,7 +1121,8 @@
         "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
         "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
         "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
-        "The pre-existing ID-keyed client cache is not proven isolated across accounts/configurations. List may drop failed item hydration."
+        "The pre-existing ID-keyed client cache is not proven isolated across accounts/configurations. List may drop failed item hydration.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named HTTP-boundary cases preserve canonical IDs and client mappings after failed deletion, propagate nonmissing failures and honor native void deletion acknowledgements.",
@@ -1163,7 +1162,8 @@
         "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
         "Installed e2b2.30.1 can convert body code404 to typed missing before checking actual HTTP status; actual HTTP auth/error provenance is not guaranteed.",
         "Public native connect stamps the requested ID instead of validating returned wire identity and can resume/renew. Vendor-method spies do not prove wire behavior; dynamic undici is not intercepted by a global fetch stub.",
-        "Existing ambient domain/endpoint behavior and list catchalls are unchanged; retained terminal metadata may not be connectable."
+        "Existing ambient domain/endpoint behavior and list catchalls are unchanged; retained terminal metadata may not be connectable.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named vendor-boundary cases use metadata getInfo before public connect and direct boolean kill for deletion, preserving post-positive failures and existing domain/config forwarding.",
@@ -1259,7 +1259,8 @@
         "Timeout exit 124 intentionally returns best-effort partial output; background launch is not completed-capture verification.",
         "Early poll-failure cleanup remains outside these cases; real provider FS/exec behavior remains unverified.",
         "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
-        "Persisted native database-handle absence is not a fresh remote-cloud VM query. Cloud cleanup stays blocked pending a reviewed oracle; connection/start effects and native retries remain unchanged."
+        "Persisted native database-handle absence is not a fresh remote-cloud VM query. Cloud cleanup stays blocked pending a reviewed oracle; connection/start effects and native retries remain unchanged.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
@@ -1345,7 +1346,8 @@
         "Initial launch/wait failures precede the read-cleanup scope; non-integrity errors still use existing native error text.",
         "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
         "Timeout preflight is provider-backed only; no universal zero policy, independent daemon-route validation, hard elapsed-time bound or remote cancellation guarantee is established.",
-        "Raw poll RPC errors have no public authoritative nullable-absence discriminator; Modal remains cleanup-blocked. Poll/terminate do not prove physical deletion or billing cessation."
+        "Raw poll RPC errors have no public authoritative nullable-absence discriminator; Modal remains cleanup-blocked. Poll/terminate do not prove physical deletion or billing cessation.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
@@ -1863,7 +1865,8 @@
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Empty-context versus stream-output precedence remains unchanged; real provider behavior remains unverified.",
         "Background launch and timeout behavior are not completed-capture verification.",
-        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range."
+        "Installed native API declarations/implementations were inspected; mocks do not establish raw HTTP guarantees or compatibility across the entire declared SDK version range.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named completed-capture tests reject malformed/missing lengths, persistent UTF-8 byte-count mismatches, and malformed/missing child status.",
@@ -1932,7 +1935,8 @@
         "Length equality is not a checksum, arbitrary binary integrity, or remote cancellation/cleanup guarantee.",
         "Remote timeout/cancellation remains unchanged and unverified.",
         "The delimiter protocol is not a byte-count/checksum or truncated-stderr guarantee; long-running trailing-background output/lifetime is unverified.",
-        "HTTP metadata absence is not proof of physical deletion or billing cessation. Background/timeouts and complete capability coverage remain unverified."
+        "HTTP metadata absence is not proof of physical deletion or billing cessation. Background/timeouts and complete capability coverage remain unverified.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named bounded local-shell tests preserve comments, heredocs, exit, stdin EOF, literal cwd/env, and exact text stdout/stderr.",
@@ -2055,7 +2059,8 @@
         "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
         "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
         "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
-        "Native metadata can retain terminated/archive states; SDK-null cleanup eligibility remains unapproved. An unchanged existing workdir retry unit assertion still fails on the baseline."
+        "Native metadata can retain terminated/archive states; SDK-null cleanup eligibility remains unapproved. An unchanged existing workdir retry unit assertion still fails on the baseline.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named cases perform actual-existence info after lazy connect, preserve canonical name identity, reject route-normalizing references, and propagate nonmissing lookup/termination failures.",
@@ -2192,7 +2197,8 @@
         "Existing installed dependencies were reused without a clean install; compatibility across declared dependency ranges is unverified.",
         "List and unrelated getInfo/execution/egress-recovery fallbacks are outside these new lifecycle checks. Retained terminal records are not filtered into null.",
         "An internal vendor create can accept a resource and then fail before returning an ID; these adapter checks do not recover every such hidden allocation.",
-        "Native create may accept an ID before polling fails. List catchalls and retained terminal metadata remain outside this proof."
+        "Native create may accept an ID before polling fails. List catchalls and retained terminal metadata remain outside this proof.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named HTTP-boundary cases preserve supported name aliases and canonical IDs, classify missing only around initial Box.get and propagate every post-positive delete failure.",
@@ -2232,7 +2238,8 @@
         "Ordinary native errors retain the existing synthetic exit127 policy; protocol rejection does not itself guarantee remote cleanup or process-tree reaping.",
         "The native SDK itself masks some missing finished wire exit status to zero; adapter-boundary checks cannot recover that omission.",
         "Detached exit0 is an explicit launch acknowledgement only, not proof of child completion or complete streams.",
-        "Permanent native delete and later SDK-null verification have not run live. Orphan snapshots and separately owned drives are deliberately retained and may keep storage charges; no all-artifact/billing cleanup claim."
+        "Permanent native delete and later SDK-null verification have not run live. Orphan snapshots and separately owned drives are deliberately retained and may keep storage charges; no all-artifact/billing cleanup claim.",
+        "The referenced local-mocked record qualifies only its recorded historical source/artifact hashes; it is not qualification of the main-based integrated revision."
       ],
       "claims": [
         "Named native-only-mocked tests reject missing, null or malformed foreground exit status, preserve valid integer statuses and exact captured text, and acknowledge only explicit detached null as launched rather than completed.",

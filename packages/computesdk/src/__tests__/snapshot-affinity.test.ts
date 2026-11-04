@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { compute, type CreateInstanceOptions, type DirectProvider } from '../compute';
 import type { Instance } from '../types/universal-instance';
+import { getInstanceSizeProfile, type InstanceSizeClass } from '../sizes';
 
 // Core routing doubles only: these tests do not exercise native provider APIs.
 function makeProvider(name: string, snapshotId = `${name}-snapshot`) {
@@ -24,6 +25,29 @@ function makeProvider(name: string, snapshotId = `${name}-snapshot`) {
 }
 
 describe('compute snapshot affinity (core unit)', () => {
+  it('checks standard sizing on the known snapshot owner without rerouting or fallback', async () => {
+    const first = makeProvider('first');
+    const owner = makeProvider('owner');
+    const sizedFirst: DirectProvider = {
+      ...first.provider,
+      sizes: {
+        contract: 'computesdk.instance-sizes.v1',
+        list: () => [],
+        resolve: (sizeClass: InstanceSizeClass) => ({
+          status: 'supported', requested: getInstanceSizeProfile(sizeClass), provenance: 'adapter-declared',
+          resolved: { vcpus: 1, memoryMiB: 2048 }, nativeOptions: {},
+        }),
+      },
+    };
+    const sdk = compute({ providers: [sizedFirst, owner.provider], fallbackOnError: true });
+    await sdk.snapshot.list();
+
+    await expect(sdk.instances.create({ snapshotId: owner.record.id, sizeClass: 'sm' }))
+      .rejects.toMatchObject({ code: 'unknown', fallback: false });
+    expect(first.create).not.toHaveBeenCalled();
+    expect(owner.create).not.toHaveBeenCalled();
+  });
+
   it.each(['priority', 'round-robin'] as const)(
     'restores a listed snapshot only on its actual provider under %s routing',
     async providerStrategy => {

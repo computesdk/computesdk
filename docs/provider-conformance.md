@@ -19,7 +19,7 @@ node --test scripts/__tests__/provider-conformance.test.mjs
 
 ## Current accounting
 
-The source baseline is `41a638cc`; `conformance/providers.json` is the
+The main source baseline is `2cec1227e6226802d5ae429a57faa6ac05d0fe91`; `conformance/providers.json` is the
 machine-readable roster. Current checked counts:
 
 | Measure | Count |
@@ -34,10 +34,10 @@ machine-readable roster. Current checked counts:
 | Omitted discovered adapter entries | 0 |
 | Cloud Run entries explicitly excluded from compatibility review | 2 |
 | Entries included in compatibility review | 68 |
-| Included entries without a scoped adapter-mocked/native run (**uncovered**) | **50** |
+| Included entries without a scoped adapter-mocked/native run (**uncovered**) | **51** |
 | Included entries without whole-provider native certification | 68 |
-| Roster entries currently `unknown` | 52 |
-| `declared` / `adapter-mocked` / `native-verified` entries | 0 / 18 / 0 |
+| Roster entries currently `unknown` | 53 |
+| `declared` / `adapter-mocked` / `native-verified` entries | 0 / 17 / 0 |
 
 These are public entry counts, not independent backend counts: deprecated
 `@computesdk/agentcore` forwards to `@computesdk/aws/agentcore`.
@@ -45,11 +45,18 @@ Both `@computesdk/gcp/cloud-run` and deprecated `@computesdk/cloud-run` are
 accounted for, but **explicitly excluded from this compatibility review**.
 Their presence makes no claim of Cloud Run support.
 
-Eighteen entries have explicitly recorded **limited, mocked reliability regressions**;
+Seventeen current entries have explicitly recorded **limited, mocked reliability regressions**;
 all other entries remain `unknown`. No native provider has been certified.
 Inventory checks do not execute these adapter regressions. An adapter test
 file's presence, a generic factory mock, a build, or a source fix alone does
 not promote a status.
+
+Main replaces Declaw with Agent37, leaving entry counts unchanged. Agent37
+is `unknown`, with source-reviewed configuration wiring but no adapter-mocked
+or native qualification. Declaw's unchanged historical record is archived at
+`conformance/runs/historical/removed-declaw/declaw.json` and is not current
+inventory or an executable suite. All retained records qualify only their
+recorded revisions and artifact hashes, not this integrated source.
 
 ## Reliability regressions shipped with these patches
 
@@ -73,7 +80,12 @@ provider credentials including E2B and the Sprites/Sandbox0 token fallbacks.
 Sprites uses bounded local stdin-fed bash fixtures; Daytona uses bounded local
 bash/sh command-string fixtures. Neither calls a live provider.
 
-| Scope | Passing checks |
+The following table is historical pre-main-integration evidence, not a claim
+that this checkout executed that selection. Declaw is no longer selected.
+The current explicit whitelist also retains main's sizing, legacy-type,
+Archil sizing and Namespace snapshot regressions.
+
+| Historical scope | Recorded passing checks |
 | --- | ---: |
 | Shared suite ownership, deadlines, cleanup and concurrency regressions | 60 |
 | Shared byte-count/child-status helper | 49 |

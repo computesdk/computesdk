@@ -8,8 +8,10 @@ import { fileURLToPath } from 'node:url';
 // those can include credential-gated, paid integration tests.
 const suites = [
   ['@computesdk/test-utils', 'provider-crud.test.ts', 'provider-lifecycle.test.ts', 'provider-suite-boundaries.test.ts', 'provider-suite-attempt.test.ts'],
-  ['@computesdk/provider', 'command-output.test.ts'],
-  ['computesdk', 'snapshot-metadata.test.ts', 'snapshot-affinity.test.ts'],
+  ['@computesdk/provider', 'command-output.test.ts', 'sizes.test.ts', 'legacy-size-types.test.ts'],
+  ['computesdk', 'snapshot-metadata.test.ts', 'snapshot-affinity.test.ts', 'sizes.test.ts'],
+  ['@computesdk/namespace', 'sizes.test.ts', 'snapshot.test.ts'],
+  ['@computesdk/archil', 'sizes.test.ts'],
   ['@computesdk/e2b', 'snapshot-contract.test.ts', 'lifecycle-contract.test.ts'],
   ['@computesdk/modal', 'command-output.test.ts', 'unit.test.ts', 'timeout-contract.test.ts', 'lifecycle-contract.test.ts'],
   ['@computesdk/isorun', 'command-integrity.test.ts'],

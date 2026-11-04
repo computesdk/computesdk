@@ -60,6 +60,9 @@ test('current roster accounts for every adapter, public export and utility packa
   assert.equal(result.summary.byStatus['native-verified'], 0);
   assert.equal(result.summary.nativeUnverifiedAdapters, 68);
   const byId = new Map(roster.providers.map((row) => [row.id, row]));
+  assert.equal(byId.has('@computesdk/declaw'), false);
+  assert.equal(byId.get('@computesdk/agent37').status, 'unknown');
+  assert.equal(byId.get('@computesdk/agent37').verification, undefined);
   for (const id of ['@computesdk/aws/ec2', '@computesdk/aws/agentcore', '@computesdk/gcp/cloud-run', '@computesdk/platform', '@computesdk/r2', '@computesdk/s3', '@computesdk/tigris']) assert.ok(byId.has(id));
   assert.equal(byId.get('@computesdk/agentcore').aliasOf, '@computesdk/aws/agentcore');
   assert.equal(byId.get('@computesdk/cloud-run').aliasOf, '@computesdk/gcp/cloud-run');
