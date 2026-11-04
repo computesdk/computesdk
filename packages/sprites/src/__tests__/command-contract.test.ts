@@ -174,6 +174,30 @@ describe('Sprites real-adapter command contract (local native boundary)', () => 
       .toMatchObject({ stdout: 'echo\0\x01 café🚀', stderr: 'err\x02', exitCode: 7 });
   });
 
+  it.each(['text then binary', 'binary then text', 'repeated binary'])(
+    'accepts agreeing zero completion confirmations (%s) without replacing the child status',
+    async (order) => {
+      execFrames = (script, socket) => {
+        socket.send(JSON.stringify({ type: 'provider-notification' }));
+        frame(socket, 1, runScript(script));
+        frame(socket, 2, 'native-stderr\0\x01 café🚀');
+        const textExit = () => socket.send(JSON.stringify({ type: 'exit', exit_code: 0 }));
+        if (order === 'text then binary') textExit();
+        frame(socket, 3, Buffer.from([0]));
+        if (order === 'binary then text') textExit();
+        if (order === 'repeated binary') {
+          frame(socket, 3, Buffer.from([0]));
+          frame(socket, 3, Buffer.from([0]));
+        }
+        socket.send(JSON.stringify({ type: 'provider-notification' }));
+      };
+      expect(await (await instance()).runCommand("printf 'out\\000\\001 café🚀'; printf 'err\\002' >&2; exit 7"))
+        .toMatchObject({
+          stdout: 'out\0\x01 café🚀', stderr: 'err\x02native-stderr\0\x01 café🚀', exitCode: 7,
+        });
+    },
+  );
+
   it('does not treat unknown metadata alone as command output or completion', async () => {
     execFrames = (_script, socket) => {
       socket.send(JSON.stringify({ type: 'provider-notification' }));
@@ -225,8 +249,9 @@ describe('Sprites real-adapter command contract (local native boundary)', () => 
     ['empty exit', [Buffer.from([3])]],
     ['oversized exit', [Buffer.from([3, 0, 0])]],
     ['nonzero wrapper exit', [Buffer.from([3, 1])]],
-    ['duplicate exit', [Buffer.from([3, 0]), Buffer.from([3, 0])]],
     ['contradictory exit', [Buffer.from([3, 0]), Buffer.from([3, 7])]],
+    ['contradictory text confirmation', [Buffer.from([3, 0]), '{"type":"exit","exit_code":7}']],
+    ['data after exit', [Buffer.from([3, 0]), Buffer.from([1, 65])]],
     ['missing text exit code', ['{"type":"exit"}']],
     ['out-of-range text exit', ['{"type":"exit","exit_code":256}']],
     ['fractional text exit', ['{"type":"exit","exit_code":0.5}']],

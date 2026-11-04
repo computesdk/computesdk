@@ -109,9 +109,13 @@ async function execStream(url: URL, token: string, script: string): Promise<{ st
     const complete = (code: unknown, diagnostic: ProtocolDiagnostic) => {
       // The shell wrapper must finish normally; its own footer carries the
       // user's child status, which can legitimately be nonzero.
-      if (exit !== undefined || !Number.isInteger(code) || code !== 0) return invalid(diagnostic);
+      if (!Number.isInteger(code) || code !== 0) return invalid(diagnostic);
+      // Official Go supports both text and binary exit formats; Native proved
+      // they can both confirm the same zero completion. Idempotent confirmation
+      // never resets the close bound or replaces the independent child status.
+      if (exit !== undefined) return;
       exit = code as number;
-      // Wait for close to detect queued duplicate/contradictory exit messages.
+      // Wait for close to detect queued contradictory exit messages.
       // Bound only the close handshake, not remote command execution.
       closeTimer = setTimeout(() => finish(), 1_000);
       closeTimer.unref();
@@ -170,7 +174,7 @@ async function execStream(url: URL, token: string, script: string): Promise<{ st
         diagnostic.exitPayload = bytes.length === 1 ? 'missing' : bytes.length === 2 ? 'one-byte' : 'oversized';
         if (bytes.length === 2) diagnostic.exitRange = bytes[1] === 0 ? 'zero' : 'nonzero-byte';
       }
-      if (bytes.length === 0 || exit !== undefined) return invalid(diagnostic);
+      if (bytes.length === 0 || (exit !== undefined && bytes[0] !== 3)) return invalid(diagnostic);
       switch (bytes[0]) {
         case 1: stdout.push(bytes.subarray(1)); break;
         case 2: stderr.push(bytes.subarray(1)); break;
