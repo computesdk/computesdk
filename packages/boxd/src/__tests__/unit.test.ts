@@ -55,8 +55,8 @@ function machine(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** An exec stream that plays the given chunks, or hangs until closed. */
-function fakeStream(opts: { stdout?: string[]; stderr?: string[]; exitCode?: number; hang?: boolean }) {
+/** An exec stream that plays the given chunks, hangs until closed, or fails. */
+function fakeStream(opts: { stdout?: string[]; stderr?: string[]; exitCode?: number; hang?: boolean; fail?: Error }) {
   const enc = new TextEncoder();
   let release!: () => void;
   const closed = new Promise<void>((resolve) => (release = resolve));
@@ -74,7 +74,12 @@ function fakeStream(opts: { stdout?: string[]; stderr?: string[]; exitCode?: num
   return {
     stdout: play(opts.stdout),
     stderr: play(opts.stderr),
-    wait: () => (opts.hang ? closed.then(() => Promise.reject(cancelled())) : Promise.resolve(opts.exitCode ?? 0)),
+    wait: () =>
+      opts.fail
+        ? Promise.reject(opts.fail)
+        : opts.hang
+          ? closed.then(() => Promise.reject(cancelled()))
+          : Promise.resolve(opts.exitCode ?? 0),
     close: vi.fn(() => release()),
   };
 }
@@ -168,19 +173,116 @@ describe('create', () => {
 describe('lookup', () => {
   it('returns null for a computer that does not exist', async () => {
     m.get.mockRejectedValueOnce(new NotFoundError('machine not found', 5));
+    m.list.mockResolvedValueOnce([]);
     expect(await provider().instances.getById('gone')).toBeNull();
   });
 
-  it('lists only computers with the computesdk label', async () => {
-    m.list.mockResolvedValueOnce([machine(), machine({ id: 'm-2' })]);
+  it('lists only computers with the computesdk label, in every region', async () => {
+    m.list.mockResolvedValueOnce([machine(), machine({ id: 'm-2', region: 'nyc' })]);
     const all = await provider().instances.list();
-    expect(m.list).toHaveBeenCalledWith({ org: 'acme', labels: { computesdk: 'true' } });
+    expect(m.list).toHaveBeenCalledWith({ org: 'acme', region: 'all', labels: { computesdk: 'true' } });
     expect(all.map((s) => s.instanceId)).toEqual(['m-1', 'm-2']);
   });
 
   it('ignores a computer that is already gone on destroy', async () => {
     m.delete.mockRejectedValueOnce(new NotFoundError('machine not found', 5));
+    m.list.mockResolvedValueOnce([]);
     await expect(provider().instances.destroy('gone')).resolves.toBeUndefined();
+    expect(m.delete).toHaveBeenCalledTimes(1);
+  });
+});
+
+// boxd answers "not found" for a computer in another region than the one asked, and for a
+// moment about one it has just created. A listing of every region decides.
+describe('regions and "not found"', () => {
+  const notFound = () => new NotFoundError('VM not found (region fra)', 5);
+  const ok = { stdout: 'ok\n', stderr: '', exitCode: 0, success: true };
+
+  it('destroys a computer in another region, found by id', async () => {
+    m.delete.mockRejectedValueOnce(notFound()).mockResolvedValueOnce(undefined);
+    m.list.mockResolvedValueOnce([machine({ id: 'nyc-1', region: 'nyc' })]);
+    await provider().instances.destroy('nyc-1');
+    expect(m.list).toHaveBeenCalledWith({ org: 'acme', region: 'all' });
+    expect(m.delete).toHaveBeenNthCalledWith(1, 'nyc-1', {});
+    expect(m.delete).toHaveBeenNthCalledWith(2, 'nyc-1', { region: 'nyc' });
+  });
+
+  it('gets a computer in another region, found by id', async () => {
+    m.get.mockRejectedValueOnce(notFound()).mockResolvedValueOnce(machine({ id: 'nyc-2', region: 'nyc' }));
+    m.list.mockResolvedValueOnce([machine({ id: 'nyc-2', region: 'nyc' })]);
+    const found = await provider().instances.getById('nyc-2');
+    expect(found?.getInstance().region).toBe('nyc');
+    expect(m.get).toHaveBeenLastCalledWith('nyc-2', { region: 'nyc' });
+  });
+
+  it('retries a call while the listing still shows the computer', async () => {
+    m.get.mockResolvedValueOnce(machine({ id: 'old-1' }));
+    const sandbox = await provider().instances.getById('old-1');
+    m.exec.mockRejectedValueOnce(notFound()).mockResolvedValueOnce(ok);
+    m.list.mockResolvedValueOnce([machine({ id: 'old-1' })]);
+    expect((await sandbox!.runCommand('echo ok')).stdout).toBe('ok\n');
+    expect(m.exec).toHaveBeenCalledTimes(2);
+  });
+
+  it('believes "not found" once the listing agrees', async () => {
+    m.get.mockResolvedValueOnce(machine({ id: 'old-2' }));
+    const sandbox = await provider().instances.getById('old-2');
+    m.exec.mockRejectedValueOnce(notFound());
+    m.list.mockResolvedValueOnce([]);
+    await expect(sandbox!.runCommand('echo ok')).rejects.toThrow('VM not found');
+    expect(m.exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a computer it just created, even before the listing shows it', async () => {
+    const sandbox = await created();
+    m.exec.mockRejectedValueOnce(notFound()).mockResolvedValueOnce(ok);
+    m.list.mockResolvedValueOnce([]);
+    expect((await sandbox.runCommand('echo ok')).stdout).toBe('ok\n');
+  });
+
+  it('waits out a "not found" while a new computer becomes ready', async () => {
+    m.create.mockResolvedValueOnce(machine({ id: 'new-1' }));
+    m.waitUntilReady.mockRejectedValueOnce(notFound()).mockResolvedValueOnce(machine({ id: 'new-1' }));
+    m.list.mockResolvedValueOnce([]);
+    const sandbox = await provider().instances.create();
+    expect(sandbox.instanceId).toBe('new-1');
+    expect(m.delete).not.toHaveBeenCalled();
+  });
+
+  it('names the computer it could not clean up after a failed create', async () => {
+    m.create.mockResolvedValueOnce(machine({ id: 'stuck-1', name: 'computesdk-stuck' }));
+    m.waitUntilReady.mockRejectedValueOnce(new Error('not ready after 90s'));
+    m.delete.mockRejectedValueOnce(new Error('region unavailable'));
+    await expect(provider().instances.create()).rejects.toThrow(
+      /computesdk-stuck \(stuck-1\) did not become ready .* could not be deleted .*`boxd machine destroy computesdk-stuck`/,
+    );
+  });
+
+  it('opens the stream again when nothing was delivered yet', async () => {
+    const sandbox = await created();
+    m.streamExec.mockReturnValueOnce(fakeStream({ fail: notFound() })).mockReturnValueOnce(fakeStream({ stdout: ['hi\n'] }));
+    m.list.mockResolvedValueOnce([]);
+    const out: string[] = [];
+    const result = await sandbox.runCommand('echo hi', { onStdout: (d) => out.push(d) });
+    expect(out).toEqual(['hi\n']);
+    expect(result.exitCode).toBe(0);
+    expect(m.streamExec).toHaveBeenCalledTimes(2);
+  });
+
+  it('creates from a snapshot kept in another region', async () => {
+    m.create.mockRejectedValueOnce(new NotFoundError('snapshot not found', 5)).mockResolvedValueOnce(machine({ id: 'r-1', region: 'nyc' }));
+    snapshots.list.mockResolvedValueOnce([{ id: 'snap-nyc', name: 'golden', region: 'nyc' }]);
+    m.waitUntilReady.mockResolvedValueOnce(machine({ id: 'r-1', region: 'nyc' }));
+    await provider().instances.create({ snapshotId: 'snap-nyc' });
+    expect(snapshots.list).toHaveBeenCalledWith({ org: 'acme', region: 'all' });
+    expect(m.create.mock.calls[1][0]).toMatchObject({ fromSnapshot: 'snap-nyc', region: 'nyc' });
+  });
+
+  it('deletes a snapshot kept in another region', async () => {
+    snapshots.delete.mockRejectedValueOnce(new NotFoundError('snapshot not found', 5)).mockResolvedValueOnce(undefined);
+    snapshots.list.mockResolvedValueOnce([{ id: 'snap-nyc', name: 'golden', region: 'nyc' }]);
+    await provider().snapshot!.delete('snap-nyc');
+    expect(snapshots.delete).toHaveBeenLastCalledWith('snap-nyc', { org: 'acme', region: 'nyc' });
   });
 });
 
@@ -301,8 +403,8 @@ describe('snapshots', () => {
     snapshots.get
       .mockResolvedValueOnce({ id: 'snap-1', name: 'golden', status: 'pending' })
       .mockResolvedValueOnce({ id: 'snap-1', name: 'golden', status: 'ready', createdAt: new Date(0), sizeBytes: 10 });
-    const snapshot = await provider().snapshot!.create('m-1', { name: 'golden' });
-    expect(snapshots.create).toHaveBeenCalledWith('m-1', 'golden', {});
+    const snapshot = await provider().snapshot!.create('m-snap', { name: 'golden' });
+    expect(snapshots.create).toHaveBeenCalledWith('m-snap', 'golden', {});
     expect(snapshot).toMatchObject({ id: 'snap-1', provider: 'boxd' });
   });
 });

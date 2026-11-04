@@ -61,7 +61,7 @@ interface BoxdConfig {
   token?: string;
   /** Org to create and list computers in - defaults to BOXD_ORG */
   org?: string;
-  /** Region, e.g. `fra` or `nyc` - defaults to BOXD_REGION, then Frankfurt */
+  /** Region to create in, e.g. `fra` or `nyc` - defaults to BOXD_REGION, then Frankfurt. Lists cover every region unless it is set. */
   region?: string;
   /** API endpoint - defaults to BOXD_BASE_URL, then boxd production */
   baseURL?: string;
@@ -80,7 +80,7 @@ interface BoxdConfig {
 | `memoryMiB` (or `memory`, `memoryMb`, `memMiB`) | `config.memory` | 4096, 8192, 16384 or 32768. Every vCPU comes with 4 GiB, so either field names the whole size. |
 | `snapshotId` (or `templateId`) | `fromSnapshot` | Starts as the snapshot was captured, with its size. |
 | `timeout` | `deleteAfter` | Milliseconds until the computer is deleted, whatever it is doing. |
-| `region` | `region` | `fra` (default) or another region your org has, such as `nyc`. |
+| `region` | `region` | `fra` (default) or another region your org has, such as `nyc`. `getById` and `destroy` find a computer in any region. |
 | `envs` | | Exported in every command. |
 | `name` | `name` | Unique in the org. Default `computesdk-<8 hex>`. |
 

@@ -39,7 +39,7 @@ export interface BoxdConfig {
   token?: string;
   /** Org (name or id) to create and list computers in - falls back to BOXD_ORG. Empty means your personal computers. */
   org?: string;
-  /** Region for computers and snapshots (e.g. `fra`, `nyc`) - falls back to BOXD_REGION, then the boxd default (Frankfurt) */
+  /** Region to create computers in (e.g. `fra`, `nyc`) - falls back to BOXD_REGION, then the boxd default (Frankfurt). Lists cover every region unless it is set. */
   region?: string;
   /** API endpoint - falls back to BOXD_BASE_URL, then boxd production */
   baseURL?: string;
@@ -71,6 +71,10 @@ const SIZES: ReadonlyArray<{ vcpu: number; memoryGiB: number }> = [
 const SIZE_LIST = SIZES.map((s) => `${s.vcpu} vCPU / ${s.memoryGiB} GiB`).join(', ');
 const LABEL = { computesdk: 'true' } as const;
 const SNAPSHOT_READY_TIMEOUT_MS = 120_000;
+/** Pauses between retries of a "not found" that boxd may not mean (see `onComputer`). */
+const NOT_FOUND_RETRY_MS = [250, 500, 1000, 2000];
+/** A computer this process created less than this long ago is known to exist. */
+const JUST_CREATED_MS = 60_000;
 
 interface ResolvedConfig {
   apiKey?: string;
@@ -123,6 +127,101 @@ function clientFor(config: ResolvedConfig): Boxd {
 
 function regionOpt(region?: string): { region?: string } {
   return region ? { region } : {};
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// A call that only gets an id can't tell which region the computer is in, so this process
+// remembers the region of every computer it sees, and when it created the ones it made.
+const regionOf = new Map<string, string>();
+const createdHere = new Map<string, number>();
+
+function remember(machine: Machine): void {
+  if (machine.region) regionOf.set(machine.id, machine.region);
+}
+
+function forget(id: string): void {
+  regionOf.delete(id);
+  createdHere.delete(id);
+}
+
+function justCreated(id: string): boolean {
+  const at = createdHere.get(id);
+  return at !== undefined && Date.now() - at < JUST_CREATED_MS;
+}
+
+/** The region a computer is in, from a listing of every region the org has. */
+async function locate(client: Boxd, org: string | undefined, id: string): Promise<string | undefined> {
+  const machines = await client.machines.list({ ...(org ? { org } : {}), region: 'all' });
+  return machines.find((machine) => machine.id === id)?.region ?? undefined;
+}
+
+/** The region a snapshot (by id or name) is in, from a listing of every region the org has. */
+async function locateSnapshot(client: Boxd, org: string | undefined, idOrName: string): Promise<string | undefined> {
+  const snapshots = await client.snapshots.list({ ...(org ? { org } : {}), region: 'all' });
+  return snapshots.find((snapshot) => snapshot.id === idOrName || snapshot.name === idOrName)?.region ?? undefined;
+}
+
+/**
+ * Runs `call` against one computer and decides what a "not found" means, since boxd
+ * answers it in two cases where the computer exists:
+ *
+ * - The computer is in another region than `target.region`: one created with a per-call
+ *   `region`, looked up by id. The listing names its region, and the call goes there.
+ * - boxd answers "not found" for a moment about a computer it has just created. The call
+ *   is retried for a few seconds, unless the listing agrees that the computer is gone.
+ *
+ * `call` reads `target.region` each time it runs. `canRetry` turns retrying off, for a
+ * call that can't be repeated once it has delivered output.
+ */
+async function onComputer<T>(
+  client: Boxd,
+  org: string | undefined,
+  target: { id: string; region?: string },
+  call: () => Promise<T>,
+  canRetry: () => boolean = () => true,
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call();
+    } catch (err) {
+      if (!(err instanceof NotFoundError) || !canRetry() || attempt >= NOT_FOUND_RETRY_MS.length) throw err;
+      const region = await locate(client, org, target.id).catch(() => undefined);
+      if (region && region !== target.region) {
+        target.region = region;
+        regionOf.set(target.id, region);
+        continue;
+      }
+      if (!region && !justCreated(target.id)) throw err;
+      await sleep(NOT_FOUND_RETRY_MS[attempt]);
+    }
+  }
+}
+
+/** Deletes a computer. Resolves once it is gone, also when it already was. */
+async function deleteComputer(client: Boxd, org: string | undefined, target: { id: string; region?: string }): Promise<void> {
+  try {
+    await onComputer(client, org, target, () => client.machines.delete(target.id, regionOpt(target.region)));
+  } catch (err) {
+    if (!(err instanceof NotFoundError)) throw err;
+  }
+  forget(target.id);
+}
+
+async function createMachine(client: Boxd, config: ResolvedConfig, params: MachineCreateParams): Promise<Machine> {
+  try {
+    return await client.machines.create(params);
+  } catch (err) {
+    if (err instanceof AuthenticationError) {
+      throw new Error(`boxd rejected the credentials (${err.message}). Check BOXD_API_KEY and that BOXD_ORG is the org the key belongs to.`);
+    }
+    // A snapshot is kept in the region of the computer it was taken from.
+    if (err instanceof NotFoundError && params.fromSnapshot && !params.region) {
+      const region = await locateSnapshot(client, config.org, params.fromSnapshot).catch(() => undefined);
+      if (region) return client.machines.create({ ...params, region });
+    }
+    throw err;
+  }
 }
 
 function toInstance(client: Boxd, config: ResolvedConfig, machine: Machine, envs: Record<string, string> = {}): BoxdInstance {
@@ -208,14 +307,16 @@ async function startMachine(instance: BoxdInstance): Promise<void> {
   await instance.client.machines.waitUntilReady(instance.id, regionOpt(instance.region));
 }
 
-// A stopped computer does not wake on its own, unlike a suspended or hibernated one.
-async function withStart<T>(instance: BoxdInstance, fn: () => Promise<T>): Promise<T> {
+// A call on a computer. A stopped computer does not wake on its own, unlike a suspended or
+// hibernated one, so it is started and the call made again; "not found" is handled by `onComputer`.
+async function onInstance<T>(instance: BoxdInstance, fn: () => Promise<T>, canRetry: () => boolean = () => true): Promise<T> {
+  const run = () => onComputer(instance.client, instance.org, instance, fn, canRetry);
   try {
-    return await fn();
+    return await run();
   } catch (err) {
-    if (!isStopped(err)) throw err;
+    if (!isStopped(err) || !canRetry()) throw err;
     await startMachine(instance);
-    return await fn();
+    return await run();
   }
 }
 
@@ -322,21 +423,22 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
       create: async (config: BoxdConfig, options: CreateInstanceOptions = {}) => {
         const resolved = resolveConfig(config);
         const client = clientFor(resolved);
-        let machine: Machine;
-        try {
-          machine = await client.machines.create(createParams(resolved, options));
-        } catch (err) {
-          if (err instanceof AuthenticationError) {
-            throw new Error(`boxd rejected the credentials (${err.message}). Check BOXD_API_KEY and that BOXD_ORG is the org the key belongs to.`);
-          }
-          throw err;
-        }
+        const machine = await createMachine(client, resolved, createParams(resolved, options));
+        remember(machine);
+        createdHere.set(machine.id, Date.now());
         const instance = toInstance(client, resolved, machine, options.envs ?? {});
         // create returns before the computer takes commands; waitUntilReady covers the gap.
         try {
-          instance.machine = await client.machines.waitUntilReady(machine.id, regionOpt(instance.region));
+          instance.machine = await onComputer(client, resolved.org, instance, () =>
+            client.machines.waitUntilReady(machine.id, regionOpt(instance.region)),
+          );
         } catch (err) {
-          await client.machines.delete(machine.id, regionOpt(instance.region)).catch(() => undefined);
+          await deleteComputer(client, resolved.org, instance).catch((cleanup: Error) => {
+            throw new Error(
+              `boxd computer ${machine.name} (${machine.id}) did not become ready (${(err as Error).message}) ` +
+                `and could not be deleted (${cleanup.message}). Delete it with \`boxd machine destroy ${machine.name}\`.`,
+            );
+          });
           throw err;
         }
         return { instance, instanceId: machine.id };
@@ -345,8 +447,10 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
       getById: async (config: BoxdConfig, instanceId: string) => {
         const resolved = resolveConfig(config);
         const client = clientFor(resolved);
+        const target = { id: instanceId, region: regionOf.get(instanceId) ?? resolved.region };
         try {
-          const machine = await client.machines.get(instanceId, regionOpt(resolved.region));
+          const machine = await onComputer(client, resolved.org, target, () => client.machines.get(instanceId, regionOpt(target.region)));
+          remember(machine);
           return { instance: toInstance(client, resolved, machine), instanceId: machine.id };
         } catch (err) {
           if (err instanceof NotFoundError) return null;
@@ -354,31 +458,29 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
         }
       },
 
-      // Only the computers this provider created, which carry the computesdk label.
+      // Only the computers this provider created, which carry the computesdk label, in
+      // every region the org has unless the config names one.
       list: async (config: BoxdConfig) => {
         const resolved = resolveConfig(config);
         const client = clientFor(resolved);
         const machines = await client.machines.list({
           ...(resolved.org ? { org: resolved.org } : {}),
-          ...regionOpt(resolved.region),
+          region: resolved.region ?? 'all',
           labels: { ...LABEL },
         });
+        machines.forEach(remember);
         return machines.map((machine) => ({ instance: toInstance(client, resolved, machine), instanceId: machine.id }));
       },
 
       destroy: async (config: BoxdConfig, instanceId: string) => {
         const resolved = resolveConfig(config);
-        try {
-          await clientFor(resolved).machines.delete(instanceId, regionOpt(resolved.region));
-        } catch (err) {
-          if (!(err instanceof NotFoundError)) throw err;
-        }
+        await deleteComputer(clientFor(resolved), resolved.org, { id: instanceId, region: regionOf.get(instanceId) ?? resolved.region });
       },
 
       runCommand: async (instance: BoxdInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const start = Date.now();
         try {
-          const result = await withStart(instance, () =>
+          const result = await onInstance(instance, () =>
             instance.client.machines.exec(instance.id, {
               command: shellCommand(instance, command, options),
               ...(options?.cwd ? { cwd: options.cwd } : {}),
@@ -410,19 +512,16 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
             options.onStderr?.(data);
           },
         };
-        try {
-          return await streamOnce(instance, command, tracked);
-        } catch (err) {
-          if (delivered || !isStopped(err)) throw err;
-          await startMachine(instance);
-          return await streamOnce(instance, command, options);
-        }
+        // Made again (on a stopped computer, or a "not found") only while nothing has been delivered.
+        return onInstance(instance, () => streamOnce(instance, command, tracked), () => !delivered);
       },
 
       getInfo: async (instance: BoxdInstance): Promise<InstanceInfo> => {
         let machine: Machine | undefined;
         try {
-          machine = await instance.client.machines.get(instance.id, regionOpt(instance.region));
+          machine = await onComputer(instance.client, instance.org, instance, () =>
+            instance.client.machines.get(instance.id, regionOpt(instance.region)),
+          );
           instance.machine = machine;
         } catch (err) {
           if (!(err instanceof NotFoundError)) throw err;
@@ -451,12 +550,14 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
       // certificate within about 15 seconds of being created.
       getUrl: async (instance: BoxdInstance, options: { port: number; protocol?: string }): Promise<string> => {
         const proxies = instance.client.machines.proxies;
-        const region = regionOpt(instance.region);
+        const onIt = <T>(call: () => Promise<T>) => onComputer(instance.client, instance.org, instance, call);
         const findDomain = async () =>
-          (await proxies.list(instance.id, region)).find((p) => p.name && !p.isDefault && p.port === options.port)?.domain;
+          (await onIt(() => proxies.list(instance.id, regionOpt(instance.region)))).find(
+            (p) => p.name && !p.isDefault && p.port === options.port,
+          )?.domain;
         let domain = await findDomain();
         if (!domain) {
-          const created = await proxies.create(instance.id, `p${options.port}`, options.port, region);
+          const created = await onIt(() => proxies.create(instance.id, `p${options.port}`, options.port, regionOpt(instance.region)));
           domain = (await findDomain()) ?? `${created.name}.${instance.name}.boxd.sh`;
         }
         const scheme = options.protocol === 'ws' || options.protocol === 'wss' ? 'wss' : 'https';
@@ -468,15 +569,15 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
       // boxd's file API, so no shell is involved. Files are written as the computer's user, `boxd`.
       filesystem: {
         readFile: async (instance: BoxdInstance, path: string): Promise<string> => {
-          const bytes = await withStart(instance, () => instance.client.machines.fs.read(instance.id, path, regionOpt(instance.region)));
+          const bytes = await onInstance(instance, () => instance.client.machines.fs.read(instance.id, path, regionOpt(instance.region)));
           return new TextDecoder().decode(bytes);
         },
         writeFile: async (instance: BoxdInstance, path: string, content: string): Promise<void> => {
-          await withStart(instance, () => instance.client.machines.fs.write(instance.id, path, content, regionOpt(instance.region)));
+          await onInstance(instance, () => instance.client.machines.fs.write(instance.id, path, content, regionOpt(instance.region)));
         },
         mkdir: async (instance: BoxdInstance, path: string): Promise<void> => {
           try {
-            await withStart(instance, () => instance.client.machines.fs.mkdir(instance.id, path, regionOpt(instance.region)));
+            await onInstance(instance, () => instance.client.machines.fs.mkdir(instance.id, path, regionOpt(instance.region)));
           } catch (err) {
             if (!(err instanceof MachineFileExistsError)) throw err;
             const stat = await instance.client.machines.fs.stat(instance.id, path, regionOpt(instance.region));
@@ -484,7 +585,7 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
           }
         },
         readdir: async (instance: BoxdInstance, path: string): Promise<FileEntry[]> => {
-          const entries = await withStart(instance, () => instance.client.machines.fs.list(instance.id, path, regionOpt(instance.region)));
+          const entries = await onInstance(instance, () => instance.client.machines.fs.list(instance.id, path, regionOpt(instance.region)));
           return entries.map((entry) => ({
             name: entry.name,
             type: entry.isDir ? ('directory' as const) : ('file' as const),
@@ -493,11 +594,11 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
           }));
         },
         exists: async (instance: BoxdInstance, path: string): Promise<boolean> => {
-          return withStart(instance, () => instance.client.machines.fs.exists(instance.id, path, regionOpt(instance.region)));
+          return onInstance(instance, () => instance.client.machines.fs.exists(instance.id, path, regionOpt(instance.region)));
         },
         remove: async (instance: BoxdInstance, path: string): Promise<void> => {
           try {
-            await withStart(instance, () =>
+            await onInstance(instance, () =>
               instance.client.machines.fs.remove(instance.id, path, { recursive: true, ...regionOpt(instance.region) }),
             );
           } catch (err) {
@@ -514,8 +615,12 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
         const resolved = resolveConfig(config);
         const client = clientFor(resolved);
         const name = options?.name || `computesdk-snap-${randomSuffix()}`;
-        const lookup = { ...(resolved.org ? { org: resolved.org } : {}), ...regionOpt(resolved.region) };
-        const created = await client.snapshots.create(instanceId, name, regionOpt(resolved.region));
+        const target = { id: instanceId, region: regionOf.get(instanceId) ?? resolved.region };
+        const created = await onComputer(client, resolved.org, target, () =>
+          client.snapshots.create(instanceId, name, regionOpt(target.region)),
+        );
+        // The snapshot is kept in its computer's region.
+        const lookup = { ...(resolved.org ? { org: resolved.org } : {}), ...regionOpt(target.region) };
         const deadline = Date.now() + SNAPSHOT_READY_TIMEOUT_MS;
         let snapshot = await client.snapshots.get(created.name, lookup);
         while (snapshot.status === 'pending' && Date.now() < deadline) {
@@ -529,11 +634,12 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
       },
 
       // boxd snapshots are not tied to a computer once taken, so `instanceId` does not filter.
+      // Every region the org has, unless the config names one.
       list: async (config: BoxdConfig, options?: ListSnapshotsOptions): Promise<Snapshot[]> => {
         const resolved = resolveConfig(config);
         const snapshots = await clientFor(resolved).snapshots.list({
           ...(resolved.org ? { org: resolved.org } : {}),
-          ...regionOpt(resolved.region),
+          region: resolved.region ?? 'all',
         });
         const all = snapshots.map(toSnapshot);
         return options?.limit ? all.slice(0, options.limit) : all;
@@ -541,13 +647,21 @@ export const boxd = defineProvider<BoxdInstance, BoxdConfig, unknown, Snapshot>(
 
       delete: async (config: BoxdConfig, snapshotId: string): Promise<void> => {
         const resolved = resolveConfig(config);
+        const client = clientFor(resolved);
+        const remove = (region?: string) =>
+          client.snapshots.delete(snapshotId, { ...(resolved.org ? { org: resolved.org } : {}), ...regionOpt(region) });
         try {
-          await clientFor(resolved).snapshots.delete(snapshotId, {
-            ...(resolved.org ? { org: resolved.org } : {}),
-            ...regionOpt(resolved.region),
-          });
+          await remove(resolved.region);
         } catch (err) {
           if (!(err instanceof NotFoundError)) throw err;
+          // A snapshot is kept in its computer's region, which need not be the configured one.
+          const region = await locateSnapshot(client, resolved.org, snapshotId).catch(() => undefined);
+          if (!region || region === resolved.region) return;
+          try {
+            await remove(region);
+          } catch (again) {
+            if (!(again instanceof NotFoundError)) throw again;
+          }
         }
       },
     },
