@@ -1,5 +1,15 @@
 # @computesdk/namespace
 
+## 1.6.40
+
+### Patch Changes
+
+- b9711e9: Fixed `snapshot.list` and `snapshot.delete` against the real StorageService contract. `ListPersistentVolumeSnapshots` ignores its `id` filter and answers the workspace's full record set in camelCase, so listing now makes one call and joins each record to its volume (the record `id` is the volume id, `completedSnapshot` the generation) instead of re-fetching per volume and emitting duplicates. Listed snapshots are id'd `tag/<gen>` — the form `create({ snapshotId })` restores. `delete` now addresses the artifact by its volume (`{id: volumeId, tag}`) as the RPC requires, accepting `tag/<gen>` or a bare generation, and no-ops when the volume or generation is already gone.
+- 24803d6: Add additive standard CPU/RAM sizeClass requests, immutable pure provider capability resolution and request metadata, with typed pre-create failures instead of silently ignored or default-sized requests. Initially map sm/md/lg/xl for Namespace Linux amd64 and new Archil persistent VMs; preserve every legacy create path without sizeClass. Other mappings remain explicitly unknown; no builds, live availability checks, or consumer migrations are performed.
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 1.6.39
 
 ### Patch Changes

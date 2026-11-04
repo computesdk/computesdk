@@ -1,5 +1,13 @@
 # @computesdk/tilion
 
+## 0.1.17
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.1.16
 
 ### Patch Changes

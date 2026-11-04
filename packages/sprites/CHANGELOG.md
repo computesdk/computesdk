@@ -1,5 +1,14 @@
 # @computesdk/sprites
 
+## 0.1.33
+
+### Patch Changes
+
+- b63030e: fix(sprites): suffix the default sandbox name with a uuid so concurrent `sandbox.create()` calls no longer collide — `sprite-${Date.now()}` produced identical names within the same millisecond and the API returned 409 "already exists"
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.1.32
 
 ### Patch Changes

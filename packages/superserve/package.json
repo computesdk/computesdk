@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/superserve",
-  "version": "0.2.18",
+  "version": "0.2.19",
   "description": "Superserve provides sandbox infrastructure to run code in isolated cloud environments powered by Firecracker MicroVMs",
   "author": "Superserve",
   "license": "MIT",
