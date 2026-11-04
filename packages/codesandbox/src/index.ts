@@ -19,6 +19,23 @@ export interface CodesandboxConfig {
   timeout?: number;
 }
 
+/** Safe lifecycle diagnostics, without native errors, request data or causes. */
+export class CodeSandboxLifecycleError extends Error {
+  readonly code = 'CODESANDBOX_LIFECYCLE_ERROR' as const;
+  readonly provider = 'codesandbox' as const;
+  declare readonly httpStatus?: number;
+
+  constructor(readonly operation: 'get' | 'resume' | 'delete', httpStatus?: number) {
+    super(operation === 'delete'
+      ? 'Failed to delete CodeSandbox sandbox.'
+      : 'Failed to get CodeSandbox sandbox.');
+    this.name = 'CodeSandboxLifecycleError';
+    if (typeof httpStatus === 'number' && Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599) {
+      this.httpStatus = httpStatus;
+    }
+  }
+}
+
 function validateSandboxId(sandboxId: string): void {
   if (typeof sandboxId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(sandboxId)) {
     throw new Error('Invalid CodeSandbox sandbox ID.');
@@ -28,7 +45,7 @@ function validateSandboxId(sandboxId: string): void {
 // SDK 2.4.2's handleResponse discards HTTP status when it throws. Observe the
 // response through its public fetch option, never infer absence from error text
 // or a status-shaped thrown object. Each client observes one exact operation.
-function lifecycleSdk(apiKey: string, method: 'GET' | 'DELETE', path: string) {
+function lifecycleSdk(apiKey: string, method: 'GET' | 'POST' | 'DELETE', path: string) {
   let status: number | undefined;
   const sdk = new CodeSandbox(apiKey, {
     fetch: async (input, init) => {
@@ -42,7 +59,7 @@ function lifecycleSdk(apiKey: string, method: 'GET' | 'DELETE', path: string) {
       return response;
     },
   });
-  return { sdk, isNotFound: () => status === 404 };
+  return { sdk, getStatus: () => status };
 }
 
 export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({
@@ -92,22 +109,23 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         validateSandboxId(sandboxId);
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
         if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
-        const { sdk, isNotFound } = lifecycleSdk(apiKey, 'GET', `/sandbox/${sandboxId}`);
+        const { sdk, getStatus } = lifecycleSdk(apiKey, 'GET', `/sandbox/${sandboxId}`);
         let metadata;
         try {
           metadata = await sdk.sandboxes.get(sandboxId);
         } catch {
-          if (isNotFound()) return null;
-          throw new Error('Failed to get CodeSandbox sandbox.');
+          if (getStatus() === 404) return null;
+          throw new CodeSandboxLifecycleError('get', getStatus());
         }
-        if (metadata.id !== sandboxId) throw new Error('Failed to get CodeSandbox sandbox.');
+        if (metadata.id !== sandboxId) throw new CodeSandboxLifecycleError('get', getStatus());
+        const resume = lifecycleSdk(apiKey, 'POST', `/vm/${sandboxId}/start`);
         try {
-          const sandbox = await sdk.sandboxes.resume(sandboxId);
+          const sandbox = await resume.sdk.sandboxes.resume(sandboxId);
           return { instance: sandbox, instanceId: sandboxId };
         } catch {
           // Resume starts a VM; a failure here (even HTTP 404) is not a
           // metadata absence observation and must never become null.
-          throw new Error('Failed to get CodeSandbox sandbox.');
+          throw new CodeSandboxLifecycleError('resume', resume.getStatus());
         }
       },
 
@@ -119,13 +137,13 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         validateSandboxId(sandboxId);
         const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.CSB_API_KEY) || '';
         if (!apiKey) throw new Error(`Missing CodeSandbox API key.`);
-        const { sdk, isNotFound } = lifecycleSdk(apiKey, 'DELETE', `/vm/${sandboxId}`);
+        const { sdk, getStatus } = lifecycleSdk(apiKey, 'DELETE', `/vm/${sandboxId}`);
         try {
           // Public permanent deletion includes this sandbox's data. Shutdown
           // only stops the VM and adds retries that can exhaust cleanup budgets.
           await sdk.sandboxes.delete(sandboxId);
         } catch {
-          if (!isNotFound()) throw new Error('Failed to delete CodeSandbox sandbox.');
+          if (getStatus() !== 404) throw new CodeSandboxLifecycleError('delete', getStatus());
         }
       },
 

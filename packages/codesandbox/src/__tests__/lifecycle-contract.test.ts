@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodeSandbox, Sandbox } from '@codesandbox/sdk';
-import { codesandbox } from '../index';
+import { codesandbox, CodeSandboxLifecycleError } from '../index';
 
 // Exercise the installed native SDK and real provider factory. Only HTTP is
 // controlled: no canned framework sandbox or replacement native methods.
@@ -40,6 +40,30 @@ async function rejectsSafely(promise: Promise<unknown>, message: string) {
   expect(error).not.toHaveProperty('cause');
 }
 
+async function rejectsLifecycle(
+  promise: Promise<unknown>, operation: 'get' | 'resume' | 'delete', httpStatus?: number,
+) {
+  const error = await promise.catch(error => error);
+  expect(error).toBeInstanceOf(CodeSandboxLifecycleError);
+  if (!(error instanceof Error)) throw new Error('Expected a lifecycle failure.');
+  expect(error).toMatchObject({
+    name: 'CodeSandboxLifecycleError',
+    code: 'CODESANDBOX_LIFECYCLE_ERROR',
+    provider: 'codesandbox',
+    operation,
+    message: operation === 'delete' ? deleteFailure : lookupFailure,
+  });
+  if (httpStatus === undefined) expect(error).not.toHaveProperty('httpStatus');
+  else expect(error).toHaveProperty('httpStatus', httpStatus);
+  expect(Object.keys(error).sort()).toEqual(
+    ['name', 'code', 'provider', 'operation', ...(httpStatus === undefined ? [] : ['httpStatus'])].sort(),
+  );
+  for (const field of ['cause', 'config', 'response', 'body', 'request', 'status']) {
+    expect(error).not.toHaveProperty(field);
+  }
+  expect(JSON.stringify(error)).not.toContain(nativeDetail);
+}
+
 beforeEach(() => {
   calls = [];
   wireRequests = [];
@@ -75,6 +99,55 @@ afterEach(() => {
 });
 
 describe('CodeSandbox native lifecycle HTTP contract', () => {
+  it.each([99, 600, 200.5, NaN, Infinity])('omits an invalid diagnostic HTTP status (%s)', status => {
+    expect(new CodeSandboxLifecycleError('delete', status)).not.toHaveProperty('httpStatus');
+  });
+
+  it.each([100, 599])('retains an integer diagnostic HTTP status at the valid boundary (%i)', status => {
+    expect(new CodeSandboxLifecycleError('delete', status)).toHaveProperty('httpStatus', status);
+  });
+
+  it.each(['get', 'resume', 'delete'] as const)(
+    'reports only the scoped native HTTP status for %s failures', async operation => {
+      respond = call => {
+        if (operation === 'resume' && call.method === 'GET') return metadata();
+        return failure(403);
+      };
+      const manager = provider().sandbox;
+      await rejectsLifecycle(
+        operation === 'delete' ? manager.destroy(id) : manager.getById(id), operation, 403,
+      );
+      expect(calls).toEqual(
+        operation === 'delete' ? [deleteCall]
+          : operation === 'get' ? [getCall] : [getCall, resumeCall, resumeCall, resumeCall],
+      );
+    },
+  );
+
+  it.each(['get', 'resume', 'delete'] as const)(
+    'does not infer %s HTTP status from thrown objects or a prior metadata success', async operation => {
+      respond = call => {
+        if (operation === 'resume' && call.method === 'GET') return metadata();
+        throw { status: 404, httpStatus: 404, response: { status: 404 }, message: nativeDetail };
+      };
+      const manager = provider().sandbox;
+      await rejectsLifecycle(
+        operation === 'delete' ? manager.destroy(id) : manager.getById(id), operation,
+      );
+    },
+  );
+
+  it('drops an earlier resume HTTP status when the last SDK retry has a transport error', async () => {
+    let resumes = 0;
+    respond = call => {
+      if (call.method === 'GET') return metadata();
+      if (++resumes < 3) return failure(503);
+      throw new TypeError(nativeDetail);
+    };
+    await rejectsLifecycle(provider().sandbox.getById(id), 'resume');
+    expect(calls).toEqual([getCall, resumeCall, resumeCall, resumeCall]);
+  });
+
   it('documents that SDK 2.4.2 erases a real metadata HTTP 404 into an untyped error', async () => {
     respond = () => failure(404);
     const error = await new CodeSandbox(apiKey).sandboxes.get(id).catch(error => error);
