@@ -3,11 +3,11 @@
  */
 
 import { Sandbox as E2BSandbox, Volume as E2BVolume } from 'e2b';
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, StartProcessOptions } from '@computesdk/provider';
+import { runE2BCommand, startE2BProcess } from './process';
 
-type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 type E2BFileEntry = {
   name: string;
   isDir?: boolean;
@@ -127,24 +127,15 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         } catch { /* already destroyed */ }
       },
 
-      runCommand: async (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const startTime = Date.now();
-        try {
-          let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          const execution = await sandbox.commands.run(fullCommand, { timeoutMs: options?.timeout });
-          return { stdout: execution.stdout, stderr: execution.stderr, exitCode: execution.exitCode, durationMs: Date.now() - startTime };
-        } catch (error) {
-          const result = (error as { result?: E2BExecutionResult })?.result;
-          if (result) return { stdout: result.stdout || '', stderr: result.stderr || '', exitCode: result.exitCode || 1, durationMs: Date.now() - startTime };
-          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
-        }
-      },
+      runCommand: (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> =>
+        runE2BCommand(sandbox, command, options),
+
+      // envd streams output, takes stdin and signals processes itself.
+      streamCommand: (sandbox: E2BSandbox, command: string, options: RunCommandOptions): Promise<CommandResult> =>
+        runE2BCommand(sandbox, command, options),
+
+      startProcess: (sandbox: E2BSandbox, command: string, options: StartProcessOptions) =>
+        startE2BProcess(sandbox, command, options),
 
       getInfo: async (sandbox: E2BSandbox): Promise<InstanceInfo> => ({
         id: sandbox.sandboxId || 'e2b-unknown',
