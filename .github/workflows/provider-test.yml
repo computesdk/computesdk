@@ -64,9 +64,10 @@ jobs:
     - name: Build packages
       run: pnpm build
 
-    # Every repo secret, then every Namespace vault entry, is exported so each
-    # provider's suite finds the credential names it already reads
-    # (NSC_TOKEN, E2B_API_KEY, ...). Vault entries win on name clashes.
+    # Every repo secret is exported, then the Namespace vault entries for the
+    # env vars the provider's source reads (process.env.X), so its suite finds
+    # the credential names it already uses (NSC_TOKEN, E2B_API_KEY, ...).
+    # Vault entries win on name clashes.
     # Missing credentials fail the run instead of skipping the live tests.
     - name: Run ${{ inputs.provider }} tests
       env:
@@ -82,22 +83,26 @@ jobs:
         eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select((.key | ascii_downcase) != "github_token") | "export \(.key)=\(.value | @sh)"')"
         unset SECRETS_JSON
 
+        keys=$(grep -rhoE "process\.env(\?)?\.[A-Z][A-Z0-9_]*|process\.env\[['\"][A-Z][A-Z0-9_]*['\"]\]" "packages/$PROVIDER/src" \
+          | grep -oE '[A-Z][A-Z0-9_]*' | sort -u | jq -R . | jq -sc . || echo '[]')
         envdef="$RUNNER_TEMP/vault.envdef"
-        nsc vault list --output json | jq -r '
+        nsc vault list --output json | jq -r --argjson keys "$keys" '
           [ .[]
             | select((.deleted_at // null) == null)
             | ((((.labels // []) | map(select(.name == "name")) | .[0].value) // .description // "")) as $name
-            | select($name | test("^[A-Z][A-Z0-9_]*$"))
+            | select($keys | index($name) != null)
             | {name: $name, object_id: .object_id} ]
           | group_by(.name) | map(last) | .[]
           | "\(.name)=\(.object_id)"' > "$envdef"
-        echo "Loading $(wc -l < "$envdef") Namespace vault entries"
-        vault_exported=$(nsc vault export --envdef "$envdef" --shell=bash)
-        eval "$vault_exported"
-        unset vault_exported
-        while IFS='=' read -r key _; do
-          [ -n "${!key-}" ] && printf '::add-mask::%s\n' "${!key}"
-        done < "$envdef"
+        echo "Loading $(cut -d= -f1 "$envdef" | tr '\n' ' ')from the Namespace vault"
+        if [ -s "$envdef" ]; then
+          vault_exported=$(nsc vault export --envdef "$envdef" --shell=bash)
+          eval "$vault_exported"
+          unset vault_exported
+          while IFS='=' read -r key _; do
+            if [ -n "${!key-}" ]; then printf '::add-mask::%s\n' "${!key}"; fi
+          done < "$envdef"
+        fi
         rm -f "$envdef"
 
         pnpm --filter "./packages/$PROVIDER" test
