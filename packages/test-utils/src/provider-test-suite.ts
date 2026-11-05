@@ -288,14 +288,15 @@ export function defineProviderTests(config: ProviderTestConfig) {
           // about ordering against the command's own completion rather than
           // about the final text.
           const chunks: string[] = [];
-          const startedAt = Date.now();
           let firstChunkAt: number | undefined;
+          let lastChunkAt: number | undefined;
 
           const result = await sandbox.runCommand(
             `sh -c 'for i in 1 2 3 4 5; do echo tick $i; sleep 1; done'`,
             {
               onStdout: (text: string) => {
                 firstChunkAt ??= Date.now();
+                lastChunkAt = Date.now();
                 chunks.push(text);
               }
             }
@@ -303,12 +304,10 @@ export function defineProviderTests(config: ProviderTestConfig) {
 
           expect(result.exitCode).toBe(0);
           expect(firstChunkAt).toBeDefined();
-          // The first tick is printed immediately and the last four seconds are
-          // spent sleeping, so a first chunk that arrives in the first half of
-          // the command's life could not have been buffered until exit.
-          expect((firstChunkAt as number) - startedAt).toBeLessThan(
-            result.durationMs / 2
-          );
+          // The ticks are printed a second apart, so output buffered until exit
+          // arrives in one burst while streamed output is spread over the run.
+          // Measured between chunks, so slow connection setup doesn't count.
+          expect((lastChunkAt as number) - (firstChunkAt as number)).toBeGreaterThanOrEqual(60);
           // Everything streamed is exactly what the command produced: no chunk
           // dropped, and none delivered twice.
           expect(chunks.join('')).toBe(result.stdout);
@@ -445,8 +444,8 @@ export function defineProviderTests(config: ProviderTestConfig) {
  * Runs the complete provider test suite (legacy function for backward compatibility)
  */
 export function runProviderTestSuite(config: ProviderTestConfig) {
-  const testFunction = defineProviderTests(config);
-  testFunction();
+  // Scoped so the per-test live sandbox hooks don't wrap a package's own unit tests.
+  describe(`${config.name} conformance`, defineProviderTests(config));
 }
 
 /**

@@ -1177,7 +1177,11 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
 
     const instance = this.wrap(result);
     // Reattach a running router's info; nothing to read if none ever ran.
-    instance.egress = await readInstanceEgress(instance).catch(() => undefined);
+    // Only via a native file API: the shell fallback would turn every getById
+    // into command execs on the box.
+    if (this.methods.filesystem) {
+      instance.egress = await readInstanceEgress(instance).catch(() => undefined);
+    }
     return instance;
   }
 
