@@ -144,4 +144,30 @@ describe('shell process tier (host sh)', () => {
     // Held start: launch + confirm; unheld start: launch only.
     expect(launches.length - execsForFirst).toBeLessThan(execsForFirst)
   }, 30_000)
+
+  it('reports no signal for a command that exits 143 on its own', async () => {
+    const proc = await startShellProcess(run, 'exit 143')
+    expect(await proc.wait({ timeout: 20_000 })).toMatchObject({ exitCode: 143, signal: null })
+  }, 30_000)
+
+  it('accepts a stdin write right after a held first start', async () => {
+    const runtime = new ShellProcessRuntime(run)
+    const proc = await runtime.startProcess('cat', { stdin: true })
+    await proc.write('early\n')
+    await proc.closeStdin()
+    expect((await proc.wait({ timeout: 20_000 })).stdout).toBe('early\n')
+  }, 30_000)
+
+  it('still advances when maxReadBytes is smaller than a record', async () => {
+    const proc = await startShellProcess(run, 'i=0; while [ $i -lt 2000 ]; do echo "line $i"; i=$((i+1)); done', { maxReadBytes: 1 })
+    expect((await proc.wait({ timeout: 30_000 })).stdout.split('\n').length).toBe(2001)
+  }, 60_000)
+
+  it('refuses a job root it does not own', async () => {
+    const box = fs.mkdtempSync(path.join(tmp, 'unsafe-'))
+    fs.mkdirSync(path.join(box, 'elsewhere'))
+    fs.symlinkSync(path.join(box, 'elsewhere'), path.join(box, '.computesdk'))
+    const runIn: CommandRunner = (command, options) => run(`TMPDIR=${box}; export TMPDIR; ${command}`, options)
+    await expect(startShellProcess(runIn, 'echo hi')).rejects.toThrow(/unsafe-job-root/)
+  }, 30_000)
 })
