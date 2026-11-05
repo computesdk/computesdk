@@ -191,6 +191,8 @@ export function launchScript(input: {
     'umask 077',
     'R="${TMPDIR:-/tmp}/.computesdk/jobs"',
     'mkdir -p "$R" || { echo "' + REPLY_MARKER + ' error cannot-create-job-root"; exit 0; }',
+    // A root another user created (or symlinked) would let them swap job files.
+    'for p in "${TMPDIR:-/tmp}/.computesdk" "$R"; do { [ ! -L "$p" ] && [ -O "$p" ] && chmod 700 "$p"; } || { echo "' + REPLY_MARKER + ' error unsafe-job-root"; exit 0; }; done',
     jobDir(input.jobId),
     `mkdir "$D" || { echo "${REPLY_MARKER} error job-exists"; exit 0; }`,
     `printf '%s' ${shQuote(runFile(input))} > "$D/run.sh"`,
