@@ -43,6 +43,35 @@ function minimalPathBin(dir: string): void {
   }
 }
 
+/** Replaces (or adds) `tool` in a minimal PATH dir with a shell stub. */
+function stubTool(dir: string, tool: string, body: string): void {
+  fs.rmSync(path.join(dir, tool), { force: true })
+  fs.writeFileSync(path.join(dir, tool), `#!/bin/sh\n${body}\n`, { mode: 0o755 })
+}
+
+/** Makes a minimal PATH look like an Alpine (musl) box of the given machine arch. */
+function stubMusl(dir: string, mach: 'x86_64' | 'aarch64'): void {
+  stubTool(dir, 'uname', `case "$1" in -s) echo Linux ;; -m) echo ${mach} ;; esac`)
+  stubTool(dir, 'ldd', `echo "musl libc (${mach})" >&2; exit 1`)
+}
+
+/** A tarball mimicking the node dist layout whose "node" prints a launcher result. */
+function stubNodeTarball(distName: string): Buffer {
+  const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-dist-'))
+  const nodeBin = path.join(tree, distName, 'bin')
+  fs.mkdirSync(nodeBin, { recursive: true })
+  const payload = JSON.stringify({
+    token: 'tok',
+    requestId: 'r',
+    daemon: { reused: false, pid: 4242, sseUrl: '' },
+    command: { exitCode: 0, signal: null, stdout: 'ok', stderr: '', combined: 'ok' },
+  })
+  fs.writeFileSync(path.join(nodeBin, 'node'), `#!/bin/sh\necho '${payload}'\n`, { mode: 0o755 })
+  const tarball = path.join(tree, 'node.tar.gz')
+  spawnSync('tar', ['-czf', tarball, '-C', tree, distName])
+  return fs.readFileSync(tarball)
+}
+
 function makeProviderMethods(runCommand: (sandbox: unknown, command: string) => Promise<CommandResult>) {
   return {
     create: vi.fn().mockResolvedValue({ sandbox: { id: 's-1' }, sandboxId: 's-1' }),
@@ -62,7 +91,9 @@ describe('daemonSeedScriptCommand', () => {
     expect(command).toContain('busybox --list')
     expect(command).toContain('https://nodejs.org/dist')
     expect(command).toContain('DAEMOND_NODE_DIST_URL')
-    expect(command).toContain(`node-v${NODE_VERSION}-linux-$__daemond_arch`)
+    expect(command).toContain(`node-v${NODE_VERSION}-$__daemond_flavor`)
+    expect(command).toContain('https://unofficial-builds.nodejs.org/download/release')
+    expect(command).toContain('DAEMOND_NODE_MUSL_DIST_URL')
     expect(command).toContain('daemon bootstrap failed')
     // A single `sh -c` invocation: providers may prepend env assignments or a
     // `cd` prefix to the command, which must land on a real command.
@@ -240,6 +271,85 @@ describe('node bootstrap in a sandbox without node', () => {
     } finally {
       server.close()
     }
+  }, 60_000)
+
+  it('fetches the unofficial musl x64 build on musl, installs libstdc++ via apk, and caches it separately', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-home-'))
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-bin-'))
+    minimalPathBin(bin)
+    stubMusl(bin, 'x86_64')
+    const apkLog = path.join(home, 'apk.log')
+    stubTool(bin, 'apk', `echo "$@" >> '${apkLog}'`)
+
+    const distName = `node-v${NODE_VERSION}-linux-x64-musl`
+    const tarballBytes = stubNodeTarball(distName)
+    const requested: string[] = []
+    const server = http.createServer((req, res) => {
+      requested.push(req.url ?? '')
+      res.writeHead(200, { 'content-type': 'application/gzip' })
+      res.end(tarballBytes)
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+
+    try {
+      const port = (server.address() as AddressInfo).port
+      const command = daemonSeedScriptCommand({ ssePort: 38989 }, 'ignored')
+      const result = await runSeedCommand(command, {
+        PATH: bin,
+        HOME: home,
+        // The glibc mirror must not be used for the musl build.
+        DAEMOND_NODE_DIST_URL: 'http://127.0.0.1:1',
+        DAEMOND_NODE_MUSL_DIST_URL: `http://127.0.0.1:${port}`,
+        DAEMOND_NODE_SKIP_SHA256: '1',
+      })
+      expect(result.stderr).toBe('')
+      expect(result.status).toBe(0)
+      expect(parseSeedInvocationOutput(result.stdout).command.stdout).toBe('ok')
+      expect(requested).toEqual([`/v${NODE_VERSION}/${distName}.tar.gz`])
+      expect(fs.readFileSync(apkLog, 'utf8').trim()).toBe('add --no-cache libstdc++')
+      expect(fs.existsSync(path.join(home, '.computesdk', 'daemond', distName, 'bin', 'node'))).toBe(true)
+      expect(fs.existsSync(path.join(home, '.computesdk', 'daemond', `node-v${NODE_VERSION}-linux-x64`))).toBe(false)
+    } finally {
+      server.close()
+    }
+  }, 60_000)
+
+  it('verifies the musl download against the pinned musl digest', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-home-'))
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-bin-'))
+    minimalPathBin(bin)
+    stubMusl(bin, 'x86_64')
+    stubTool(bin, 'sha256sum', 'echo "0000  $1"')
+    const server = http.createServer((_req, res) => { res.end('not-the-real-node') })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+
+    try {
+      const port = (server.address() as AddressInfo).port
+      const command = daemonSeedScriptCommand({ ssePort: 38989 }, 'ignored')
+      expect(command).toContain('6b50f327fd5053b5e4ba67de4bf93aa23653d8a9de39bd6f905f839069c7933d')
+      const result = await runSeedCommand(command, {
+        PATH: bin,
+        HOME: home,
+        DAEMOND_NODE_MUSL_DIST_URL: `http://127.0.0.1:${port}`,
+      })
+      expect(result.status).toBe(127)
+      expect(result.stderr).toContain('failed sha256 verification (got 0000)')
+    } finally {
+      server.close()
+    }
+  }, 60_000)
+
+  it('fails closed on musl arm64, which has no node build', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-home-'))
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-bin-'))
+    minimalPathBin(bin)
+    stubMusl(bin, 'aarch64')
+
+    const command = daemonSeedScriptCommand({ ssePort: 38989 }, 'ignored')
+    const result = await runSeedCommand(command, { PATH: bin, HOME: home })
+    expect(result.status).toBe(127)
+    expect(result.stderr).toContain('daemon bootstrap failed: no musl node build for arm64')
+    expect(fs.readdirSync(home)).toEqual([])
   }, 60_000)
 
   it('fails with a clear capability error when node cannot be fetched', async () => {

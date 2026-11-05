@@ -129,6 +129,19 @@ Emitted events include (all `command.*` events carry `jobId`):
 - `command.stdin.closed` (emitted once when a job's stdin pipe closes)
 - `command.exit`
 
+## Node bootstrap
+
+When the sandbox has no `node`/`nodejs` on PATH, the seed command downloads a pinned, sha256-verified
+Node (v22.14.0) into `~/.computesdk/daemond/node-v22.14.0-<flavor>`:
+
+- Linux glibc x64/arm64: official build from `https://nodejs.org/dist` (`DAEMOND_NODE_DIST_URL` overrides).
+- Linux musl x64 (Alpine, `docker:dind`): `linux-x64-musl` from
+  `https://unofficial-builds.nodejs.org/download/release` (`DAEMOND_NODE_MUSL_DIST_URL` overrides).
+  It links libstdc++, so `apk add --no-cache libstdc++` is attempted when `apk` exists.
+- Linux musl arm64 and non-Linux: no build; the command fails with exit 127 and a capability error.
+
+`DAEMOND_NODE_SKIP_SHA256=1` disables digest verification (mirrors serving repackaged archives).
+
 ## Development
 
 ```bash

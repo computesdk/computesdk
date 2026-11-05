@@ -112,6 +112,13 @@ const BOOTSTRAP_NODE_SHA256: Record<"x64" | "arm64", string> = {
 };
 
 /**
+ * SHA-256 of the pinned musl build, from
+ * https://unofficial-builds.nodejs.org/download/release/v22.14.0/SHASUMS256.txt.
+ * unofficial-builds ships linux-x64-musl only; musl arm64 has no build.
+ */
+const BOOTSTRAP_NODE_MUSL_X64_SHA256 = "6b50f327fd5053b5e4ba67de4bf93aa23653d8a9de39bd6f905f839069c7933d";
+
+/**
  * One fetch verb for the node download. A minimal image may ship none of the
  * usual tools (Namespace's base image has no curl), so the chain walks what is
  * actually installed: curl, then wget, then busybox's wget applet, then
@@ -180,14 +187,18 @@ const NODE_SHA256_FN = [
 /**
  * Shell prelude resolving a node binary for the seed launcher: PATH first,
  * then a cached bootstrap under ~/.computesdk/daemond, then a download of the
- * pinned, digest-verified static build for the sandbox's arch. Bootstrap only
- * supports Linux/glibc — other platforms get the capability error before any
- * download is attempted. On total failure it prints that error to stderr and
- * exits 127 rather than letting the launcher fail silently on a missing
- * interpreter.
+ * pinned, digest-verified build for the sandbox's arch and libc. Bootstrap
+ * supports Linux/glibc (x64, arm64) and Linux/musl x64 (Alpine, e.g.
+ * docker:dind) via the unofficial-builds musl tarball, which links libstdc++ —
+ * so `apk add libstdc++` is attempted when apk exists. Other platforms get the
+ * capability error before any download is attempted. On total failure it
+ * prints that error to stderr and exits 127 rather than letting the launcher
+ * fail silently on a missing interpreter.
  *
- * DAEMOND_NODE_DIST_URL overrides the dist base URL (default
+ * DAEMOND_NODE_DIST_URL overrides the glibc dist base URL (default
  * https://nodejs.org/dist) — useful for mirrors and tests.
+ * DAEMOND_NODE_MUSL_DIST_URL overrides the musl dist base URL (default
+ * https://unofficial-builds.nodejs.org/download/release).
  * DAEMOND_NODE_SKIP_SHA256=1 disables digest verification (tests, or mirrors
  * serving repackaged archives).
  */
@@ -212,22 +223,37 @@ function nodeBootstrapPrelude(exec: string): string {
     `  case "$__daemond_arch" in x64) __daemond_sha=${BOOTSTRAP_NODE_SHA256.x64} ;; arm64) __daemond_sha=${BOOTSTRAP_NODE_SHA256.arm64} ;; *) __daemond_sha="" ;; esac`,
     '  __daemond_err=""',
     '  if [ "$__daemond_os" != "Linux" ]; then',
-    '    __daemond_err="no static node build for ${__daemond_os:-unknown} (bootstrap supports Linux/glibc only)"',
+    '    __daemond_err="no node build for ${__daemond_os:-unknown} (bootstrap supports Linux only)"',
     '  elif [ -z "$__daemond_arch" ]; then',
     '    __daemond_err="unsupported machine architecture ${__daemond_mach:-unknown}"',
     "  else",
+    '    __daemond_musl=""',
     '    case "$(ldd --version 2>&1 || true)" in',
-    '      *musl*|*Musl*) __daemond_err="musl libc cannot run the official static node build" ;;',
+    "      *musl*|*Musl*) __daemond_musl=1 ;;",
     "    esac",
+    // Alpine images without musl-utils have no ldd; the loader is the tell.
+    '    for __daemond_ld in /lib/ld-musl-*.so.1; do [ -e "$__daemond_ld" ] && __daemond_musl=1; done',
+    '    __daemond_flavor="linux-$__daemond_arch"',
+    '    __daemond_base="${DAEMOND_NODE_DIST_URL:-https://nodejs.org/dist}"',
+    '    if [ -n "$__daemond_musl" ]; then',
+    '      if [ "$__daemond_arch" = x64 ]; then',
+    '        __daemond_flavor="linux-x64-musl"',
+    '        __daemond_base="${DAEMOND_NODE_MUSL_DIST_URL:-https://unofficial-builds.nodejs.org/download/release}"',
+    `        __daemond_sha=${BOOTSTRAP_NODE_MUSL_X64_SHA256}`,
+    "      else",
+    '        __daemond_err="no musl node build for $__daemond_arch (unofficial-builds ships linux-x64-musl only); install node in the image"',
+    "      fi",
+    "    fi",
     "  fi",
     '  if [ -z "$__daemond_err" ]; then',
-    `    __daemond_dir="$__daemond_home/node-v${v}-linux-$__daemond_arch"`,
+    `    __daemond_dist="node-v${v}-$__daemond_flavor"`,
+    '    __daemond_dir="$__daemond_home/$__daemond_dist"',
     '    if [ -x "$__daemond_dir/bin/node" ]; then',
     '      __daemond_node="$__daemond_dir/bin/node"',
     '    elif [ -d "$__daemond_dir" ]; then',
     '      __daemond_err="cached node at $__daemond_dir is unusable; remove it and retry"',
     "    else",
-    `      __daemond_url="\${DAEMOND_NODE_DIST_URL:-https://nodejs.org/dist}/v${v}/node-v${v}-linux-$__daemond_arch.tar.gz"`,
+    `      __daemond_url="$__daemond_base/v${v}/$__daemond_dist.tar.gz"`,
     // umask keeps the predictable $$-named staging dirs private to this user.
     "      umask 077",
     '      __daemond_tmp="$__daemond_home/.bootstrap-$$"',
@@ -243,13 +269,18 @@ function nodeBootstrapPrelude(exec: string): string {
     '            __daemond_err="no sha256 tool to verify the non-HTTPS download from $__daemond_url"',
     "          fi",
     "        fi",
-    `        if [ -z "$__daemond_err" ] && tar -xzf "$__daemond_tmp/node.tar.gz" -C "$__daemond_tmp" 2>/dev/null && [ -f "$__daemond_tmp/node-v${v}-linux-$__daemond_arch/bin/node" ] && "$__daemond_tmp/node-v${v}-linux-$__daemond_arch/bin/node" --version >/dev/null 2>&1; then`,
+    // The musl build links libstdc++/libgcc, absent from stock Alpine. Best
+    // effort: without apk (or root) the `--version` gate below reports it.
+    '        if [ -z "$__daemond_err" ] && [ -n "$__daemond_musl" ] && command -v apk >/dev/null 2>&1; then',
+    "          apk add --no-cache libstdc++ >/dev/null 2>&1 || true",
+    "        fi",
+    '        if [ -z "$__daemond_err" ] && tar -xzf "$__daemond_tmp/node.tar.gz" -C "$__daemond_tmp" 2>/dev/null && [ -f "$__daemond_tmp/$__daemond_dist/bin/node" ] && "$__daemond_tmp/$__daemond_dist/bin/node" --version >/dev/null 2>&1; then',
     // Never delete the shared cache dir — a concurrent bootstrap or running
     // daemon may be using it. Promote only into an absent path; if another
     // installer raced us there, adopt its runtime.
     '          if [ -x "$__daemond_dir/bin/node" ]; then',
     '            __daemond_node="$__daemond_dir/bin/node"',
-    `          elif mv "$__daemond_tmp/node-v${v}-linux-$__daemond_arch" "$__daemond_dir" 2>/dev/null && [ -x "$__daemond_dir/bin/node" ]; then`,
+    '          elif mv "$__daemond_tmp/$__daemond_dist" "$__daemond_dir" 2>/dev/null && [ -x "$__daemond_dir/bin/node" ]; then',
     '            __daemond_node="$__daemond_dir/bin/node"',
     '          elif [ -x "$__daemond_dir/bin/node" ]; then',
     '            __daemond_node="$__daemond_dir/bin/node"',
@@ -257,7 +288,7 @@ function nodeBootstrapPrelude(exec: string): string {
     '            __daemond_err="could not install node into $__daemond_dir"',
     "          fi",
     '        elif [ -z "$__daemond_err" ]; then',
-    '          __daemond_err="downloaded node tarball could not be unpacked or does not run on this system"',
+    '          __daemond_err="downloaded node tarball could not be unpacked or does not run on this system${__daemond_musl:+ (musl build needs libstdc++: apk add libstdc++)}"',
     "        fi",
     "      else",
     '        __daemond_err="download of $__daemond_url failed: the image has none of curl, wget, busybox wget or python3, or the network is unreachable"',
