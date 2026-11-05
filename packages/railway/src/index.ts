@@ -7,7 +7,7 @@
  * filesystem block is implemented over the shell and `getUrl` throws.
  */
 
-import { Sandbox, SandboxNotFoundError } from 'railway';
+import { RailwayConnectionError, RailwayGraphQLError, Sandbox, SandboxNotFoundError } from 'railway';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, RunCommandOptions, InstanceInfo } from '@computesdk/provider';
@@ -115,12 +115,31 @@ function composeCommand(command: string, options?: RunCommandOptions): string {
 /** How long to wait for the exit after a timeout kill before giving up on the stream. */
 const KILL_GRACE_MS = 5000;
 
+/** Attempts for an exec whose session never opened (the command did not start). */
+const EXEC_CONNECT_ATTEMPTS = 5;
+
+/**
+ * Whether an exec failed before the command was sent: the exec WebSocket never
+ * opened, or minting its shell token hit a rate limit or server error. Either
+ * way nothing ran in the sandbox, so trying again cannot run it twice.
+ */
+function isRetryableExecError(error: unknown): boolean {
+  if (error instanceof RailwayConnectionError) {
+    return /exec WebSocket (connection failed|closed before opening)/.test(error.message);
+  }
+  if (error instanceof RailwayGraphQLError) {
+    return error.status === 429 || error.status >= 500;
+  }
+  return false;
+}
+
 /**
  * Run a composed command through `sandbox.exec`, forwarding live output.
  *
  * The SDK's own `timeoutSec` only closes the client's session, which can leave
  * the command running in the sandbox, so the deadline here kills the process
- * group instead.
+ * group instead. The deadline covers the command's run, so it restarts when a
+ * session that never opened is retried.
  */
 async function execCommand(
   sandbox: RailwaySandbox,
@@ -128,39 +147,47 @@ async function execCommand(
   options?: RunCommandOptions
 ): Promise<CommandResult> {
   const startTime = Date.now();
-  const handle = sandbox.exec(fullCommand, {
-    ...(options?.onStdout ? { onStdout: options.onStdout } : {}),
-    ...(options?.onStderr ? { onStderr: options.onStderr } : {}),
-  });
 
-  let timedOut = false;
-  let killTimer: ReturnType<typeof setTimeout> | undefined;
-  let graceTimer: ReturnType<typeof setTimeout> | undefined;
-  if (options?.timeout) {
-    killTimer = setTimeout(() => {
-      timedOut = true;
-      void handle.kill('KILL').catch(() => false);
-      graceTimer = setTimeout(() => {
-        void handle.detach().catch(() => undefined);
-      }, KILL_GRACE_MS);
-    }, options.timeout);
-  }
+  for (let attempt = 1; ; attempt += 1) {
+    const handle = sandbox.exec(fullCommand, {
+      ...(options?.onStdout ? { onStdout: options.onStdout } : {}),
+      ...(options?.onStderr ? { onStderr: options.onStderr } : {}),
+    });
 
-  try {
-    const result = await handle;
-    const stderr = timedOut
-      ? `${result.stderr}${result.stderr && !result.stderr.endsWith('\n') ? '\n' : ''}Command timed out after ${options?.timeout}ms`
-      : result.stderr;
-    return {
-      stdout: result.stdout,
-      stderr,
-      // exitCode is -1 or null when a signal ended the command
-      exitCode: timedOut ? 124 : (result.exitCode ?? -1),
-      durationMs: Date.now() - startTime,
-    };
-  } finally {
-    if (killTimer) clearTimeout(killTimer);
-    if (graceTimer) clearTimeout(graceTimer);
+    let timedOut = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    if (options?.timeout) {
+      killTimer = setTimeout(() => {
+        timedOut = true;
+        void handle.kill('KILL').catch(() => false);
+        graceTimer = setTimeout(() => {
+          void handle.detach().catch(() => undefined);
+        }, KILL_GRACE_MS);
+      }, options.timeout);
+    }
+
+    try {
+      const result = await handle;
+      const stderr = timedOut
+        ? `${result.stderr}${result.stderr && !result.stderr.endsWith('\n') ? '\n' : ''}Command timed out after ${options?.timeout}ms`
+        : result.stderr;
+      return {
+        stdout: result.stdout,
+        stderr,
+        // exitCode is -1 or null when a signal ended the command
+        exitCode: timedOut ? 124 : (result.exitCode ?? -1),
+        durationMs: Date.now() - startTime,
+      };
+    } catch (error) {
+      if (attempt >= EXEC_CONNECT_ATTEMPTS || timedOut || !isRetryableExecError(error)) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
+    } finally {
+      if (killTimer) clearTimeout(killTimer);
+      if (graceTimer) clearTimeout(graceTimer);
+    }
   }
 }
 
