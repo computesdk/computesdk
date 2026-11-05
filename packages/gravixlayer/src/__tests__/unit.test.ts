@@ -801,12 +801,28 @@ describe('snapshots', () => {
       description: 'deps',
     } as { name: string; description: string })
 
-    expect(calls('snapshots.create')[0].args).toEqual(['rt_live', 'warm', { description: 'deps' }])
+    expect(calls('snapshots.create')[0].args).toEqual([
+      'rt_live',
+      'warm',
+      { kind: 'hot', description: 'deps' },
+    ])
     expect(snapshot).toMatchObject({
       id: 'snap_1',
       provider: 'gravixlayer',
       metadata: { name: 'warm', state: 'ready', kind: 'cold' },
     })
+  })
+
+  it('passes a cold kind through and rejects unknown kinds', async () => {
+    await provider().snapshot!.create('rt_live', { name: 'a', metadata: { kind: 'cold' } })
+    await provider().snapshot!.create('rt_live', { name: 'b', kind: 'cold' } as { name: string })
+    expect(calls('snapshots.create').map((c) => c.args[2])).toEqual([
+      { kind: 'cold' },
+      { kind: 'cold' },
+    ])
+    await expect(
+      provider().snapshot!.create('rt_live', { name: 'c', metadata: { kind: 'warm' } }),
+    ).rejects.toThrow(/Invalid GravixLayer snapshot kind/)
   })
 
   it('lists snapshots filtered by sandboxId as runtimeId', async () => {

@@ -36,6 +36,20 @@ export interface GravixLayerConfig {
   http2?: boolean
 }
 
+/**
+ * Snapshots default to `hot` (filesystem and memory), so tmpfs paths such as
+ * `/tmp` survive restore. Pass `kind: 'cold'` (or
+ * `metadata.kind`) for a filesystem-only snapshot of the persistent disk.
+ */
+function snapshotKind(options?: CreateSnapshotOptions): 'hot' | 'cold' {
+  const value =
+    (options as { kind?: unknown } | undefined)?.kind ?? options?.metadata?.kind ?? 'hot'
+  if (value !== 'hot' && value !== 'cold') {
+    throw new Error(`Invalid GravixLayer snapshot kind: ${String(value)}. Use 'hot' or 'cold'.`)
+  }
+  return value
+}
+
 /** Snapshot returned by this provider's snapshot manager. */
 export interface GravixLayerSnapshot {
   id: string
@@ -613,7 +627,9 @@ const createGravixLayerProvider = defineProvider<
           typeof (options as { description?: unknown }).description === 'string'
             ? (options as { description: string }).description
             : undefined
+        const kind = snapshotKind(options)
         const snapshot = await client.snapshots.create(sandboxId, name, {
+          kind,
           ...(description !== undefined ? { description } : {}),
         })
         return {
