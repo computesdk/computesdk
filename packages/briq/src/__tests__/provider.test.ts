@@ -239,9 +239,21 @@ it('uses real official process handles for UTF-8 stdin, status, wait and acknowl
   const url = await instance.getUrl({ port: 3000 });
   expect(url).toContain('briq_token=fixture');
   expect(state.previews).toHaveBeenCalledTimes(1);
-  await expect(instance.runCommand('sleep 5', { background: true })).rejects.toMatchObject({
-    code: 'unsupported',
+  const detached = await instance.runCommand('sleep 5; echo "a b"', {
+    background: true,
+    cwd: root,
+    env: { K: 'v' },
   });
+  expect(detached).toMatchObject({ stdout: '', stderr: '', exitCode: 0 });
+  const launch = state.run.mock.calls.at(-1)?.[1];
+  expect(launch.cmd).toEqual([
+    '/bin/sh',
+    '-c',
+    'nohup sh -c "$1" </dev/null >/dev/null 2>&1 &',
+    'sh',
+    'sleep 5; echo "a b"',
+  ]);
+  expect(launch).toMatchObject({ cwd: root, env: { K: 'v' }, stdin: '' });
   await instance.destroy();
   expect(state.destroys).toHaveBeenCalledWith('bq_owned');
 }, 20000);

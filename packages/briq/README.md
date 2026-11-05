@@ -76,7 +76,7 @@ Other options are refused before anything is created: `timeout`, `image`, templa
 | Capability | Supported | Notes |
 |---|---|---|
 | `runCommand` | Yes | Output streams live. Default timeout 30 seconds, maximum one hour. Output is limited to 8 MiB. |
-| `runCommand` with `background` | No | Use `startProcess`. |
+| `runCommand` with `background` | Yes | Detached with `nohup`; returns exit code 0 once started. No output, no handle. Use `startProcess` to manage a process. |
 | `startProcess` | Yes | stdin, status, wait, kill and callbacks. |
 | Filesystem | Yes | UTF-8 text. Listings refuse symbolic links. |
 | `getUrl` | Yes | A private HTTP preview. One port per instance: a new port replaces the old one. |

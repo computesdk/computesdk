@@ -113,7 +113,7 @@ Other options (`timeout`, `image`, templates, snapshots, `resources`, `sizeClass
 
 ## Limitations
 
-- `runCommand` with `background: true` is not supported. Use `startProcess`.
+- `runCommand` with `background: true` starts the command detached and returns exit code 0. Its output is discarded and it has no handle: use `startProcess` to read, wait for or stop a process. A detached command does not keep the instance awake; a long one needs a longer `sleep`.
 - Command timeout is 30 seconds by default and one hour at most. Output is limited to 8 MiB.
 - Files are UTF-8 text. Directory listings refuse symbolic links.
 - No templates, snapshots or volumes.

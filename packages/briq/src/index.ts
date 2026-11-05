@@ -52,8 +52,25 @@ export function briq(config: BriqConfig = {}) {
     command: string,
     options: RunCommandOptions = {},
   ): Promise<CommandResult> => {
-    if (options.background)
-      throw fail('unsupported', 'Use startProcess for a managed background process');
+    if (options.background) {
+      // Detached like the other providers: the launcher exits 0 once the command is started.
+      // The command is an argument of the script, never part of it. Its output goes nowhere and
+      // its stdin is closed, so nothing keeps the exec stream open.
+      const started = performance.now();
+      const launched = await backend().run(instance.id, {
+        cmd: ['/bin/sh', '-c', 'nohup sh -c "$1" </dev/null >/dev/null 2>&1 &', 'sh', command],
+        cwd: options.cwd ?? directory(instance.id),
+        env: options.env ?? {},
+        stdin: '',
+        timeoutMs: options.timeout ?? COMMAND_TIMEOUT,
+        live: false,
+        onChunk() {},
+      });
+      if (launched.timedOut) throw fail('timeout', 'Background launch timed out');
+      if (launched.exitCode === null)
+        throw fail('outcome_unknown', 'Background launch did not report a confirmed exit');
+      return { stdout: '', stderr: '', exitCode: launched.exitCode, durationMs: performance.now() - started };
+    }
     let payload = daemonPayload(command);
     if (payload !== undefined) {
       const job = JSON.parse(payload) as { command?: unknown; env?: Record<string, string> };
