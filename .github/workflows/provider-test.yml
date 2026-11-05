@@ -13,7 +13,7 @@ on:
 
 jobs:
   provider-test:
-    runs-on: namespace-profile-default
+    runs-on: namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal
     permissions:
       contents: read
     env:
@@ -38,14 +38,35 @@ jobs:
         node-version: '22'
         cache: 'pnpm'
 
+    # Provider credentials live in the Namespace vault (same as the
+    # benchmarks). Authenticate nsc with NSC_TOKEN; it is only granted vault
+    # access, so skip the registry login.
+    - name: Seed Namespace token file
+      env:
+        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
+      run: |
+        if [ -n "${NSC_TOKEN:-}" ] && [ ! -f /var/run/nsc/token.json ]; then
+          mkdir -p /var/run/nsc
+          case "$NSC_TOKEN" in
+            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+          esac
+          chmod 600 /var/run/nsc/token.json
+          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
+          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
+        fi
+
+    - uses: namespacelabs/nscloud-setup@v0
+
     - name: Install dependencies
       run: pnpm install --ignore-scripts
 
     - name: Build packages
       run: pnpm build
 
-    # Every repo secret is exported so each provider's suite finds the
-    # credential names it already reads (NSC_TOKEN, E2B_API_KEY, ...).
+    # Every repo secret, then every Namespace vault entry, is exported so each
+    # provider's suite finds the credential names it already reads
+    # (NSC_TOKEN, E2B_API_KEY, ...). Vault entries win on name clashes.
     # Missing credentials fail the run instead of skipping the live tests.
     - name: Run ${{ inputs.provider }} tests
       env:
@@ -60,4 +81,23 @@ jobs:
       run: |
         eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select((.key | ascii_downcase) != "github_token") | "export \(.key)=\(.value | @sh)"')"
         unset SECRETS_JSON
+
+        envdef="$RUNNER_TEMP/vault.envdef"
+        nsc vault list --output json | jq -r '
+          [ .[]
+            | select((.deleted_at // null) == null)
+            | ((((.labels // []) | map(select(.name == "name")) | .[0].value) // .description // "")) as $name
+            | select($name | test("^[A-Z][A-Z0-9_]*$"))
+            | {name: $name, object_id: .object_id} ]
+          | group_by(.name) | map(last) | .[]
+          | "\(.name)=\(.object_id)"' > "$envdef"
+        echo "Loading $(wc -l < "$envdef") Namespace vault entries"
+        vault_exported=$(nsc vault export --envdef "$envdef" --shell=bash)
+        eval "$vault_exported"
+        unset vault_exported
+        while IFS='=' read -r key _; do
+          [ -n "${!key-}" ] && printf '::add-mask::%s\n' "${!key}"
+        done < "$envdef"
+        rm -f "$envdef"
+
         pnpm --filter "./packages/$PROVIDER" test
