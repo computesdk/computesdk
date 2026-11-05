@@ -50,6 +50,12 @@ jobs:
     - name: Run ${{ inputs.provider }} tests
       env:
         COMPUTESDK_REQUIRE_INTEGRATION: '1'
+        # Per-package live-test opt-ins.
+        RUN_INTEGRATION: '1'
+        MSB_RUN_INTEGRATION: '1'
+        NOVITA_RUN_INTEGRATION: '1'
+        RUNLOOP_INTEGRATION: '1'
+        LIZARD_LIVE_TESTS: '1'
         SECRETS_JSON: ${{ toJSON(secrets) }}
       run: |
         eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select(.key != "github_token") | "export \(.key)=\(.value | @sh)"')"
