@@ -24,6 +24,13 @@ type E2BSandboxStatics = typeof E2BSandbox & {
   deleteTemplate?: (snapshotId: string, options: { apiKey?: string }) => Promise<unknown>;
 };
 
+/** Drains a paginator from the e2b SDK (`hasNext` / `nextItems`). */
+async function drain<T>(paginator: { hasNext: boolean; nextItems: () => Promise<T[]> }): Promise<T[]> {
+  const items: T[] = [];
+  while (paginator.hasNext) items.push(...await paginator.nextItems());
+  return items;
+}
+
 export interface E2BConfig {
   /** E2B API key - if not provided, will fallback to E2B_API_KEY environment variable */
   apiKey?: string;
@@ -137,14 +144,25 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
       startProcess: (sandbox: E2BSandbox, command: string, options: StartProcessOptions) =>
         startE2BProcess(sandbox, command, options),
 
-      getInfo: async (sandbox: E2BSandbox): Promise<InstanceInfo> => ({
-        id: sandbox.sandboxId || 'e2b-unknown',
-        provider: 'e2b',
-        status: 'running',
-        createdAt: new Date(),
-        timeout: 300000,
-        metadata: { e2bSessionId: sandbox.sandboxId }
-      }),
+      getInfo: async (sandbox: E2BSandbox): Promise<InstanceInfo> => {
+        const info = await sandbox.getInfo();
+        return {
+          id: info.sandboxId,
+          provider: 'e2b',
+          status: info.state === 'paused' ? 'stopped' : 'running',
+          createdAt: info.startedAt,
+          timeout: Math.max(0, info.endAt.getTime() - info.startedAt.getTime()),
+          metadata: {
+            ...info.metadata,
+            e2bSessionId: info.sandboxId,
+            templateId: info.templateId,
+            ...(info.name && { templateName: info.name }),
+            cpuCount: info.cpuCount,
+            memoryMB: info.memoryMB,
+            endAt: info.endAt.toISOString(),
+          },
+        };
+      },
 
       getUrl: async (sandbox: E2BSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
@@ -158,7 +176,9 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
       filesystem: {
         readFile: async (sandbox: E2BSandbox, path: string): Promise<string> => sandbox.files.read(path),
-        writeFile: async (sandbox: E2BSandbox, path: string, content: string): Promise<void> => { await sandbox.files.write(path, content); },
+        // A raw octet-stream body instead of multipart; the SDK falls back to
+        // multipart on envd versions that lack it.
+        writeFile: async (sandbox: E2BSandbox, path: string, content: string): Promise<void> => { await sandbox.files.write(path, content, { useOctetStream: true }); },
         mkdir: async (sandbox: E2BSandbox, path: string): Promise<void> => { await sandbox.files.makeDir(path); },
         readdir: async (sandbox: E2BSandbox, path: string): Promise<FileEntry[]> => {
           const entries = await sandbox.files.list(path);
@@ -190,21 +210,13 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         }
       },
       list: async (config: E2BConfig) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.listTemplates === 'function') {
-            return await e2bStatic.listTemplates({ apiKey: config.apiKey || process.env.E2B_API_KEY });
-          }
-          return [];
-        } catch { return []; }
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        return drain(E2BSandbox.listSnapshots({ apiKey }));
       },
       delete: async (config: E2BConfig, snapshotId: string) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.deleteTemplate === 'function') {
-            await e2bStatic.deleteTemplate(snapshotId, { apiKey: config.apiKey || process.env.E2B_API_KEY });
-          }
-        } catch { /* ignore */ }
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        // false = already gone, which is what delete asked for.
+        await E2BSandbox.deleteSnapshot(snapshotId, { apiKey });
       }
     },
 
