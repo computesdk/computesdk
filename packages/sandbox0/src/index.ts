@@ -477,9 +477,8 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
         // while still delivering the exit event — and when the Context
         // snapshot is unavailable that partial capture is returned as real
         // output. Redirect to guest files so the command's output never
-        // depends on stream fidelity, then read the files back through
-        // short-lived commands with byte-count verification (same pattern
-        // as the microsandbox adapter). Background commands skip the
+        // depends on stream fidelity, then read the files back with
+        // byte-count verification. Background commands skip the
         // redirect — their output would accumulate in the files forever
         // (and nothing reads them back anyway).
         const base = `/tmp/.sandbox0-exec-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
@@ -567,17 +566,49 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
             return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
           };
 
+          const readDirect = async (): Promise<[string, string, string] | undefined> => {
+            const decoder = new TextDecoder();
+            const read = (suffix: string) => sandbox.readFile(`${base}.${suffix}`);
+            try {
+              const [out, err, outLen, errLen, code] = await withinCommandDeadline(
+                Promise.all([read('out'), read('err'), read('outlen'), read('errlen'), read('code')]),
+                deadline,
+                timeout,
+              );
+              const expected = (bytes: Uint8Array) =>
+                Number.parseInt(decoder.decode(bytes).trim(), 10);
+              if (out.byteLength !== expected(outLen) || err.byteLength !== expected(errLen)) {
+                return undefined;
+              }
+              return [decoder.decode(out), decoder.decode(err), decoder.decode(code)];
+            } catch (error) {
+              if (error instanceof Sandbox0CommandTimeoutError) throw error;
+              return undefined;
+            }
+          };
+
           let stdout: string;
           let stderr: string;
           let codeText: string;
-          try {
-            stdout = await readVerified(`${base}.out`, `${base}.outlen`);
-            stderr = await readVerified(`${base}.err`, `${base}.errlen`);
-            codeText = await readViaCommand(`cat ${base}.code 2>/dev/null`).catch(() => '');
-          } finally {
-            await readViaCommand(
+          // Read the capture files over the file API in one parallel round
+          // trip; fall back to byte-verified reads through commands if the
+          // file API fails or returns a short read.
+          const direct = await readDirect();
+          if (direct) {
+            [stdout, stderr, codeText] = direct;
+            void readViaCommand(
               `rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`,
             ).catch(() => undefined);
+          } else {
+            try {
+              stdout = await readVerified(`${base}.out`, `${base}.outlen`);
+              stderr = await readVerified(`${base}.err`, `${base}.errlen`);
+              codeText = await readViaCommand(`cat ${base}.code 2>/dev/null`).catch(() => '');
+            } finally {
+              await readViaCommand(
+                `rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`,
+              ).catch(() => undefined);
+            }
           }
 
           const fileExit = Number.parseInt(codeText.trim(), 10);
