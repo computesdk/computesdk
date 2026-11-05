@@ -103,7 +103,6 @@ export function supervisorFile(): string {
     'D=$1',
     'cd / || exit 1',
     '. "$D/conf"',
-    'echo $$ > "$D/sup"',
     NAP,
     // Two pumps append to one log, so each record is written under a mkdir lock.
     'lock() { until mkdir "$D/lock" 2>/dev/null; do :; done; }',
@@ -131,6 +130,8 @@ export function supervisorFile(): string {
     // With HOLD, the command waits for the client's confirm exec (`go`). An
     // instance whose execs share no state never confirms, and the command
     // becomes a no-op instead of running behind the client's back.
+    // Written once stdin exists, so a held launch never returns before write() can work.
+    'echo $$ > "$D/sup"',
     'if [ "$HOLD" = 1 ]; then',
     '  i=0; while [ ! -f "$D/go" ] && [ "$i" -lt 600 ]; do nap; i=$((i+1)); done',
     '  [ -f "$D/go" ] || printf \'exit 125\\n\' > "$D/run.sh"',
