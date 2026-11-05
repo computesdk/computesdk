@@ -64,8 +64,8 @@ jobs:
     - name: Build packages
       run: pnpm build
 
-    # Every repo secret is exported, then the Namespace vault entries for the
-    # env vars the provider's source reads (process.env.X), so its suite finds
+    # Every repo secret is exported, then the Namespace vault entries named
+    # like an env var in the provider's source (FOO_BAR), so its suite finds
     # the credential names it already uses (NSC_TOKEN, E2B_API_KEY, ...).
     # Vault entries win on name clashes.
     # Missing credentials fail the run instead of skipping the live tests.
@@ -83,8 +83,8 @@ jobs:
         eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select((.key | ascii_downcase) != "github_token") | "export \(.key)=\(.value | @sh)"')"
         unset SECRETS_JSON
 
-        keys=$(grep -rhoE "process\.env(\?)?\.[A-Z][A-Z0-9_]*|process\.env\[['\"][A-Z][A-Z0-9_]*['\"]\]" "packages/$PROVIDER/src" \
-          | grep -oE '[A-Z][A-Z0-9_]*' | sort -u | jq -R . | jq -sc . || echo '[]')
+        # Every ENV_STYLE name in the package source; only vault entries with one of these names load.
+        keys=$({ grep -rhoE '\b[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9]\b' "packages/$PROVIDER/src" || true; } | sort -u | jq -Rsc 'split("\n") | map(select(. != ""))')
         envdef="$RUNNER_TEMP/vault.envdef"
         nsc vault list --output json | jq -r --argjson keys "$keys" '
           [ .[]
