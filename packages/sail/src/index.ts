@@ -9,6 +9,8 @@ import { defineProvider } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
+  CreateSnapshotOptions,
+  ListSnapshotsOptions,
   FileEntry,
   RunCommandOptions,
   InstanceInfo,
@@ -44,6 +46,8 @@ const MAX_RESOLVED_CONFIGS = 32;
 interface ResolvedSailConfig {
   client: Client;
   appName: string;
+  apiKey: string;
+  sailboxApiUrl: string;
   appPromise?: Promise<App>;
 }
 
@@ -83,6 +87,8 @@ function resolve(config: SailConfig): ResolvedSailConfig {
       ? clientWithKey(config.apiKey, environment)
       : Client.fromEnv(),
     appName,
+    apiKey,
+    sailboxApiUrl: environment.sailboxApiUrl,
   };
   resolvedConfigs.set(cacheKey, entry);
   if (resolvedConfigs.size > MAX_RESOLVED_CONFIGS) {
@@ -122,6 +128,66 @@ function clientWithKey(apiKey: string, environment: ReturnType<typeof resolveCon
         ? environment.ingressBase
         : undefined,
   });
+}
+
+/** A Sail checkpoint surfaced as a ComputeSDK snapshot. */
+export interface SailSnapshot {
+  id: string;
+  provider: typeof PROVIDER;
+  createdAt: Date;
+  metadata: {
+    sailboxId: string;
+    checkpointGeneration: number;
+    name?: string;
+    expiresAt?: Date;
+  } & Record<string, unknown>;
+}
+
+interface CheckpointRecord {
+  checkpoint_id: string;
+  name: string | null;
+  sailbox_id: string;
+  app_id: string;
+  checkpoint_generation: number;
+  created_at: string;
+  expires_at: string | null;
+}
+
+/** Call Sail's HTTPS Sailbox API for operations the SDK does not wrap
+ *  (listing and deleting checkpoints). */
+async function sailboxApi<T>(
+  config: SailConfig,
+  method: 'GET' | 'DELETE',
+  path: string,
+): Promise<{ status: number; body: T | undefined }> {
+  const { apiKey, sailboxApiUrl } = resolve(config);
+  const response = await fetch(`${sailboxApiUrl.replace(/\/+$/, '')}/v1${path}`, {
+    method,
+    headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
+  });
+  const text = await response.text();
+  const body = text ? (JSON.parse(text) as T) : undefined;
+  if (!response.ok && response.status !== 404) {
+    const message =
+      (body as { error?: { message?: string } } | undefined)?.error?.message ?? text;
+    throw new Error(`Sail ${method} ${path} failed (${response.status}): ${message}`);
+  }
+  return { status: response.status, body };
+}
+
+function toSnapshot(record: CheckpointRecord): SailSnapshot {
+  return {
+    id: record.checkpoint_id,
+    provider: PROVIDER,
+    createdAt: new Date(record.created_at),
+    metadata: {
+      sailboxId: record.sailbox_id,
+      appId: record.app_id,
+      checkpointGeneration: record.checkpoint_generation,
+      name: record.name ?? undefined,
+      expiresAt: record.expires_at ? new Date(record.expires_at) : undefined,
+    },
+  };
 }
 
 /** Convert an aborted signal into a stable Error for runtimes with arbitrary reasons. */
@@ -184,6 +250,7 @@ function validateCreateOptions(options: CreateInstanceOptions | undefined): void
     'provider',
     'signal',
     'size',
+    'snapshotId',
     'timeout',
   ]);
   const unsupported = Object.keys(options ?? {}).filter(
@@ -200,6 +267,15 @@ function validateCreateOptions(options: CreateInstanceOptions | undefined): void
       'Sail does not support ComputeSDK create timeout because it is a hard ' +
         'sandbox lifetime. Bound individual commands with runCommand timeout ' +
         'or call destroy() when finished.',
+    );
+  }
+  if (
+    options?.snapshotId !== undefined &&
+    (options.size !== undefined || options.memoryGib !== undefined)
+  ) {
+    throw new Error(
+      'Sail restores a checkpoint with the source Sailbox\'s resources; ' +
+        'size and memoryGib cannot be combined with snapshotId.',
     );
   }
   if (
@@ -313,12 +389,22 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         validateCreateOptions(options);
         if (options?.signal?.aborted) throw abortError(options.signal);
         const { client } = resolve(config);
+        const name = options?.name ?? `csdk-${crypto.randomUUID().slice(0, 8)}`;
+        if (options?.snapshotId) {
+          const restore = Sailbox.fromCheckpoint({
+            checkpointId: options.snapshotId,
+            name,
+            client,
+          });
+          const sandbox = await createWithAbortCleanup(restore, options.signal, client);
+          return { instance: sandbox, instanceId: sandbox.sailboxId };
+        }
         const app = await resolveApp(config);
         if (options?.signal?.aborted) throw abortError(options.signal);
 
         const creation = Sailbox.create({
           app,
-          name: options?.name ?? `csdk-${crypto.randomUUID().slice(0, 8)}`,
+          name,
           client,
           image: config.image ?? Image.devbox('arm64'),
           size: sailboxSize(options?.size) ?? DEFAULT_SIZE,
@@ -463,6 +549,65 @@ export const sail = defineProvider<Sailbox, SailConfig>({
       },
 
       getInstance: (sandbox) => sandbox,
+    },
+
+    snapshot: {
+      // A checkpoint saves the Sailbox's memory and disk and leaves it
+      // running; `create({ snapshotId })` starts a new Sailbox from it.
+      create: async (
+        config,
+        sandboxId: string,
+        options?: CreateSnapshotOptions,
+      ): Promise<SailSnapshot> => {
+        const { client } = resolve(config);
+        const checkpoint = await Sailbox.fromId(sandboxId, { client }).checkpoint({
+          name: options?.name,
+        });
+        return {
+          id: checkpoint.checkpointId,
+          provider: PROVIDER,
+          createdAt: new Date(),
+          metadata: {
+            ...options?.metadata,
+            sailboxId: checkpoint.sailboxId,
+            checkpointGeneration: checkpoint.checkpointGeneration,
+            name: options?.name,
+            expiresAt: checkpoint.expiresAt,
+          },
+        };
+      },
+
+      list: async (config, options?: ListSnapshotsOptions): Promise<SailSnapshot[]> => {
+        const sailboxId = options?.instanceId ?? options?.sandboxId;
+        const snapshots: SailSnapshot[] = [];
+        const pageSize = 100;
+        for (let offset = 0; ; offset += pageSize) {
+          const query = new URLSearchParams({
+            limit: String(pageSize),
+            offset: String(offset),
+          });
+          if (sailboxId) query.set('sailbox_id', sailboxId);
+          const { body } = await sailboxApi<{
+            data: CheckpointRecord[];
+            has_more: boolean;
+          }>(config, 'GET', `/sailbox-checkpoints?${query}`);
+          for (const record of body?.data ?? []) {
+            snapshots.push(toSnapshot(record));
+            if (options?.limit !== undefined && snapshots.length >= options.limit) {
+              return snapshots;
+            }
+          }
+          if (!body?.has_more) return snapshots;
+        }
+      },
+
+      delete: async (config, snapshotId: string) => {
+        await sailboxApi(
+          config,
+          'DELETE',
+          `/sailbox-checkpoints/${encodeURIComponent(snapshotId)}`,
+        );
+      },
     },
   },
 });

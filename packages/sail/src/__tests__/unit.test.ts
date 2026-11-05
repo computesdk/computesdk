@@ -95,6 +95,18 @@ vi.mock('@sailresearch/sdk', () => {
         if (h.state.notFoundOnGet) throw new h.NotFoundError('missing');
         return makeBox(id, h.state.getStatus);
       }),
+      fromCheckpoint: vi.fn(async (options: Record<string, unknown>) => {
+        h.state.createArgs.push(options);
+        return makeBox('sb_restored', 'running');
+      }),
+      fromId: vi.fn((id: string) => ({
+        checkpoint: vi.fn(async () => ({
+          checkpointId: 'ckpt_1',
+          sailboxId: id,
+          checkpointGeneration: 3,
+          status: 'running',
+        })),
+      })),
       list: vi.fn(async () =>
         h.state.listStatuses.map((status, index) =>
           makeBox(`sb_${index + 1}`, status),
@@ -206,7 +218,7 @@ describe('sail provider', () => {
   it('rejects unsupported or misleading create options', async () => {
     const compute = provider();
     await expect(
-      compute.sandbox.create({ snapshotId: 'snap_1' }),
+      compute.sandbox.create({ snapshotId: 'ckpt_1', size: 'm' }),
     ).rejects.toThrow(/snapshotId/);
     await expect(
       compute.sandbox.create({ envs: { A: '1' } }),
@@ -410,5 +422,71 @@ describe('sail provider', () => {
     expect(sandbox.getInstance()).toBe(h.state.lastBox);
     await compute.sandbox.destroy('sb_x');
     expect(h.state.terminate).toHaveBeenCalledWith('sb_x');
+  });
+  it('checkpoints a Sailbox and restores a new one from the checkpoint', async () => {
+    const compute = provider();
+    const snapshot = await compute.snapshot!.create('sb_src', { name: 'snap' });
+    expect(snapshot).toMatchObject({
+      id: 'ckpt_1',
+      provider: 'sail',
+      metadata: { sailboxId: 'sb_src', checkpointGeneration: 3, name: 'snap' },
+    });
+
+    const restored = await compute.sandbox.create({ snapshotId: 'ckpt_1', name: 'copy' });
+    expect(restored.sandboxId).toBe('sb_restored');
+    expect(h.state.createArgs).toEqual([
+      expect.objectContaining({ checkpointId: 'ckpt_1', name: 'copy' }),
+    ]);
+  });
+
+  it('lists and deletes checkpoints through the Sailbox HTTPS API', async () => {
+    const calls: Array<{ url: string; method?: string; auth?: string }> = [];
+    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({
+        url,
+        method: init.method,
+        auth: (init.headers as Record<string, string>).authorization,
+      });
+      if (init.method === 'DELETE') {
+        return new Response('{"error":{"message":"gone"}}', { status: 404 });
+      }
+      const offset = Number(new URL(url).searchParams.get('offset'));
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              checkpoint_id: `ckpt_${offset}`,
+              name: null,
+              sailbox_id: 'sb_src',
+              app_id: 'app_demo',
+              checkpoint_generation: 1,
+              created_at: '2026-01-01T00:00:00Z',
+              expires_at: null,
+            },
+          ],
+          limit: 100,
+          offset,
+          has_more: offset === 0,
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const compute = provider();
+      const listed = await compute.snapshot!.list({ instanceId: 'sb_src' });
+      expect(listed.map((s) => s.id)).toEqual(['ckpt_0', 'ckpt_100']);
+      expect(calls[0].url).toBe(
+        'https://sb-dev.example/v1/sailbox-checkpoints?limit=100&offset=0&sailbox_id=sb_src',
+      );
+      expect(calls[0].auth).toBe('Bearer key');
+      await expect(compute.snapshot!.delete('ckpt_0')).resolves.toBeUndefined();
+      expect(calls[2]).toMatchObject({
+        url: 'https://sb-dev.example/v1/sailbox-checkpoints/ckpt_0',
+        method: 'DELETE',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
