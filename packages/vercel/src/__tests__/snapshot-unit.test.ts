@@ -22,6 +22,12 @@ vi.mock('@vercel/sandbox', () => {
     },
     Snapshot: {
       get: vi.fn().mockResolvedValue(mockSnapshotInstance),
+      list: vi.fn().mockResolvedValue({
+        snapshots: [
+          { id: 'snap-1', sourceSessionId: 'sess-1', region: 'iad1', status: 'created', sizeBytes: 10, createdAt: 1, updatedAt: 1 },
+          { id: 'snap-2', sourceSessionId: 'sess-2', region: 'iad1', status: 'deleted', sizeBytes: 0, createdAt: 2, updatedAt: 2 },
+        ],
+      }),
     }
   };
 });
@@ -113,11 +119,13 @@ describe('Vercel Snapshot Support', () => {
     }));
   });
 
-  it('should throw when listing snapshots', async () => {
+  it('should list created snapshots', async () => {
     if (!provider.snapshot) {
       throw new Error('Snapshot manager not initialized');
     }
 
-    await expect(provider.snapshot.list()).rejects.toThrow('Vercel provider does not support listing snapshots');
+    const snapshots = await provider.snapshot.list();
+    expect(VercelSnapshot.list).toHaveBeenCalledWith(expect.objectContaining({ token: 'mock-token', projectId: 'mock-project' }));
+    expect(snapshots.map((s: any) => s.id)).toEqual(['snap-1']);
   });
 });

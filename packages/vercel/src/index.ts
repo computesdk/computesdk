@@ -3,7 +3,7 @@
  */
 
 import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive } from '@vercel/sandbox';
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
@@ -58,15 +58,61 @@ function validateCredentials(creds: ResolvedCredentials): void {
   if (!creds.projectId) throw new Error(`Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID.`);
 }
 
-function getUtf8Sink() {
+function getUtf8Sink(onChunk?: (data: string) => void) {
   const chunks: string[] = [];
   const sink = new Writable({
+    decodeStrings: false,
     write(chunk, _enc, cb) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk));
+      const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+      chunks.push(text);
+      if (text && onChunk) onChunk(text);
       cb();
     },
   });
   return { sink, value: () => chunks.join("") };
+}
+
+function credentialParams(creds: ResolvedCredentials) {
+  return creds.useOidc ? {} : { token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+}
+
+// `setsid` gives the command its own process group, so the watchdog can kill
+// the whole tree, not just the outer shell.
+const DEADLINE_WRAPPER = 'if command -v setsid >/dev/null 2>&1; then setsid sh -c "$1" & else sh -c "$1" & fi; pid=$!; (sleep "$0"; kill -KILL -"$pid" || kill -KILL "$pid") >/dev/null 2>&1 & w=$!; wait "$pid"; rc=$?; kill "$w" 2>/dev/null; exit $rc';
+
+// Runs through the SDK's native env/cwd fields; stdout/stderr arrive on the
+// sinks while the command runs, so the same path serves streamCommand.
+async function execCommand(sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
+  const startTime = Date.now();
+  try {
+    const env = options?.env && Object.keys(options.env).length > 0 ? options.env : undefined;
+    const stdout = options?.background ? undefined : getUtf8Sink(options?.onStdout);
+    const stderr = options?.background ? undefined : getUtf8Sink(options?.onStderr);
+    const deadline = options?.timeout && !options.background ? options.timeout : undefined;
+    // A watchdog in the box kills the command's whole process group at the
+    // deadline; the abort is a backstop so the caller still returns on time.
+    const args = deadline ? ['-c', DEADLINE_WRAPPER, String(deadline / 1000), command] : ['-c', command];
+    const controller = deadline ? new AbortController() : undefined;
+    const timer = deadline ? setTimeout(() => controller!.abort(), deadline + 3000) : undefined;
+    try {
+      const result = await sandbox.runCommand({
+        cmd: 'sh', args,
+        cwd: options?.cwd, env, detached: options?.background,
+        stdout: stdout?.sink, stderr: stderr?.sink,
+        signal: controller?.signal,
+      });
+      return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
+    } catch (error) {
+      if (controller?.signal.aborted) {
+        return { stdout: stdout?.value() ?? '', stderr: `${stderr?.value() ?? ''}Command timed out after ${deadline}ms`, exitCode: 124, durationMs: Date.now() - startTime };
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch (error) {
+    return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
+  }
 }
 
 export const vercel = defineProvider<VercelSandbox, VercelConfig>({
@@ -79,7 +125,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
         const timeout = options?.timeout ?? config.timeout ?? 300000;
         try {
           const {
-            timeout: _timeout, envs: _envs, name: _name, metadata: _metadata,
+            timeout: _timeout, envs, name, metadata: _metadata,
             templateId, snapshotId: optSnapshotId, sandboxId: _sandboxId,
             namespace: _namespace, directory: _directory,
             volumes,
@@ -95,6 +141,8 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           const optSource = (options as any)?.source;
 
           const params: any = { timeout, ...providerOptions };
+          if (envs && Object.keys(envs).length > 0) params.env = { ...envs, ...(providerOptions as any).env };
+          if (name) params.name = name;
           // Vercel sandboxes are persistent by default, which auto-snapshots the
           // filesystem on every stop() and accrues Snapshot Storage. ComputeSDK
           // sandboxes default to non-persistent unless the caller opts in via
@@ -161,8 +209,16 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
         } catch { return null; }
       },
 
-      list: async (_config: VercelConfig) => {
-        throw new Error(`Vercel provider does not support listing sandboxes.`);
+      list: async (config: VercelConfig) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const page = await VercelSandbox.list({ ...credentialParams(creds), sortBy: 'createdAt', sortOrder: 'desc' } as any);
+        const live = (page.sandboxes ?? []).filter((s: any) => s.status === 'running' || s.status === 'pending');
+        const sandboxes = await Promise.all(live.map((s: any) =>
+          VercelSandbox.get({ name: s.name, ...credentialParams(creds) } as any).catch(() => null)));
+        return sandboxes
+          .filter((s): s is VercelSandbox => s !== null)
+          .map((sandbox) => ({ instance: sandbox, instanceId: sandbox.name }));
       },
 
       destroy: async (config: VercelConfig, sandboxId: string) => {
@@ -175,27 +231,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
         } catch { /* already destroyed or doesn't exist */ }
       },
 
-      runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const startTime = Date.now();
-        try {
-          let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(v)}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          const stdout = options?.background ? undefined : getUtf8Sink();
-          const stderr = options?.background ? undefined : getUtf8Sink();
-          const result = await sandbox.runCommand({
-            cmd: 'sh', args: ['-c', fullCommand],
-            cwd: options?.cwd, detached: options?.background,
-            stdout: stdout?.sink, stderr: stderr?.sink,
-            timeoutMs: options?.timeout,
-          });
-          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
-        } catch (error) {
-          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
-        }
-      },
+      runCommand: (sandbox: VercelSandbox, command: string, options?: RunCommandOptions) => execCommand(sandbox, command, options),
+
+      streamCommand: (sandbox: VercelSandbox, command: string, options: RunCommandOptions) => execCommand(sandbox, command, options),
 
       getInfo: async (sandbox: VercelSandbox): Promise<InstanceInfo> => {
         const status = sandbox.status;
@@ -273,7 +311,19 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           metadata: { name: options?.name, sourceSessionId: snapshot.sourceSessionId },
         };
       },
-      list: async (_config: VercelConfig) => { throw new Error(`Vercel provider does not support listing snapshots.`); },
+      list: async (config: VercelConfig) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const page = await VercelSnapshot.list(credentialParams(creds) as any);
+        return (page.snapshots ?? [])
+          .filter((snap: any) => snap.status === 'created')
+          .map((snap: any) => ({
+            id: snap.id,
+            provider: 'vercel',
+            createdAt: new Date(snap.createdAt),
+            metadata: { sourceSessionId: snap.sourceSessionId, sizeBytes: snap.sizeBytes, region: snap.region },
+          }));
+      },
       delete: async (config: VercelConfig, snapshotId: string) => {
         const creds = resolveCredentials(config);
         const snapshot = creds.useOidc

@@ -7,11 +7,11 @@ runProviderTestSuite({
   name: 'vercel',
   provider: vercel({}),
   supportsFilesystem: true,
-  // No native streaming/process API in the adapter: both run on the shell process tier.
+  // Streaming uses Vercel's native log stream; processes run on the shell process tier.
   supportsStreaming: true,
   supportsProcesses: true,
   // The mock sandbox reports no process runtime, so only assert it live.
-  expectProcessRuntime: skipIntegration ? undefined : { streaming: 'shell', processes: 'shell' },
+  expectProcessRuntime: skipIntegration ? undefined : { streaming: 'native', processes: 'shell' },
   skipIntegration,
   // Note: Vercel blocks certain ports (80, 443, 8080). Use allowed ports for getUrl tests.
   ports: [3000, 8000],
