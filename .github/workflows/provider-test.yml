@@ -58,6 +58,6 @@ jobs:
         LIZARD_LIVE_TESTS: '1'
         SECRETS_JSON: ${{ toJSON(secrets) }}
       run: |
-        eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select(.key != "github_token") | "export \(.key)=\(.value | @sh)"')"
+        eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select((.key | ascii_downcase) != "github_token") | "export \(.key)=\(.value | @sh)"')"
         unset SECRETS_JSON
         pnpm --filter "./packages/$PROVIDER" test
