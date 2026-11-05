@@ -25,30 +25,30 @@ describe('quilt provider unit behavior', () => {
     vi.restoreAllMocks();
   });
 
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+  // The framework may issue its own exec calls (e.g. reading egress state), so
+  // route by request instead of relying on call order.
+  const mockQuiltApi = (execResult: Record<string, unknown>, services: unknown[] = [], createdService?: unknown) =>
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      if (url.endsWith('/exec')) {
+        const script = String(body?.command?.[2] ?? '');
+        if (script.includes('computesdk-egress')) {
+          return json({ stdout: '', stderr: '', exit_code: 1, timed_out: false });
+        }
+        return json(execResult);
+      }
+      if (url.endsWith('/services')) {
+        return init?.method === 'POST' ? json(createdService) : json({ services });
+      }
+      return json({ container_id: 'ctr_123', state: 'running', created_at: '2026-01-01T00:00:00Z' });
+    });
+
   it('runs commands through the Quilt exec API', async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            container_id: 'ctr_123',
-            state: 'running',
-            created_at: '2026-01-01T00:00:00Z',
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            stdout: 'hello\n',
-            stderr: '',
-            exit_code: 0,
-            timed_out: false,
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-      );
+    const fetchMock = mockQuiltApi({ stdout: 'hello\n', stderr: '', exit_code: 0, timed_out: false });
 
     const provider = quilt({});
     const sandbox = await provider.sandbox.getById('ctr_123');
@@ -60,14 +60,13 @@ describe('quilt provider unit behavior', () => {
     });
 
     expect(result.stdout).toBe('hello\n');
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      'https://quilt.example.test/api/containers/ctr_123/exec',
-      expect.objectContaining({
-        method: 'POST',
-      })
+    const execCall = fetchMock.mock.calls.find(([url, init]) =>
+      String(url) === 'https://quilt.example.test/api/containers/ctr_123/exec' &&
+      String((init as RequestInit).body).includes('echo hello')
     );
-    const execInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(execCall).toBeDefined();
+    const execInit = execCall![1] as RequestInit;
+    expect(execInit.method).toBe('POST');
     expect(JSON.parse(String(execInit.body))).toMatchObject({
       command: ['/bin/sh', '-lc', 'APP_ENV="test" echo hello'],
       workdir: '/workspace',
@@ -75,33 +74,11 @@ describe('quilt provider unit behavior', () => {
   });
 
   it('reuses or creates published services for getUrl', async () => {
-    vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            container_id: 'ctr_123',
-            state: 'running',
-            created_at: '2026-01-01T00:00:00Z',
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ services: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            service_id: 'lnx_123',
-            public_url: 'https://quilt.example.test/linx/lnx_123/',
-            websocket_url: 'wss://quilt.example.test/linx/lnx_123/ws',
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-      );
+    mockQuiltApi({ stdout: '', stderr: '', exit_code: 0 }, [], {
+      service_id: 'lnx_123',
+      public_url: 'https://quilt.example.test/linx/lnx_123/',
+      websocket_url: 'wss://quilt.example.test/linx/lnx_123/ws',
+    });
 
     const provider = quilt({});
     const handle = await provider.sandbox.getById('ctr_123');
