@@ -310,6 +310,29 @@ describe('run-cloud provider', () => {
     });
   });
 
+  it('streams command output as the exec stream delivers it', async () => {
+    const bytes = new TextEncoder().encode('tick \u00e9\n');
+    execMock.mockImplementationOnce(async (_id, _cmd, options) => {
+      options.onStdout(bytes.subarray(0, 6));
+      options.onStdout(bytes.subarray(6));
+      options.onStderr(new TextEncoder().encode('warn\n'));
+      return { stdout: 'tick \u00e9\n', stderr: 'warn\n', exit_code: 0, exitCode: 0 };
+    });
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+    const out: string[] = [];
+    const err: string[] = [];
+
+    const result = await sandbox.runCommand('echo tick', {
+      onStdout: (text) => out.push(text),
+      onStderr: (text) => err.push(text),
+    });
+
+    expect(out).toEqual(['tick ', '\u00e9\n']);
+    expect(err).toEqual(['warn\n']);
+    expect(out.join('')).toBe(result.stdout);
+    expect(result.exitCode).toBe(0);
+  });
+
   it('detaches background commands through nohup', async () => {
     const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
     const result = await sandbox.runCommand("printf 'ready'", {

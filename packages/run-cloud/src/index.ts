@@ -413,6 +413,55 @@ async function createSandbox(
   };
 }
 
+/** Decodes streamed byte chunks to text without splitting multi-byte characters. */
+function textSink(callback: (text: string) => void) {
+  const decoder = new TextDecoder();
+  return {
+    write: (chunk: Uint8Array) => {
+      const text = decoder.decode(chunk, { stream: true });
+      if (text) callback(text);
+    },
+    flush: () => {
+      const text = decoder.decode();
+      if (text) callback(text);
+    },
+  };
+}
+
+/** Runs a command over the SDK's exec stream, forwarding output as it arrives. */
+async function execCommand(
+  handle: RunCloudSandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const startedAt = Date.now();
+  const timeout = options?.timeout ?? handle.commandTimeout;
+  const fullCommand = options?.background
+    ? `nohup sh -c ${singleQuote(command)} >/dev/null 2>&1 &`
+    : command;
+  const stdout = options?.onStdout ? textSink(options.onStdout) : undefined;
+  const stderr = options?.onStderr ? textSink(options.onStderr) : undefined;
+  const result = await handle.client.sandboxes.exec(
+    handle.sandbox.id,
+    fullCommand,
+    {
+      cwd: options?.cwd,
+      env: options?.env,
+      timeoutSeconds: millisecondsToSeconds('command timeout', timeout),
+      ...(stdout && { onStdout: stdout.write }),
+      ...(stderr && { onStderr: stderr.write }),
+    },
+  );
+  stdout?.flush();
+  stderr?.flush();
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
 const _provider = defineProvider<
   RunCloudSandbox,
   RunCloudConfig,
@@ -453,34 +502,9 @@ const _provider = defineProvider<
         }
       },
 
-      runCommand: async (
-        handle,
-        command,
-        options?: RunCommandOptions,
-      ): Promise<CommandResult> => {
-        const startedAt = Date.now();
-        const timeout = options?.timeout ?? handle.commandTimeout;
-        const fullCommand = options?.background
-          ? `nohup sh -c ${singleQuote(command)} >/dev/null 2>&1 &`
-          : command;
-        const result = await handle.client.sandboxes.exec(
-          handle.sandbox.id,
-          fullCommand,
-          {
-            cwd: options?.cwd,
-            env: options?.env,
-            timeoutSeconds: millisecondsToSeconds('command timeout', timeout),
-          },
-        );
-        if (result.stdout && options?.onStdout) options.onStdout(result.stdout);
-        if (result.stderr && options?.onStderr) options.onStderr(result.stderr);
-        return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-          durationMs: Date.now() - startedAt,
-        };
-      },
+      runCommand: execCommand,
+
+      streamCommand: execCommand,
 
       getInfo: async (handle): Promise<InstanceInfo> => {
         handle.sandbox = await handle.client.sandboxes.get(handle.sandbox.id);
