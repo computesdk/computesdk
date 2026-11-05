@@ -63,6 +63,20 @@ function asCommandExit(error: unknown): { stdout: string; stderr: string; exitCo
   return null;
 }
 
+/**
+ * Undici reports network failures as a bare `fetch failed` with the real
+ * reason (ECONNREFUSED, ENOTFOUND, TLS errors, …) on `error.cause`, so append it.
+ */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = (error as { cause?: unknown }).cause;
+  if (!cause) return error.message;
+  const code = (cause as { code?: unknown }).code;
+  const causeMessage = cause instanceof Error ? cause.message : String(cause);
+  const detail = typeof code === 'string' && !causeMessage.includes(code) ? `${code}: ${causeMessage}` : causeMessage;
+  return detail && !error.message.includes(detail) ? `${error.message} (${detail})` : error.message;
+}
+
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 type E2BFileEntry = {
   name: string;
@@ -220,7 +234,7 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
               throw new Error(`Lelantos quota exceeded. Please check your usage at https://lelantos.ai/`);
             }
           }
-          throw new Error(`Failed to create Lelantos sandbox: ${error instanceof Error ? error.message : String(error)}`);
+          throw new Error(`Failed to create Lelantos sandbox: ${describeError(error)}`);
         }
       },
 
@@ -303,7 +317,7 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
 
         // (3) Still failing after retries: SURFACE the real error message in
         // stderr with a non-zero exit code, instead of a silent fake 127.
-        const message = lastError instanceof Error ? lastError.message : String(lastError);
+        const message = describeError(lastError);
         return { stdout: '', stderr: message, exitCode: 1, durationMs: Date.now() - startTime };
       },
 
