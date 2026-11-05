@@ -44,6 +44,7 @@ import {
 } from 'daemond';
 import { readInstanceEgress, setupInstanceEgress } from './egress.js';
 import { withVolumeSettle } from './utils.js';
+import { ShellFileSystem } from './shell-filesystem';
 import { InstanceSizeError, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeMetadata } from 'computesdk';
 import { applyInstanceSizePatch, createInstanceSizeManager, type InstanceSizeResolver } from './sizes.js';
 
@@ -401,43 +402,6 @@ export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any,
 }
 
 /**
- * Auto-generated filesystem implementation that throws "not supported" errors
- */
-class UnsupportedFileSystem implements InstanceFileSystem {
-  private readonly providerName: string;
-
-  constructor(providerName: string) {
-    this.providerName = providerName;
-  }
-
-  async readFile(_path: string): Promise<string> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async writeFile(_path: string, _content: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async mkdir(_path: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async readdir(_path: string): Promise<FileEntry[]> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async exists(_path: string): Promise<boolean> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async remove(_path: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-}
-
-
-
-/**
  * Auto-generated filesystem implementation that wraps provider methods
  */
 class SupportedFileSystem<TInstance> implements InstanceFileSystem {
@@ -521,7 +485,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     if (methods.filesystem) {
       this.filesystem = new SupportedFileSystem(instance, methods.filesystem, methods);
     } else {
-      this.filesystem = new UnsupportedFileSystem(providerName);
+      this.filesystem = new ShellFileSystem((command, options) => this.methods.runCommand(this.instance, command, options));
     }
 
     // Runtime attach/detach are only exposed when the provider implements
