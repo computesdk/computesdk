@@ -41,13 +41,15 @@ jobs:
     - name: Install dependencies
       run: pnpm install --ignore-scripts
 
-    - name: Build provider and its dependencies
-      run: pnpm --filter "./packages/$PROVIDER..." build
+    - name: Build packages
+      run: pnpm build
 
     # Every repo secret is exported so each provider's suite finds the
     # credential names it already reads (NSC_TOKEN, E2B_API_KEY, ...).
+    # Missing credentials fail the run instead of skipping the live tests.
     - name: Run ${{ inputs.provider }} tests
       env:
+        COMPUTESDK_REQUIRE_INTEGRATION: '1'
         SECRETS_JSON: ${{ toJSON(secrets) }}
       run: |
         eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select(.key != "github_token") | "export \(.key)=\(.value | @sh)"')"

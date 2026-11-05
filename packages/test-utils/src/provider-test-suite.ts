@@ -63,6 +63,19 @@ export interface ProviderTestConfig {
 }
 
 /**
+ * With COMPUTESDK_REQUIRE_INTEGRATION=1, a suite whose live tests would be
+ * skipped (missing credentials) registers a failing test instead.
+ */
+export function failIfIntegrationRequired(name: string, skipIntegration: boolean) {
+  if (!skipIntegration || process.env.COMPUTESDK_REQUIRE_INTEGRATION !== '1') return;
+  it(`${name} integration tests require credentials`, () => {
+    throw new Error(
+      `COMPUTESDK_REQUIRE_INTEGRATION=1 but ${name} integration tests were skipped (missing credentials)`
+    );
+  });
+}
+
+/**
  * Creates test functions for a provider test suite
  * This returns functions that can be called within describe blocks
  */
@@ -82,6 +95,8 @@ export function defineProviderTests(config: ProviderTestConfig) {
   } = config;
 
   return () => {
+    failIfIntegrationRequired(name, skipIntegration);
+
     let sandbox: ProviderInstance;
 
     const createSandbox = async () => {
