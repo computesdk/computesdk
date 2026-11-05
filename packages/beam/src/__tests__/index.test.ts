@@ -114,6 +114,18 @@ describe('lazy sandbox readiness', () => {
     expect(process.wait).toHaveBeenCalledOnce();
   });
 
+  test('fills HOME for commands because the exec gateway starts without it', async () => {
+    const instance = mockSandbox();
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+
+    await sandbox.runCommand('echo "$HOME"', { env: { FOO: 'bar' }, background: true });
+
+    const [argv] = vi.mocked(instance.exec).mock.calls[0];
+    const script = (argv as string[])[2];
+    expect(script).toMatch(/^\[ -n "\$HOME" \] \|\| HOME=.*\/etc\/passwd.*export HOME=/);
+    expect(script.endsWith('; nohup FOO="bar" echo "$HOME" > /dev/null 2>&1 &')).toBe(true);
+  });
+
   test('writes and reads files through the native fs API instead of shell arguments', async () => {
     const instance = mockSandbox();
     vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);

@@ -99,6 +99,13 @@ function withBeamInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): Pr
   return withBeamConfig(config, fn);
 }
 
+/**
+ * Beam's exec gateway starts commands with a bare environment that has no
+ * HOME, which breaks `$HOME`, `~` and tools that keep state there (npm, git).
+ * Fill it from the passwd entry of the running user when it is unset.
+ */
+const HOME_PRELUDE = `[ -n "$HOME" ] || HOME=$(awk -F: -v u="$(id -u 2>/dev/null)" '$3==u{print $6;exit}' /etc/passwd 2>/dev/null); export HOME="\${HOME:-/}"`;
+
 function shellEscape(arg: string): string {
   if (arg === '') return "''";
   return `'${arg.replace(/'/g, "'\\''")}'`;
@@ -309,6 +316,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           }
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
           if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          fullCommand = `${HOME_PRELUDE}; ${fullCommand}`;
 
           // wait:true makes the gateway block until the command finishes, so a
           // client-side timeout must launch with wait:false to get the process
