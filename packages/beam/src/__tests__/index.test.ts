@@ -123,7 +123,7 @@ describe('lazy sandbox readiness', () => {
     const [argv] = vi.mocked(instance.exec).mock.calls[0];
     const script = (argv as string[])[2];
     expect(script).toMatch(/^\[ -n "\$HOME" \] \|\| HOME=.*\/etc\/passwd.*export HOME=/);
-    expect(script.endsWith('; nohup FOO="bar" echo "$HOME" > /dev/null 2>&1 &')).toBe(true);
+    expect(script).toMatch(/; nohup sh -c '.*export FOO="bar"\necho "\$HOME"' > \/dev\/null 2>&1 &$/s);
   });
 
   test('writes and reads files through the native fs API instead of shell arguments', async () => {
@@ -208,4 +208,66 @@ describe('lazy sandbox readiness', () => {
     const commands: string[] = builders[0].stub.config.image.config.commands;
     expect(commands.some((c) => c.includes('docker-ce'))).toBe(true);
   });
+});
+
+describe.skipIf(!process.env.BEAM_TOKEN || !process.env.BEAM_WORKSPACE_ID)('beam live capabilities', () => {
+  const provider = beam({});
+
+  test('snapshot restores files and memory into a new sandbox', async () => {
+    const source = await provider.sandbox.create();
+    let restoredId: string | undefined;
+    try {
+      await source.filesystem.writeFile('/tmp/snap-marker.txt', 'checkpointed');
+      const snapshot = await provider.snapshot!.create(source.sandboxId, { name: 'computesdk-test' });
+      expect(snapshot.id).toBeTruthy();
+      expect(snapshot.id).not.toBe(source.sandboxId);
+
+      const restored = await provider.sandbox.create({ snapshotId: snapshot.id });
+      restoredId = restored.sandboxId;
+      expect(restored.sandboxId).not.toBe(source.sandboxId);
+      expect(await restored.filesystem.readFile('/tmp/snap-marker.txt')).toBe('checkpointed');
+    } finally {
+      await provider.sandbox.destroy(source.sandboxId).catch(() => {});
+      if (restoredId) await provider.sandbox.destroy(restoredId).catch(() => {});
+    }
+  }, 600_000);
+
+  test('round-trips files larger than the gateway message cap', async () => {
+    const sandbox = await provider.sandbox.create();
+    try {
+      const content = 'abcdefghij'.repeat(2_000_000) + 'tail';
+      await sandbox.filesystem.writeFile('/tmp/large.txt', content);
+      const size = await sandbox.runCommand('wc -c < /tmp/large.txt');
+      expect(size.stdout.trim()).toBe(String(content.length));
+      const read = await sandbox.filesystem.readFile('/tmp/large.txt');
+      expect(read.length).toBe(content.length);
+      expect(read === content).toBe(true);
+      const leftovers = await sandbox.runCommand('ls /tmp | grep -c computesdk- || true');
+      expect(leftovers.stdout.trim()).toBe('0');
+    } finally {
+      await provider.sandbox.destroy(sandbox.sandboxId).catch(() => {});
+    }
+  }, 600_000);
+
+  test('mounts a volume at the requested path and keeps data across sandboxes', async () => {
+    const volume = await provider.volume!.create({ name: `computesdk-test-${Date.now().toString(36)}` });
+    const mountPath = '/mnt/computesdk-vol';
+    const ids: string[] = [];
+    try {
+      const first = await provider.sandbox.create({ volumes: [{ volume, mountPath }] });
+      ids.push(first.sandboxId);
+      const mounts = await first.runCommand(`grep -c ' ${mountPath} ' /proc/mounts || true`);
+      expect(Number(mounts.stdout.trim())).toBeGreaterThan(0);
+      await first.runCommand(`echo persisted > ${mountPath}/marker.txt`);
+      await provider.sandbox.destroy(first.sandboxId);
+
+      const second = await provider.sandbox.create({ volumes: [{ volume, mountPath }] });
+      ids.push(second.sandboxId);
+      const read = await second.runCommand(`cat ${mountPath}/marker.txt`);
+      expect(read.stdout.trim()).toBe('persisted');
+    } finally {
+      for (const id of ids) await provider.sandbox.destroy(id).catch(() => {});
+      await provider.volume!.delete(String(volume.id)).catch(() => {});
+    }
+  }, 600_000);
 });
