@@ -20,6 +20,17 @@ export interface DaytonaConfig {
   timeout?: number;
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function isNotFound(err: unknown): boolean {
+  return err instanceof DaytonaNotFoundError
+    || (err as { statusCode?: number }).statusCode === 404
+    || (err as { status?: number }).status === 404
+    || /not found|no such file/i.test(errorText(err));
+}
+
 /**
  * Resolve a volume by id OR name — `d.volume.get()` looks up by name only,
  * so an id falls back to a list scan. Returns null when nothing matches
@@ -31,11 +42,7 @@ async function resolveDaytonaVolume(d: Daytona, idOrName: string) {
   } catch (err) {
     // Only a real "not found" means the arg wasn't a name — anything else
     // (auth, 5xx) must propagate, else delete silently no-ops.
-    const notFound = err instanceof DaytonaNotFoundError
-      || (err as { statusCode?: number }).statusCode === 404
-      || (err as { status?: number }).status === 404
-      || /not found/i.test(errorText(err));
-    if (!notFound) throw err;
+    if (!isNotFound(err)) throw err;
   }
   const volumes = await d.volume.list();
   return (volumes ?? []).find((v: any) => v.id === idOrName) ?? null;
@@ -206,15 +213,10 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       runCommand: async (sandbox: DaytonaSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
+          // env/cwd go through executeCommand's native fields so every part of
+          // a compound command sees them.
           let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          if (options?.background) fullCommand = `nohup sh -c ${shellQuote(command)} > /dev/null 2>&1 &`;
 
           // executeCommand returns one merged `result` — separate stderr by
           // redirecting it to a file and cat'ing it back behind a delimiter.
@@ -224,10 +226,11 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           // always the cleanup's (0), not the command's.
           const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __dy_ec=$?; echo "${delim}$__dy_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
 
+          const env = options?.env && Object.keys(options.env).length > 0 ? options.env : undefined;
           const response = await sandbox.process.executeCommand(
             wrapped,
-            undefined,
-            undefined,
+            options?.cwd,
+            env,
             options?.timeout !== undefined ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined,
           );
           const merged = response.result || '';
@@ -279,47 +282,48 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
+      // Native toolbox file API: bytes travel as multipart uploads/downloads
+      // instead of base64 inside a shell command line.
       filesystem: {
         readFile: async (sandbox: DaytonaSandbox, path: string): Promise<string> => {
-          const response = await sandbox.process.executeCommand(`cat "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`File not found or cannot be read: ${path}`);
-          return response.result || '';
+          try {
+            const data = await sandbox.fs.downloadFile(path);
+            return Buffer.isBuffer(data) ? data.toString('utf8') : String(data ?? '');
+          } catch (error) {
+            throw new Error(`File not found or cannot be read: ${path} (${errorText(error)})`);
+          }
         },
         writeFile: async (sandbox: DaytonaSandbox, path: string, content: string): Promise<void> => {
-          const encoded = Buffer.from(content).toString('base64');
-          const response = await sandbox.process.executeCommand(`echo "${encoded}" | base64 -d > "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`Failed to write to file: ${path}`);
+          // A string source is read as a local path by the SDK — always pass bytes.
+          await sandbox.fs.uploadFile(Buffer.from(content, 'utf8'), path);
         },
         mkdir: async (sandbox: DaytonaSandbox, path: string): Promise<void> => {
-          const response = await sandbox.process.executeCommand(`mkdir -p "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`Failed to create directory: ${path}`);
+          await sandbox.fs.createFolder(path, '755');
         },
         readdir: async (sandbox: DaytonaSandbox, path: string): Promise<FileEntry[]> => {
-          const response = await sandbox.process.executeCommand(`ls -la "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`Directory not found or cannot be read: ${path}`);
-          const lines = response.result.split('\n').filter((l: string) => l.trim());
-          const entries: FileEntry[] = [];
-          for (const line of lines) {
-            if (line.startsWith('total ') || line.endsWith(' .') || line.endsWith(' ..')) continue;
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 9) {
-              entries.push({
-                name: parts.slice(8).join(' '),
-                type: parts[0].startsWith('d') ? 'directory' as const : 'file' as const,
-                size: parseInt(parts[4]) || 0,
-                modified: new Date()
-              });
-            }
-          }
-          return entries;
+          const files = await sandbox.fs.listFiles(path);
+          return (files ?? []).map((f) => ({
+            name: f.name,
+            type: f.isDir ? 'directory' as const : 'file' as const,
+            size: f.size || 0,
+            modified: new Date(f.modifiedAt || f.modTime || Date.now()),
+          }));
         },
         exists: async (sandbox: DaytonaSandbox, path: string): Promise<boolean> => {
-          const response = await sandbox.process.executeCommand(`test -e "${path}"`);
-          return response.exitCode === 0;
+          try {
+            await sandbox.fs.getFileDetails(path);
+            return true;
+          } catch (error) {
+            if (isNotFound(error)) return false;
+            throw error;
+          }
         },
         remove: async (sandbox: DaytonaSandbox, path: string): Promise<void> => {
-          const response = await sandbox.process.executeCommand(`rm -rf "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`Failed to remove: ${path}`);
+          try {
+            await sandbox.fs.deleteFile(path, true);
+          } catch (error) {
+            if (!isNotFound(error)) throw error;
+          }
         }
       },
 
