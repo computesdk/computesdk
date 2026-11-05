@@ -289,6 +289,97 @@ async function execOrThrow(inst: PromigenceInstance, command: string, what: stri
   }
 }
 
+/** Runs a command and returns its stdout; a non-zero exit is an error that names the operation. */
+async function execOutput(inst: PromigenceInstance, command: string, what: string): Promise<string> {
+  let r: PromigenceCommandResult;
+  try {
+    r = await inst.sandbox.commands.run(command, { throwOnExit: false });
+  } catch (e) {
+    rethrow(e, what);
+  }
+  if (r.exitCode !== 0) {
+    throw promigenceError(`Promigence ${what} failed (exit ${r.exitCode}): ${r.stderr.trim()}`);
+  }
+  return r.stdout;
+}
+
+/**
+ * Instances for which the Promigence API refused the files API of the installed `@promigence/sdk`
+ * (older releases put the path in the URL; the API now takes it in the body). From then on, their
+ * files are read, written, checked and listed with shell commands in the sandbox.
+ */
+const filesApiRefused = new WeakSet<PromigenceInstance>();
+
+function isFilesApiRefusal(e: unknown): boolean {
+  return e instanceof PromigenceError && e.code === 'usage' && /URL/.test(e.message);
+}
+
+/** Calls the files API; once the API has refused it, or when it refuses this call, runs `viaShell`. */
+async function viaFilesApi<T>(
+  inst: PromigenceInstance,
+  api: () => Promise<T>,
+  viaShell: () => Promise<T>,
+  what: string
+): Promise<T> {
+  if (filesApiRefused.has(inst)) return viaShell();
+  try {
+    return await api();
+  } catch (e) {
+    if (!isFilesApiRefusal(e)) rethrow(e, what);
+    filesApiRefused.add(inst);
+    return viaShell();
+  }
+}
+
+const shellFs = {
+  readFile: async (inst: PromigenceInstance, path: string): Promise<string> => {
+    const q = `"${escapeShellArg(path)}"`;
+    const out = await execOutput(
+      inst,
+      `if [ -f ${q} ]; then base64 < ${q}; else echo "no such file: ${escapeShellArg(path)}" >&2; exit 1; fi`,
+      `read of ${path}`
+    );
+    return Buffer.from(out.replace(/\s+/g, ''), 'base64').toString('utf8');
+  },
+  writeFile: async (inst: PromigenceInstance, path: string, content: string): Promise<void> => {
+    const q = `"${escapeShellArg(path)}"`;
+    const b64 = Buffer.from(content, 'utf8').toString('base64');
+    await execOutput(
+      inst,
+      `mkdir -p -- "$(dirname -- ${q})" && printf '%s' '${b64}' | base64 -d > ${q}`,
+      `write of ${path}`
+    );
+  },
+  exists: async (inst: PromigenceInstance, path: string): Promise<boolean> => {
+    const q = `"${escapeShellArg(path)}"`;
+    const out = await execOutput(inst, `if [ -e ${q} ] || [ -L ${q} ]; then echo yes; else echo no; fi`, `check of ${path}`);
+    return out.trim() === 'yes';
+  },
+  readdir: async (inst: PromigenceInstance, path: string): Promise<FileEntry[]> => {
+    const q = `"${escapeShellArg(path)}"`;
+    const out = await execOutput(
+      inst,
+      `cd -- ${q} || exit 1; for f in * .[!.]* ..?*; do [ -e "$f" ] || [ -L "$f" ] || continue; ` +
+        `if [ -d "$f" ]; then t=d; else t=f; fi; m=$(stat -c '%s %Y' -- "$f" 2>/dev/null); ` +
+        `printf '%s\\t%s\\t%s\\n' "$t" "$m" "$f"; done`,
+      `listing of ${path}`
+    );
+    return out
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [t, meta, ...rest] = line.split('\t');
+        const [size, mtime] = (meta ?? '').split(' ').map(Number);
+        return {
+          name: rest.join('\t'),
+          type: t === 'd' ? 'directory' : 'file',
+          ...(Number.isFinite(size) ? { size } : {}),
+          ...(Number.isFinite(mtime) ? { modified: new Date(mtime * 1000) } : {}),
+        } as FileEntry;
+      });
+  },
+};
+
 function toSnapshotInfo(s: SnapshotRecord) {
   return {
     id: s.snapshot_id,
@@ -517,36 +608,26 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
       getInstance: (inst: PromigenceInstance): PromigenceInstance => inst,
 
       filesystem: {
-        readFile: async (inst: PromigenceInstance, path: string): Promise<string> => {
-          try {
-            return await inst.sandbox.files.read(path);
-          } catch (e) {
-            rethrow(e, `read of ${path}`);
-          }
-        },
-        writeFile: async (inst: PromigenceInstance, path: string, content: string): Promise<void> => {
-          try {
-            await inst.sandbox.files.write(path, content);
-          } catch (e) {
-            rethrow(e, `write of ${path}`);
-          }
-        },
+        readFile: (inst: PromigenceInstance, path: string): Promise<string> =>
+          viaFilesApi(inst, () => inst.sandbox.files.read(path), () => shellFs.readFile(inst, path), `read of ${path}`),
+        writeFile: (inst: PromigenceInstance, path: string, content: string): Promise<void> =>
+          viaFilesApi(
+            inst,
+            () => inst.sandbox.files.write(path, content),
+            () => shellFs.writeFile(inst, path, content),
+            `write of ${path}`
+          ),
         mkdir: (inst: PromigenceInstance, path: string): Promise<void> =>
           execOrThrow(inst, `mkdir -p -- "${escapeShellArg(path)}"`, `mkdir of ${path}`),
-        readdir: async (inst: PromigenceInstance, path: string): Promise<FileEntry[]> => {
-          try {
-            return (await inst.sandbox.files.list(path)).map(toFileEntry);
-          } catch (e) {
-            rethrow(e, `listing of ${path}`);
-          }
-        },
-        exists: async (inst: PromigenceInstance, path: string): Promise<boolean> => {
-          try {
-            return await inst.sandbox.files.exists(path);
-          } catch (e) {
-            rethrow(e, `check of ${path}`);
-          }
-        },
+        readdir: (inst: PromigenceInstance, path: string): Promise<FileEntry[]> =>
+          viaFilesApi(
+            inst,
+            async () => (await inst.sandbox.files.list(path)).map(toFileEntry),
+            () => shellFs.readdir(inst, path),
+            `listing of ${path}`
+          ),
+        exists: (inst: PromigenceInstance, path: string): Promise<boolean> =>
+          viaFilesApi(inst, () => inst.sandbox.files.exists(path), () => shellFs.exists(inst, path), `check of ${path}`),
         // ComputeSDK's remove takes directories too.
         remove: (inst: PromigenceInstance, path: string): Promise<void> =>
           execOrThrow(inst, `rm -rf -- "${escapeShellArg(path)}"`, `remove of ${path}`),
