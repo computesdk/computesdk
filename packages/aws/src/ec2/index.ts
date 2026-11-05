@@ -681,11 +681,13 @@ async function readSpilled(
     const start = Math.max(0, size - max);
     return { file: `${SPILL_DIR}/${id}.${ext}`, size, start, chunks: new Array(Math.ceil((size - start) / READBACK_CHUNK_BYTES)) };
   };
-  const out = stream('out', sizes.stdout);
-  const err = stream('err', sizes.stderr);
-  const reads = [out, err].flatMap((spilled) => Array.from({ length: spilled.chunks.length }, (_, index) => ({ spilled, index })));
+  let out: SpilledStream;
+  let err: SpilledStream;
 
   try {
+    out = stream('out', sizes.stdout);
+    err = stream('err', sizes.stderr);
+    const reads = [out, err].flatMap((spilled) => Array.from({ length: spilled.chunks.length }, (_, index) => ({ spilled, index })));
     await inParallel(reads, READBACK_CONCURRENCY, async ({ spilled, index }) => {
       const script = chunkRead(spilled.file, spilled.start + index * READBACK_CHUNK_BYTES);
       const invocation = await ssmRunOk(context, sandbox, script, 'reading back command output');
@@ -765,11 +767,15 @@ async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCom
       }));
     } else if (invocation.Status === 'TimedOut') {
       // Partial output is best effort: a failed read-back must not hide the timeout itself.
-      try {
-        ({ stdout, stderr } = await readSpilledOutput(context, sandbox, spillId, await spilledSizes(context, sandbox, spillId)));
-      } catch {
-        // keep the (empty) inline output
+      const sizes = await spilledSizes(context, sandbox, spillId).catch(() => undefined);
+      if (!sizes) {
         await removeSpilled(context, sandbox, spillId);
+      } else {
+        try {
+          ({ stdout, stderr } = await readSpilledOutput(context, sandbox, spillId, sizes));
+        } catch {
+          // keep the (empty) inline output; readSpilled has already removed the files
+        }
       }
     } else if (invocation.Status === 'Cancelled') {
       // Cancelled outside this call: the script never reached its own cleanup.
