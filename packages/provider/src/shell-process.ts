@@ -43,10 +43,6 @@ const MAX_BUFFERED_CHARS = 4 * 1024 * 1024;
 /** A read window must hold one whole record (4096 bytes plus its header), or the cursor never advances. */
 const MIN_READ_BYTES = 8 * 1024;
 
-const SIGNAL_NAMES: Record<number, string> = {
-  1: 'SIGHUP', 2: 'SIGINT', 3: 'SIGQUIT', 6: 'SIGABRT', 9: 'SIGKILL', 13: 'SIGPIPE', 14: 'SIGALRM', 15: 'SIGTERM',
-};
-
 /** The instance lacks a tool the shell tier needs. */
 export class ShellProcessUnsupportedError extends Error {
   readonly code = 'unsupported';
@@ -149,11 +145,14 @@ export function parseFramedLog(window: Uint8Array, baseOffset: number): ShellLog
   return records;
 }
 
+/**
+ * Only signals the tier sent itself are reported: a shell exit status of 128+n
+ * cannot tell a signal death from a command that ran `exit 143`.
+ */
 function signalFor(exitCode: number | null, recorded: string | null, timedOut: boolean): string | null {
-  if (exitCode === null) return null;
+  if (exitCode === null || exitCode <= 128) return null;
   if (timedOut) return 'SIGKILL';
-  if (exitCode > 128) return recorded ?? SIGNAL_NAMES[exitCode - 128] ?? `SIG${exitCode - 128}`;
-  return null;
+  return recorded;
 }
 
 /** One exec: the job's state plus the log window after `cursor`, optionally long-polled in the box. */
