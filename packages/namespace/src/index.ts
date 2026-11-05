@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { randomUUID } from 'node:crypto';
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError, TIMEOUT_EXIT_CODE, START_FAILURE_EXIT_CODE } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
@@ -110,6 +110,7 @@ const API_ENDPOINTS = {
 
 const COMMAND_SERVICE = {
   RUN_COMMAND_SYNC: '/namespace.cloud.compute.v1beta.CommandService/RunCommandSync',
+  RUN_COMMAND: '/namespace.cloud.compute.v1beta.CommandService/RunCommand',
 };
 
 const STORAGE_SERVICE = {
@@ -327,6 +328,215 @@ export const fetchNamespace = async (
   handleApiErrors(data);
   return data;
 };
+
+/** `command` with the caller's env, cwd and background options applied as shell. */
+function shellCommand(command: string, options?: RunCommandOptions): string {
+  let fullCommand = command;
+
+  if (options?.env && Object.keys(options.env).length > 0) {
+    const envPrefix = Object.entries(options.env)
+      .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
+      .join(' ');
+    fullCommand = `${envPrefix} ${fullCommand}`;
+  }
+
+  if (options?.cwd) {
+    fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+  }
+
+  if (options?.background) {
+    fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+  }
+
+  return fullCommand;
+}
+
+function commandTimeoutMs(options?: RunCommandOptions): number | undefined {
+  return typeof options?.timeout === 'number' &&
+    Number.isFinite(options.timeout) &&
+    options.timeout > 0
+    ? Math.floor(options.timeout)
+    : undefined;
+}
+
+/** One `RunCommandResponse` in Connect JSON: `data` is base64, `stream` an enum name or number. */
+interface WireRunCommandResponse {
+  stream?: 'STDOUT' | 'STDERR' | 'STREAM_UNKNOWN' | number;
+  data?: string;
+  exitStatus?: { exitCode?: number };
+}
+
+/** Connect envelope flags: bit 0 compressed, bit 1 end-of-stream. */
+const CONNECT_FLAG_COMPRESSED = 0x01;
+const CONNECT_FLAG_END_STREAM = 0x02;
+
+/**
+ * Splits a Connect server-streaming body into its enveloped frames
+ * (1 flag byte, 4-byte big-endian length, payload).
+ */
+async function* connectFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<{ flags: number; payload: Uint8Array }> {
+  const reader = body.getReader();
+  let buffer = new Uint8Array(0);
+  try {
+    for (;;) {
+      while (buffer.length >= 5) {
+        const length = new DataView(buffer.buffer, buffer.byteOffset, 5).getUint32(1);
+        if (buffer.length < 5 + length) break;
+        yield { flags: buffer[0], payload: buffer.subarray(5, 5 + length) };
+        buffer = buffer.subarray(5 + length);
+      }
+      const { done, value } = await reader.read();
+      if (done) {
+        if (buffer.length > 0) throw new Error('stream ended inside a frame');
+        return;
+      }
+      const next = new Uint8Array(buffer.length + value.length);
+      next.set(buffer);
+      next.set(value, buffer.length);
+      buffer = next;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Runs `fullCommand` over CommandService.RunCommand, the server-streaming
+ * twin of RunCommandSync, calling `onStdout`/`onStderr` per chunk as it arrives.
+ *
+ * Lifecycle matches `streamCommandViaProcess`: a failure before the stream
+ * opens is exit 127, the caller's `timeout` is exit 124 (sent as
+ * Connect-Timeout-Ms so the server stops the command, and enforced by a client
+ * abort), and a stream lost before its exit status is exit -1 with what was
+ * received so far. RunCommand has no status or buffered-output call to recover
+ * a dropped stream, so -1 is final.
+ */
+async function streamNamespaceCommand(
+  sandbox: NamespaceSandbox,
+  fullCommand: string,
+  options: RunCommandOptions
+): Promise<CommandResult> {
+  const startTime = Date.now();
+  const timeoutMs = commandTimeoutMs(options);
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = timeoutMs === undefined
+    ? undefined
+    : setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+
+  let stdout = '';
+  let stderr = '';
+  const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
+  const emitStdout = (text: string) => {
+    if (!text) return;
+    stdout += text;
+    options.onStdout?.(text);
+  };
+  const emitStderr = (text: string) => {
+    if (!text) return;
+    stderr += text;
+    options.onStderr?.(text);
+  };
+  const flush = () => {
+    emitStdout(decoders.stdout.decode());
+    emitStderr(decoders.stderr.decode());
+  };
+  const result = (exitCode: number): CommandResult => ({ stdout, stderr, exitCode, durationMs: Date.now() - startTime });
+  const timeoutResult = () => {
+    flush();
+    return result(TIMEOUT_EXIT_CODE);
+  };
+
+  try {
+    const requestBody = new TextEncoder().encode(JSON.stringify({
+      instanceId: sandbox.instanceId,
+      targetContainerName: sandbox.targetContainerName,
+      command: { command: ['sh', '-c', fullCommand] },
+    }));
+    const envelope = new Uint8Array(5 + requestBody.length);
+    new DataView(envelope.buffer).setUint32(1, requestBody.length);
+    envelope.set(requestBody, 5);
+
+    let response: Response | undefined;
+    for (let attempt = 0; !response; attempt++) {
+      try {
+        response = await fetch(`${sandbox.commandServiceEndpoint}${COMMAND_SERVICE.RUN_COMMAND}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/connect+json',
+            'Connect-Protocol-Version': '1',
+            'Authorization': `Bearer ${sandbox.token}`,
+            ...(timeoutMs !== undefined ? { 'Connect-Timeout-Ms': String(timeoutMs) } : {}),
+          },
+          body: envelope,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        const delay = RETRY_DELAYS_MS[attempt];
+        if (!timedOut && delay !== undefined && retryable(COMMAND_SERVICE.RUN_COMMAND, { error })) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!response.ok || !response.body) {
+      const detail = await errorDetail(response);
+      await response.body?.cancel().catch(() => undefined);
+      return { stdout: '', stderr: `Namespace API error: ${response.status} ${response.statusText}${detail}`, exitCode: START_FAILURE_EXIT_CODE, durationMs: Date.now() - startTime };
+    }
+
+    let exitCode: number | undefined;
+    try {
+      for await (const frame of connectFrames(response.body)) {
+        if (frame.flags & CONNECT_FLAG_COMPRESSED) throw new Error('unexpected compressed frame');
+        const message = JSON.parse(new TextDecoder().decode(frame.payload));
+        if (frame.flags & CONNECT_FLAG_END_STREAM) {
+          const error = (message as { error?: { code?: string; message?: string } }).error;
+          if (error) {
+            flush();
+            if (error.code === 'deadline_exceeded' && timeoutMs !== undefined) return result(TIMEOUT_EXIT_CODE);
+            // An error before any output is a failure to run the command at all.
+            const detail = `Namespace API error: ${[error.code, error.message].filter(Boolean).join(': ')}`;
+            const started = stdout !== '' || stderr !== '' || exitCode !== undefined;
+            emitStderr(stderr && !stderr.endsWith('\n') ? `\n${detail}` : detail);
+            return result(started ? exitCode ?? -1 : START_FAILURE_EXIT_CODE);
+          }
+          break;
+        }
+        const chunk = message as WireRunCommandResponse;
+        if (chunk.data) {
+          const bytes = Buffer.from(chunk.data, 'base64');
+          if (chunk.stream === 'STDERR' || chunk.stream === 2) emitStderr(decoders.stderr.decode(bytes, { stream: true }));
+          else emitStdout(decoders.stdout.decode(bytes, { stream: true }));
+        }
+        if (chunk.exitStatus) exitCode = chunk.exitStatus.exitCode ?? 0;
+      }
+    } catch (error) {
+      if (timedOut) return timeoutResult();
+      flush();
+      emitStderr(`${stderr && !stderr.endsWith('\n') ? '\n' : ''}Namespace command stream lost before exit: ${error instanceof Error ? error.message : String(error)}`);
+      return result(exitCode ?? -1);
+    }
+
+    flush();
+    if (exitCode === undefined) {
+      if (timedOut) return result(TIMEOUT_EXIT_CODE);
+      emitStderr(`${stderr && !stderr.endsWith('\n') ? '\n' : ''}Namespace command stream ended without an exit status`);
+      return result(-1);
+    }
+    return result(exitCode);
+  } catch (error) {
+    if (timedOut) return timeoutResult();
+    return { stdout, stderr: stderr + (error instanceof Error ? error.message : String(error)), exitCode: START_FAILURE_EXIT_CODE, durationMs: Date.now() - startTime };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 /**
  * Namespace provider
@@ -594,29 +804,8 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const startTime = Date.now();
 
         try {
-          let fullCommand = command;
-
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-
-          if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          }
-
-          if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          }
-
-          const timeoutMs =
-            typeof options?.timeout === 'number' &&
-            Number.isFinite(options.timeout) &&
-            options.timeout > 0
-              ? Math.floor(options.timeout)
-              : undefined;
+          const fullCommand = shellCommand(command, options);
+          const timeoutMs = commandTimeoutMs(options);
 
           const result = await fetchNamespace(
             sandbox.token,
@@ -666,6 +855,15 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             `Namespace command execution failed: ${error instanceof Error ? error.message : String(error)}`
           );
         }
+      },
+
+      // CommandService.RunCommand streams output chunks while the command runs,
+      // so callbacks need neither daemond nor a routable port.
+      streamCommand: async (sandbox: NamespaceSandbox, command: string, options: RunCommandOptions): Promise<CommandResult> => {
+        if (!sandbox.commandServiceEndpoint) {
+          throw new Error('Command service endpoint not available. The instance may not support command execution.');
+        }
+        return streamNamespaceCommand(sandbox, shellCommand(command, options), options);
       },
 
       getInfo: async (sandbox: NamespaceSandbox): Promise<InstanceInfo> => {
