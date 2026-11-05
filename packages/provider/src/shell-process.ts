@@ -40,6 +40,8 @@ const EXEC_GRACE_MS = 30_000;
 const STDIN_CHUNK_BYTES = 48 * 1024;
 /** Accumulated output kept per stream on a handle; older output is dropped and `truncated` set. */
 const MAX_BUFFERED_CHARS = 4 * 1024 * 1024;
+/** A read window must hold one whole record (4096 bytes plus its header), or the cursor never advances. */
+const MIN_READ_BYTES = 8 * 1024;
 
 const SIGNAL_NAMES: Record<number, string> = {
   1: 'SIGHUP', 2: 'SIGINT', 3: 'SIGQUIT', 6: 'SIGABRT', 9: 'SIGKILL', 13: 'SIGPIPE', 14: 'SIGALRM', 15: 'SIGTERM',
@@ -227,7 +229,7 @@ class ShellJob implements ShellProcessHandle {
   async pull(waitMs = 0, untilOutput = false): Promise<ShellJobRead> {
     const read = await readShellJob(this.run, this.jobId, {
       cursor: this.cursor,
-      maxBytes: this.options.maxReadBytes ?? DEFAULT_READ_BYTES,
+      maxBytes: Math.max(MIN_READ_BYTES, this.options.maxReadBytes ?? DEFAULT_READ_BYTES),
       waitMs,
       untilOutput,
     });
