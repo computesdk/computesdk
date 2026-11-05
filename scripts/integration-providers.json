@@ -1,0 +1,488 @@
+{
+  "archil": {
+    "package": "@computesdk/archil",
+    "directory": "archil",
+    "factory": "archil",
+    "requiredEnv": [
+      "ARCHIL_API_KEY",
+      "ARCHIL_REGION",
+      "ARCHIL_DISK_ID"
+    ],
+    "config": {
+      "apiKey": "ARCHIL_API_KEY",
+      "region": "ARCHIL_REGION"
+    },
+    "aliases": {
+      "ARCHIL_DISK_ID": [
+        "ARCHIL_DISK_ID_SANDBOX"
+      ]
+    },
+    "sandboxEnv": {
+      "diskId": "ARCHIL_DISK_ID"
+    }
+  },
+  "arker": {
+    "package": "@computesdk/arker",
+    "directory": "arker",
+    "factory": "arker",
+    "requiredEnv": [
+      "ARKER_API_KEY"
+    ],
+    "config": {
+      "apiKey": "ARKER_API_KEY"
+    },
+    "sandboxOptions": {
+      "templateId": "ubuntu-small"
+    }
+  },
+  "beam": {
+    "package": "@computesdk/beam",
+    "directory": "beam",
+    "factory": "beam",
+    "requiredEnv": [
+      "BEAM_TOKEN",
+      "BEAM_WORKSPACE_ID"
+    ],
+    "config": {
+      "token": "BEAM_TOKEN",
+      "workspaceId": "BEAM_WORKSPACE_ID",
+      "gatewayUrl": "BEAM_GATEWAY_URL"
+    },
+    "optionalEnv": [
+      "BEAM_GATEWAY_URL"
+    ],
+    "sandboxOptions": {
+      "name": "computesdk-integration",
+      "runtime": "node"
+    }
+  },
+  "blaxel": {
+    "package": "@computesdk/blaxel",
+    "directory": "blaxel",
+    "factory": "blaxel",
+    "requiredEnv": [
+      "BL_API_KEY",
+      "BL_WORKSPACE"
+    ],
+    "config": {
+      "apiKey": "BL_API_KEY",
+      "workspace": "BL_WORKSPACE"
+    },
+    "sandboxOptions": {
+      "timeout": 300000
+    }
+  },
+  "buddy": {
+    "package": "@computesdk/buddy",
+    "directory": "buddy",
+    "factory": "buddy",
+    "requiredEnv": [
+      "BUDDY_TOKEN",
+      "BUDDY_WORKSPACE",
+      "BUDDY_PROJECT"
+    ],
+    "config": {
+      "token": "BUDDY_TOKEN",
+      "workspace": "BUDDY_WORKSPACE",
+      "project": "BUDDY_PROJECT"
+    }
+  },
+  "cloud-run": {
+    "package": "@computesdk/gcp",
+    "directory": "gcp",
+    "factory": "cloudRun",
+    "requiredEnv": [
+      "CLOUD_RUN_SANDBOX_URL",
+      "CLOUD_RUN_SANDBOX_SECRET"
+    ],
+    "config": {
+      "sandboxUrl": "CLOUD_RUN_SANDBOX_URL",
+      "sandboxSecret": "CLOUD_RUN_SANDBOX_SECRET",
+      "gatewayAuthToken": "CLOUD_RUN_AUTH_TOKEN"
+    },
+    "entry": "cloud-run/index.mjs",
+    "optionalEnv": [
+      "CLOUD_RUN_AUTH_TOKEN"
+    ]
+  },
+  "cloudflare": {
+    "package": "@computesdk/cloudflare",
+    "directory": "cloudflare",
+    "factory": "cloudflare",
+    "requiredEnv": [
+      "CLOUDFLARE_SANDBOX_URL",
+      "SANDBOX_API_KEY"
+    ],
+    "config": {
+      "sandboxUrl": "CLOUDFLARE_SANDBOX_URL",
+      "sandboxApiKey": "SANDBOX_API_KEY"
+    }
+  },
+  "codesandbox": {
+    "package": "@computesdk/codesandbox",
+    "directory": "codesandbox",
+    "factory": "codesandbox",
+    "requiredEnv": [
+      "CSB_API_KEY"
+    ],
+    "config": {
+      "apiKey": "CSB_API_KEY"
+    }
+  },
+  "createos": {
+    "package": "@computesdk/createos-sandbox",
+    "directory": "createos-sandbox",
+    "factory": "createosSandbox",
+    "requiredEnv": [
+      "CREATEOS_SANDBOX_API_KEY"
+    ],
+    "config": {
+      "apiKey": "CREATEOS_SANDBOX_API_KEY"
+    }
+  },
+  "daytona": {
+    "package": "@computesdk/daytona",
+    "directory": "daytona",
+    "factory": "daytona",
+    "requiredEnv": [
+      "DAYTONA_API_KEY"
+    ],
+    "config": {
+      "apiKey": "DAYTONA_API_KEY"
+    }
+  },
+  "e2b": {
+    "package": "@computesdk/e2b",
+    "directory": "e2b",
+    "factory": "e2b",
+    "requiredEnv": [
+      "E2B_API_KEY"
+    ],
+    "config": {
+      "apiKey": "E2B_API_KEY"
+    }
+  },
+  "freestyle": {
+    "package": "@computesdk/freestyle",
+    "directory": "freestyle",
+    "factory": "freestyle",
+    "requiredEnv": [
+      "FREESTYLE_API_KEY"
+    ],
+    "config": {
+      "apiKey": "FREESTYLE_API_KEY"
+    }
+  },
+  "givemeanode": {
+    "package": "@computesdk/givemeanode",
+    "directory": "givemeanode",
+    "factory": "givemeanode",
+    "requiredEnv": [
+      "GMN_TOKEN"
+    ],
+    "config": {
+      "apiKey": "GMN_TOKEN",
+      "baseUrl": "GMN_API_HOST"
+    },
+    "optionalEnv": [
+      "GMN_API_HOST"
+    ]
+  },
+  "gravixlayer": {
+    "package": "@computesdk/gravixlayer",
+    "directory": "gravixlayer",
+    "factory": "gravixlayer",
+    "requiredEnv": [
+      "GRAVIXLAYER_API_KEY"
+    ],
+    "config": {
+      "apiKey": "GRAVIXLAYER_API_KEY"
+    }
+  },
+  "hopx": {
+    "package": "@computesdk/hopx",
+    "directory": "hopx",
+    "factory": "hopx",
+    "requiredEnv": [
+      "HOPX_API_KEY"
+    ],
+    "config": {
+      "apiKey": "HOPX_API_KEY"
+    }
+  },
+  "isorun": {
+    "package": "@computesdk/isorun",
+    "directory": "isorun",
+    "factory": "isorun",
+    "requiredEnv": [
+      "ISORUN_API_KEY"
+    ],
+    "config": {
+      "apiKey": "ISORUN_API_KEY"
+    },
+    "sandboxOptions": {
+      "image": "node:22"
+    }
+  },
+  "modal": {
+    "package": "@computesdk/modal",
+    "directory": "modal",
+    "factory": "modal",
+    "requiredEnv": [
+      "MODAL_TOKEN_ID",
+      "MODAL_TOKEN_SECRET"
+    ],
+    "config": {
+      "tokenId": "MODAL_TOKEN_ID",
+      "tokenSecret": "MODAL_TOKEN_SECRET"
+    }
+  },
+  "microsandbox": {
+    "package": "@computesdk/microsandbox",
+    "directory": "microsandbox",
+    "factory": "microsandbox",
+    "requiredEnv": [
+      "MSB_API_KEY"
+    ],
+    "config": {
+      "apiKey": "MSB_API_KEY"
+    },
+    "sandboxOptions": {
+      "image": "node:22"
+    }
+  },
+  "miosa": {
+    "package": "@computesdk/miosa",
+    "directory": "miosa",
+    "factory": "miosa",
+    "requiredEnv": [
+      "MIOSA_API_KEY"
+    ],
+    "config": {
+      "apiKey": "MIOSA_API_KEY"
+    }
+  },
+  "mosaic": {
+    "package": "@computesdk/mosaic",
+    "directory": "mosaic",
+    "factory": "mosaic",
+    "requiredEnv": [
+      "MOSAIC_API_URL",
+      "MOSAIC_API_TOKEN"
+    ],
+    "config": {
+      "baseUrl": "MOSAIC_API_URL",
+      "apiKey": "MOSAIC_API_TOKEN"
+    },
+    "sandboxOptions": {
+      "templateId": "node-20"
+    }
+  },
+  "namespace": {
+    "package": "@computesdk/namespace",
+    "directory": "namespace",
+    "factory": "namespace",
+    "requiredEnv": [
+      "NSC_TOKEN"
+    ],
+    "config": {
+      "token": "NSC_TOKEN"
+    }
+  },
+  "northflank": {
+    "package": "@computesdk/northflank",
+    "directory": "northflank",
+    "factory": "northflank",
+    "requiredEnv": [
+      "NORTHFLANK_TOKEN",
+      "NORTHFLANK_PROJECT_ID"
+    ],
+    "config": {
+      "token": "NORTHFLANK_TOKEN",
+      "projectId": "NORTHFLANK_PROJECT_ID",
+      "host": "NORTHFLANK_API_URL"
+    },
+    "factoryOptions": {
+      "runtime": "node"
+    },
+    "optionalEnv": [
+      "NORTHFLANK_API_URL"
+    ]
+  },
+  "novita": {
+    "package": "@computesdk/novita",
+    "directory": "novita",
+    "factory": "novita",
+    "requiredEnv": [
+      "NOVITA_API_KEY"
+    ],
+    "config": {
+      "apiKey": "NOVITA_API_KEY"
+    }
+  },
+  "opencomputer": {
+    "package": "@computesdk/opencomputer",
+    "directory": "opencomputer",
+    "factory": "opencomputer",
+    "requiredEnv": [
+      "OPENCOMPUTER_API_KEY",
+      "OPENCOMPUTER_API_URL"
+    ],
+    "config": {
+      "apiKey": "OPENCOMPUTER_API_KEY",
+      "apiUrl": "OPENCOMPUTER_API_URL"
+    }
+  },
+  "promigence": {
+    "package": "@computesdk/promigence",
+    "directory": "promigence",
+    "factory": "promigence",
+    "requiredEnv": [
+      "PROMIGENCE_API_KEY"
+    ],
+    "config": {
+      "apiKey": "PROMIGENCE_API_KEY"
+    }
+  },
+  "run-cloud": {
+    "package": "@computesdk/run-cloud",
+    "directory": "run-cloud",
+    "factory": "runCloud",
+    "requiredEnv": [
+      "RUN_CLOUD_API_KEY"
+    ],
+    "config": {
+      "apiKey": "RUN_CLOUD_API_KEY"
+    },
+    "sandboxOptions": {
+      "templateId": "runcloud/agent-base"
+    }
+  },
+  "sail": {
+    "package": "@computesdk/sail",
+    "directory": "sail",
+    "factory": "sail",
+    "requiredEnv": [
+      "SAIL_API_KEY"
+    ],
+    "config": {
+      "apiKey": "SAIL_API_KEY",
+      "app": "SAIL_APP"
+    },
+    "optionalEnv": [
+      "SAIL_APP"
+    ]
+  },
+  "sandbox0": {
+    "package": "@computesdk/sandbox0",
+    "directory": "sandbox0",
+    "factory": "sandbox0",
+    "requiredEnv": [
+      "SANDBOX0_TOKEN"
+    ],
+    "config": {
+      "token": "SANDBOX0_TOKEN",
+      "teamId": "SANDBOX0_TEAM_ID",
+      "baseUrl": "SANDBOX0_BASE_URL",
+      "templateId": "SANDBOX0_TEMPLATE"
+    },
+    "sandboxOptions": {
+      "memory": 128,
+      "hardTtl": 900
+    },
+    "optionalEnv": [
+      "SANDBOX0_TEAM_ID",
+      "SANDBOX0_BASE_URL",
+      "SANDBOX0_TEMPLATE"
+    ]
+  },
+  "superserve": {
+    "package": "@computesdk/superserve",
+    "directory": "superserve",
+    "factory": "superserve",
+    "requiredEnv": [
+      "SUPERSERVE_API_KEY"
+    ],
+    "config": {
+      "apiKey": "SUPERSERVE_API_KEY"
+    },
+    "sandboxOptions": {
+      "templateId": "superserve/node-22"
+    }
+  },
+  "tenki": {
+    "package": "@computesdk/tenki",
+    "directory": "tenki",
+    "factory": "tenki",
+    "requiredEnv": [
+      "TENKI_API_KEY"
+    ],
+    "config": {
+      "apiKey": "TENKI_API_KEY",
+      "workspaceId": "TENKI_WORKSPACE_ID"
+    },
+    "optionalEnv": [
+      "TENKI_WORKSPACE_ID"
+    ]
+  },
+  "tensorlake": {
+    "package": "@computesdk/tensorlake",
+    "directory": "tensorlake",
+    "factory": "tensorlake",
+    "requiredEnv": [
+      "TENSORLAKE_API_KEY"
+    ],
+    "config": {
+      "apiKey": "TENSORLAKE_API_KEY"
+    }
+  },
+  "upstash": {
+    "package": "@computesdk/upstash",
+    "directory": "upstash",
+    "factory": "upstash",
+    "requiredEnv": [
+      "UPSTASH_BOX_API_KEY"
+    ],
+    "config": {
+      "apiKey": "UPSTASH_BOX_API_KEY"
+    },
+    "sandboxOptions": {
+      "ephemeral": true
+    }
+  },
+  "vercel": {
+    "package": "@computesdk/vercel",
+    "directory": "vercel",
+    "factory": "vercel",
+    "requiredEnv": [
+      "VERCEL_TOKEN",
+      "VERCEL_TEAM_ID",
+      "VERCEL_PROJECT_ID"
+    ],
+    "config": {
+      "token": "VERCEL_TOKEN",
+      "teamId": "VERCEL_TEAM_ID",
+      "projectId": "VERCEL_PROJECT_ID"
+    },
+    "sandboxOptions": {
+      "persistent": false
+    }
+  },
+  "platform": {
+    "package": "@computesdk/platform",
+    "directory": "platform",
+    "factory": "platform",
+    "requiredEnv": [
+      "COMPUTE_PLATFORM_TEST_API_KEY"
+    ],
+    "config": {
+      "apiKey": "COMPUTE_PLATFORM_TEST_API_KEY"
+    },
+    "aliases": {
+      "COMPUTE_PLATFORM_TEST_API_KEY": [
+        "BENCHMARKS_PLATFORM_API_KEY"
+      ]
+    },
+    "canonicalFirst": true
+  }
+}
