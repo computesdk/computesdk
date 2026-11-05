@@ -369,6 +369,20 @@ interface WireRunCommandMessage {
 
 const CONNECT_FLAG_END_STREAM = 0x02;
 
+/**
+ * Namespace reports every failing command as exit code 1 and puts the real
+ * code in a final stderr line from its exec agent, e.g.
+ * `time="..." level=fatal msg="exec failed with exit code 3"`.
+ */
+const EXEC_FAILED_LINE = /(^|\n)time="[^"\n]*" level=fatal msg="exec failed with exit code (-?\d+)"\n?$/;
+
+/** Strips Namespace's exec-failure line from `stderr` and returns the command's real exit code. */
+function realExitStatus(stderr: string, exitCode: number): { stderr: string; exitCode: number } {
+  const match = exitCode === 1 ? EXEC_FAILED_LINE.exec(stderr) : null;
+  if (!match) return { stderr, exitCode };
+  return { stderr: stderr.slice(0, match.index + match[1].length), exitCode: Number(match[2]) };
+}
+
 /** Splits a Connect streaming body into frames: 1 flag byte, 4-byte big-endian length, JSON payload. */
 async function* connectFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<{ flags: number; message: WireRunCommandMessage }> {
   const reader = body.getReader();
@@ -405,12 +419,23 @@ async function streamNamespaceCommand(sandbox: NamespaceSandbox, fullCommand: st
   let stdout = '';
   let stderr = '';
   let exitCode: number | undefined;
+  let execFailure: string | undefined;
   const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
   // Called without bytes, flushes a multi-byte character split across chunks.
   const emit = (stream: 'stdout' | 'stderr', bytes?: Uint8Array) => {
     const text = decoders[stream].decode(bytes, { stream: bytes !== undefined });
     if (!text) return;
     if (stream === 'stderr') {
+      // Held back until the exit status shows whether it is Namespace's exec-failure line.
+      if (execFailure !== undefined) {
+        stderr += execFailure;
+        options.onStderr?.(execFailure);
+        execFailure = undefined;
+      }
+      if (EXEC_FAILED_LINE.test(text) && realExitStatus(text, 1).stderr === '') {
+        execFailure = text;
+        return;
+      }
       stderr += text;
       options.onStderr?.(text);
     } else {
@@ -470,6 +495,14 @@ async function streamNamespaceCommand(sandbox: NamespaceSandbox, fullCommand: st
   }
   emit('stdout');
   emit('stderr');
+  if (execFailure !== undefined) {
+    if (exitCode === 1) {
+      exitCode = realExitStatus(execFailure, 1).exitCode;
+    } else {
+      stderr += execFailure;
+      options.onStderr?.(execFailure);
+    }
+  }
   return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
 }
 
@@ -781,8 +814,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
           return {
             stdout: decodeBase64(result.stdout),
-            stderr: decodeBase64(result.stderr),
-            exitCode: result.exitCode ?? 0,
+            ...realExitStatus(decodeBase64(result.stderr), result.exitCode ?? 0),
             durationMs: Date.now() - startTime
           };
         } catch (error) {
