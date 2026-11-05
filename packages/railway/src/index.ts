@@ -83,33 +83,30 @@ function mapStatus(status: string): InstanceInfo['status'] {
  * assignment prefix, so anything outside this set is rejected rather than escaped. */
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/** Apply env/cwd/background options by composing a single shell command string. */
+/** Quote a string as one POSIX shell word. */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Validate env names and apply the background option. `env` and `cwd` go to
+ * `sandbox.exec`, which runs the command as `cd <cwd> && K=v sh -c '<command>'`
+ * so the variables reach every part of a compound command.
+ */
 function composeCommand(command: string, options?: RunCommandOptions): string {
-  let fullCommand = command;
-
-  if (options?.env && Object.keys(options.env).length > 0) {
-    const envPrefix = Object.entries(options.env)
-      .map(([k, v]) => {
-        if (!ENV_KEY_PATTERN.test(k)) {
-          throw new Error(
-            `Invalid environment variable name "${k}". Names must match ${ENV_KEY_PATTERN}.`
-          );
-        }
-        return `${k}="${escapeShellArg(String(v))}"`;
-      })
-      .join(' ');
-    fullCommand = `${envPrefix} ${fullCommand}`;
-  }
-
-  if (options?.cwd) {
-    fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+  for (const k of Object.keys(options?.env ?? {})) {
+    if (!ENV_KEY_PATTERN.test(k)) {
+      throw new Error(
+        `Invalid environment variable name "${k}". Names must match ${ENV_KEY_PATTERN}.`
+      );
+    }
   }
 
   if (options?.background) {
-    fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+    return `nohup sh -c ${shellQuote(command)} > /dev/null 2>&1 &`;
   }
 
-  return fullCommand;
+  return command;
 }
 
 /** How long to wait for the exit after a timeout kill before giving up on the stream. */
@@ -150,6 +147,10 @@ async function execCommand(
 
   for (let attempt = 1; ; attempt += 1) {
     const handle = sandbox.exec(fullCommand, {
+      ...(options?.env && Object.keys(options.env).length > 0
+        ? { env: Object.fromEntries(Object.entries(options.env).map(([k, v]) => [k, String(v)])) }
+        : {}),
+      ...(options?.cwd ? { cwd: options.cwd } : {}),
       ...(options?.onStdout ? { onStdout: options.onStdout } : {}),
       ...(options?.onStderr ? { onStderr: options.onStderr } : {}),
     });
