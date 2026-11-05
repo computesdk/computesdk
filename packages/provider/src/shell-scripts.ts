@@ -42,6 +42,16 @@ const JOB_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SIGNAL_PATTERN = /^[A-Z0-9]{1,16}$/;
 
+/**
+ * Wraps a program into one line for transport. Some providers' exec APIs flatten
+ * newlines (archil runs the command as a single line), so every program is sent
+ * base64-encoded and decoded in the box.
+ */
+export function singleLine(script: string): string {
+  const encoded = Buffer.from(script, 'utf8').toString('base64');
+  return `command -v base64 >/dev/null 2>&1 || { echo "${REPLY_MARKER} unsupported base64"; exit 0; }; sh -c "$(printf '%s' '${encoded}' | base64 -d)"`;
+}
+
 /** Single-quotes a value for POSIX sh. */
 export function shQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;

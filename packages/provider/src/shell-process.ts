@@ -22,6 +22,7 @@ import {
   killScript,
   launchScript,
   readScript,
+  singleLine,
   writeStdinScript,
 } from './shell-scripts.js';
 
@@ -143,7 +144,7 @@ export async function readShellJob(
   options: { cursor: number; maxBytes?: number; waitMs?: number; untilOutput?: boolean }
 ): Promise<ShellJobRead> {
   const waitMs = Math.min(options.waitMs ?? 0, MAX_LONG_POLL_MS);
-  const result = await run(readScript({ jobId, ...options, waitMs }), { timeout: waitMs + EXEC_GRACE_MS });
+  const result = await run(singleLine(readScript({ jobId, ...options, waitMs })), { timeout: waitMs + EXEC_GRACE_MS });
   const lines = replyLines(result, 'read');
   const [, state, code, sig, to, size, pid] = lines[0].trim().split(/\s+/);
   const endIndex = lines.findIndex((line) => line.trim() === REPLY_END);
@@ -165,7 +166,7 @@ export async function readShellJob(
 
 async function launchShellJob(run: CommandRunner, jobId: string, command: string, options: ShellProcessOptions): Promise<number | null> {
   const result = await run(
-    launchScript({
+    singleLine(launchScript({
       jobId,
       command,
       cwd: options.cwd,
@@ -173,7 +174,7 @@ async function launchShellJob(run: CommandRunner, jobId: string, command: string
       stdin: options.stdin === true,
       timeoutMs: options.timeoutMs,
       retentionMs: options.retentionMs,
-    }),
+    })),
     { timeout: 60_000 }
   );
   const [, verdict, detail] = replyLines(result, 'start')[0].trim().split(/\s+/);
@@ -341,7 +342,7 @@ class ShellJob implements ShellProcessHandle {
   }
 
   private async control(script: string, phase: string): Promise<string> {
-    const result = await this.run(script, { timeout: 60_000 });
+    const result = await this.run(singleLine(script), { timeout: 60_000 });
     const verdict = replyLines(result, phase)[0].trim().split(/\s+/)[1];
     if (verdict === 'missing') throw new Error(`shell-process: job ${this.jobId} not found (expired or never started)`);
     return verdict;

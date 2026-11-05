@@ -12,6 +12,7 @@ import {
   readScript,
   runFile,
   shQuote,
+  singleLine,
   supervisorFile,
   writeStdinScript,
 } from '../shell-scripts.js'
@@ -28,6 +29,12 @@ vi.mock('daemond', () => ({
 }))
 
 describe('shell scripts', () => {
+  it('sends every program as one base64 line', () => {
+    const wire = singleLine('echo a\necho b')
+    expect(wire).not.toContain('\n')
+    expect(wire).toContain(`printf '%s' '${Buffer.from('echo a\necho b').toString('base64')}' | base64 -d`)
+  })
+
   it('quotes values for sh', () => {
     expect(shQuote("it's")).toBe(`'it'\\''s'`)
   })
@@ -88,7 +95,9 @@ describe('shell scripts', () => {
 })
 
 function methods(extra: Record<string, unknown> = {}) {
-  const runCommand = vi.fn(async (_box: unknown, command: string): Promise<CommandResult> => {
+  const runCommand = vi.fn(async (_box: unknown, wire: string): Promise<CommandResult> => {
+    const encoded = /printf '%s' '([A-Za-z0-9+/=]+)' \| base64 -d\)"$/.exec(wire)
+    const command = encoded ? Buffer.from(encoded[1], 'base64').toString('utf8') : wire
     if (command.includes('sup.sh')) return { stdout: `${REPLY_MARKER} ok 4242\n`, stderr: '', exitCode: 0, durationMs: 1 }
     if (command.includes('out.log')) {
       const log = Buffer.from('O6\nshell\n').toString('base64')

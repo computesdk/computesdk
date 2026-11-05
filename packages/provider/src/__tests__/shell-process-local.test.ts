@@ -94,4 +94,16 @@ describe('shell process tier (host sh)', () => {
     const replay = await again.wait({ timeout: 20_000 })
     expect(replay.stdout).toBe(result.stdout)
   }, 90_000)
+
+  it('survives an exec API that flattens newlines', async () => {
+    const flattening: CommandRunner = (command, options) => run(command.replace(/\n/g, ' '), options)
+    const chunks: string[] = []
+    const result = await runCommandViaShell(flattening, 'echo a\necho b', { onStdout: (c) => chunks.push(c) })
+    // The caller's command travels base64-encoded, so its own newlines survive.
+    expect(result).toMatchObject({ exitCode: 0, stdout: 'a\nb\n' })
+    const proc = await startShellProcess(flattening, 'cat', { stdin: true })
+    await proc.write('x\ny\n')
+    await proc.closeStdin()
+    expect((await proc.wait({ timeout: 20_000 })).stdout).toBe('x\ny\n')
+  }, 30_000)
 })
