@@ -169,7 +169,7 @@ export interface CreateosCreateOptions extends CreateInstanceOptions {
   cpus?: number;
   /** Overlay disk size (MiB). 0 / omitted = the shape's default disk. */
   ephemeralDiskMb?: number;
-  /** Enable public ingress. Defaults to false. */
+  /** Enable public ingress at create. Defaults to false; `getUrl` enables it on demand. */
   ingressEnabled?: boolean;
   /** SSH public keys to inject at boot. */
   sshPubkeys?: string[];
@@ -267,6 +267,19 @@ async function resolveShape(
   }
   const picked = pickShape(entry.shapes, opts.memoryMb, opts.cpus) ?? defaultShape(entry.shapes) ?? FALLBACK_SHAPE;
   return picked;
+}
+
+/** Public URL for a port. Sandboxes are created with ingress off, so asking
+ *  for a URL turns it on (PATCH) first; a handle that has ingress on but no
+ *  URL template (e.g. a stale view) is refreshed before building the URL. */
+export async function ingressUrl(
+  sandbox: Pick<Sandbox, "data" | "setIngress" | "refresh" | "previewUrl">,
+  options: { port: number; protocol?: string },
+): Promise<string> {
+  const scheme = options.protocol === "http" ? "http" : "https";
+  if (!sandbox.data.ingress_enabled) await sandbox.setIngress(true);
+  else if (!sandbox.data.ingress_url_template) await sandbox.refresh();
+  return sandbox.previewUrl(options.port, { scheme });
 }
 
 /** Map an createos-sandbox lifecycle state onto ComputeSDK's running|stopped|error. */
@@ -579,10 +592,8 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         };
       },
 
-      getUrl: async (sandbox: Sandbox, options: { port: number; protocol?: string }) => {
-        const scheme = options.protocol === "http" ? "http" : "https";
-        return sandbox.previewUrl(options.port, { scheme });
-      },
+      getUrl: async (sandbox: Sandbox, options: { port: number; protocol?: string }) =>
+        ingressUrl(sandbox, options),
 
       // Escape hatch: the bare native @nodeops-createos/sandbox handle
       // (pause/resume/fork/disks/...).

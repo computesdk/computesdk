@@ -87,10 +87,10 @@ await native.attachDisk({ diskId: "my-bucket", mountPath: "/mnt/data" });
 - **Snapshot semantics differ** — `snapshot.create` *pauses* the sandbox (the
   source VM stops); the paused sandbox id IS the snapshot id. `create({ snapshotId })`
   forks that paused bundle into a fresh sandbox.
-- **`getUrl` needs ingress + works in-process** — sandboxes are created with
-  ingress enabled by default; `getUrl` is only available for sandboxes created in
-  this process (the SDK handle from `getById`/`list` carries no ingress template).
-  Ingress currently serves a non-CA TLS cert and strips the `Authorization`
+- **`getUrl` turns on ingress** — sandboxes are created with ingress off
+  (pass `ingressEnabled: true` to enable it at create); `getUrl` enables it on
+  demand the first time a URL is requested. Ingress currently serves a non-CA
+  TLS cert and strips the `Authorization`
   header upstream — use `protocol: "http"` / `curl -k` and don't rely on HTTP auth
   behind ingress.
 - **`readdir` parses `ls` output** — relies on coreutils `ls` in the rootfs.
