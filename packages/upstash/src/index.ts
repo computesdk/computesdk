@@ -10,6 +10,10 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 export type UpstashSandboxInstance = Box | EphemeralBox;
 
 export function isEphemeralSandboxInstance(sandbox: UpstashSandboxInstance): sandbox is EphemeralBox {
@@ -198,20 +202,19 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
 
         try {
           let fullCommand = command;
+          const envEntries = Object.entries(options?.env ?? {});
 
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
+          if (envEntries.length > 0) {
+            const assignments = envEntries.map(([k, v]) => `${k}=${shellQuote(String(v))}`).join(' ');
+            fullCommand = `env ${assignments} sh -c ${shellQuote(fullCommand)}`;
           }
 
           if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+            fullCommand = `cd ${shellQuote(options.cwd)} && ${envEntries.length > 0 ? fullCommand : `{ ${fullCommand}\n}`}`;
           }
 
           if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+            fullCommand = `nohup sh -c ${shellQuote(fullCommand)} > /dev/null 2>&1 &`;
           }
 
           const run = await sandbox.exec.command(fullCommand);
