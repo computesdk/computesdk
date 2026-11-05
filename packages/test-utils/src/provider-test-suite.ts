@@ -179,6 +179,8 @@ export function defineProviderTests(config: ProviderTestConfig) {
       const coverage = describeProcessRuntime(name, sandbox);
       processRuntimeCoverage.push(coverage);
       console.info(`[conformance] ${name}: streaming=${coverage.streaming} processes=${coverage.processes}`);
+      // The mock sandbox used without credentials has no process runtime.
+      if (skipIntegration) return;
       if (expectProcessRuntime?.streaming) expect(coverage.streaming).toBe(expectProcessRuntime.streaming);
       if (expectProcessRuntime?.processes) expect(coverage.processes).toBe(expectProcessRuntime.processes);
     });
