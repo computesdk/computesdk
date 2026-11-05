@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const files = new Map<string, string>();
 const dirs = new Set<string>();
 const runCalls: string[][] = [];
+const startCalls: string[][] = [];
 let probeFails = false;
 
 class FakeSandbox {
@@ -30,8 +31,9 @@ class FakeSandbox {
     return { stdout: "", stderr: "", exitCode: 0 };
   }
 
-  async startProcess() {
-    return {};
+  async startProcess(cmd: string, options?: { args?: string[] }) {
+    startCalls.push([cmd, ...(options?.args ?? [])]);
+    return { pid: 1 };
   }
 
   async readFile(path: string) {
@@ -76,6 +78,7 @@ describe("tensorlake relative filesystem paths", () => {
     files.clear();
     dirs.clear();
     runCalls.length = 0;
+    startCalls.length = 0;
     probeFails = false;
   });
 
@@ -115,7 +118,8 @@ describe("tensorlake relative filesystem paths", () => {
     probeFails = false;
     await sandbox.filesystem.writeFile("y.txt", "y");
     expect(files.get("/root/y.txt")).toBe("y");
-    expect(runCalls.filter((c) => c[0] === "sh")).toHaveLength(2);
+    // 4 probe attempts for the failed op, then 1 fresh probe that succeeds.
+    expect(runCalls.filter((c) => c[0] === "sh")).toHaveLength(5);
   });
 
   it("rejects ambiguous paths in remove", async () => {
@@ -135,5 +139,15 @@ describe("tensorlake relative filesystem paths", () => {
     await sandbox.filesystem.writeFile("/abs/file.txt", "x");
     expect(files.get("/abs/file.txt")).toBe("x");
     expect(runCalls.filter((c) => c[0] === "sh")).toHaveLength(0);
+  });
+
+  it("starts background commands without also running them in the foreground", async () => {
+    const provider = tensorlake({ apiKey: "test" });
+    const sandbox = await provider.sandbox.create();
+
+    const result = await sandbox.runCommand("sleep 100", { background: true, cwd: "/tmp" });
+    expect(result.exitCode).toBe(0);
+    expect(startCalls).toEqual([["sh", "-c", "sleep 100"]]);
+    expect(runCalls.filter((c) => c[2] === "sleep 100")).toHaveLength(0);
   });
 });

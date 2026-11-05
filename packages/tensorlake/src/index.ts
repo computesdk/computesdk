@@ -323,6 +323,12 @@ export const tensorlake = defineProvider<
               durationMs: Date.now() - startTime,
             };
           }
+          return {
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+            durationMs: Date.now() - startTime,
+          };
         }
 
         try {
