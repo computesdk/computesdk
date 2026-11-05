@@ -103,14 +103,34 @@ async function runBare(
   command: string,
   options?: RunCommandOptions,
 ): Promise<CommandResult> {
+  return await runSh(ctx, command, options?.cwd, options);
+}
+
+/** Foreground `sh -c` run. A timed run goes through the process API with a
+ *  client-side deadline instead of `run({ timeout })`: Tensorlake enforces
+ *  that server-side timeout by killing everything the command spawned, even
+ *  after the shell has exited, so `nohup … &` / `setsid` launchers would see
+ *  their detached children die when the deadline passes. */
+async function runSh(
+  ctx: TensorlakeSandboxContext,
+  command: string,
+  workingDir: string | undefined,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  if (options?.timeout !== undefined) {
+    return await streamTensorlakeCommand(ctx.sandbox, command, {
+      ...(options.env && { env: options.env }),
+      ...(workingDir && { cwd: workingDir }),
+      timeout: options.timeout,
+    });
+  }
   const startTime = Date.now();
   try {
     const result = await ctx.sandbox.run("sh", {
       args: ["-c", command],
       ...(options?.env &&
         Object.keys(options.env).length > 0 && { env: options.env }),
-      ...(options?.cwd && { workingDir: options.cwd }),
-      ...(options?.timeout !== undefined && { timeout: options.timeout / 1000 }),
+      ...(workingDir && { workingDir }),
     });
     return {
       stdout: result.stdout,
@@ -331,30 +351,7 @@ export const tensorlake = defineProvider<
           };
         }
 
-        try {
-          const result = await ctx.sandbox.run("sh", {
-            args: ["-c", command],
-            ...(options?.env &&
-              Object.keys(options.env).length > 0 && { env: options.env }),
-            workingDir,
-            ...(options?.timeout !== undefined && { timeout: options.timeout / 1000 }),
-          });
-
-          const durationMs = Date.now() - startTime;
-          return {
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode ?? 0,
-            durationMs,
-          };
-        } catch (error) {
-          return {
-            stdout: "",
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127,
-            durationMs: Date.now() - startTime,
-          };
-        }
+        return await runSh(ctx, command, workingDir, options);
       },
 
       // Native streaming: `run()` returns a command's output only once it has
