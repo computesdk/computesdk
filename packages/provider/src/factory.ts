@@ -1294,7 +1294,14 @@ function normalizeTemplateInfo(providerName: string, result: unknown, fallbackNa
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id) {
     throw new TemplateError('invalid', `${providerName} returned a template without a string id`);
   }
-  return { ...raw, id: raw.id, name: raw.name ?? fallbackName ?? raw.id, provider: raw.provider ?? providerName };
+  const info: TemplateInfo = { ...raw, id: raw.id, name: raw.name ?? fallbackName ?? raw.id, provider: raw.provider ?? providerName };
+  const createdAt = raw.createdAt as unknown;
+  if (createdAt !== undefined && !(createdAt instanceof Date)) {
+    const parsed = typeof createdAt === 'string' || typeof createdAt === 'number' ? new Date(createdAt) : undefined;
+    if (parsed && !Number.isNaN(parsed.getTime())) info.createdAt = parsed;
+    else delete info.createdAt;
+  }
+  return info;
 }
 
 /**

@@ -45,6 +45,13 @@ describe('templates', () => {
     expect(await provider.template!.list()).toEqual([{ id: 'tpl-1', name: 'a', provider: 'mock' }])
   })
 
+  it('coerces adapter createdAt strings to Date', async () => {
+    const { provider } = mockProvider(builds, { id: 'tpl-1', createdAt: '2026-11-05T00:00:00Z' })
+    const info = await provider.template!.create({ name: 'base', image: 'ubuntu:24.04' })
+    expect(info.createdAt).toBeInstanceOf(Date)
+    expect(info.createdAt.toISOString()).toBe('2026-11-05T00:00:00.000Z')
+  })
+
   it('rejects both sources, unsupported sources and missing ids', async () => {
     const both = mockProvider(builds).provider
     await expect(both.template!.create({ name: 'x', image: 'a', dockerfile: 'FROM a' }))
