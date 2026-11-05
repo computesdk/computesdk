@@ -489,6 +489,51 @@ describe('archil persistent mode', () => {
     await expect(provider.sandbox.create()).rejects.toThrow(/disk id/i);
   });
 
+  it('exposes pause/resume on the persistent instance handle', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'POST' && url.endsWith('/pause')) return json(sandboxWire('paused'));
+      if (method === 'POST' && url.endsWith('/resume')) return json(sandboxWire('running'));
+      return json(sandboxWire('running'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({
+      apiKey: 'key_test',
+      region: 'aws-us-east-1',
+      execution: 'persistent',
+    });
+    const sandbox = await provider.sandbox.getById('sbx_123');
+    const handle = sandbox!.getInstance() as indexExports.ArchilSandbox;
+    await handle.pause!();
+    await handle.resume!();
+
+    const posts = (fetchMock.mock.calls as any[][])
+      .filter(([, init]) => (init as RequestInit)?.method === 'POST')
+      .map(([url]) => String(url));
+    expect(posts.some((u) => u.includes('/api/sandboxes/sbx_123/pause'))).toBe(true);
+    expect(posts.some((u) => u.includes('/api/sandboxes/sbx_123/resume'))).toBe(true);
+  });
+
+  it('exports env for compound exec-mode commands', async () => {
+    let body = '';
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      body = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({ success: true, data: { exitCode: 0, stdout: '', stderr: '', timing: { totalMs: 1, queueMs: 0, executeMs: 1 } } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_123' });
+    await sandbox.runCommand('(echo a; echo b)', { env: { FOO: 'bar' }, cwd: '/w' });
+    const command = JSON.parse(body).command as string;
+    expect(command).toMatch(/^export HOME='[^']*' FOO='bar'; cd '\/w' && \(echo a; echo b\)$/);
+  });
+
   it('resumes a paused sandbox on getById', async () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);

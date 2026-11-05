@@ -115,6 +115,30 @@ interface ArchilSandbox {
   vm?: ArchilVm;
   resolved: ResolvedConfig;
   createdAt: Date;
+  /** persistent mode: pause the VM, preserving CPU and memory state. */
+  pause?: () => Promise<void>;
+  /** persistent mode: resume the paused VM under the same sandbox id. */
+  resume?: () => Promise<void>;
+}
+
+function vmInstance(
+  client: ArchilClient,
+  vm: ArchilVm,
+  resolved: ResolvedConfig,
+): ArchilSandbox {
+  return {
+    client,
+    disk: { id: vm.id },
+    vm,
+    resolved,
+    createdAt: new Date(),
+    pause: async () => {
+      await vm.pause();
+    },
+    resume: async () => {
+      await vm.resume();
+    },
+  };
 }
 
 interface ArchilCreateOptions extends CreateInstanceOptions {
@@ -310,18 +334,20 @@ function maxWriteChunkSize(
 function wrapCommand(command: string, options?: RunCommandOptions): string {
   let wrapped = command;
 
+  if (options?.cwd) {
+    wrapped = `cd ${shellEscape(options.cwd)} && ${wrapped}`;
+  }
+
   const envEntries = Object.entries(options?.env ?? {});
   if (!envEntries.some(([key]) => key === 'HOME')) {
     envEntries.unshift(['HOME', process.env.HOME || '/tmp']);
   }
-  const envPrefix = envEntries
+  // `export` instead of a `K=v cmd` prefix: an assignment prefix only binds a
+  // simple command, so `K=v (a; b)` or `K=v { a; }` is a shell syntax error.
+  const exports = envEntries
     .map(([k, v]) => `${k}=${shellEscape(String(v))}`)
     .join(' ');
-  wrapped = `${envPrefix} ${wrapped}`;
-
-  if (options?.cwd) {
-    wrapped = `cd ${shellEscape(options.cwd)} && ${wrapped}`;
-  }
+  wrapped = `export ${exports}; ${wrapped}`;
 
   if (options?.background) {
     wrapped = `nohup sh -c ${shellEscape(wrapped)} > /dev/null 2>&1 &`;
@@ -459,14 +485,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             });
           }
           sandboxModes.set(vm.id, 'persistent');
-          return { instance: {
-              client,
-              disk: { id: vm.id },
-              vm,
-              resolved,
-              createdAt: new Date(),
-            }, instanceId: vm.id,
-          };
+          return { instance: vmInstance(client, vm, resolved), instanceId: vm.id };
         }
 
         const diskId = resolveCreateDiskId(options);
@@ -487,14 +506,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
           if (resolved.execution === 'persistent') {
             const vm = await client.sandboxes.get(sandboxId);
             await ensureVmRunning(vm);
-            return { instance: {
-                client,
-                disk: { id: vm.id },
-                vm,
-                resolved,
-                createdAt: new Date(),
-              }, instanceId: vm.id,
-            };
+            return { instance: vmInstance(client, vm, resolved), instanceId: vm.id };
           }
           const disk = await client.disks.get(sandboxId);
           return { instance: { client, disk, resolved, createdAt: new Date() }, instanceId: disk.id,
@@ -509,14 +521,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const client = createClient(config, resolved);
         if (resolved.execution === 'persistent') {
           const vms = await client.sandboxes.list();
-          return vms.map((vm) => ({ instance: {
-              client,
-              disk: { id: vm.id },
-              vm,
-              resolved,
-              createdAt: new Date(),
-            }, instanceId: vm.id,
-          }));
+          return vms.map((vm) => ({ instance: vmInstance(client, vm, resolved), instanceId: vm.id }));
         }
         const disks = await client.disks.list();
         return disks.map((disk) => ({ instance: { client, disk, resolved, createdAt: new Date() }, instanceId: disk.id,
