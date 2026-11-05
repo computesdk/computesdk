@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { randomUUID } from 'node:crypto';
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError, TIMEOUT_EXIT_CODE, START_FAILURE_EXIT_CODE } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError, TIMEOUT_EXIT_CODE, START_FAILURE_EXIT_CODE } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
@@ -329,26 +329,29 @@ export const fetchNamespace = async (
   return data;
 };
 
-/** `command` with the caller's env, cwd and background options applied as shell. */
-function shellCommand(command: string, options?: RunCommandOptions): string {
-  let fullCommand = command;
+/** CommandService's `Command`: argv plus the env and working directory it runs with. */
+interface WireCommand {
+  command: string[];
+  envVars?: { name: string; value: string }[];
+  cwd?: string;
+}
 
-  if (options?.env && Object.keys(options.env).length > 0) {
-    const envPrefix = Object.entries(options.env)
-      .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-      .join(' ');
-    fullCommand = `${envPrefix} ${fullCommand}`;
-  }
-
-  if (options?.cwd) {
-    fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-  }
-
-  if (options?.background) {
-    fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-  }
-
-  return fullCommand;
+/**
+ * `command` as a CommandService `Command`. Env and cwd go in the request's own
+ * fields, so they apply to the whole command line (`echo $FOO`, `a && b`), not
+ * just its first word; background runs the line detached under `nohup sh -c`.
+ */
+function wireCommand(command: string, options?: RunCommandOptions): WireCommand {
+  const line = options?.background
+    ? `nohup sh -c '${command.replace(/'/g, `'\\''`)}' > /dev/null 2>&1 &`
+    : command;
+  return {
+    command: ['sh', '-c', line],
+    ...(options?.env && Object.keys(options.env).length > 0
+      ? { envVars: Object.entries(options.env).map(([name, value]) => ({ name, value: String(value) })) }
+      : {}),
+    ...(options?.cwd ? { cwd: options.cwd } : {}),
+  };
 }
 
 function commandTimeoutMs(options?: RunCommandOptions): number | undefined {
@@ -407,11 +410,11 @@ async function* connectFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<
 }
 
 /**
- * Streams `fullCommand` over CommandService.RunCommand. Exit codes follow the
+ * Streams `command` over CommandService.RunCommand. Exit codes follow the
  * other native streamers: timeout 124, failure before any output 127, stream
  * lost before its exit status -1 (RunCommand has no way to recover it).
  */
-async function streamNamespaceCommand(sandbox: NamespaceSandbox, fullCommand: string, options: RunCommandOptions): Promise<CommandResult> {
+async function streamNamespaceCommand(sandbox: NamespaceSandbox, command: WireCommand, options: RunCommandOptions): Promise<CommandResult> {
   const startTime = Date.now();
   const timeoutMs = commandTimeoutMs(options);
   const controller = new AbortController();
@@ -448,7 +451,7 @@ async function streamNamespaceCommand(sandbox: NamespaceSandbox, fullCommand: st
     const body = new TextEncoder().encode(JSON.stringify({
       instanceId: sandbox.instanceId,
       targetContainerName: sandbox.targetContainerName,
-      command: { command: ['sh', '-c', fullCommand] },
+      command,
     }));
     const envelope = new Uint8Array(5 + body.length);
     new DataView(envelope.buffer).setUint32(1, body.length);
@@ -772,7 +775,6 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const startTime = Date.now();
 
         try {
-          const fullCommand = shellCommand(command, options);
           const timeoutMs = commandTimeoutMs(options);
 
           const result = await fetchNamespace(
@@ -795,9 +797,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               body: JSON.stringify({
                 instanceId: sandbox.instanceId,
                 targetContainerName: sandbox.targetContainerName,
-                command: {
-                  command: ['sh', '-c', fullCommand],
-                },
+                command: wireCommand(command, options),
               })
             },
             sandbox.commandServiceEndpoint
@@ -828,7 +828,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         if (!sandbox.commandServiceEndpoint) {
           throw new Error('Command service endpoint not available. The instance may not support command execution.');
         }
-        return streamNamespaceCommand(sandbox, shellCommand(command, options), options);
+        return streamNamespaceCommand(sandbox, wireCommand(command, options), options);
       },
 
       getInfo: async (sandbox: NamespaceSandbox): Promise<InstanceInfo> => {
