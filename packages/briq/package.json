@@ -1,0 +1,68 @@
+{
+  "name": "@computesdk/briq",
+  "version": "1.0.0",
+  "description": "Briq provider for ComputeSDK - sandboxes on microVMs with commands, files, previews and interactive processes",
+  "author": "Briq",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "keywords": [
+    "computesdk",
+    "provider",
+    "briq",
+    "sandbox",
+    "microvm",
+    "code-execution",
+    "cloud",
+    "compute"
+  ],
+  "dependencies": {
+    "@briq-cloud/sdk": "^0.1.0",
+    "@computesdk/provider": "workspace:*",
+    "computesdk": "workspace:*",
+    "daemond": "workspace:*"
+  },
+  "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.37.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/briq"
+  },
+  "homepage": "https://briq.cloud",
+  "bugs": {
+    "url": "https://github.com/computesdk/computesdk/issues"
+  }
+}
