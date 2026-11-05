@@ -23,9 +23,135 @@ export interface SpritesConfig {
   timeout?: number;
 }
 
-function stripControlChars(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/[\x00-\x08\x0e-\x1f]/g, '');
+const FRAME_STDOUT = 0x01;
+const FRAME_STDERR = 0x02;
+const FRAME_EXIT = 0x03;
+const CONNECT_ERRORS = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT']);
+
+interface ExecFramesResult { stdout: string; stderr: string; exitCode: number | null }
+
+/**
+ * POST /exec with `script` on bash's stdin. The response body is type-prefixed
+ * frames without lengths (0x01 stdout, 0x02 stderr, 0x03 <exit byte>), one per
+ * HTTP chunk, so each read is taken to start a frame unless its first byte
+ * isn't a frame type, in which case it continues the previous frame (a large
+ * chunk split across reads). env and cwd go through the API's native fields.
+ */
+async function execFrames(
+  sandbox: SpritesSandbox,
+  script: string,
+  options: RunCommandOptions | undefined,
+  callbacks: { onStdout?: (data: string) => void; onStderr?: (data: string) => void } = {},
+): Promise<ExecFramesResult> {
+  const url = new URL(`${sandbox._baseUrl}/sprites/${encodeURIComponent(sandbox.name)}/exec`);
+  url.searchParams.append('cmd', 'bash');
+  url.searchParams.set('stdin', 'true');
+  if (options?.cwd) url.searchParams.set('dir', options.cwd);
+  for (const [key, value] of Object.entries(options?.env ?? {})) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
+    url.searchParams.append('env', `${key}=${value}`);
+  }
+
+  // Backstop in case the in-box watchdog can't end the response.
+  const controller = new AbortController();
+  const abortTimer = options?.timeout ? setTimeout(() => controller.abort(), options.timeout + 15000) : undefined;
+  let res: Response;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      res = await fetch(url.toString(), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${sandbox._token}`, 'Content-Type': 'application/octet-stream' },
+        body: script,
+        signal: controller.signal,
+      });
+      break;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        clearTimeout(abortTimer);
+        return { stdout: '', stderr: '', exitCode: 124 };
+      }
+      // Exec isn't idempotent, so only retry when the request never reached the server.
+      const code = (error as { cause?: { code?: string } })?.cause?.code;
+      if (attempt < 4 && code && CONNECT_ERRORS.has(code)) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+        continue;
+      }
+      clearTimeout(abortTimer);
+      throw new Error(`Sprites exec request failed: ${error instanceof Error ? error.message : String(error)}${code ? ` (${code})` : ''}`);
+    }
+  }
+  if (!res.ok) { clearTimeout(abortTimer); throw new Error(`Sprites exec failed (${res.status}): ${await res.text()}`); }
+  if (!res.body) throw new Error('Sprites exec response has no body');
+
+  const decoders = { [FRAME_STDOUT]: new TextDecoder(), [FRAME_STDERR]: new TextDecoder() };
+  const out = { [FRAME_STDOUT]: '', [FRAME_STDERR]: '' };
+  let stream: typeof FRAME_STDOUT | typeof FRAME_STDERR = FRAME_STDOUT;
+  let exitCode: number | null = null;
+  const emit = (data: Uint8Array) => {
+    if (!data.length) return;
+    const text = decoders[stream].decode(data, { stream: true });
+    if (!text) return;
+    out[stream] += text;
+    (stream === FRAME_STDOUT ? callbacks.onStdout : callbacks.onStderr)?.(text);
+  };
+
+  const reader = res.body.getReader();
+  try {
+    for (;;) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (error) {
+        if (!controller.signal.aborted) throw error;
+        exitCode = 124;
+        break;
+      }
+      const { value, done } = chunk;
+      if (done) break;
+      if (!value?.length) continue;
+      const type = value[0];
+      if (type === FRAME_EXIT && value.length === 2) { exitCode = value[1]; continue; }
+      if (type === FRAME_STDOUT || type === FRAME_STDERR) {
+        stream = type;
+        let payload = value.subarray(1);
+        // An exit frame coalesced onto the end of the last output chunk.
+        if (payload.length >= 2 && payload[payload.length - 2] === FRAME_EXIT) {
+          exitCode = payload[payload.length - 1];
+          payload = payload.subarray(0, payload.length - 2);
+        }
+        emit(payload);
+      } else {
+        emit(value);
+      }
+    }
+  } finally {
+    clearTimeout(abortTimer);
+    await reader.cancel().catch(() => undefined);
+  }
+  for (const id of [FRAME_STDOUT, FRAME_STDERR] as const) {
+    stream = id;
+    const tail = decoders[id].decode();
+    if (tail) { out[id] += tail; (id === FRAME_STDOUT ? callbacks.onStdout : callbacks.onStderr)?.(tail); }
+  }
+  return { stdout: out[FRAME_STDOUT], stderr: out[FRAME_STDERR], exitCode };
+}
+
+/** The caller's command in a subshell with stdin from /dev/null, so it can't read the rest of the script bash is fed on stdin. */
+function subshell(command: string): string {
+  return `(\n${command}\n) </dev/null`;
+}
+
+/**
+ * `subshell` under a deadline: job control puts the command in its own process
+ * group and a watchdog SIGKILLs that whole group at the deadline, so nothing
+ * the command spawned outlives it (exit 137).
+ */
+function withDeadline(command: string, timeoutMs?: number): string {
+  if (!timeoutMs || timeoutMs <= 0) return subshell(command);
+  const secs = (timeoutMs / 1000).toFixed(3);
+  return `( set -m; ${subshell(command)} & __sp_pid=$!; ` +
+    `( sleep ${secs}; kill -KILL -- -$__sp_pid 2>/dev/null ) </dev/null >/dev/null 2>&1 & __sp_wd=$!; ` +
+    `wait $__sp_pid; __sp_rc=$?; kill -KILL -- -$__sp_wd 2>/dev/null; exit $__sp_rc )`;
 }
 
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
@@ -108,10 +234,20 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
         const token = config.apiKey || (typeof process !== 'undefined' && process.env?.SPRITES_TOKEN) || '';
         const baseUrl = config.baseUrl || 'https://api.sprites.dev/v1';
         try {
-          const res = await fetch(`${baseUrl}/sprites`, { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
-          if (!res.ok) return [];
-          const data = await res.json() as SpritesSandbox[];
-          return data.map((sprite: SpritesSandbox) => { sprite._token = token; sprite._baseUrl = baseUrl; return { instance: sprite, instanceId: sprite.name }; });
+          const all: SpritesSandbox[] = [];
+          let continuation: string | undefined;
+          do {
+            const url = new URL(`${baseUrl}/sprites`);
+            url.searchParams.set('max_results', '500');
+            if (continuation) url.searchParams.set('continuation_token', continuation);
+            const res = await fetch(url.toString(), { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
+            if (!res.ok) break;
+            const data = await res.json() as SpritesSandbox[] | { sprites?: SpritesSandbox[]; has_more?: boolean; next_continuation_token?: string };
+            if (Array.isArray(data)) { all.push(...data); break; }
+            all.push(...(data.sprites ?? []));
+            continuation = data.has_more ? data.next_continuation_token : undefined;
+          } while (continuation);
+          return all.map((sprite: SpritesSandbox) => { sprite._token = token; sprite._baseUrl = baseUrl; return { instance: sprite, instanceId: sprite.name }; });
         } catch { return []; }
       },
 
@@ -122,63 +258,46 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       },
 
       runCommand: async (sandbox: SpritesSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const token = sandbox._token;
-        const baseUrl = sandbox._baseUrl;
-        const name = sandbox.name;
         const startTime = Date.now();
+        const id = `${Date.now()}_${randomUUID().slice(0, 8)}`;
+        const delimiter = `__COMPUTESDK_EXIT_${id}__`;
+        const errDelimiter = `__COMPUTESDK_STDERR_${id}__`;
+        const errFile = `/tmp/.computesdk-stderr-${id}`;
 
-        const delimiter = `__COMPUTESDK_EXIT_${Date.now()}__`;
-        const errDelimiter = `__COMPUTESDK_STDERR_${Date.now()}__`;
-        let shellCmd = command;
-
-        if (options?.cwd) shellCmd = `cd ${escapeShellArg(options.cwd)} && ${shellCmd}`;
-        if (options?.env) {
-          const safeKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
-          const envPrefix = Object.entries(options.env).map(([k, v]) => {
-            if (!safeKeyPattern.test(k)) throw new Error(`Invalid environment variable name: ${k}`);
-            return `${k}=${escapeShellArg(v)}`;
-          }).join(' ');
-          shellCmd = `${envPrefix} ${shellCmd}`;
-        }
-
-        // The exec endpoint returns one combined stream — keep stdout/stderr
-        // separated by redirecting stderr to a file and cat'ing it behind a
-        // delimiter, then the exit-code delimiter.
-        const errFile = `/tmp/.computesdk-stderr-${Date.now()}`;
-        shellCmd = `{ ${shellCmd} ; } 2>${escapeShellArg(errFile)}; __sp_ec=$?; echo "${delimiter}$__sp_ec"; echo "${errDelimiter}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
-
-        const url = new URL(`${baseUrl}/sprites/${encodeURIComponent(name)}/exec`);
-        url.searchParams.set('cmd', 'bash');
-        url.searchParams.set('stdin', 'true');
+        // Frames are one per HTTP chunk and a proxy may merge them, so the
+        // exit code and stderr travel in-band behind delimiters on stdout
+        // rather than relying on frame boundaries.
+        const script = `${subshell(command)} 2>${escapeShellArg(errFile)}; __sp_ec=$?; echo "${delimiter}$__sp_ec"; echo "${errDelimiter}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}\n`;
 
         try {
-          const res = await fetch(url.toString(), {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain' },
-            body: shellCmd,
-          });
-
-          const raw = await res.text();
-          if (!res.ok) return { stdout: '', stderr: raw, exitCode: 1, durationMs: Date.now() - startTime };
-
-          const delimIdx = raw.lastIndexOf(delimiter);
+          const raw = await execFrames(sandbox, script, options);
+          const delimIdx = raw.stdout.lastIndexOf(delimiter);
           if (delimIdx === -1) {
-            return { stdout: stripControlChars(raw), stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
+            return { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode ?? 1, durationMs: Date.now() - startTime };
           }
-          const stdout = stripControlChars(raw.substring(0, delimIdx));
-          const after = raw.substring(delimIdx + delimiter.length);
+          const stdout = raw.stdout.substring(0, delimIdx);
+          const after = raw.stdout.substring(delimIdx + delimiter.length);
           const nlIdx = after.indexOf('\n');
           const exitCode = parseInt((nlIdx === -1 ? after : after.substring(0, nlIdx)).trim(), 10) || 0;
           let stderr = '';
           if (nlIdx !== -1) {
             const rest = after.substring(nlIdx + 1);
-            const errIdx = rest.lastIndexOf(errDelimiter);
-            if (errIdx !== -1) stderr = stripControlChars(rest.substring(errIdx + errDelimiter.length)).replace(/^\n/, '');
+            const errIdx = rest.indexOf(`${errDelimiter}\n`);
+            if (errIdx !== -1) stderr = rest.substring(errIdx + errDelimiter.length + 1);
           }
-          return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
+          return { stdout, stderr: raw.stderr + stderr, exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
+      },
+
+      // The exec response streams stdout and stderr as separate frames while
+      // the command runs, so callbacks get live, separated output natively.
+      streamCommand: async (sandbox: SpritesSandbox, command: string, options: RunCommandOptions): Promise<CommandResult> => {
+        const startTime = Date.now();
+        const result = await execFrames(sandbox, `${withDeadline(command, options.timeout)}\n`, options, { onStdout: options.onStdout, onStderr: options.onStderr });
+        if (result.exitCode === null) throw new Error('Sprites exec response did not include an exit frame');
+        return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode, durationMs: Date.now() - startTime };
       },
 
       getInfo: async (sandbox: SpritesSandbox): Promise<InstanceInfo> => {
