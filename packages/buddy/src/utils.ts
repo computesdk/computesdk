@@ -444,6 +444,13 @@ export interface BuddySandboxHandle {
   resources?: string;
   /** Tunnels known so far. `getUrl` extends this when it opens a new one. */
   endpoints: BuddyEndpoint[];
+  /**
+   * Stops the sandbox and resolves once Buddy reports `STOPPED`. The disk is
+   * kept (except `/tmp`, which is cleared on boot); running processes are not.
+   */
+  stop(): Promise<void>;
+  /** Starts a stopped sandbox under the same id and resolves once it is ready. */
+  start(): Promise<void>;
 }
 
 /** Sandbox as the API returns it, narrowed to the fields the provider reads. */
@@ -480,6 +487,8 @@ export function toHandle(
   const client = getClient(config);
 
   return {
+    stop: () => stopSandbox(config, sandboxId),
+    start: () => startSandbox(config, sandboxId),
     sandboxId,
     identifier: sandbox.identifier ?? sandboxId,
     config,
@@ -503,4 +512,69 @@ export async function getSandboxData(
 
 export async function sleep(ms: number): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** Measured at ~1 s to stop and ~3 s to start; the margin covers a busy pool. */
+const LIFECYCLE_TIMEOUT_MS = 120_000;
+const LIFECYCLE_POLL_MS = 250;
+
+const isStopped = (data: BuddySandboxData) => data.status === 'STOPPED';
+const isReady = (data: BuddySandboxData) =>
+  data.status === 'RUNNING' && data.setup_status === 'SUCCESS';
+
+/**
+ * Buddy's start and stop endpoints return as soon as the transition is
+ * accepted, so both are followed by a poll for the target state. A sandbox
+ * already in that state is left alone, and an operation still in flight (a
+ * boot, a snapshot) is retried until it clears.
+ */
+async function transition(
+  config: ResolvedBuddyConfig,
+  sandboxId: string,
+  verb: 'start' | 'stop',
+  reached: (data: BuddySandboxData) => boolean,
+): Promise<void> {
+  const client = getClient(config);
+  const deadline = Date.now() + LIFECYCLE_TIMEOUT_MS;
+  let data = await getSandboxData(config, sandboxId);
+  if (reached(data)) return;
+
+  for (;;) {
+    try {
+      const path = { path: { sandbox_id: sandboxId } };
+      await (verb === 'stop' ? client.stopSandbox(path) : client.startSandbox(path));
+      break;
+    } catch (error) {
+      if (!isOperationInProgress(error) || Date.now() >= deadline) throw error;
+      await sleep(LIFECYCLE_POLL_MS);
+      data = await getSandboxData(config, sandboxId);
+      if (reached(data)) return;
+    }
+  }
+
+  for (;;) {
+    data = await getSandboxData(config, sandboxId);
+    if (reached(data)) return;
+    if (data.status === 'FAILED' || data.setup_status === 'FAILED') {
+      throw new Error(
+        `Buddy sandbox ${sandboxId} failed to ${verb} ` +
+        `(status: ${data.status}, setup: ${data.setup_status}).`,
+      );
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Buddy sandbox ${sandboxId} did not ${verb} within ` +
+        `${LIFECYCLE_TIMEOUT_MS / 1000}s (status: ${data.status}, setup: ${data.setup_status}).`,
+      );
+    }
+    await sleep(LIFECYCLE_POLL_MS);
+  }
+}
+
+export function stopSandbox(config: ResolvedBuddyConfig, sandboxId: string): Promise<void> {
+  return transition(config, sandboxId, 'stop', isStopped);
+}
+
+export function startSandbox(config: ResolvedBuddyConfig, sandboxId: string): Promise<void> {
+  return transition(config, sandboxId, 'start', isReady);
 }

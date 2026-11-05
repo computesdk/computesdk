@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { runProviderTestSuite } from '@computesdk/test-utils';
 import type { ExecView } from '@buddy-works/sandbox-sdk';
 
@@ -672,4 +672,38 @@ describe('identifiers', () => {
     expect(identifier).toBe('a'.repeat(59));
     expect(identifier.length).toBeLessThanOrEqual(60);
   });
+});
+
+const live = Boolean(process.env.BUDDY_TOKEN && process.env.BUDDY_WORKSPACE && process.env.BUDDY_PROJECT);
+
+describe.skipIf(!live)('stop and start through getInstance()', () => {
+  // The unit tests above stub the shared client's prototype.
+  beforeAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('stops the sandbox and starts the same one with its disk intact', async () => {
+    const provider = buddy({});
+    const sandbox = await provider.sandbox.create();
+    try {
+      const handle = sandbox.getInstance() as import('../utils').BuddySandboxHandle;
+      const dir = `/buddy/stop-start-${Date.now()}`;
+      const marker = `${dir}/marker.txt`;
+      await sandbox.filesystem.mkdir(dir);
+      await sandbox.filesystem.writeFile(marker, 'kept');
+
+      await handle.stop();
+      expect((await sandbox.getInfo()).status).toBe('stopped');
+      // Stopping twice is a no-op rather than an error.
+      await handle.stop();
+
+      await handle.start();
+      expect((await sandbox.getInfo()).status).toBe('running');
+      expect(sandbox.sandboxId).toBe(handle.sandboxId);
+      expect(await sandbox.filesystem.readFile(marker)).toBe('kept');
+      expect((await sandbox.runCommand(`cat ${marker}`)).stdout).toBe('kept');
+    } finally {
+      await sandbox.destroy().catch(() => {});
+    }
+  }, 300_000);
 });

@@ -7,7 +7,8 @@
  * time-to-first-command at the warm-pool latency instead of a poll interval.
  *
  * Snapshots are Buddy's only reusable image, so `compute.template.*` is mapped
- * onto them.
+ * onto them. `getInstance()` exposes `stop()`/`start()` for pausing a sandbox
+ * and resuming the same one.
  *
  * @see https://buddy.works/docs/api/sandboxes
  */
