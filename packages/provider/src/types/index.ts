@@ -27,6 +27,10 @@ export type {
   InstanceEgressInfo,
   RunloopLaunchParameters,
   VercelSandboxResources,
+  TemplateSource,
+  TemplateCapabilities,
+  TemplateInfo,
+  TemplateErrorCode,
 } from 'computesdk';
 
 // Deprecated Sandbox* aliases for backwards compatibility

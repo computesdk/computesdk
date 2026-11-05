@@ -396,7 +396,11 @@ export interface CreateInstanceOptions extends InstanceResourceOptions {
    */
   ephemeral?: boolean;
   timeout?: number;
-  /** Provider-agnostic template/image ID to boot from */
+  /**
+   * Template to boot from: the `id` returned by `provider.template.create()`
+   * (or a provider-native template/image id). Works on every provider that
+   * declares `template.capabilities`, whether or not it boots external images.
+   */
   templateId?: string;
   /**
    * Snapshot ID to restore from when creating an instance.
@@ -423,7 +427,15 @@ export interface CreateInstanceOptions extends InstanceResourceOptions {
    * image when `image` is not set.
    */
   runtime?: string;
-  /** Container/VM image to boot from, overriding the provider default. */
+  /**
+   * Container/VM image to boot from, overriding the provider default.
+   *
+   * Only providers with `template.capabilities.externalImages: true` boot
+   * an arbitrary registry ref here. On the others, a declared provider
+   * rejects it with a `TemplateError` (`code: 'unsupported'`): build it once
+   * with `provider.template.create({ name, image })` and pass
+   * `templateId` instead. Mutually exclusive with `templateId`.
+   */
   image?: string;
   /**
    * Egress routing: run the on-box router shim so credentialed hosts are

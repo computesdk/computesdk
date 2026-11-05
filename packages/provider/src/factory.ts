@@ -45,6 +45,7 @@ import {
 import { readInstanceEgress, setupInstanceEgress } from './egress.js';
 import { withVolumeSettle } from './utils.js';
 import { InstanceSizeError, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeMetadata } from 'computesdk';
+import { TemplateError, assertImageBootSupported, type TemplateCapabilities, type TemplateInfo } from 'computesdk';
 import { applyInstanceSizePatch, createInstanceSizeManager, type InstanceSizeResolver } from './sizes.js';
 
 type DaemonStreamState = {
@@ -356,6 +357,13 @@ export type SandboxMethods<TInstance = any, TConfig = any> = InstanceMethods<TIn
  * Template method implementations
  */
 export interface TemplateMethods<TTemplate = any, TConfig = any, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> {
+  /**
+   * Opt in to the unified template contract. The framework then validates
+   * `image`/`dockerfile` against `sources`, normalizes `create`/`list`
+   * results to `TemplateInfo` (they must carry a string `id`), and rejects
+   * `instances.create({ image })` when `externalImages` is false.
+   */
+  capabilities?: TemplateCapabilities;
   create: (config: TConfig, options: TCreateOptions) => Promise<TTemplate>;
   list: (config: TConfig, options?: ListTemplatesOptions) => Promise<TTemplate[]>;
   delete: (config: TConfig, templateId: string) => Promise<void>;
@@ -1149,6 +1157,8 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
       delete options.sizeClass;
     }
 
+    assertImageBootSupported(this.providerName, this.providerInstance.template?.capabilities, options);
+
     const signal = options?.signal;
     const runCreate = () => this.methods.create(this.config, options).then(normalizeInstanceResult);
     // Create-time volume mounts hit the same detach-settle race as
@@ -1234,22 +1244,57 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
  * Auto-generated Template Manager implementation
  */
 class GeneratedTemplateManager<TTemplate, TConfig, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> implements ProviderTemplateManager<TTemplate, TCreateOptions> {
+  readonly capabilities?: TemplateCapabilities;
+
   constructor(
     private config: TConfig,
+    private providerName: string,
     private methods: TemplateMethods<TTemplate, TConfig, TCreateOptions>
-  ) {}
+  ) {
+    if (methods.capabilities) this.capabilities = Object.freeze({ ...methods.capabilities, sources: Object.freeze([...methods.capabilities.sources]) });
+  }
 
   async create(options: TCreateOptions): Promise<TTemplate> {
-    return await this.methods.create(this.config, options);
+    if (!this.capabilities) return await this.methods.create(this.config, options);
+    validateTemplateSource(this.providerName, this.capabilities, options);
+    const result = await this.methods.create(this.config, options);
+    return normalizeTemplateInfo(this.providerName, result, options.name) as TTemplate;
   }
 
   async list(options?: ListTemplatesOptions): Promise<TTemplate[]> {
-    return await this.methods.list(this.config, options);
+    const results = await this.methods.list(this.config, options);
+    if (!this.capabilities) return results;
+    return results.map((result) => normalizeTemplateInfo(this.providerName, result) as TTemplate);
   }
 
   async delete(templateId: string): Promise<void> {
     return await this.methods.delete(this.config, templateId);
   }
+}
+
+function validateTemplateSource(providerName: string, capabilities: TemplateCapabilities, options: CreateTemplateOptions): void {
+  if (!options || typeof options.name !== 'string' || !options.name.trim()) {
+    throw new TemplateError('invalid', 'a template name is required');
+  }
+  const { image, dockerfile } = options;
+  if (image !== undefined && dockerfile !== undefined) {
+    throw new TemplateError('invalid', 'pass either image or dockerfile, not both');
+  }
+  const source = image !== undefined ? 'image' : dockerfile !== undefined ? 'dockerfile' : undefined;
+  if (source && !capabilities.sources.includes(source)) {
+    throw new TemplateError(
+      'unsupported',
+      `${providerName} cannot build templates from a ${source} (accepts: ${capabilities.sources.join(', ') || 'none'})`
+    );
+  }
+}
+
+function normalizeTemplateInfo(providerName: string, result: unknown, fallbackName?: string): TemplateInfo {
+  const raw = result as Partial<TemplateInfo> | null | undefined;
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id) {
+    throw new TemplateError('invalid', `${providerName} returned a template without a string id`);
+  }
+  return { ...raw, id: raw.id, name: raw.name ?? fallbackName ?? raw.id, provider: raw.provider ?? providerName };
 }
 
 /**
@@ -1345,7 +1390,7 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
 
     // Initialize optional managers if methods are provided
     if (providerConfig.methods.template) {
-      this.template = new GeneratedTemplateManager(config, providerConfig.methods.template);
+      this.template = new GeneratedTemplateManager(config, providerConfig.name, providerConfig.methods.template);
     }
 
     if (providerConfig.methods.snapshot) {

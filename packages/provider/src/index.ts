@@ -90,4 +90,5 @@ export type * from './types';
 export { createInstanceSizeManager } from './sizes';
 export type { InstanceSizeResolver, InstanceSizeSupport } from './sizes';
 export { InstanceSizeError, INSTANCE_SIZE_PROFILES, isInstanceSizeManager } from 'computesdk';
+export { TemplateError } from 'computesdk';
 export type { InstanceSizeClass, InstanceSizeProfile, InstanceSizeManager, InstanceSizeResolution, InstanceSizeMetadata, InstanceSizeStatus, InstanceSizeErrorCode, InstanceSizeNativeOptions, InstanceSizeNativeValue } from 'computesdk';

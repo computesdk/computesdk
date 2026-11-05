@@ -95,3 +95,6 @@ export { compute } from './compute';
 export type { CallableCompute, ExplicitComputeConfig, ComputeCreateVolumeOptions } from './compute';
 
 export * from './sizes';
+
+export { TemplateError, assertImageBootSupported } from './templates';
+export type { TemplateSource, TemplateCapabilities, TemplateInfo, TemplateErrorCode } from './templates';
