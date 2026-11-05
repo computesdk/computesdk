@@ -1,12 +1,12 @@
 /**
- * Live smoke test for the CreateOS headline behaviour the conformance suite
- * can't reach: snapshot.create (= pause), snapshot.list, and fork via
- * create({ snapshotId }). Plus the getInstance() escape hatch.
+ * Live test for the CreateOS snapshot lifecycle the conformance suite can't
+ * reach: snapshot.create (paused fork), restore via create({ snapshotId })
+ * after the source is gone, parallel restores, isolation from post-snapshot
+ * mutations, snapshot.list / delete, and the getInstance() escape hatch.
  *
  * Gated on CREATEOS_SANDBOX_API_KEY — skipped entirely without creds.
  *
- *   CREATEOS_SANDBOX_API_KEY=skp_... CREATEOS_SANDBOX_BASE_URL=https://createos-sandbox.example.com \
- *     npx vitest run src/__tests__/snapshot.integration.test.ts
+ *   CREATEOS_SANDBOX_API_KEY=skp_... npx vitest run src/__tests__/snapshot.integration.test.ts
  */
 import { afterAll, describe, expect, it } from "vitest";
 import { createosSandbox } from "../index.js";
@@ -14,53 +14,72 @@ import { createosSandbox } from "../index.js";
 const live = !!process.env.CREATEOS_SANDBOX_API_KEY && process.env.SKIP_INTEGRATION !== "true";
 const provider = createosSandbox({});
 
-describe.skipIf(!live)("createos snapshot / fork (live)", () => {
-  let sourceId: string | undefined;
-  let cloneId: string | undefined;
+describe.skipIf(!live)("createos snapshot / restore (live)", () => {
+  const sandboxIds: string[] = [];
+  let snapshotId: string | undefined;
 
   afterAll(async () => {
-    if (cloneId) await provider.sandbox.destroy(cloneId).catch(() => undefined);
-    if (sourceId) await provider.sandbox.destroy(sourceId).catch(() => undefined);
-  }, 60_000);
+    for (const id of sandboxIds) await provider.sandbox.destroy(id).catch(() => undefined);
+    if (snapshotId) await provider.snapshot!.delete(snapshotId).catch(() => undefined);
+  }, 120_000);
 
-  it("pauses via snapshot.create, lists the snapshot, forks a running clone", async () => {
-    // 1. running source
+  it("snapshots a running box, keeps the source running, restores after the source is destroyed", async () => {
     const source = await provider.sandbox.create({});
-    sourceId = source.sandboxId;
-    expect(sourceId).toMatch(/^sb-/);
+    sandboxIds.push(source.sandboxId);
+    const marker = `snap-marker-${Date.now()}.txt`;
+    await source.filesystem.writeFile(marker, "before-snapshot");
+
+    const snap = await provider.snapshot!.create(source.sandboxId, { name: "computesdk-live" });
+    snapshotId = snap.id;
+    expect(snap.id).toMatch(/^sb-/);
+    expect(snap.id).not.toBe(source.sandboxId);
+
+    // The source is back up and accepts work; mutations after the snapshot
+    // must not leak into restores.
     expect((await source.getInfo()).status).toBe("running");
+    await source.filesystem.writeFile(marker, "after-snapshot");
+    expect(await source.filesystem.readFile(marker)).toBe("after-snapshot");
 
-    // 2. snapshot.create => pause; the paused sandbox id IS the snapshot id
-    const snap = await provider.snapshot!.create(sourceId);
-    expect(snap.id).toBe(sourceId);
+    expect((await provider.snapshot!.list()).map((s: { id: string }) => s.id)).toContain(snap.id);
 
-    // ensure the pause has settled before forking
-    const srcHandle = await provider.sandbox.getById(sourceId);
-    expect(srcHandle).not.toBeNull();
-    // getInstance() = native @nodeops-createos/sandbox handle (the escape hatch)
-    await (
-      srcHandle!.getInstance() as { waitUntilPaused: (o: object) => Promise<unknown> }
-    ).waitUntilPaused({ timeoutMs: 120_000 });
-    const info = await srcHandle!.getInfo();
-    expect(info.status).toBe("stopped"); // paused -> stopped
-    expect((info.metadata as Record<string, unknown>).createosStatus).toBe("paused");
+    await source.destroy();
 
-    // 3. snapshot.list includes the paused id
-    const snaps = await provider.snapshot!.list();
-    expect(snaps.map((s: { id: string }) => s.id)).toContain(sourceId);
+    // Fan out: several restores from the one snapshot, in parallel.
+    const restored = await Promise.all(
+      [0, 1, 2].map(() =>
+        provider.sandbox.create({ snapshotId: snap.id } as Record<string, unknown>),
+      ),
+    );
+    for (const r of restored) sandboxIds.push(r.sandboxId);
+    expect(new Set(restored.map((r) => r.sandboxId)).size).toBe(3);
+    for (const r of restored) {
+      expect(r.sandboxId).not.toBe(snap.id);
+      expect(await r.filesystem.readFile(marker)).toBe("before-snapshot");
+      const echo = await r.runCommand("echo restored-alive");
+      expect(echo.exitCode).toBe(0);
+      expect(echo.stdout).toContain("restored-alive");
+    }
 
-    // 4. fork: create({ snapshotId }) clones the paused bundle into a new VM
-    const clone = await provider.sandbox.create({ snapshotId: sourceId } as Record<
-      string,
-      unknown
-    >);
-    cloneId = clone.sandboxId;
-    expect(cloneId).toMatch(/^sb-/);
-    expect(cloneId).not.toBe(sourceId);
+    await provider.snapshot!.delete(snap.id);
+    snapshotId = undefined;
+  }, 480_000);
 
-    // 5. the forked clone is alive and independent
-    const r = await clone.runCommand("echo forked-alive");
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("forked-alive");
-  }, 240_000);
+  it("native pause / resume keeps the same box once the pause settles", async () => {
+    const box = await provider.sandbox.create({});
+    sandboxIds.push(box.sandboxId);
+    await box.runCommand("echo kept > pause-marker.txt");
+    const native = box.getInstance() as {
+      pause: () => Promise<unknown>;
+      waitUntilPaused: (o?: object) => Promise<unknown>;
+      resume: () => Promise<unknown>;
+      waitUntilRunning: (o?: object) => Promise<unknown>;
+    };
+    await native.pause();
+    await native.waitUntilPaused({ timeoutMs: 120_000 });
+    expect((await box.getInfo()).metadata?.createosStatus).toBe("paused");
+    await native.resume();
+    await native.waitUntilRunning({ timeoutMs: 120_000 });
+    const r = await box.runCommand("cat pause-marker.txt");
+    expect(r.stdout.trim()).toBe("kept");
+  }, 300_000);
 });

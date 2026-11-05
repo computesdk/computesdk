@@ -58,7 +58,7 @@ control plane validates it; `0`/omitted = the shape's default disk).
 | `sandbox.getUrl({port})` | per-sandbox ingress URL |
 | `filesystem.readFile` / `writeFile` | `GET/PUT /v1/sandboxes/:id/files` |
 | `filesystem.mkdir` / `readdir` / `exists` / `remove` | synthesised via `runCommand` |
-| `snapshot.create` / `list` / `delete` | `pause` / list paused / `destroy` |
+| `snapshot.create` / `list` / `delete` | pause → `fork({ start_paused: true })` → resume / list paused / `destroy` |
 
 Template builds (`/v1/templates`) are **not** exposed through the ComputeSDK
 provider surface — ComputeSDK's public `Provider` type can't carry the
@@ -74,8 +74,9 @@ ComputeSDK's core surface has no pause/resume/fork. Reach the full
 ```typescript
 const native = sandbox.getInstance();
 await native.pause();
-await native.resume();
+await native.waitUntilPaused(); // pause() returns while the VM is still "pausing"
 const clone = await native.fork();
+await native.resume();
 await native.attachDisk({ diskId: "my-bucket", mountPath: "/mnt/data" });
 ```
 
@@ -84,9 +85,11 @@ await native.attachDisk({ diskId: "my-bucket", mountPath: "/mnt/data" });
 - **`runCommand` env/cwd are synthesised** — createos-sandbox drops per-exec env
   server-side, so `env`/`cwd` are injected by wrapping the command in an inline
   `sh -c` script. Sandbox-level env should be set at create time (`envs`).
-- **Snapshot semantics differ** — `snapshot.create` *pauses* the sandbox (the
-  source VM stops); the paused sandbox id IS the snapshot id. `create({ snapshotId })`
-  forks that paused bundle into a fresh sandbox.
+- **Snapshots are paused forks** — createos forks only from a paused sandbox,
+  so `snapshot.create` briefly pauses the source, forks it into a paused copy
+  (the snapshot, with its own id) and resumes the source. `create({ snapshotId })`
+  forks that copy into a fresh sandbox; `snapshot.delete` destroys it. A
+  snapshot taken while a process is running captures its memory state too.
 - **`getUrl` turns on ingress** — sandboxes are created with ingress off
   (pass `ingressEnabled: true` to enable it at create); `getUrl` enables it on
   demand the first time a URL is requested. Ingress currently serves a non-CA
