@@ -142,3 +142,29 @@ local-backend integration gate are not overridden. The core integration job
 is the common live create/execute/reconnect/destroy path for every configured
 provider, independent of those package-specific test gates. No live integration
 results are claimed by the offline credential checks.
+
+## Live verification: November 5, 2026
+
+GitHub run `42055322899` tested commit `71a097a5` before the manual-only
+workflow split. Core integration: **28 passed, 6 failed**. Native package
+suites: **22 passed, 11 failed**; native success counts are not universal live
+coverage because some suites use mocks or disable live cases.
+
+Every failed job completed vault resolution with `missing=0` and entered its
+test command. Successful E2B, Daytona, Modal and Vercel core logs additionally
+confirmed real lifecycle assertions passed. Retrieving credentials is proven;
+upstream acceptance is **not** proven for providers returning auth errors.
+
+| Failed core provider | Observed failure / next action |
+| --- | --- |
+| CodeSandbox | VM deletion returned an unexpected error. Cleanup can mask earlier failures; lifecycle success is not established. |
+| Sail | Harness passed an unsupported create timeout. Registry now omits it; a live rerun is still required. |
+| Miosa | Daemon bootstrap failed with exit 127 / runtime exec-contract error. |
+| HopX | Sandbox create returned HTTP 526; upstream transport/API investigation required. |
+| Northflank | HTTP 401 despite loaded token/project. Validate active vault token, project access and configured API host. |
+| OpenComputer | HTTP 402, `insufficient_credits`, `trial_days`: account trial expired. Resolve entitlement before rerunning. |
+
+The native failures also include stale mock expectations, API-contract
+mismatches and timing assertions. They are not hidden or converted into green
+skips by this change. No automatic reruns were started after switching the
+workflow to manual dispatch.

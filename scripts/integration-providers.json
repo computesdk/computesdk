@@ -362,6 +362,7 @@
     "package": "@computesdk/sail",
     "directory": "sail",
     "factory": "sail",
+    "omitCreateTimeout": true,
     "requiredEnv": [
       "SAIL_API_KEY"
     ],

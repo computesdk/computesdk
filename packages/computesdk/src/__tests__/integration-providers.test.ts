@@ -37,7 +37,10 @@ describe('shared integration provider wiring (no cloud credentials required)', (
       else expect(config).not.toHaveProperty(property);
     }
     expect(config).toMatchObject(definition.factoryOptions ?? {});
-    expect(options).toMatchObject({ timeout: 120000, ...definition.sandboxOptions });
+    expect(options).toMatchObject({
+      ...(definition.omitCreateTimeout ? {} : { timeout: 120000 }),
+      ...definition.sandboxOptions,
+    });
     for (const [property, name] of Object.entries(definition.sandboxEnv ?? {})) {
       expect(options[property]).toBe(env[name]);
     }
@@ -98,6 +101,11 @@ describe('shared integration provider wiring (no cloud credentials required)', (
   it('retains the Blaxel minimum TTL and nested Cloud Run dist entry', () => {
     expect(getProviderSandboxOptions('blaxel', requiredEnvironment('blaxel'))).toHaveProperty('timeout', 300000);
     expect(getProviderModuleUrl('cloud-run')).toMatch(/\/packages\/gcp\/dist\/cloud-run\/index\.mjs$/);
+  });
+
+  it('omits the unsupported hard-lifetime timeout for Sail without changing lifecycle assertions', () => {
+    expect(getProviderSandboxOptions('sail', requiredEnvironment('sail'))).not.toHaveProperty('timeout');
+    expect(getProviderSandboxOptions('e2b', requiredEnvironment('e2b'))).toHaveProperty('timeout', 120000);
   });
 
   it.each(['unknown', 'toString', '__proto__'])('rejects unregistered provider %s', (provider) => {

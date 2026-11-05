@@ -14,6 +14,7 @@ interface IntegrationProvider {
   aliases?: Record<string, string[]>;
   canonicalFirst?: boolean;
   factoryOptions?: Record<string, unknown>;
+  omitCreateTimeout?: boolean;
   sandboxOptions?: Record<string, unknown>;
   sandboxEnv?: Record<string, string>;
 }
@@ -87,7 +88,7 @@ export function getProviderSandboxOptions(provider: string, env: Environment = p
   const definition = getProvider(provider);
   requireEnvironment(definition, env);
   return {
-    timeout: 120000,
+    ...(definition.omitCreateTimeout ? {} : { timeout: 120000 }),
     ...definition.sandboxOptions,
     ...mapEnvironment(definition, definition.sandboxEnv ?? {}, env),
   };
