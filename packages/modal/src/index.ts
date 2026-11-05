@@ -14,7 +14,7 @@ import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
 type ModalNativeSandbox = Sandbox;
 
 
-const DEFAULT_IMAGE = 'node:20';
+const DEFAULT_IMAGE = 'node:22';
 const DEFAULT_APP_NAME = 'computesdk-modal';
 const DEFAULT_DAEMON_SSE_PORT = 38989;
 
@@ -225,7 +225,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         try {
           const client = config._client;
           const sandbox = await client.sandboxes.fromId(sandboxId);
-          if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate();
+          // Volume writes are only committed once the container has exited, so
+          // wait for exit: a sandbox mounting the same volume right after
+          // destroy() would otherwise see none of this sandbox's writes.
+          if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate({ wait: true });
         } catch { /* already terminated */ }
       },
 
@@ -233,12 +236,13 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         const startTime = Date.now();
         try {
           let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          if (options?.background) fullCommand = `nohup sh -c '${fullCommand.replace(/'/g, `'\\''`)}' > /dev/null 2>&1 &`;
+          // Exported (not `K=v cmd`) so every part of a compound command sees it.
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const exports = Object.entries(options.env).map(([k, v]) => `export ${k}="${escapeShellArg(String(v))}";`).join(' ');
+            fullCommand = `${exports} ${fullCommand}`;
+          }
           
           // Modal's exec pipes stream output — a transport hiccup during a
           // quiet stretch drops a contiguous chunk and the read still
