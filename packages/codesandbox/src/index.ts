@@ -106,7 +106,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           // code and stderr in-band via a delimiter + stderr file.
           const errFile = `/tmp/.computesdk-stderr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
           const delim = `__COMPUTESDK_EXIT_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
-          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __cs_ec=$?; echo "${delim}$__cs_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+          const wrapped = `{ ${fullCommand}\n} 2>${escapeShellArg(errFile)}; __cs_ec=$?; echo "${delim}$__cs_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
           const output = await client.commands.run(wrapped);
           const delimIdx = output.lastIndexOf(delim);
           if (delimIdx === -1) {
