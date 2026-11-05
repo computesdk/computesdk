@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({
   backendKind: 'local' as 'local' | 'cloud',
@@ -252,7 +252,12 @@ vi.mock('microsandbox', () => {
 
 let microsandbox: typeof import('../index.js').microsandbox;
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 beforeEach(async () => {
+  for (const name of ['MSB_API_KEY', 'MSB_API_URL', 'MSB_BACKEND', 'MSB_PROFILE']) vi.stubEnv(name, '');
   vi.resetModules();
   ({ microsandbox } = await import('../index.js'));
   mock.backendKind = 'local';
@@ -371,6 +376,28 @@ describe('microsandbox provider', () => {
     await microsandbox().sandbox.create({ name: 'default-cloud' });
 
     expect(mock.created[0]).toMatchObject({ name: 'default-cloud', backend: 'cloud' });
+    expect(mock.backendSelections).toEqual([]);
+  });
+
+  it('uses MSB_API_KEY and MSB_API_URL from the environment for the cloud backend', async () => {
+    vi.stubEnv('MSB_API_KEY', 'env-key');
+    vi.stubEnv('MSB_API_URL', 'https://env.example.test');
+
+    await microsandbox().sandbox.create({ name: 'env-cloud' });
+
+    expect(mock.backendSelections).toEqual([
+      { kind: 'cloud', apiKey: 'env-key', url: 'https://env.example.test' },
+    ]);
+    expect(mock.created[0]).toMatchObject({ name: 'env-cloud', backend: 'cloud' });
+  });
+
+  it('leaves MSB_BACKEND and MSB_PROFILE resolution to the microsandbox SDK', async () => {
+    vi.stubEnv('MSB_API_KEY', 'env-key');
+    vi.stubEnv('MSB_BACKEND', 'cloud');
+    mock.backendKind = 'cloud';
+
+    await microsandbox().sandbox.create({ name: 'sdk-env-cloud' });
+
     expect(mock.backendSelections).toEqual([]);
   });
 
@@ -701,6 +728,17 @@ describe('microsandbox provider', () => {
     const result = await sandbox.runCommand('sleep 60', { timeout: 5 });
 
     expect(result.exitCode).toBe(124);
+  });
+
+  it('refuses to snapshot a running ephemeral sandbox instead of stopping it away', async () => {
+    const provider = microsandbox({ backend: 'local' });
+    const sandbox = await provider.sandbox.create({ name: 'ephemeral-box' });
+    const handle = mock.handles.get('ephemeral-box');
+    handle.configValue.lifecycle = { ephemeral: true };
+
+    await expect(provider.snapshot!.create(sandbox.sandboxId)).rejects.toThrow(/ephemeral.*ephemeral: false/);
+    expect(handle.status).toBe('running');
+    expect(mock.stopAttempts).toBe(0);
   });
 
   it('uses the native filesystem surface', async () => {

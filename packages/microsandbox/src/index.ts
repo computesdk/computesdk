@@ -47,7 +47,7 @@ export interface MicrosandboxConfig {
    * installed on the calling machine.
    */
   backend?: 'cloud' | 'local';
-  /** Cloud API key. Falls back to the microsandbox SDK's `MSB_API_KEY` resolution. */
+  /** Cloud API key. Falls back to `MSB_API_KEY` (and `MSB_API_URL`). */
   apiKey?: string;
   /** Hosted API endpoint override. Requires `apiKey`. */
   apiUrl?: string;
@@ -103,6 +103,7 @@ export interface MicrosandboxSnapshot {
 
 interface RecoveredConfig {
   labels?: Record<string, string>;
+  lifecycle?: { ephemeral?: boolean };
   network?: {
     ports?: Array<{
       host?: number;
@@ -218,7 +219,18 @@ function selectBackend(config: MicrosandboxConfig): BackendSelection {
     };
   }
 
-  // Let the SDK resolve MSB_API_KEY, MSB_PROFILE, or the active profile, then
+  // The SDK only reads MSB_API_KEY under MSB_BACKEND=cloud; on its own the key
+  // would leave the SDK on its local default, so install it explicitly.
+  const envApiKey = process.env.MSB_API_KEY;
+  if (envApiKey && !process.env.MSB_BACKEND && !process.env.MSB_PROFILE) {
+    const envApiUrl = process.env.MSB_API_URL;
+    return {
+      kind,
+      override: { kind: 'cloud', apiKey: envApiKey, ...(envApiUrl ? { url: envApiUrl } : {}) },
+    };
+  }
+
+  // Let the SDK resolve MSB_BACKEND, MSB_PROFILE, or the active profile, then
   // enforce cloud so an unconfigured machine does not silently fall back local.
   return { kind };
 }
@@ -975,6 +987,13 @@ const _microsandbox = defineProvider<
         requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const handle = await sdk.Sandbox.get(sandboxId);
         const wasRunning = handle.status === 'running' || handle.status === 'draining';
+        // Snapshots need a stopped sandbox, and stopping an ephemeral one removes it.
+        if (wasRunning && (handle.config() as RecoveredConfig).lifecycle?.ephemeral) {
+          throw new Error(
+            `Microsandbox sandbox ${sandboxId} is ephemeral and would be removed by the stop a snapshot requires. ` +
+            `Create it with ephemeral: false to snapshot it.`,
+          );
+        }
         if (wasRunning) await retry(() => handle.stopWithTimeout(10_000));
 
         const name = options?.name ?? `csdk-snapshot-${Date.now().toString(36)}`;
