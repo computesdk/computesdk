@@ -59,7 +59,9 @@ function createDirectBinding(
         ].join('\0')
       );
     }
-    if (command.includes('cat --')) return directOutput('Mock file content');
+    if (command.includes('stat -c %s')) {
+      return directOutput('17\nMock file content');
+    }
     return directOutput();
   }
 ) {
@@ -281,13 +283,20 @@ describe('Cloudflare direct mode', () => {
     ]);
 
     const commands = sandbox.exec.mock.calls.map((call) => call[0][2]);
-    expect(commands).toContain("cat -- '/tmp/test.txt'");
-    const writeCommand = commands.find((command) =>
-      command.includes('| base64 -d >>')
+    const readCall = sandbox.exec.mock.calls.find((call) =>
+      call[0][2]?.includes('stat -c %s')
     );
-    expect(writeCommand).toBeDefined();
-    const encoded = /printf %s '([^']+)'/.exec(writeCommand || '')?.[1];
-    expect(Buffer.from(encoded || '', 'base64').toString()).toBe("it's safe");
+    expect(readCall?.[0].slice(0, 2)).toEqual(['sh', '-c']);
+    expect(readCall?.[0][3]).toBe('/tmp/test.txt');
+    const writeCall = sandbox.exec.mock.calls.find((call) =>
+      call[0][2]?.includes('base64 -d | dd')
+    );
+    expect(writeCall).toBeDefined();
+    expect(writeCall?.[0][3]).toMatch(/^\/tmp\/\.computesdk-/);
+    expect(writeCall?.[0][4]).toBe('0');
+    expect(
+      Buffer.from(writeCall?.[0][5] || '', 'base64').toString()
+    ).toBe("it's safe");
     expect(
       commands.some(
         (command) =>
@@ -368,14 +377,86 @@ describe('Cloudflare direct mode', () => {
     await created.filesystem.writeFile('/tmp/large.bin', content);
 
     const encodedChunks = sandbox.exec.mock.calls
-      .map((call) => call[0][2] as string)
-      .filter((command) => command.includes('| base64 -d >>'))
-      .map((command) => /printf %s '([^']+)'/.exec(command)?.[1] || '');
+      .filter((call) => call[0][2]?.includes('base64 -d | dd'))
+      .flatMap((call) => call[0].slice(5));
     expect(encodedChunks.length).toBeGreaterThan(1);
+    expect(
+      encodedChunks.every((encoded) => encoded.length < 128 * 1024)
+    ).toBe(true);
     const reconstructed = Buffer.concat(
       encodedChunks.map((encoded) => Buffer.from(encoded, 'base64'))
     ).toString();
     expect(reconstructed).toBe(content);
+  });
+
+  it('writes multi-megabyte content as parallel positioned ranges', async () => {
+    const { binding, sandbox } = createDirectBinding();
+    const provider = cloudflare({ sandboxBinding: binding });
+    const created = await provider.sandbox.create();
+    const content = 'x'.repeat(3 * 1024 * 1024 + 7);
+
+    await created.filesystem.writeFile('/tmp/big.bin', content);
+
+    const ranges = sandbox.exec.mock.calls
+      .filter((call) => call[0][2]?.includes('base64 -d | dd'))
+      .map((call) => ({
+        offset: Number(call[0][4]),
+        bytes: Buffer.concat(
+          call[0].slice(5).map((encoded) => Buffer.from(encoded, 'base64'))
+        ),
+      }))
+      .sort((a, b) => a.offset - b.offset);
+    expect(ranges.length).toBeGreaterThan(1);
+    let expected = 0;
+    for (const range of ranges) {
+      expect(range.offset).toBe(expected);
+      expected += range.bytes.length;
+    }
+    expect(Buffer.concat(ranges.map((range) => range.bytes)).toString()).toBe(
+      content
+    );
+  });
+
+  it('reads large files in bounded ranges and reassembles them', async () => {
+    const content = Buffer.from('é'.repeat(5 * 1024 * 1024));
+    const { binding, sandbox } = createDirectBinding(async (argv) => {
+      const command = argv[2] || '';
+      if (command.includes('stat -c %s')) {
+        const count = Number(argv[4]);
+        return {
+          stdout: Buffer.concat([
+            Buffer.from(`${content.length}\n`),
+            content.subarray(0, count),
+          ]).buffer as ArrayBuffer,
+          stderr: bytes(''),
+          exitCode: 0,
+        };
+      }
+      if (command.includes('skip_bytes')) {
+        const offset = Number(argv[4]);
+        const count = Number(argv[5]);
+        return {
+          stdout: new Uint8Array(content.subarray(offset, offset + count))
+            .buffer as ArrayBuffer,
+          stderr: bytes(''),
+          exitCode: 0,
+        };
+      }
+      return directOutput();
+    });
+    const provider = cloudflare({ sandboxBinding: binding });
+    const created = await provider.sandbox.create();
+
+    await expect(created.filesystem.readFile('/tmp/big.txt')).resolves.toBe(
+      content.toString('utf8')
+    );
+    const rangeCalls = sandbox.exec.mock.calls.filter((call) =>
+      call[0][2]?.includes('skip_bytes')
+    );
+    expect(rangeCalls.length).toBeGreaterThan(1);
+    expect(rangeCalls.every((call) => Number(call[0][5]) <= 4 * 1024 * 1024)).toBe(
+      true
+    );
   });
 });
 
@@ -576,7 +657,11 @@ describe('Cloudflare remote bridge mode', () => {
         bridgeExecResponse([
           {
             event: 'stdout',
-            data: Buffer.from('hello').toString('base64'),
+            data: Buffer.from('5\nhel').toString('base64'),
+          },
+          {
+            event: 'stdout',
+            data: Buffer.from('lo').toString('base64'),
           },
           { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
         ])
@@ -594,7 +679,8 @@ describe('Cloudflare remote bridge mode', () => {
         'hello'
       );
       const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
-      expect(body.argv).toEqual(['sh', '-lc', "cat -- '/tmp/a.txt'"]);
+      expect(body.argv.slice(0, 2)).toEqual(['sh', '-c']);
+      expect(body.argv.slice(3)).toEqual(['/tmp/a.txt', String(4 * 1024 * 1024)]);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -639,6 +725,11 @@ describe('Cloudflare remote bridge mode', () => {
       )
       .mockResolvedValueOnce(
         bridgeExecResponse([
+          { event: 'exit', data: JSON.stringify({ exit_code: 1 }) },
+        ])
+      )
+      .mockResolvedValueOnce(
+        bridgeExecResponse([
           { event: 'exit', data: JSON.stringify({ exit_code: 0 }) },
         ])
       );
@@ -659,7 +750,7 @@ describe('Cloudflare remote bridge mode', () => {
       expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('POST');
 
       await sandbox?.runCommand('echo ready');
-      const body = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+      const body = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string);
       expect(body.argv).toEqual([
         'sh',
         '-lc',
@@ -754,3 +845,4 @@ describe('Cloudflare remote bridge mode', () => {
     }
   });
 });
+

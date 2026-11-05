@@ -23,7 +23,15 @@ import type {
 
 const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
 const MAX_EXEC_TIMEOUT_MS = 15 * 60_000;
-const WRITE_CHUNK_BYTES = 48 * 1024;
+// Each argv string stays under Linux's 128 KiB MAX_ARG_STRLEN once base64
+// encoded; one exec carries several of them and stays well under ARG_MAX.
+const WRITE_ARG_BYTES = 72 * 1024;
+const WRITE_ARGS_PER_EXEC = 12;
+const WRITE_EXEC_BYTES = WRITE_ARG_BYTES * WRITE_ARGS_PER_EXEC;
+// Reads are split so no single exec output approaches the Durable Object RPC
+// and Worker memory limits.
+const READ_CHUNK_BYTES = 4 * 1024 * 1024;
+const FILE_TRANSFER_CONCURRENCY = 4;
 
 export interface CloudflareDirectExecOutput {
   stdout: ArrayBuffer;
@@ -208,11 +216,15 @@ async function bridgeJSONRequest(
   return text ? JSON.parse(text) : {};
 }
 
-function parseBridgeExecEvents(
-  text: string
-): Pick<CommandResult, 'stdout' | 'stderr' | 'exitCode'> {
-  let stdout = '';
-  let stderr = '';
+interface RawExecOutput {
+  stdout: Uint8Array;
+  stderr: string;
+  exitCode: number;
+}
+
+function parseBridgeExecBytes(text: string): RawExecOutput {
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
   let exitCode: number | undefined;
 
   for (const rawEvent of text.split(/\r?\n\r?\n/)) {
@@ -229,9 +241,9 @@ function parseBridgeExecEvents(
 
     const payload = data.join('\n');
     if (event === 'stdout') {
-      stdout += Buffer.from(payload, 'base64').toString('utf8');
+      stdout.push(Buffer.from(payload, 'base64'));
     } else if (event === 'stderr') {
-      stderr += Buffer.from(payload, 'base64').toString('utf8');
+      stderr.push(Buffer.from(payload, 'base64'));
     } else if (event === 'exit') {
       const parsed = JSON.parse(payload);
       const parsedExitCode = parsed.exit_code ?? parsed.exitCode;
@@ -245,12 +257,14 @@ function parseBridgeExecEvents(
       }
       exitCode = parsedExitCode;
     } else if (event === 'error') {
+      let message = payload;
       try {
         const parsed = JSON.parse(payload);
-        stderr += parsed.error || parsed.message || payload;
+        message = parsed.error || parsed.message || payload;
       } catch {
-        stderr += payload;
+        // keep the raw payload
       }
+      stderr.push(Buffer.from(String(message)));
       exitCode ??= 1;
     }
   }
@@ -258,7 +272,18 @@ function parseBridgeExecEvents(
   if (exitCode === undefined) {
     throw new Error('Sandbox Worker exec response ended without an exit event');
   }
-  return { stdout, stderr, exitCode };
+  return {
+    stdout: Buffer.concat(stdout),
+    stderr: Buffer.concat(stderr).toString('utf8'),
+    exitCode,
+  };
+}
+
+function parseBridgeExecEvents(
+  text: string
+): Pick<CommandResult, 'stdout' | 'stderr' | 'exitCode'> {
+  const { stdout, stderr, exitCode } = parseBridgeExecBytes(text);
+  return { stdout: Buffer.from(stdout).toString('utf8'), stderr, exitCode };
 }
 
 function shellQuote(value: string): string {
@@ -350,6 +375,129 @@ function exec(
   return cfSandbox.remote
     ? bridgeExec(cfSandbox, command, options)
     : directExec(cfSandbox, command, options);
+}
+
+async function execArgv(
+  cfSandbox: CloudflareSandbox,
+  argv: string[]
+): Promise<RawExecOutput> {
+  const timeoutMs = executionTimeout(cfSandbox.timeoutMs);
+  if (cfSandbox.remote) {
+    const response = await bridgeRequest(
+      cfSandbox,
+      'POST',
+      `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/exec`,
+      JSON.stringify({ argv, timeout_ms: timeoutMs }),
+      { 'Content-Type': 'application/json' }
+    );
+    return parseBridgeExecBytes(await response.text());
+  }
+
+  if (!cfSandbox.sandbox) throw new Error('Missing Cloudflare sandbox binding');
+  const output = await cfSandbox.sandbox.exec(argv, undefined, timeoutMs);
+  return {
+    stdout: new Uint8Array(output.stdout),
+    stderr: new TextDecoder().decode(output.stderr),
+    exitCode: output.exitCode,
+  };
+}
+
+function assertRawSucceeded(result: RawExecOutput, action: string): void {
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `${action} failed: ${result.stderr || `exit ${result.exitCode}`}`
+    );
+  }
+}
+
+async function runPool<T>(
+  items: T[],
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  let next = 0;
+  const runners = Array.from(
+    { length: Math.min(FILE_TRANSFER_CONCURRENCY, items.length) },
+    async () => {
+      while (next < items.length) await worker(items[next++]);
+    }
+  );
+  await Promise.all(runners);
+}
+
+const READ_FIRST_SCRIPT = `stat -c %s -- "$0" && dd if="$0" bs=1M iflag=count_bytes count="$1" status=none`;
+const READ_RANGE_SCRIPT = `dd if="$0" bs=1M iflag=skip_bytes,count_bytes skip="$1" count="$2" status=none`;
+const WRITE_RANGE_SCRIPT = `p=$0; o=$1; shift; printf %s "$@" | base64 -d | dd of="$p" bs=1M iflag=fullblock oflag=seek_bytes seek="$o" conv=notrunc status=none`;
+
+async function readFileBytes(
+  cfSandbox: CloudflareSandbox,
+  path: string
+): Promise<Buffer> {
+  const first = await execArgv(cfSandbox, [
+    'sh',
+    '-c',
+    READ_FIRST_SCRIPT,
+    path,
+    String(READ_CHUNK_BYTES),
+  ]);
+  assertRawSucceeded(first, 'File read');
+
+  const newline = first.stdout.indexOf(10);
+  const size = Number.parseInt(
+    Buffer.from(first.stdout.subarray(0, newline)).toString('utf8'),
+    10
+  );
+  if (newline < 0 || !Number.isFinite(size)) {
+    throw new Error('File read failed: malformed size output');
+  }
+
+  const head = Buffer.from(first.stdout.subarray(newline + 1));
+  if (head.length < READ_CHUNK_BYTES || size <= READ_CHUNK_BYTES) return head;
+
+  const offsets: number[] = [];
+  for (let offset = READ_CHUNK_BYTES; offset < size; offset += READ_CHUNK_BYTES) {
+    offsets.push(offset);
+  }
+  const chunks = new Map<number, Uint8Array>();
+  await runPool(offsets, async (offset) => {
+    const result = await execArgv(cfSandbox, [
+      'sh',
+      '-c',
+      READ_RANGE_SCRIPT,
+      path,
+      String(offset),
+      String(Math.min(READ_CHUNK_BYTES, size - offset)),
+    ]);
+    assertRawSucceeded(result, 'File read');
+    chunks.set(offset, result.stdout);
+  });
+
+  return Buffer.concat([head, ...offsets.map((offset) => chunks.get(offset)!)]);
+}
+
+async function writeRange(
+  cfSandbox: CloudflareSandbox,
+  tempPath: string,
+  bytes: Uint8Array,
+  offset: number
+): Promise<void> {
+  const end = Math.min(offset + WRITE_EXEC_BYTES, bytes.length);
+  const encoded: string[] = [];
+  for (let start = offset; start < end; start += WRITE_ARG_BYTES) {
+    encoded.push(
+      Buffer.from(
+        bytes.subarray(start, Math.min(start + WRITE_ARG_BYTES, end))
+      ).toString('base64')
+    );
+  }
+  const result = await execArgv(cfSandbox, [
+    'sh',
+    '-c',
+    WRITE_RANGE_SCRIPT,
+    tempPath,
+    String(offset),
+    ...encoded,
+  ]);
+  assertRawSucceeded(result, 'File write');
 }
 
 function assertCommandSucceeded(result: CommandResult, action: string): void {
@@ -599,9 +747,7 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
       filesystem: {
         readFile: async (cfSandbox: CloudflareSandbox, path: string) => {
-          const result = await exec(cfSandbox, `cat -- ${shellQuote(path)}`);
-          assertCommandSucceeded(result, 'File read');
-          return result.stdout;
+          return (await readFileBytes(cfSandbox, path)).toString('utf8');
         },
 
         writeFile: async (
@@ -615,22 +761,17 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
             assertCommandSucceeded(result, 'Temporary file creation');
 
             const bytes = new TextEncoder().encode(content);
+            const offsets: number[] = [];
             for (
               let offset = 0;
               offset < bytes.length;
-              offset += WRITE_CHUNK_BYTES
+              offset += WRITE_EXEC_BYTES
             ) {
-              const encoded = Buffer.from(
-                bytes.subarray(offset, offset + WRITE_CHUNK_BYTES)
-              ).toString('base64');
-              result = await exec(
-                cfSandbox,
-                `printf %s ${shellQuote(encoded)} | base64 -d >> ${shellQuote(
-                  tempPath
-                )}`
-              );
-              assertCommandSucceeded(result, 'File write');
+              offsets.push(offset);
             }
+            await runPool(offsets, (offset) =>
+              writeRange(cfSandbox, tempPath, bytes, offset)
+            );
 
             result = await exec(
               cfSandbox,
