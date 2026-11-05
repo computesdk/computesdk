@@ -111,7 +111,7 @@ The provider checks this config before it sends anything. A missing key, or a ma
 
 Commands take `cwd`, `env`, `timeout` and `background`, and one that exits non-zero comes back as a normal result with its `exitCode`. Pass `onStdout` or `onStderr` and the output arrives while the command runs. A command that outruns its `timeout` is stopped and reported with exit code 124.
 
-The filesystem API reads, writes, lists and removes files, creates directories and checks whether a path exists. Sandboxes are managed with `create`, `getById`, `list` (every sandbox that has not ended) and `destroy`; snapshots with `snapshot.list()` and `snapshot.delete(id)`. Every sandbox runs under a spend cap: yours, `PROMIGENCE_SPEND_CAP`, or your organization's default.
+The filesystem API reads, writes, lists and removes files, creates directories and checks whether a path exists. Sandboxes are managed with `create`, `getById`, `list` (every sandbox that has not ended) and `destroy`; snapshots with `snapshot.create(sandboxId)`, `snapshot.list()` and `snapshot.delete(id)`. Every sandbox runs under a spend cap: yours, `PROMIGENCE_SPEND_CAP`, or your organization's default.
 
 ### Supported runtimes
 
@@ -139,7 +139,7 @@ While `fallbackOnError` is on (the default), `compute.instances.create()` combin
 ## Limitations
 
 - There are no preview URLs yet, so `getUrl()` throws. To reach a server in the sandbox, call it from a command in the same sandbox, for example with `curl`.
-- `snapshot.create()` throws: Promigence does not take a snapshot of a running sandbox. Build snapshots with the Promigence CLI (`promigence snapshot create --image <image>`), or pass `image` to `create()`.
+- `snapshot.create(sandboxId)` takes a snapshot of a running sandbox, which keeps running; start new sandboxes from it with `create({ snapshotId })`. Files, including `/tmp`, are kept; background processes are not (they are ended to take it).
 - Templates are snapshots here. The `template` methods throw, and `templateId` on `create()` names a snapshot.
 - `runCommand(cmd, { background: true })` answers at once with exit code 0 and does not collect the command's output.
 - CPU and memory fields on `create()` are ignored. A sandbox has its snapshot's size, and `tier` picks one for a sandbox created from `image`.

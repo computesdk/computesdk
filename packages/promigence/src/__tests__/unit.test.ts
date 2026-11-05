@@ -483,17 +483,22 @@ describe('promigence provider (unit, fake client)', () => {
     expect(typeof inst.sandbox.fork).toBe('function');
   });
 
-  it('snapshots: create from a sandbox is refused with the alternative named; list and delete map', async () => {
+  it('snapshots: create takes a live snapshot that restores into a new sandbox; list and delete map', async () => {
     const { client, provider, c } = setup({
       snapshots: [{ snapshot_id: 'snap_1', alias: 'myapp', commit: '0123abc4567', tier: 'medium', verified: true, created_at: '2030-02-03T00:00:00Z' }],
     });
     const sandbox = await c.instances.create();
-    await expect(provider.snapshot!.create(sandbox.instanceId)).rejects.toMatchObject({
-      name: 'UnsupportedError',
-      code: 'unsupported',
-      fix: expect.stringContaining('promigence snapshot create --image'),
+    const snap = await c.snapshot.create(sandbox.instanceId, { name: 'nightly', metadata: { run: '7' } });
+    expect(client.last('sandboxes.snapshot')[0]).toBe(sandbox.instanceId);
+    expect(snap).toMatchObject({
+      id: 'snap_live2',
+      provider: 'promigence',
+      metadata: { name: 'nightly', run: '7', sandboxId: sandbox.instanceId, tier: 'small', backgroundExecsKilled: 0 },
     });
-    await expect(c.snapshot.create(sandbox.instanceId)).rejects.toThrow(/does not create a snapshot from a running sandbox/);
+    await c.instances.create({ snapshotId: snap.id });
+    expect(arg(client.last('runs.start'), 0).snapshot).toBe('snap_live2');
+    await expect(provider.snapshot!.create('sbx_unknown')).rejects.toThrow(/snapshot create failed/);
+    client.snapshotsStore.pop();
 
     const list = await c.snapshot.list();
     expect(list.map((s) => [s.id, s.provider, s.metadata?.alias, s.metadata?.verified])).toEqual([['snap_1', 'promigence', 'myapp', true]]);

@@ -9,6 +9,7 @@ import { defineProvider, escapeShellArg, TIMEOUT_EXIT_CODE } from '@computesdk/p
 import type {
   CommandResult,
   CreateInstanceOptions,
+  CreateSnapshotOptions,
   FileEntry,
   InstanceInfo,
   ListSnapshotsOptions,
@@ -30,6 +31,7 @@ import type {
   OptimizeFor,
   SandboxCreateOpts,
   SandboxRecord,
+  SandboxSnapshotResult,
   SnapshotRecord,
   Tier,
 } from '@promigence/sdk';
@@ -635,12 +637,33 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
     },
 
     snapshot: {
-      create: async (_config: PromigenceConfig, instanceId: string) => {
-        throw unsupported(
-          `Promigence does not create a snapshot from a running sandbox (${instanceId}).`,
-          'Build one with the Promigence CLI (promigence snapshot create --image <image>) and pass its id or ' +
-            'alias to create() as templateId or snapshotId, or pass an image to create().'
-        );
+      /**
+       * A snapshot of the sandbox as it is now; the sandbox keeps running. Background execs are
+       * ended to take it (`metadata.backgroundExecsKilled`). Restore with `create({ snapshotId })`.
+       */
+      create: async (config: PromigenceConfig, instanceId: string, options?: CreateSnapshotOptions) => {
+        const client = clientFor(config);
+        let r: SandboxSnapshotResult;
+        try {
+          r = await client.sandboxes.snapshot(instanceId);
+        } catch (e) {
+          rethrow(e, 'snapshot create');
+        }
+        return {
+          id: r.snapshot_id,
+          provider: PROVIDER,
+          createdAt: new Date(),
+          metadata: {
+            ...(options?.metadata ?? {}),
+            ...(options?.name ? { name: options.name } : {}),
+            sandboxId: r.sandbox_id,
+            tier: r.tier,
+            ...(r.alias ? { alias: r.alias } : {}),
+            bytes: r.bytes?.allocated,
+            backgroundExecsKilled: r.background_execs_killed,
+            ...(typeof r.took_ms === 'number' ? { tookMs: r.took_ms } : {}),
+          },
+        };
       },
       list: async (config: PromigenceConfig, options?: ListSnapshotsOptions) => {
         const limit = snapshotLimit(options?.limit);
