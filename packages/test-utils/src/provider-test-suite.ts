@@ -8,7 +8,23 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOptions, InstanceInfo } from '@computesdk/provider';
+import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOptions, InstanceInfo, ProcessTier } from '@computesdk/provider';
+
+/** Which runtime served streaming and background processes in a conformance run. */
+export interface ProcessRuntimeCoverage {
+  provider: string;
+  streaming: ProcessTier | 'unknown';
+  processes: ProcessTier | 'unknown';
+}
+
+/** Coverage recorded by every suite run in this process, for reporting. */
+export const processRuntimeCoverage: ProcessRuntimeCoverage[] = [];
+
+/** Reads which runtime serves `onStdout`/`onStderr` and `startProcess` on an instance. */
+export function describeProcessRuntime(name: string, instance: ProviderInstance): ProcessRuntimeCoverage {
+  const runtime = instance.processRuntime;
+  return { provider: name, streaming: runtime?.streaming ?? 'unknown', processes: runtime?.processes ?? 'unknown' };
+}
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -28,18 +44,22 @@ export interface ProviderTestConfig {
   /** Base path for filesystem tests (default: '/tmp') */
   filesystemBasePath?: string;
   /**
-   * Whether to check live command output (`onStdout`/`onStderr`). Any provider
-   * can serve it — natively via `streamCommand`, otherwise through the daemond
-   * bridge — but the bridge needs a routable port inside the sandbox, so this is
-   * opt-in per provider rather than assumed.
+   * Whether to check live command output (`onStdout`/`onStderr`). Served
+   * natively via `streamCommand`, otherwise by the shell process tier over
+   * plain `runCommand` (or daemond when configured with `processRuntime: 'daemond'`).
    */
   supportsStreaming?: boolean;
   /**
-   * Whether to exercise `startProcess` (interactive stdin jobs via the
-   * in-sandbox daemon). Like streaming it runs through daemond, so it needs a
-   * sandbox where the daemon can boot — opt-in per provider.
+   * Whether to exercise `startProcess` (stdin, kill, parallel starts, reattach).
+   * Served natively via a `startProcess` hook, otherwise by the shell tier.
    */
   supportsProcesses?: boolean;
+  /**
+   * Expected runtime per capability, e.g. `{ streaming: 'native', processes: 'shell' }`.
+   * The suite always records coverage in {@link processRuntimeCoverage}; with
+   * this set it also fails when a provider silently changes tier.
+   */
+  expectProcessRuntime?: { streaming?: ProcessTier; processes?: ProcessTier };
 }
 
 /**
@@ -58,6 +78,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
     filesystemBasePath = '/tmp',
     supportsStreaming = false,
     supportsProcesses = false,
+    expectProcessRuntime,
   } = config;
 
   return () => {
@@ -118,6 +139,14 @@ export function defineProviderTests(config: ProviderTestConfig) {
       expect(result).toBeDefined();
       expect(result.exitCode).toBe(0);
     }, timeout);
+
+    it('should report which runtime serves streaming and processes', () => {
+      const coverage = describeProcessRuntime(name, sandbox);
+      processRuntimeCoverage.push(coverage);
+      console.info(`[conformance] ${name}: streaming=${coverage.streaming} processes=${coverage.processes}`);
+      if (expectProcessRuntime?.streaming) expect(coverage.streaming).toBe(expectProcessRuntime.streaming);
+      if (expectProcessRuntime?.processes) expect(coverage.processes).toBe(expectProcessRuntime.processes);
+    });
 
     it('should get sandbox info', async () => {
       const info = await sandbox.getInfo();
@@ -280,6 +309,22 @@ export function defineProviderTests(config: ProviderTestConfig) {
           expect(result.exitCode).not.toBe(0);
           expect(result.durationMs).toBeLessThan(30000);
         }, timeout);
+
+        if (!skipIntegration) {
+          it('should leave no delayed side effect after a timeout', async () => {
+            // A deadline that only stops the client leaves the command running;
+            // the marker proves the whole process tree died in the box.
+            const marker = `/tmp/csdk-timeout-marker-${Date.now()}`;
+            const result = await sandbox.runCommand(`sh -c 'sleep 4; touch ${marker}'`, {
+              timeout: 1500,
+              onStdout: () => {},
+            });
+            expect(result.exitCode).not.toBe(0);
+            await new Promise((resolve) => setTimeout(resolve, 6000));
+            const check = await sandbox.runCommand(`[ -e ${marker} ] && echo present || echo absent`);
+            expect(check.stdout.trim()).toBe('absent');
+          }, timeout);
+        }
       });
     }
 
@@ -309,6 +354,27 @@ export function defineProviderTests(config: ProviderTestConfig) {
 
           expect(result.exitCode).not.toBe(0);
           expect(result.signal).toBeTruthy();
+        }, timeout);
+
+        it('should start several processes in parallel', async () => {
+          const results = await Promise.all(
+            [0, 1, 2, 3].map((i) =>
+              sandbox.startProcess(`echo parallel-${i}`).then((proc) => proc.wait({ timeout: 30000 }))
+            )
+          );
+          results.forEach((result, i) => {
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe(`parallel-${i}\n`);
+          });
+        }, timeout);
+
+        it('should reattach to a shell-tier process from its job id', async () => {
+          if (sandbox.processRuntime?.processes !== 'shell' || !sandbox.attachProcess) return;
+          const proc = await sandbox.startProcess(`sh -c 'echo before; sleep 2; echo after'`);
+          const attached = await sandbox.attachProcess(proc.jobId);
+          const result = await attached.wait({ timeout: 30000 });
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toBe('before\nafter\n');
         }, timeout);
       });
     }
@@ -409,7 +475,7 @@ function createMockSandbox(config: ProviderTestConfig): ProviderInstance {
     },
 
     startProcess: async (): Promise<never> => {
-      throw new Error('daemond: not supported by mock');
+      throw new Error('startProcess is not supported by the mock sandbox');
     },
 
     getInfo: async (): Promise<InstanceInfo> => ({

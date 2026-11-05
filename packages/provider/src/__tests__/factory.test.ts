@@ -159,7 +159,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const sandbox = await provider.sandbox.create()
 
       const url = await sandbox.getUrl({ port: 8080, protocol: 'wss' })
@@ -214,7 +214,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const sandbox = await provider.sandbox.create()
       const onStdout = vi.fn()
       const onStderr = vi.fn()
@@ -299,7 +299,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const sandbox = await provider.sandbox.create()
 
       await expect(
@@ -338,7 +338,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const sandbox = await provider.sandbox.create()
       const onStdout = vi.fn()
       const result = await sandbox.runCommand('pwd', { onStdout })
@@ -396,7 +396,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const sandbox = await provider.sandbox.create()
       const onStdout = vi.fn()
       const result = await sandbox.runCommand('echo hi', { onStdout })
@@ -452,7 +452,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const sandbox = await provider.sandbox.create()
       const onStdout = vi.fn()
       const result = await sandbox.runCommand('echo hi', { onStdout })
@@ -496,7 +496,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const controller = new AbortController()
       controller.abort()
 
@@ -537,7 +537,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const controller = new AbortController()
       const createPromise = provider.sandbox.create({ signal: controller.signal })
       controller.abort()
@@ -578,7 +578,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const controller = new AbortController()
       const promise = provider.sandbox.create({ signal: controller.signal })
 
@@ -689,7 +689,7 @@ describe('Factory', () => {
         methods: { sandbox: methods }
       })
 
-      const provider = providerFactory({ apiKey: 'test-key' })
+      const provider = providerFactory({ apiKey: 'test-key', processRuntime: 'daemond' })
       const sandbox = await provider.sandbox.create()
 
       const onStdout = vi.fn()

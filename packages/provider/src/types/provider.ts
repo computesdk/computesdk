@@ -5,6 +5,9 @@
  */
 
 import type {
+  ProcessHandle,
+  ProcessTier,
+  StartProcessOptions,
   CreateInstanceOptions,
   CreateVolumeOptions,
   InstanceInterface,
@@ -25,6 +28,26 @@ export interface ProviderInstance<TInstance = any> extends Omit<InstanceInterfac
   getInstance(): TInstance;
   /** Destroy instance and clean up resources */
   destroy(): Promise<void>;
+  /** Which runtime serves streaming `runCommand` and `startProcess` on this instance. */
+  readonly processRuntime?: { streaming: ProcessTier; processes: ProcessTier };
+  /**
+   * Rebuilds a handle for a shell-tier process from its `jobId` — e.g. in a
+   * new client after a restart. Output replays from the start of the job's log.
+   */
+  attachProcess?(jobId: string, options?: StartProcessOptions): Promise<ProcessHandle>;
+}
+
+/**
+ * Selects the opt-in daemond runtime for background processes and streaming.
+ * Accepted in every provider's config, e.g. `e2b({ apiKey, processRuntime: 'daemond' })`.
+ */
+export interface ProcessRuntimeOptions {
+  /**
+   * `'shell'` (default): provider-native hooks, else POSIX-shell process records
+   * over plain `runCommand` — no Node, daemon or download in the instance.
+   * `'daemond'`: provider-native hooks, else the in-box daemond bridge.
+   */
+  processRuntime?: 'shell' | 'daemond';
 }
 
 /** @deprecated Use {@link ProviderInstance} instead. */

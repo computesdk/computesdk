@@ -23,6 +23,7 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:shell-docker": "COMPUTESDK_SHELL_DOCKER_TESTS=1 vitest run src/__tests__/shell-process-docker.test.ts",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
