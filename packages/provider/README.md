@@ -301,6 +301,7 @@ Each job is a directory `${TMPDIR:-/tmp}/.computesdk/jobs/<jobId>/` (mode 0700).
 - **kill** signals the whole process group. A streaming `runCommand`'s `timeout` is enforced in the box by a watchdog that SIGKILLs the group (exit code 124), so the deadline holds when the client is gone. Without `timeout` nothing kills the command.
 - **Reattach**: `instance.attachProcess(jobId)` rebuilds a handle in a new client.
 - **Retention**: a job directory is removed 10 minutes after exit (60s after a kill).
+- **Instances whose execs share no state** (a fresh container per command, e.g. archil disk exec): the first launch on an instance holds the command until a second exec confirms the job directory survived, so this is detected before anything runs. On such instances a streaming `runCommand` falls back to one plain exec with its output delivered at exit, and `startProcess` throws `ShellStateNotPersistentError`.
 - **Requirements**: `sh`, `setsid`, `mkfifo`, `kill`, `cat`, `dd`, `wc`, `tail`, `head`, `base64`, `mkdir`, `rm`, `mv`, `sleep`. A missing one fails with `ShellProcessUnsupportedError` naming it.
 
 The egress router (`CreateInstanceOptions.egress`) stays on daemond: its shim is a Node program, and daemond's bootstrap is what installs Node on images without it.

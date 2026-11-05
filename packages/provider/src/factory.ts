@@ -33,7 +33,7 @@ import type {
   ProcessRuntimeOptions,
   ProcessTier,
 } from './types/index.js';
-import { attachShellProcess, runCommandViaShell, startShellProcess, type CommandRunner } from './shell-process.js';
+import { ShellProcessRuntime } from './shell-process.js';
 import {
   daemonSeedScriptCommand,
   parseSeedInvocationOutput,
@@ -495,8 +495,8 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   private daemonStreamState?: DaemonStreamState;
   /** Which runtime serves streaming `runCommand` and `startProcess`. */
   readonly processRuntime: { streaming: ProcessTier; processes: ProcessTier };
-  /** The provider's plain `runCommand` — all the shell process tier needs. */
-  private readonly shellRunner: CommandRunner;
+  /** The shell process tier, built on the provider's plain `runCommand`. */
+  private readonly shell: ShellProcessRuntime;
   constructor(
     private instance: TInstance,
     instanceId: string,
@@ -513,7 +513,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
       streaming: methods.streamCommand ? 'native' : fallback,
       processes: methods.startProcess ? 'native' : fallback,
     };
-    this.shellRunner = (command, options) => this.methods.runCommand(this.instance, command, options);
+    this.shell = new ShellProcessRuntime((command, options) => this.methods.runCommand(this.instance, command, options));
     this.sandboxId = instanceId;
     this.provider = providerName;
 
@@ -603,7 +603,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
       }
 
       if (this.runtimeMode !== 'daemond') {
-        return await runCommandViaShell(this.shellRunner, command, options);
+        return await this.shell.runCommand(command, options);
       }
 
       const forwardedOptions: RunCommandOptions = { ...options };
@@ -776,11 +776,11 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
       return handle.runtime ? handle : Object.assign(handle, { runtime: 'native' as const });
     }
     if (this.runtimeMode === 'daemond') return await this.startDaemondProcess(command, options);
-    return await startShellProcess(this.shellRunner, command, options);
+    return await this.shell.startProcess(command, options);
   }
 
   async attachProcess(jobId: string, options: StartProcessOptions = {}): Promise<ProcessHandle> {
-    return attachShellProcess(this.shellRunner, jobId, options);
+    return this.shell.attachProcess(jobId, options);
   }
 
   /**

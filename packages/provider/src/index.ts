@@ -78,6 +78,8 @@ export {
   readShellJob,
   parseFramedLog,
   ShellProcessUnsupportedError,
+  ShellStateNotPersistentError,
+  ShellProcessRuntime,
 } from './shell-process';
 export type { CommandRunner, ShellProcessHandle, ShellProcessOptions, ShellJobRead, ShellLogRecord } from './shell-process';
 export { SHELL_TIER_TOOLS } from './shell-scripts';

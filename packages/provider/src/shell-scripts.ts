@@ -103,6 +103,7 @@ export function supervisorFile(): string {
     'D=$1',
     'cd / || exit 1',
     '. "$D/conf"',
+    'echo $$ > "$D/sup"',
     NAP,
     // Two pumps append to one log, so each record is written under a mkdir lock.
     'lock() { until mkdir "$D/lock" 2>/dev/null; do :; done; }',
@@ -126,6 +127,13 @@ export function supervisorFile(): string {
     // Read-write open never blocks on a FIFO and keeps a writer alive until closeStdin.
     '  sleep 2147483647 1<>"$D/in" & echo $! > "$D/holder"',
     '  IN="$D/in"',
+    'fi',
+    // With HOLD, the command waits for the client's confirm exec (`go`). An
+    // instance whose execs share no state never confirms, and the command
+    // becomes a no-op instead of running behind the client's back.
+    'if [ "$HOLD" = 1 ]; then',
+    '  i=0; while [ ! -f "$D/go" ] && [ "$i" -lt 600 ]; do nap; i=$((i+1)); done',
+    '  [ -f "$D/go" ] || printf \'exit 125\\n\' > "$D/run.sh"',
     'fi',
     // Not a group leader here, so setsid does not fork: $! is the new pgid.
     'setsid sh "$D/run.sh" < "$IN" > "$D/o" 2> "$D/e" &',
@@ -165,6 +173,8 @@ export function launchScript(input: {
   stdin?: boolean;
   timeoutMs?: number;
   retentionMs?: number;
+  /** Hold the command until {@link confirmScript} runs. */
+  hold?: boolean;
 }): string {
   const timeout = input.timeoutMs !== undefined ? seconds(Math.max(1, input.timeoutMs)) : undefined;
   const retention = Math.ceil((input.retentionMs ?? DEFAULT_RETENTION_MS) / 1000);
@@ -172,6 +182,7 @@ export function launchScript(input: {
     `TIMEOUT=${timeout ? timeout.exact : ''}`,
     `TIMEOUT_CEIL=${timeout ? timeout.ceil : ''}`,
     `STDIN=${input.stdin ? 1 : 0}`,
+    `HOLD=${input.hold ? 1 : 0}`,
     `RETENTION=${retention}`,
     `KILLED_RETENTION=${Math.min(retention, Math.ceil(KILLED_RETENTION_MS / 1000))}`,
   ].join('\n') + '\n';
@@ -187,9 +198,10 @@ export function launchScript(input: {
     `printf '%s' ${shQuote(conf)} > "$D/conf"`,
     'N=$(command -v nohup || true)',
     '$N setsid sh "$D/sup.sh" "$D" > /dev/null 2>&1 < /dev/null &',
-    // The supervisor writes pid once the command is spawned; wait up to ~5s.
-    'i=0; while [ ! -f "$D/pid" ] && [ "$i" -lt 50 ]; do sleep 0.1 2>/dev/null || sleep 1; i=$((i+1)); done',
-    `if [ -f "$D/pid" ]; then echo "${REPLY_MARKER} ok $(cat "$D/pid")"; else echo "${REPLY_MARKER} error supervisor-did-not-start"; fi`,
+    // Wait up to ~5s for the supervisor (and, unless held, the command) to start.
+    `W="$D/${input.hold ? 'sup' : 'pid'}"`,
+    'i=0; while [ ! -f "$W" ] && [ "$i" -lt 50 ]; do sleep 0.1 2>/dev/null || sleep 1; i=$((i+1)); done',
+    `if [ -f "$W" ]; then echo "${REPLY_MARKER} ok $(cat "$D/pid" 2>/dev/null || echo -)"; else echo "${REPLY_MARKER} error supervisor-did-not-start"; fi`,
   ].join('\n');
 }
 
@@ -239,6 +251,16 @@ export function readScript(input: {
     `echo "${REPLY_END}"`,
   );
   return lines.join('\n');
+}
+
+/** One exec that releases a held job; `missing` means this instance's execs share no state. */
+export function confirmScript(jobId: string): string {
+  return [
+    jobDir(jobId),
+    `[ -d "$D" ] || { echo "${REPLY_MARKER} missing"; exit 0; }`,
+    ': > "$D/go"',
+    `echo "${REPLY_MARKER} ok"`,
+  ].join('\n');
 }
 
 /** One exec that appends base64-decoded bytes to the job's stdin FIFO. */

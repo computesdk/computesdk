@@ -19,6 +19,7 @@ import {
   REPLY_MARKER,
   assertJobId,
   closeStdinScript,
+  confirmScript,
   killScript,
   launchScript,
   readScript,
@@ -47,9 +48,17 @@ const SIGNAL_NAMES: Record<number, string> = {
 /** The instance lacks a tool the shell tier needs. */
 export class ShellProcessUnsupportedError extends Error {
   readonly code = 'unsupported';
-  constructor(readonly missing: string) {
-    super(`shell-process: unsupported — the instance has no \`${missing}\`, which the shell process tier needs`);
+  constructor(readonly missing: string, message?: string) {
+    super(message ?? `shell-process: unsupported — the instance has no \`${missing}\`, which the shell process tier needs`);
     this.name = 'ShellProcessUnsupportedError';
+  }
+}
+
+/** The instance's execs share no files or processes (e.g. a fresh container per exec), so jobs cannot outlive one exec. */
+export class ShellStateNotPersistentError extends ShellProcessUnsupportedError {
+  constructor() {
+    super('persistent state', 'shell-process: unsupported — this instance does not keep files or processes between commands, so background processes cannot run on it');
+    this.name = 'ShellStateNotPersistentError';
   }
 }
 
@@ -60,6 +69,12 @@ export interface ShellProcessOptions extends StartProcessOptions {
   retentionMs?: number;
   /** Raw log bytes per read exec. Default 16 KiB. */
   maxReadBytes?: number;
+  /**
+   * Hold the command until a second exec confirms the job directory is still
+   * there, so an instance whose execs share no state is detected before the
+   * command runs ({@link ShellStateNotPersistentError}). Costs one exec.
+   */
+  confirmStart?: boolean;
 }
 
 /** A process handle served by the shell tier. */
@@ -174,6 +189,7 @@ async function launchShellJob(run: CommandRunner, jobId: string, command: string
       stdin: options.stdin === true,
       timeoutMs: options.timeoutMs,
       retentionMs: options.retentionMs,
+      hold: options.confirmStart,
     })),
     { timeout: 60_000 }
   );
@@ -357,6 +373,12 @@ export async function startShellProcess(
 ): Promise<ShellProcessHandle> {
   const jobId = createJobId();
   const pid = await launchShellJob(run, jobId, command, options);
+  if (options.confirmStart) {
+    const result = await run(singleLine(confirmScript(jobId)), { timeout: 60_000 });
+    const verdict = replyLines(result, 'start confirm')[0].trim().split(/\s+/)[1];
+    if (verdict === 'missing') throw new ShellStateNotPersistentError();
+    if (verdict !== 'ok') throw new Error(`shell-process: process did not start (${verdict})`);
+  }
   const job = new ShellJob(run, jobId, options, pid);
   if (options.onStdout || options.onStderr || options.onExit) job.watch();
   return job;
@@ -386,10 +408,12 @@ export function attachShellProcess(
 export async function runCommandViaShell(
   run: CommandRunner,
   command: string,
-  options: RunCommandOptions
+  options: RunCommandOptions,
+  shellOptions: Pick<ShellProcessOptions, 'confirmStart' | 'maxReadBytes'> = {}
 ): Promise<CommandResult> {
   const startedAt = Date.now();
   const job = (await startShellProcess(run, command, {
+    ...shellOptions,
     cwd: options.cwd,
     env: options.env,
     timeoutMs: options.timeout,
@@ -421,5 +445,52 @@ export async function runCommandViaShell(
       if (failures >= 3) throw error;
       await new Promise((resolve) => setTimeout(resolve, 500 * failures));
     }
+  }
+}
+
+/**
+ * The shell tier for one instance. The first launch is held until a confirm
+ * exec proves the instance keeps state between commands; the verdict is
+ * cached. On an instance that keeps none, streaming `runCommand` falls back to
+ * one plain exec with its output delivered at exit, and `startProcess` throws
+ * {@link ShellStateNotPersistentError}.
+ */
+export class ShellProcessRuntime {
+  private state: 'unknown' | 'persistent' | 'ephemeral' = 'unknown';
+
+  constructor(private readonly run: CommandRunner) {}
+
+  async startProcess(command: string, options: ShellProcessOptions = {}): Promise<ShellProcessHandle> {
+    if (this.state === 'ephemeral') throw new ShellStateNotPersistentError();
+    try {
+      const handle = await startShellProcess(this.run, command, { ...options, confirmStart: this.state !== 'persistent' });
+      this.state = 'persistent';
+      return handle;
+    } catch (error) {
+      if (error instanceof ShellStateNotPersistentError) this.state = 'ephemeral';
+      throw error;
+    }
+  }
+
+  async runCommand(command: string, options: RunCommandOptions): Promise<CommandResult> {
+    if (this.state !== 'ephemeral') {
+      try {
+        const result = await runCommandViaShell(this.run, command, options, { confirmStart: this.state !== 'persistent' });
+        this.state = 'persistent';
+        return result;
+      } catch (error) {
+        if (!(error instanceof ShellStateNotPersistentError)) throw error;
+        this.state = 'ephemeral';
+      }
+    }
+    const { onStdout, onStderr, ...plain } = options;
+    const result = await this.run(command, plain);
+    if (result.stdout) onStdout?.(result.stdout);
+    if (result.stderr) onStderr?.(result.stderr);
+    return result;
+  }
+
+  attachProcess(jobId: string, options: ShellProcessOptions = {}): ShellProcessHandle {
+    return attachShellProcess(this.run, jobId, options);
   }
 }

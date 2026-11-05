@@ -4,6 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import {
+  ShellProcessRuntime,
   attachShellProcess,
   runCommandViaShell,
   startShellProcess,
@@ -105,5 +106,42 @@ describe('shell process tier (host sh)', () => {
     await proc.write('x\ny\n')
     await proc.closeStdin()
     expect((await proc.wait({ timeout: 20_000 })).stdout).toBe('x\ny\n')
+  }, 30_000)
+
+  it('detects an instance whose execs share no state and never runs the command twice', async () => {
+    // Every exec gets its own TMPDIR, like a fresh container per command.
+    const counter = path.join(tmp, `ran-${Date.now()}`)
+    const ephemeral: CommandRunner = (command) =>
+      new Promise((resolve, reject) => {
+        const started = Date.now()
+        const child = spawn('/bin/sh', ['-c', command], { env: { ...process.env, TMPDIR: fs.mkdtempSync(path.join(tmp, 'exec-')) } })
+        let stdout = ''
+        let stderr = ''
+        child.stdout.on('data', (c) => { stdout += String(c) })
+        child.stderr.on('data', (c) => { stderr += String(c) })
+        child.on('error', reject)
+        child.on('close', (code) => resolve({ stdout, stderr, exitCode: code ?? -1, durationMs: Date.now() - started }))
+      })
+    const runtime = new ShellProcessRuntime(ephemeral)
+    const chunks: string[] = []
+    const result = await runtime.runCommand(`echo x >> ${counter}; echo hi`, { onStdout: (c) => chunks.push(c) })
+    expect(result).toMatchObject({ exitCode: 0, stdout: 'hi\n' })
+    expect(chunks).toEqual(['hi\n'])
+    await new Promise((r) => setTimeout(r, 1000))
+    expect(fs.readFileSync(counter, 'utf8')).toBe('x\n')
+    await expect(runtime.startProcess('echo hi')).rejects.toMatchObject({ code: 'unsupported' })
+  }, 30_000)
+
+  it('confirms state once, then launches without the hold', async () => {
+    const launches: string[] = []
+    const recording: CommandRunner = (command, options) => { launches.push(command); return run(command, options) }
+    const runtime = new ShellProcessRuntime(recording)
+    const first = await runtime.startProcess('echo one')
+    expect((await first.wait({ timeout: 20_000 })).stdout).toBe('one\n')
+    const execsForFirst = launches.length
+    const second = await runtime.startProcess('echo two')
+    expect((await second.wait({ timeout: 20_000 })).stdout).toBe('two\n')
+    // Held start: launch + confirm; unheld start: launch only.
+    expect(launches.length - execsForFirst).toBeLessThan(execsForFirst)
   }, 30_000)
 })

@@ -55,6 +55,11 @@ describe('shell scripts', () => {
     expect(script).toContain('umask 077')
     expect(script).toContain('TIMEOUT=1.500')
     expect(script).toContain('STDIN=1')
+    expect(script).toContain('HOLD=0')
+    expect(script).toContain('W="$D/pid"')
+    const held = launchScript({ jobId: 'j1', command: 'x', hold: true })
+    expect(held).toContain('HOLD=1')
+    expect(held).toContain('W="$D/sup"')
   })
 
   it('supervises with FIFOs, a stdin holder, a group-killing watchdog and exit-after-drain', () => {
@@ -98,6 +103,7 @@ function methods(extra: Record<string, unknown> = {}) {
   const runCommand = vi.fn(async (_box: unknown, wire: string): Promise<CommandResult> => {
     const encoded = /printf '%s' '([A-Za-z0-9+/=]+)' \| base64 -d\)"$/.exec(wire)
     const command = encoded ? Buffer.from(encoded[1], 'base64').toString('utf8') : wire
+    if (command.includes(': > "$D/go"')) return { stdout: `${REPLY_MARKER} ok\n`, stderr: '', exitCode: 0, durationMs: 1 }
     if (command.includes('sup.sh')) return { stdout: `${REPLY_MARKER} ok 4242\n`, stderr: '', exitCode: 0, durationMs: 1 }
     if (command.includes('out.log')) {
       const log = Buffer.from('O6\nshell\n').toString('base64')
