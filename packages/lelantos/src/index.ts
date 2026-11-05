@@ -72,7 +72,11 @@ function describeError(error: unknown): string {
   const cause = (error as { cause?: unknown }).cause;
   if (!cause) return error.message;
   const code = (cause as { code?: unknown }).code;
-  const causeMessage = cause instanceof Error ? cause.message : String(cause);
+  // Happy-eyeballs failures arrive as an AggregateError with an empty message.
+  const inner = (cause as { errors?: unknown }).errors;
+  const causeMessage = Array.isArray(inner) && inner.length > 0
+    ? inner.map((e) => (e instanceof Error ? e.message : String(e))).join('; ')
+    : cause instanceof Error ? cause.message : String(cause);
   const detail = typeof code === 'string' && !causeMessage.includes(code) ? `${code}: ${causeMessage}` : causeMessage;
   return detail && !error.message.includes(detail) ? `${error.message} (${detail})` : error.message;
 }
