@@ -45,6 +45,10 @@ jobs:
     - name: Install dependencies
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm install --ignore-scripts
+
+    - name: Test Namespace vault plumbing (offline)
+      if: steps.skip_check.outputs.skip != 'true'
+      run: node --test scripts/test-namespace-vault.mjs
     
     - name: Build packages
       if: steps.skip_check.outputs.skip != 'true'
@@ -72,10 +76,13 @@ jobs:
       run: pnpm lint
 
   provider-integration-tests:
-    runs-on: namespace-profile-default
+    runs-on: ${{ matrix.provider == 'e2b' && 'namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal' || 'namespace-profile-default' }}
+    permissions:
+      contents: read
+      id-token: write
     needs: test  # Only run if basic tests pass
-    # Run on all pull requests (but skip for changeset releases)
-    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+    # Never grant vault access to code from a fork.
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/') && github.event.pull_request.head.repo.full_name == github.repository
 
     strategy:
       matrix:
@@ -97,6 +104,31 @@ jobs:
       with:
         node-version: '22'
         cache: 'pnpm'
+
+    - name: Seed Namespace token file
+      if: matrix.provider == 'e2b'
+      env:
+        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
+      run: |
+        if [ ! -f /var/run/nsc/token.json ]; then
+          if [ -z "${NSC_TOKEN:-}" ]; then
+            echo "::error::Namespace vault authentication requires NSC_TOKEN or a runner workload token" >&2
+            exit 1
+          fi
+          umask 077
+          mkdir -p /var/run/nsc
+          case "$NSC_TOKEN" in
+            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+          esac
+          chmod 600 /var/run/nsc/token.json
+          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
+          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
+        fi
+
+    - name: Set up Namespace vault CLI
+      if: matrix.provider == 'e2b'
+      uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
     
     - name: Install dependencies
       run: pnpm install --ignore-scripts
@@ -107,15 +139,13 @@ jobs:
     - name: Run E2B Integration Tests
       if: matrix.provider == 'e2b'
       env:
-         E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
          COMPUTESDK_API_KEY: ${{ secrets.COMPUTESDK_API_KEY }}
       run: |
-         if [ -n "$E2B_API_KEY" ]; then
-           echo "Running E2B integration tests with real API..."
-           pnpm --filter @computesdk/e2b test
-         else
-           echo "Skipping E2B integration tests - no API key provided"
-         fi
+         unset E2B_API_KEY
+         . scripts/load-vault-secrets.sh '^(E2B_API_KEY|COMPUTESDK_API_KEY)='
+         : "${E2B_API_KEY:?Namespace vault did not supply E2B_API_KEY}"
+         echo "Running E2B integration tests with real API..."
+         pnpm --filter @computesdk/e2b test
         
     - name: Run Vercel Integration Tests
       if: matrix.provider == 'vercel'
@@ -188,9 +218,12 @@ jobs:
          fi
 
   computesdk-integration-tests:
-    runs-on: namespace-profile-default
+    runs-on: ${{ matrix.provider == 'e2b' && 'namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal' || 'namespace-profile-default' }}
+    permissions:
+      contents: read
+      id-token: write
     needs: test
-    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/') && github.event.pull_request.head.repo.full_name == github.repository
 
     strategy:
       matrix:
@@ -210,6 +243,31 @@ jobs:
       with:
         node-version: '22'
         cache: 'pnpm'
+
+    - name: Seed Namespace token file
+      if: matrix.provider == 'e2b'
+      env:
+        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
+      run: |
+        if [ ! -f /var/run/nsc/token.json ]; then
+          if [ -z "${NSC_TOKEN:-}" ]; then
+            echo "::error::Namespace vault authentication requires NSC_TOKEN or a runner workload token" >&2
+            exit 1
+          fi
+          umask 077
+          mkdir -p /var/run/nsc
+          case "$NSC_TOKEN" in
+            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+          esac
+          chmod 600 /var/run/nsc/token.json
+          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
+          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
+        fi
+
+    - name: Set up Namespace vault CLI
+      if: matrix.provider == 'e2b'
+      uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
     
     - name: Install dependencies
       run: pnpm install --ignore-scripts
@@ -221,7 +279,6 @@ jobs:
       env:
         COMPUTESDK_INTEGRATION: "1"
         TEST_PROVIDER: ${{ matrix.provider }}
-        E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -237,10 +294,9 @@ jobs:
       run: |
         case "$TEST_PROVIDER" in
           e2b)
-            if [ -z "$E2B_API_KEY" ]; then
-              echo "Skipping computesdk integration for e2b - missing E2B_API_KEY"
-              exit 0
-            fi
+            unset E2B_API_KEY
+            . scripts/load-vault-secrets.sh '^(E2B_API_KEY)='
+            : "${E2B_API_KEY:?Namespace vault did not supply E2B_API_KEY}"
             ;;
           vercel)
             if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_TEAM_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
