@@ -33,7 +33,10 @@ export interface SshExecRequest {
    * on the shared bridge can't impersonate the VM.
    */
   expectedHostFingerprint?: string;
-  /** Command run through `sh -lc` in the guest. */
+  /**
+   * Command run through `sh -c` in the guest (not a login shell: images'
+   * profile scripts can print banners into stdout).
+   */
   command: string;
   cwd?: string;
   env?: Record<string, string>;
@@ -53,6 +56,10 @@ export interface SshExecResult {
 // known_hosts dir — guest IPs recycle on the shared bridge, so keying on the
 // IP would both pin the wrong identity and throw false mismatches.
 const knownHostsDir = join(tmpdir(), 'ec2-firecrab-known-hosts');
+
+// How long past the guest-side deadline the client waits before dropping
+// the connection itself.
+const TIMEOUT_GRACE_MS = 5_000;
 
 function sshArgs(
   req: SshExecRequest,
@@ -87,11 +94,15 @@ function sshExec(
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
 
+    // The guest enforces the deadline itself (see runSshCommand); this is a
+    // backstop for a dead connection. A timeout is a failed command, not an
+    // exception, so callers still get the partial output.
+    let timedOut = false;
     const timer = req.timeoutMs
       ? setTimeout(() => {
+          timedOut = true;
           child.kill('SIGKILL');
-          reject(new Error(`ec2-firecrab runCommand timed out after ${req.timeoutMs}ms`));
-        }, req.timeoutMs)
+        }, req.timeoutMs + TIMEOUT_GRACE_MS)
       : undefined;
 
     child.stdout.on('data', (chunk: Buffer) => {
@@ -108,10 +119,13 @@ function sshExec(
     });
     child.on('close', (code) => {
       if (timer) clearTimeout(timer);
+      const err = Buffer.concat(stderr).toString();
       resolve({
         stdout: Buffer.concat(stdout).toString(),
-        stderr: Buffer.concat(stderr).toString(),
-        exitCode: code ?? 1,
+        stderr: timedOut
+          ? `${err}ec2-firecrab: command timed out after ${req.timeoutMs}ms\n`
+          : err,
+        exitCode: timedOut ? 124 : code ?? 1,
         durationMs: Date.now() - started,
       });
     });
@@ -191,10 +205,15 @@ export async function runSshCommand(req: SshExecRequest): Promise<SshExecResult>
         .join('')
     : '';
 
-  const remote =
-    (req.cwd ? `cd ${quote(req.cwd)} && ` : '') +
-    envPrefix +
-    `sh -lc ${quote(req.command)}`;
+  // Without a tty, dropping the ssh connection leaves the guest command
+  // running, so the deadline is enforced in the guest: `timeout` kills the
+  // command (GNU timeout kills its whole process group).
+  const inner = `sh -c ${quote(req.command)}`;
+  const timeoutSecs = req.timeoutMs ? Math.max(1, Math.ceil(req.timeoutMs / 1000)) : 0;
+  const run = timeoutSecs
+    ? `if command -v timeout >/dev/null 2>&1; then ${envPrefix}timeout -s KILL ${timeoutSecs} ${inner}; else ${envPrefix}${inner}; fi`
+    : `${envPrefix}${inner}`;
+  const remote = (req.cwd ? `cd ${quote(req.cwd)} && ` : '') + run;
 
   const { khPath, alias } = await pinGuestHostKey(req, keyPath);
   return sshExec(sshArgs(req, keyPath, khPath, alias, 'yes'), remote, req);
