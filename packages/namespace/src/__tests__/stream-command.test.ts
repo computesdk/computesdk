@@ -137,7 +137,7 @@ describe('namespace streamCommand', () => {
     const result = await sbx.runCommand('long', { onStdout: () => {}, onStderr: (t) => stderrChunks.push(t) });
     expect(result.stdout).toBe('partial\n');
     expect(result.exitCode).toBe(-1);
-    expect(result.stderr).toContain('Namespace command stream lost before exit: terminated');
+    expect(result.stderr).toBe('terminated');
     expect(stderrChunks.join('')).toBe(result.stderr);
   });
 

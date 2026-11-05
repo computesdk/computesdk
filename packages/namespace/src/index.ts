@@ -359,184 +359,118 @@ function commandTimeoutMs(options?: RunCommandOptions): number | undefined {
     : undefined;
 }
 
-/** One `RunCommandResponse` in Connect JSON: `data` is base64, `stream` an enum name or number. */
-interface WireRunCommandResponse {
+/** One `RunCommandResponse` (or end-of-stream message) in Connect JSON; `data` is base64. */
+interface WireRunCommandMessage {
   stream?: 'STDOUT' | 'STDERR' | 'STREAM_UNKNOWN' | number;
   data?: string;
   exitStatus?: { exitCode?: number };
+  error?: { code?: string; message?: string };
 }
 
-/** Connect envelope flags: bit 0 compressed, bit 1 end-of-stream. */
-const CONNECT_FLAG_COMPRESSED = 0x01;
 const CONNECT_FLAG_END_STREAM = 0x02;
 
-/**
- * Splits a Connect server-streaming body into its enveloped frames
- * (1 flag byte, 4-byte big-endian length, payload).
- */
-async function* connectFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<{ flags: number; payload: Uint8Array }> {
+/** Splits a Connect streaming body into frames: 1 flag byte, 4-byte big-endian length, JSON payload. */
+async function* connectFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<{ flags: number; message: WireRunCommandMessage }> {
   const reader = body.getReader();
   let buffer = new Uint8Array(0);
-  try {
-    for (;;) {
-      while (buffer.length >= 5) {
-        const length = new DataView(buffer.buffer, buffer.byteOffset, 5).getUint32(1);
-        if (buffer.length < 5 + length) break;
-        yield { flags: buffer[0], payload: buffer.subarray(5, 5 + length) };
-        buffer = buffer.subarray(5 + length);
-      }
-      const { done, value } = await reader.read();
-      if (done) {
-        if (buffer.length > 0) throw new Error('stream ended inside a frame');
-        return;
-      }
-      const next = new Uint8Array(buffer.length + value.length);
-      next.set(buffer);
-      next.set(value, buffer.length);
-      buffer = next;
+  for (;;) {
+    while (buffer.length >= 5) {
+      const length = new DataView(buffer.buffer, buffer.byteOffset, 5).getUint32(1);
+      if (buffer.length < 5 + length) break;
+      yield { flags: buffer[0], message: JSON.parse(new TextDecoder().decode(buffer.subarray(5, 5 + length))) };
+      buffer = buffer.subarray(5 + length);
     }
-  } finally {
-    reader.releaseLock();
+    const { done, value } = await reader.read();
+    if (done) {
+      if (buffer.length > 0) throw new Error('stream ended inside a frame');
+      return;
+    }
+    const next = new Uint8Array(buffer.length + value.length);
+    next.set(buffer);
+    next.set(value, buffer.length);
+    buffer = next;
   }
 }
 
 /**
- * Runs `fullCommand` over CommandService.RunCommand, the server-streaming
- * twin of RunCommandSync, calling `onStdout`/`onStderr` per chunk as it arrives.
- *
- * Lifecycle matches `streamCommandViaProcess`: a failure before the stream
- * opens is exit 127, the caller's `timeout` is exit 124 (sent as
- * Connect-Timeout-Ms so the server stops the command, and enforced by a client
- * abort), and a stream lost before its exit status is exit -1 with what was
- * received so far. RunCommand has no status or buffered-output call to recover
- * a dropped stream, so -1 is final.
+ * Streams `fullCommand` over CommandService.RunCommand. Exit codes follow the
+ * other native streamers: timeout 124, failure before any output 127, stream
+ * lost before its exit status -1 (RunCommand has no way to recover it).
  */
-async function streamNamespaceCommand(
-  sandbox: NamespaceSandbox,
-  fullCommand: string,
-  options: RunCommandOptions
-): Promise<CommandResult> {
+async function streamNamespaceCommand(sandbox: NamespaceSandbox, fullCommand: string, options: RunCommandOptions): Promise<CommandResult> {
   const startTime = Date.now();
   const timeoutMs = commandTimeoutMs(options);
   const controller = new AbortController();
-  let timedOut = false;
-  const timer = timeoutMs === undefined
-    ? undefined
-    : setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-      }, timeoutMs);
-
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
   let stdout = '';
   let stderr = '';
+  let exitCode: number | undefined;
   const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
-  const emitStdout = (text: string) => {
+  // Called without bytes, flushes a multi-byte character split across chunks.
+  const emit = (stream: 'stdout' | 'stderr', bytes?: Uint8Array) => {
+    const text = decoders[stream].decode(bytes, { stream: bytes !== undefined });
     if (!text) return;
-    stdout += text;
-    options.onStdout?.(text);
-  };
-  const emitStderr = (text: string) => {
-    if (!text) return;
-    stderr += text;
-    options.onStderr?.(text);
-  };
-  const flush = () => {
-    emitStdout(decoders.stdout.decode());
-    emitStderr(decoders.stderr.decode());
-  };
-  const result = (exitCode: number): CommandResult => ({ stdout, stderr, exitCode, durationMs: Date.now() - startTime });
-  const timeoutResult = () => {
-    flush();
-    return result(TIMEOUT_EXIT_CODE);
+    if (stream === 'stderr') {
+      stderr += text;
+      options.onStderr?.(text);
+    } else {
+      stdout += text;
+      options.onStdout?.(text);
+    }
   };
 
   try {
-    const requestBody = new TextEncoder().encode(JSON.stringify({
+    const body = new TextEncoder().encode(JSON.stringify({
       instanceId: sandbox.instanceId,
       targetContainerName: sandbox.targetContainerName,
       command: { command: ['sh', '-c', fullCommand] },
     }));
-    const envelope = new Uint8Array(5 + requestBody.length);
-    new DataView(envelope.buffer).setUint32(1, requestBody.length);
-    envelope.set(requestBody, 5);
+    const envelope = new Uint8Array(5 + body.length);
+    new DataView(envelope.buffer).setUint32(1, body.length);
+    envelope.set(body, 5);
 
-    let response: Response | undefined;
-    for (let attempt = 0; !response; attempt++) {
-      try {
-        response = await fetch(`${sandbox.commandServiceEndpoint}${COMMAND_SERVICE.RUN_COMMAND}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/connect+json',
-            'Connect-Protocol-Version': '1',
-            'Authorization': `Bearer ${sandbox.token}`,
-            ...(timeoutMs !== undefined ? { 'Connect-Timeout-Ms': String(timeoutMs) } : {}),
-          },
-          body: envelope,
-          signal: controller.signal,
-        });
-      } catch (error) {
-        const delay = RETRY_DELAYS_MS[attempt];
-        if (!timedOut && delay !== undefined && retryable(COMMAND_SERVICE.RUN_COMMAND, { error })) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          continue;
-        }
-        throw error;
-      }
-    }
-
+    const response = await fetch(`${sandbox.commandServiceEndpoint}${COMMAND_SERVICE.RUN_COMMAND}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/connect+json',
+        'Connect-Protocol-Version': '1',
+        'Authorization': `Bearer ${sandbox.token}`,
+        ...(timeoutMs !== undefined ? { 'Connect-Timeout-Ms': String(timeoutMs) } : {}),
+      },
+      body: envelope,
+      signal: controller.signal,
+    });
     if (!response.ok || !response.body) {
-      const detail = await errorDetail(response);
-      await response.body?.cancel().catch(() => undefined);
-      const deadline = timedOut || (timeoutMs !== undefined && detail.startsWith(': deadline_exceeded'));
-      return { stdout: '', stderr: `Namespace API error: ${response.status} ${response.statusText}${detail}`, exitCode: deadline ? TIMEOUT_EXIT_CODE : START_FAILURE_EXIT_CODE, durationMs: Date.now() - startTime };
+      throw new Error(`Namespace API error: ${response.status} ${response.statusText}${await errorDetail(response)}`);
     }
 
-    let exitCode: number | undefined;
-    try {
-      for await (const frame of connectFrames(response.body)) {
-        if (frame.flags & CONNECT_FLAG_COMPRESSED) throw new Error('unexpected compressed frame');
-        const message = JSON.parse(new TextDecoder().decode(frame.payload));
-        if (frame.flags & CONNECT_FLAG_END_STREAM) {
-          const error = (message as { error?: { code?: string; message?: string } }).error;
-          if (error) {
-            flush();
-            if (error.code === 'deadline_exceeded' && timeoutMs !== undefined) return result(TIMEOUT_EXIT_CODE);
-            // An error before any output is a failure to run the command at all.
-            const detail = `Namespace API error: ${[error.code, error.message].filter(Boolean).join(': ')}`;
-            const started = stdout !== '' || stderr !== '' || exitCode !== undefined;
-            emitStderr(stderr && !stderr.endsWith('\n') ? `\n${detail}` : detail);
-            return result(started ? exitCode ?? -1 : START_FAILURE_EXIT_CODE);
-          }
-          break;
-        }
-        const chunk = message as WireRunCommandResponse;
-        if (chunk.data) {
-          const bytes = Buffer.from(chunk.data, 'base64');
-          if (chunk.stream === 'STDERR' || chunk.stream === 2) emitStderr(decoders.stderr.decode(bytes, { stream: true }));
-          else emitStdout(decoders.stdout.decode(bytes, { stream: true }));
-        }
-        if (chunk.exitStatus) exitCode = chunk.exitStatus.exitCode ?? 0;
+    for await (const { flags, message } of connectFrames(response.body)) {
+      if (flags & CONNECT_FLAG_END_STREAM) {
+        if (message.error) throw new Error(`Namespace API error: ${[message.error.code, message.error.message].filter(Boolean).join(': ')}`);
+        break;
       }
-    } catch (error) {
-      if (timedOut) return timeoutResult();
-      flush();
-      emitStderr(`${stderr && !stderr.endsWith('\n') ? '\n' : ''}Namespace command stream lost before exit: ${error instanceof Error ? error.message : String(error)}`);
-      return result(exitCode ?? -1);
+      if (message.data) emit(message.stream === 'STDERR' || message.stream === 2 ? 'stderr' : 'stdout', Buffer.from(message.data, 'base64'));
+      if (message.exitStatus) exitCode = message.exitStatus.exitCode ?? 0;
     }
-
-    flush();
-    if (exitCode === undefined) {
-      if (timedOut) return result(TIMEOUT_EXIT_CODE);
-      emitStderr(`${stderr && !stderr.endsWith('\n') ? '\n' : ''}Namespace command stream ended without an exit status`);
-      return result(-1);
-    }
-    return result(exitCode);
+    if (exitCode === undefined) throw new Error('Namespace command stream ended without an exit status');
   } catch (error) {
-    if (timedOut) return timeoutResult();
-    return { stdout, stderr: stderr + (error instanceof Error ? error.message : String(error)), exitCode: START_FAILURE_EXIT_CODE, durationMs: Date.now() - startTime };
+    emit('stdout');
+    emit('stderr');
+    const reason = error instanceof Error ? error.message : String(error);
+    if (controller.signal.aborted || (timeoutMs !== undefined && reason.includes('deadline_exceeded'))) {
+      exitCode = TIMEOUT_EXIT_CODE;
+    } else if (exitCode === undefined) {
+      exitCode = stdout || stderr ? -1 : START_FAILURE_EXIT_CODE;
+      const text = `${stderr && !stderr.endsWith('\n') ? '\n' : ''}${reason}`;
+      stderr += text;
+      options.onStderr?.(text);
+    }
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
+    clearTimeout(timer);
   }
+  emit('stdout');
+  emit('stderr');
+  return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
 }
 
 /**
@@ -858,8 +792,6 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         }
       },
 
-      // CommandService.RunCommand streams output chunks while the command runs,
-      // so callbacks need neither daemond nor a routable port.
       streamCommand: async (sandbox: NamespaceSandbox, command: string, options: RunCommandOptions): Promise<CommandResult> => {
         if (!sandbox.commandServiceEndpoint) {
           throw new Error('Command service endpoint not available. The instance may not support command execution.');
