@@ -12,7 +12,7 @@
  */
 
 import { describe, it } from 'vitest';
-import { runStorageProviderTestSuite } from '@computesdk/test-utils';
+import { failIfIntegrationRequired, runStorageProviderTestSuite } from '@computesdk/test-utils';
 import { r2 } from '../index';
 
 // Only run integration tests if credentials are available
@@ -39,6 +39,7 @@ if (runIntegration) {
     timeout: 60000,
   });
 } else {
+  failIfIntegrationRequired('R2', true);
   describe('Cloudflare R2 Integration', () => {
     it.skip('skipped - no R2 credentials available', () => {});
   });

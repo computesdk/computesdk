@@ -12,7 +12,7 @@
  */
 
 import { describe, it } from 'vitest';
-import { runStorageProviderTestSuite } from '@computesdk/test-utils';
+import { failIfIntegrationRequired, runStorageProviderTestSuite } from '@computesdk/test-utils';
 import { tigris } from '../index';
 
 // Only run integration tests if credentials are available
@@ -36,6 +36,7 @@ if (runIntegration) {
     timeout: 60000,
   });
 } else {
+  failIfIntegrationRequired('Tigris', true);
   describe('Tigris Integration', () => {
     it.skip('skipped - no Tigris credentials available', () => {});
   });
