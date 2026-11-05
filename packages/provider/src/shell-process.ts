@@ -69,6 +69,8 @@ export interface ShellProcessOptions extends StartProcessOptions {
   retentionMs?: number;
   /** Raw log bytes per read exec. Default 16 KiB. */
   maxReadBytes?: number;
+  /** Output kept per stream on the handle; older output is dropped and `truncated` set. Default 4 Mi chars. */
+  maxBufferedChars?: number;
   /**
    * Hold the command until a second exec confirms the job directory is still
    * there, so an instance whose execs share no state is detected before the
@@ -249,9 +251,10 @@ class ShellJob implements ShellProcessHandle {
   }
 
   private keep(buffer: string): string {
-    if (buffer.length <= MAX_BUFFERED_CHARS) return buffer;
+    const limit = this.options.maxBufferedChars ?? MAX_BUFFERED_CHARS;
+    if (buffer.length <= limit) return buffer;
     this.truncated = true;
-    return buffer.slice(buffer.length - MAX_BUFFERED_CHARS);
+    return buffer.slice(buffer.length - limit);
   }
 
   /** True once the job has exited and every byte of its log has been delivered. */
@@ -414,6 +417,8 @@ export async function runCommandViaShell(
   const startedAt = Date.now();
   const job = (await startShellProcess(run, command, {
     ...shellOptions,
+    // A command's result carries all of its output, as plain runCommand does.
+    maxBufferedChars: Number.POSITIVE_INFINITY,
     cwd: options.cwd,
     env: options.env,
     timeoutMs: options.timeout,
