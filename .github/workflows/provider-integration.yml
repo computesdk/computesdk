@@ -1,0 +1,205 @@
+name: Provider Integration Tests
+
+# Credentialed tests run only when explicitly requested on a trusted ref.
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Provider ID from scripts/integration-providers.json, or all'
+        type: string
+        required: true
+        default: all
+      suite:
+        description: 'Test suites to run'
+        type: choice
+        options: [all, provider, core]
+        required: true
+        default: all
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: namespace-profile-default
+    outputs:
+      providers: ${{ steps.integration-matrix.outputs.providers }}
+      coreProviders: ${{ steps.integration-matrix.outputs.coreProviders }}
+      runProvider: ${{ steps.integration-matrix.outputs.runProvider }}
+      runCore: ${{ steps.integration-matrix.outputs.runCore }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+
+    - name: Build integration matrices
+      id: integration-matrix
+      env:
+        INPUT_PROVIDER: ${{ inputs.provider }}
+        INPUT_SUITE: ${{ inputs.suite }}
+      run: |
+        case "$INPUT_SUITE" in
+          all|provider|core) ;;
+          *) echo "::error::Unsupported suite: $INPUT_SUITE" >&2; exit 1 ;;
+        esac
+        if [ "$INPUT_PROVIDER" = all ]; then
+          core_providers=$(jq -c 'keys' scripts/integration-providers.json)
+        elif jq -e --arg provider "$INPUT_PROVIDER" 'has($provider)' scripts/integration-providers.json >/dev/null; then
+          core_providers=$(jq -cn --arg provider "$INPUT_PROVIDER" '[$provider]')
+        else
+          echo "::error::Unsupported provider: $INPUT_PROVIDER" >&2
+          exit 1
+        fi
+        providers=$(jq -c '. - ["platform"]' <<< "$core_providers")
+        run_provider=false
+        run_core=false
+        if [ "$INPUT_SUITE" != core ] && [ "$(jq 'length' <<< "$providers")" -gt 0 ]; then
+          run_provider=true
+        fi
+        if [ "$INPUT_SUITE" != provider ]; then
+          run_core=true
+        fi
+        if [ "$run_provider" = false ] && [ "$run_core" = false ]; then
+          echo "::error::No matching test suite (platform is core-only)" >&2
+          exit 1
+        fi
+        # Supply a harmless nonempty matrix to skipped jobs; some runners
+        # evaluate matrix expressions before evaluating the job-level gate.
+        if [ "$run_provider" = false ]; then providers='["e2b"]'; fi
+        {
+          echo "providers=$providers"
+          echo "coreProviders=$core_providers"
+          echo "runProvider=$run_provider"
+          echo "runCore=$run_core"
+        } >> "$GITHUB_OUTPUT"
+
+  provider-integration-tests:
+    runs-on: namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal
+    permissions:
+      contents: read
+      id-token: write
+    needs: prepare
+    if: needs.prepare.outputs.runProvider == 'true'
+
+    strategy:
+      matrix:
+        provider: ${{ fromJSON(needs.prepare.outputs.providers) }}
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.sha }}
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+
+    - name: Seed Namespace token file
+      env:
+        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
+      run: |
+        if [ ! -f /var/run/nsc/token.json ]; then
+          if [ -z "${NSC_TOKEN:-}" ]; then
+            echo "::error::Namespace vault authentication requires NSC_TOKEN or a runner workload token" >&2
+            exit 1
+          fi
+          umask 077
+          mkdir -p /var/run/nsc
+          case "$NSC_TOKEN" in
+            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+          esac
+          chmod 600 /var/run/nsc/token.json
+          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
+          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
+        fi
+
+    - name: Set up Namespace vault CLI
+      uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
+    
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+    
+    - name: Build packages
+      run: pnpm build
+        
+    - name: Run Provider Integration Tests (${{ matrix.provider }})
+      env:
+        TEST_PROVIDER: ${{ matrix.provider }}
+      run: |
+        . scripts/load-provider-vault-secrets.sh "$TEST_PROVIDER" provider
+        echo "Running $TEST_PROVIDER package tests with vault credentials..."
+        pnpm --filter "$TEST_PROVIDER_PACKAGE" test
+
+  computesdk-integration-tests:
+    runs-on: namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal
+    permissions:
+      contents: read
+      id-token: write
+    needs: prepare
+    if: needs.prepare.outputs.runCore == 'true'
+
+    strategy:
+      matrix:
+        provider: ${{ fromJSON(needs.prepare.outputs.coreProviders) }}
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.sha }}
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+
+    - name: Seed Namespace token file
+      env:
+        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
+      run: |
+        if [ ! -f /var/run/nsc/token.json ]; then
+          if [ -z "${NSC_TOKEN:-}" ]; then
+            echo "::error::Namespace vault authentication requires NSC_TOKEN or a runner workload token" >&2
+            exit 1
+          fi
+          umask 077
+          mkdir -p /var/run/nsc
+          case "$NSC_TOKEN" in
+            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+          esac
+          chmod 600 /var/run/nsc/token.json
+          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
+          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
+        fi
+
+    - name: Set up Namespace vault CLI
+      uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
+    
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+    
+    - name: Build packages
+      run: pnpm build
+        
+    - name: Run ComputeSDK Integration Test (${{ matrix.provider }})
+      env:
+        COMPUTESDK_INTEGRATION: "1"
+        TEST_PROVIDER: ${{ matrix.provider }}
+      run: |
+        . scripts/load-provider-vault-secrets.sh "$TEST_PROVIDER" core
+        echo "Running computesdk integration test for $TEST_PROVIDER..."
+        pnpm --filter computesdk test compute-provider-integration
+

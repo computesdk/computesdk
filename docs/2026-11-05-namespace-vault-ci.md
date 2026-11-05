@@ -2,7 +2,8 @@
 
 ## Scope
 
-Both integration matrices now cover all 33 active providers in
+The manually dispatched `.github/workflows/provider-integration.yml`
+contains both integration matrices and covers all 33 active providers in
 `computesdk/benchmarks`' `.github/workflows/sandbox-dax-benchmarks.yml`:
 Archil, Arker, Beam, Blaxel, Buddy, Cloud Run, Cloudflare, CodeSandbox,
 CreateOS, Daytona, E2B, Freestyle, GiveMeANode, Gravixlayer, HopX, Isorun,
@@ -27,6 +28,34 @@ then execute the existing commands:
 pnpm --filter "$TEST_PROVIDER_PACKAGE" test
 pnpm --filter computesdk test compute-provider-integration
 ```
+
+## Manual runs
+
+PR CI keeps its existing build, mock/unit tests, typecheck, lint and local
+Kubernetes job; it does not request vault permissions or start remote-provider
+matrices. The separate **Provider Integration Tests** workflow has no PR,
+push or scheduled trigger.
+
+Dispatch inputs:
+
+- `provider`: `all` (default), or an exact registry ID such as `e2b`,
+  `cloud-run`, or `platform`.
+- `suite`: `all` (default), `provider` (native package tests), or `core`
+  (the shared ComputeSDK live integration test).
+
+`platform` is core-only; combining it with `suite=provider` fails with an
+explicit selection error. Unknown provider/suite values fail before vault
+access or provider creation. Disabled matrix jobs receive a placeholder
+matrix but remain gated off, avoiding empty-matrix evaluation errors.
+
+After the workflow is available on the default branch, for example:
+
+```bash
+gh workflow run provider-integration.yml --ref main -f provider=e2b -f suite=core
+```
+
+Manual runs consume real provider resources. They intentionally do not depend
+on PR-only mock jobs; use a trusted ref whose normal checks have passed.
 
 ## Credential selection
 
@@ -73,11 +102,13 @@ On Compute Actions, `NSC_TOKEN` must be available as an org/repo secret unless
 the runner already supplies a suitable Namespace token. Workload-identity
 repo/org opt-in and global settings are unchanged.
 
-- Credentialed jobs only run on same-repository PRs, excluding changeset
-  releases, after the mock job succeeds. Fork PRs cannot run these jobs.
+- Credentialed jobs only run on explicit `workflow_dispatch` events. Neither
+  PR events nor changeset-release updates start them. The operator chooses
+  a trusted branch/tag; all jobs check out that dispatch's exact `github.sha`.
+  These jobs do not accept a user-supplied checkout repository or PR ref.
 - The runner grants remain vault-wide list/describe/reveal. The helper's
   allowlist limits routine exports, **not** what trusted PR code can access.
-  These jobs must only execute trusted same-repository contributions.
+  Operators must dispatch only trusted repository refs.
 - The loader ignores deleted objects, retains upstream duplicate-selection
   behavior, uses a private invocation-local envdef, and masks resolved values.
   Never enable shell tracing (`set -x`) around secret loading.

@@ -7,9 +7,6 @@ on:
 
 jobs:
   test:
-    outputs:
-      providers: ${{ steps.integration-matrix.outputs.providers }}
-      coreProviders: ${{ steps.integration-matrix.outputs.coreProviders }}
     runs-on: namespace-profile-default
     env:
       AWS_LAMBDA_ROLE_ARN: ${{ secrets.AWS_LAMBDA_ROLE_ARN }}
@@ -34,13 +31,6 @@ jobs:
         # For pushes, checkout the pushed ref (default behavior)
         ref: ${{ github.event.pull_request.head.sha || github.sha }}
     
-    - name: Build integration matrices
-      id: integration-matrix
-      if: steps.skip_check.outputs.skip != 'true'
-      run: |
-        echo "providers=$(jq -c 'keys - ["platform"]' scripts/integration-providers.json)" >> "$GITHUB_OUTPUT"
-        echo "coreProviders=$(jq -c 'keys' scripts/integration-providers.json)" >> "$GITHUB_OUTPUT"
-
     - name: Install pnpm
       if: steps.skip_check.outputs.skip != 'true'
       uses: pnpm/action-setup@v4
@@ -84,138 +74,6 @@ jobs:
     - name: Run linting
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm lint
-
-  provider-integration-tests:
-    runs-on: namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal
-    permissions:
-      contents: read
-      id-token: write
-    needs: test  # Only run if basic tests pass
-    # Never grant vault access to code from a fork.
-    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/') && github.event.pull_request.head.repo.full_name == github.repository
-
-    strategy:
-      matrix:
-        provider: ${{ fromJSON(needs.test.outputs.providers) }}
-      fail-fast: false
-    
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        # For pull requests, checkout the PR head ref
-        # For pushes to main, checkout the pushed ref
-        ref: ${{ github.event.pull_request.head.sha || github.sha }}
-    
-    - name: Install pnpm
-      uses: pnpm/action-setup@v4
-    
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'pnpm'
-
-    - name: Seed Namespace token file
-      env:
-        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
-      run: |
-        if [ ! -f /var/run/nsc/token.json ]; then
-          if [ -z "${NSC_TOKEN:-}" ]; then
-            echo "::error::Namespace vault authentication requires NSC_TOKEN or a runner workload token" >&2
-            exit 1
-          fi
-          umask 077
-          mkdir -p /var/run/nsc
-          case "$NSC_TOKEN" in
-            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
-            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
-          esac
-          chmod 600 /var/run/nsc/token.json
-          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
-          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
-        fi
-
-    - name: Set up Namespace vault CLI
-      uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
-    
-    - name: Install dependencies
-      run: pnpm install --ignore-scripts
-    
-    - name: Build packages
-      run: pnpm build
-        
-    - name: Run Provider Integration Tests (${{ matrix.provider }})
-      env:
-        TEST_PROVIDER: ${{ matrix.provider }}
-      run: |
-        . scripts/load-provider-vault-secrets.sh "$TEST_PROVIDER" provider
-        echo "Running $TEST_PROVIDER package tests with vault credentials..."
-        pnpm --filter "$TEST_PROVIDER_PACKAGE" test
-
-  computesdk-integration-tests:
-    runs-on: namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal
-    permissions:
-      contents: read
-      id-token: write
-    needs: test
-    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/') && github.event.pull_request.head.repo.full_name == github.repository
-
-    strategy:
-      matrix:
-        provider: ${{ fromJSON(needs.test.outputs.coreProviders) }}
-      fail-fast: false
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.pull_request.head.sha || github.sha }}
-    
-    - name: Install pnpm
-      uses: pnpm/action-setup@v4
-    
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'pnpm'
-
-    - name: Seed Namespace token file
-      env:
-        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
-      run: |
-        if [ ! -f /var/run/nsc/token.json ]; then
-          if [ -z "${NSC_TOKEN:-}" ]; then
-            echo "::error::Namespace vault authentication requires NSC_TOKEN or a runner workload token" >&2
-            exit 1
-          fi
-          umask 077
-          mkdir -p /var/run/nsc
-          case "$NSC_TOKEN" in
-            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
-            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
-          esac
-          chmod 600 /var/run/nsc/token.json
-          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
-          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
-        fi
-
-    - name: Set up Namespace vault CLI
-      uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
-    
-    - name: Install dependencies
-      run: pnpm install --ignore-scripts
-    
-    - name: Build packages
-      run: pnpm build
-        
-    - name: Run ComputeSDK Integration Test (${{ matrix.provider }})
-      env:
-        COMPUTESDK_INTEGRATION: "1"
-        TEST_PROVIDER: ${{ matrix.provider }}
-      run: |
-        . scripts/load-provider-vault-secrets.sh "$TEST_PROVIDER" core
-        echo "Running computesdk integration test for $TEST_PROVIDER..."
-        pnpm --filter computesdk test compute-provider-integration
 
   k8s-integration-tests:
     runs-on: ubuntu-latest

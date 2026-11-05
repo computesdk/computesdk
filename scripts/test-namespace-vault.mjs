@@ -5,7 +5,7 @@
  * Failure surfaces: authentication/version/list/export errors, malformed or
  * deleted entries, duplicate labels, missing/empty provider keys, accidental
  * unrelated-secret exports, skipped test commands, token-file overwrite,
- * and fork PRs receiving vault-capable runners.
+ * and automatic events receiving vault-capable integration runners.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const workflow = () => readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
+const workflow = (name = 'provider-integration.yml') => readFileSync(join(root, '.github/workflows', name), 'utf8');
 const registry = JSON.parse(readFileSync(join(root, 'scripts/integration-providers.json'), 'utf8'));
 const providers = Object.fromEntries(Object.entries(registry).map(([name, config]) => [name, config.requiredEnv]));
 const aliases = Object.assign({}, ...Object.values(registry).map(config => config.aliases ?? {}));
@@ -31,14 +31,14 @@ const entriesFor = keys => keys.map(key => ({ object_id: key, labels: [{ name: '
 
 function jobBlock(name) {
   const block = workflow().split(`  ${name}:`)[1]?.split(/\n  [a-z][\w-]*:/)[0];
-  assert.ok(block, `missing CI job ${name}`);
+  assert.ok(block, `missing integration workflow job ${name}`);
   return block;
 }
 
 function stepBlock(name, occurrence = 0) {
   const lines = workflow().split('\n');
   const indexes = lines.flatMap((line, i) => line.trim() === `- name: ${name}` ? [i] : []);
-  assert.ok(indexes.length > occurrence, `missing CI step ${name}`);
+  assert.ok(indexes.length > occurrence, `missing integration workflow step ${name}`);
   const start = indexes[occurrence];
   const indent = lines[start].search(/\S/);
   let end = start + 1;
@@ -293,7 +293,10 @@ test('workflow matrices and unconditional Namespace setup cover every supported 
     const block = jobBlock(job);
     const step = integrationSteps[i];
     const output = step.mode === 'provider' ? 'providers' : 'coreProviders';
-    assert.ok(block.includes(`provider: \${{ fromJSON(needs.test.outputs.${output}) }}`), `${job} must use the registry-generated matrix`);
+    assert.ok(block.includes(`provider: \${{ fromJSON(needs.prepare.outputs.${output}) }}`), `${job} must use the prepared registry-generated matrix`);
+    assert.match(block, /^\s+needs: prepare\s*$/m);
+    const flag = step.mode === 'provider' ? 'runProvider' : 'runCore';
+    assert.match(block, new RegExp(`^\\s+if: needs\\.prepare\\.outputs\\.${flag} == 'true'\\s*$`, 'm'), 'disabled or empty matrices must not start credentialed jobs');
     assert.equal(block.match(/^\s+runs-on: (.+)$/m)?.[1], runner, 'all matrix providers need the literal vault-enabled profile');
     assert.equal((block.match(/- name: Run .*Integration Test/g) ?? []).length, 1, 'use one generic test step, not provider-specific bypasses');
     for (const name of ['Seed Namespace token file', 'Set up Namespace vault CLI']) {
@@ -311,21 +314,83 @@ test('workflow matrices and unconditional Namespace setup cover every supported 
   }
 });
 
-test('workflow matrix generation includes every registry provider and adds platform only to core', t => {
+test('workflow preparation exposes matrices and suite gates without vault privileges', () => {
+  const job = jobBlock('prepare');
+  for (const output of ['providers', 'coreProviders', 'runProvider', 'runCore']) {
+    assert.ok(job.includes(`${output}: \${{ steps.integration-matrix.outputs.${output} }}`));
+  }
+  const step = stepBlock('Build integration matrices').join('\n');
+  assert.match(step, /INPUT_PROVIDER: \$\{\{ inputs\.provider \}\}/);
+  assert.match(step, /INPUT_SUITE: \$\{\{ inputs\.suite \}\}/);
+  assert.doesNotMatch(runBlock('Build integration matrices'), /\$\{\{\s*inputs\./, 'dispatch inputs must reach the shell through environment variables');
+  assert.doesNotMatch(job, /vault\/object|id-token: write|secrets\.|load-provider-vault-secrets/);
+  assert.match(job, /persist-credentials: false/);
+});
+
+function runMatrix(t, provider, suite) {
   const f = fixture(t);
   const output = join(f.dir, 'github-output');
-  const r = f.run(runBlock('Build integration matrices'), { GITHUB_OUTPUT: output });
-  assert.equal(r.status, 0, r.stderr);
-  const values = Object.fromEntries(readFileSync(output, 'utf8').trim().split('\n').map(line => {
+  const result = f.run(runBlock('Build integration matrices'), {
+    INPUT_PROVIDER: provider, INPUT_SUITE: suite, GITHUB_OUTPUT: output,
+  });
+  const lines = existsSync(output) ? readFileSync(output, 'utf8').trim().split('\n').filter(Boolean) : [];
+  const values = Object.fromEntries(lines.map(line => {
     const split = line.indexOf('=');
+    assert.notEqual(split, -1, `malformed matrix output: ${line}`);
     return [line.slice(0, split), JSON.parse(line.slice(split + 1))];
   }));
-  assert.deepEqual(values.providers, integrationSteps[0].providers.toSorted());
-  assert.deepEqual(values.coreProviders, integrationSteps[1].providers.toSorted());
-  const job = jobBlock('test');
-  assert.match(job, /providers: \$\{\{ steps\.integration-matrix\.outputs\.providers \}\}/);
-  assert.match(job, /coreProviders: \$\{\{ steps\.integration-matrix\.outputs\.coreProviders \}\}/);
-});
+  return { result, values };
+}
+
+for (const provider of ['all', ...Object.keys(providers)]) {
+  for (const suite of ['all', 'provider', 'core']) {
+    test(`workflow matrix selection ${provider}/${suite} preserves requested coverage and job gates`, t => {
+      const { result, values } = runMatrix(t, provider, suite);
+      if (provider === 'platform' && suite === 'provider') {
+        assert.notEqual(result.status, 0, 'platform has no provider package test suite');
+        assert.match(`${result.stdout}\n${result.stderr}`, /no matching test suite|core-only/i);
+        assert.deepEqual(values, {}, 'a selection with no matching suite must fail before publishing job matrices');
+        return;
+      }
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(Object.keys(values).sort(), ['coreProviders', 'providers', 'runCore', 'runProvider']);
+      const expectedProviders = provider === 'all' ? integrationSteps[0].providers.toSorted() : provider === 'platform' ? [] : [provider];
+      const expectedCore = provider === 'all' ? integrationSteps[1].providers.toSorted() : [provider];
+      const runProvider = suite !== 'core' && expectedProviders.length > 0;
+      const runCore = suite !== 'provider';
+      assert.equal(values.runProvider, runProvider);
+      assert.equal(values.runCore, runCore);
+      assert.ok(Array.isArray(values.providers));
+      assert.ok(Array.isArray(values.coreProviders));
+      assert.ok(values.providers.length, 'even skipped provider jobs need a valid nonempty matrix for eager matrix validation');
+      assert.ok(values.coreProviders.length, 'even skipped core jobs need a valid nonempty matrix for eager matrix validation');
+      for (const selected of [...values.providers, ...values.coreProviders]) {
+        assert.ok(Object.hasOwn(registry, selected), `unknown provider in matrix: ${selected}`);
+      }
+      assert.ok(!values.providers.includes('platform'), 'platform has no provider package suite');
+      if (runProvider) {
+        assert.deepEqual(values.providers, expectedProviders);
+      }
+      assert.deepEqual(values.coreProviders, expectedCore);
+    });
+  }
+}
+
+for (const [provider, suite] of [
+  ['unknown-provider', 'all'],
+  ['e2b,modal', 'all'],
+  ['$(touch /tmp/invalid-provider-input)', 'all'],
+  ['all', 'unknown-suite'],
+  ['e2b', 'ALL'],
+]) {
+  test(`workflow matrix rejects invalid dispatch inputs ${JSON.stringify({ provider, suite })}`, t => {
+    const { result, values } = runMatrix(t, provider, suite);
+    assert.notEqual(result.status, 0, 'invalid input must fail preparation rather than launch a default suite');
+    assert.match(`${result.stdout}\n${result.stderr}`, /(unknown|unsupported|invalid)/i);
+    assert.notEqual(values.runProvider, true, 'invalid input must not enable provider jobs');
+    assert.notEqual(values.runCore, true, 'invalid input must not enable core jobs');
+  });
+}
 
 test('registry factory and sandbox configuration references only declared vault environment keys', () => {
   for (const [provider, config] of Object.entries(registry)) {
@@ -375,14 +440,45 @@ test('Namespace bootstrap fails clearly when neither a runner token nor NSC_TOKE
   assert.match(r.stderr + r.stdout, /Namespace.*(token|authentication)/i);
 });
 
-test('vault-enabled integration jobs retain PR gates and refuse fork code', () => {
+test('credentialed integration workflow is manual-only with explicit provider and suite inputs', () => {
   const w = workflow();
+  assert.match(w, /^name: Provider Integration Tests$/m);
+  const triggers = w.match(/^on:[ \t]*\n((?:[ \t].*(?:\n|$)|\n)*)/m)?.[1];
+  assert.ok(triggers, 'workflow needs an explicit trigger block');
+  assert.deepEqual([...triggers.matchAll(/^  ([\w-]+):/gm)].map(match => match[1]), ['workflow_dispatch'], 'no PR, push, schedule, workflow_call, or chained workflow triggers may launch credentialed tests');
+  const provider = triggers.split('      provider:')[1]?.split(/\n      [\w-]+:/)[0];
+  const suite = triggers.split('      suite:')[1]?.split(/\n      [\w-]+:/)[0];
+  assert.ok(provider, 'manual workflow must expose a provider selector');
+  assert.ok(suite, 'manual workflow must expose a suite selector');
+  assert.match(provider, /^\s+type: string$/m);
+  assert.match(provider, /^\s+default: all$/m);
+  assert.match(suite, /^\s+type: choice$/m);
+  assert.match(suite, /^\s+default: all$/m);
+  const choices = suite.match(/^\s+options:\s*\[([^\]]+)\]/m)?.[1]?.split(',').map(value => value.trim())
+    ?? [...suite.matchAll(/^\s+- (all|provider|core)\s*$/gm)].map(match => match[1]);
+  assert.deepEqual(choices, ['all', 'provider', 'core']);
+  assert.doesNotMatch(w, /github\.event\.pull_request|github\.head_ref/);
+  const refs = [...w.matchAll(/^\s+ref: (.+)$/gm)].map(match => match[1]);
+  assert.equal((w.match(/uses: actions\/checkout@/g) ?? []).length, 3, 'preparation and both integration jobs need checkout');
+  assert.deepEqual(refs, Array(3).fill('${{ github.sha }}'), 'manual runs must test the selected dispatch revision');
   for (const name of ['provider-integration-tests', 'computesdk-integration-tests']) {
-    const block = w.split(`  ${name}:`)[1]?.split(/\n  [a-z][\w-]*:/)[0];
-    assert.ok(block);
-    assert.match(block, /github\.event_name == 'pull_request'/);
-    assert.match(block, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
+    const block = jobBlock(name);
     assert.match(block, /permissions:\s+contents: read\s+id-token: write/);
     assert.match(block, /permissions\.additional_grant=vault\/object:\*:reveal/);
   }
+});
+
+test('PR workflow keeps ordinary checks but cannot launch credentialed provider integrations', () => {
+  const w = workflow('ci.yml');
+  const triggers = w.match(/^on:[ \t]*\n((?:[ \t].*(?:\n|$)|\n)*)/m)?.[1];
+  assert.ok(triggers);
+  assert.deepEqual([...triggers.matchAll(/^  ([\w-]+):/gm)].map(match => match[1]), ['pull_request']);
+  assert.doesNotMatch(w, /^  (?:provider-integration-tests|computesdk-integration-tests):/m);
+  assert.doesNotMatch(w, /vault\/object|secrets\.NSC_TOKEN|id-token: write|load-provider-vault-secrets|namespacelabs\/nscloud-setup/);
+  assert.doesNotMatch(w, /Build integration matrices|integration-matrix\.outputs|fromJSON\(needs\.test\.outputs/);
+  assert.doesNotMatch(w, /provider-integration\.yml|compute-provider-integration/);
+  for (const command of [
+    'node --test scripts/test-namespace-vault.mjs', 'pnpm build', 'pnpm test', 'pnpm typecheck', 'pnpm lint',
+  ]) assert.ok(w.includes(`run: ${command}`), `PR workflow must retain ${command}`);
+  assert.match(w, /^  k8s-integration-tests:/m, 'local Kubernetes integration coverage stays on PRs');
 });
