@@ -3,12 +3,15 @@ import { runProviderTestSuite } from '@computesdk/test-utils';
 
 import { quilt } from '../index';
 
-runProviderTestSuite({
-  name: 'quilt',
-  provider: quilt({}),
-  supportsFilesystem: true,
-  supportsGetUrl: true,
-  skipIntegration: !process.env.QUILT_BASE_URL || (!process.env.QUILT_API_KEY && !process.env.QUILT_ACCESS_TOKEN),
+// Scoped so the suite's per-test sandbox hooks don't run for the unit tests below.
+describe('quilt conformance', () => {
+  runProviderTestSuite({
+    name: 'quilt',
+    provider: quilt({}),
+    supportsFilesystem: true,
+    supportsGetUrl: true,
+    skipIntegration: !process.env.QUILT_BASE_URL || (!process.env.QUILT_API_KEY && !process.env.QUILT_ACCESS_TOKEN),
+  });
 });
 
 describe('quilt provider unit behavior', () => {
