@@ -487,7 +487,8 @@ async function streamNamespaceCommand(
     if (!response.ok || !response.body) {
       const detail = await errorDetail(response);
       await response.body?.cancel().catch(() => undefined);
-      return { stdout: '', stderr: `Namespace API error: ${response.status} ${response.statusText}${detail}`, exitCode: START_FAILURE_EXIT_CODE, durationMs: Date.now() - startTime };
+      const deadline = timedOut || (timeoutMs !== undefined && detail.startsWith(': deadline_exceeded'));
+      return { stdout: '', stderr: `Namespace API error: ${response.status} ${response.statusText}${detail}`, exitCode: deadline ? TIMEOUT_EXIT_CODE : START_FAILURE_EXIT_CODE, durationMs: Date.now() - startTime };
     }
 
     let exitCode: number | undefined;

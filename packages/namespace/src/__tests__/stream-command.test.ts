@@ -164,6 +164,13 @@ describe('namespace streamCommand', () => {
     expect(result.stderr).toBe('Namespace API error: 401 Unauthorized: unauthenticated: bad token');
   });
 
+  it('maps a non-200 deadline_exceeded response to 124 when a timeout was set', async () => {
+    mockNamespace([], { status: 408, body: '{"code":"deadline_exceeded","message":"timeout"}' });
+    const sbx = await sandbox();
+    const result = await sbx.runCommand('x', { timeout: 5000, onStdout: () => {} });
+    expect(result.exitCode).toBe(124);
+  });
+
   it('handles frames split across network reads and several frames in one read', async () => {
     const all = new Uint8Array([...out('a'), ...out('b'), ...exit(0), ...end()]);
     mockNamespace([all.subarray(0, 3), all.subarray(3, 9), all.subarray(9)]);
