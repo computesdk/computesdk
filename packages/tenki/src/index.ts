@@ -231,6 +231,67 @@ async function runShell(session: Session, command: string, options?: RunCommandO
   };
 }
 
+/**
+ * Tenki's data-plane filesystem API is scoped to the sandbox workdir
+ * (/home/tenki) and rejects other paths, though the guest can reach them.
+ */
+function isOutsideWorkdir(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("path outside workdir");
+}
+
+async function shellOrThrow(session: Session, command: string): Promise<string> {
+  const result = await runShell(session, command);
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.trim() || `Command failed with exit code ${result.exitCode}: ${command}`);
+  }
+  return result.stdout;
+}
+
+// Base64 chunk per exec, well under the kernel's per-argument limit.
+const SHELL_WRITE_CHUNK = 96 * 1024;
+
+async function shellWriteFile(session: Session, path: string, content: string): Promise<void> {
+  const b64 = Buffer.from(content, "utf8").toString("base64");
+  const q = shellQuote(path);
+  await shellOrThrow(session, `mkdir -p "$(dirname ${q})" && : > ${q}`);
+  for (let i = 0; i < b64.length; i += SHELL_WRITE_CHUNK) {
+    await shellOrThrow(session, `printf '%s' '${b64.slice(i, i + SHELL_WRITE_CHUNK)}' | base64 -d >> ${q}`);
+  }
+}
+
+async function shellReadFile(session: Session, path: string): Promise<string> {
+  const out = await shellOrThrow(session, `base64 < ${shellQuote(path)}`);
+  return Buffer.from(out.replace(/\s+/g, ""), "base64").toString("utf8");
+}
+
+async function shellReaddir(session: Session, path: string): Promise<FileEntry[]> {
+  const out = await shellOrThrow(
+    session,
+    `find ${shellQuote(path)} -mindepth 1 -maxdepth 1 -printf '%y\\t%s\\t%T@\\t%f\\n'`,
+  );
+  return out
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [kind, size, mtime, ...name] = line.split("\t");
+      return {
+        name: name.join("\t"),
+        type: kind === "d" ? ("directory" as const) : ("file" as const),
+        size: Number(size),
+        modified: new Date(Number(mtime) * 1000),
+      };
+    });
+}
+
+async function nativeOrShell<T>(native: () => Promise<T>, shell: () => Promise<T>): Promise<T> {
+  try {
+    return await native();
+  } catch (err) {
+    if (isOutsideWorkdir(err)) return shell();
+    throw err;
+  }
+}
+
 function basename(path: string): string {
   const trimmed = path.replace(/\/+$/, "");
   const idx = trimmed.lastIndexOf("/");
@@ -322,25 +383,35 @@ export const tenki = defineProvider<Session, TenkiConfig>({
       // plane, so we bypass the shell-based fallback (and its escaping
       // hazards). The runCommand parameter is intentionally unused.
       filesystem: {
-        readFile: async (sandbox, path) => {
-          const bytes = await sandbox.readFile(path);
-          return new TextDecoder().decode(bytes);
-        },
-        writeFile: async (sandbox, path, content) => {
-          await sandbox.writeFile(path, content);
-        },
-        mkdir: async (sandbox, path) => {
-          await sandbox.mkdir(path);
-        },
-        readdir: async (sandbox, path): Promise<FileEntry[]> => {
-          const entries = await sandbox.list(path);
-          return entries.map((entry) => ({
-            name: basename(entry.path),
-            type: entry.isDir ? ("directory" as const) : ("file" as const),
-            size: Number(entry.size),
-            modified: new Date(Number(entry.modifiedUnixNs / 1_000_000n)),
-          }));
-        },
+        // Paths outside the workdir fall back to the shell.
+        readFile: (sandbox, path) =>
+          nativeOrShell(
+            async () => new TextDecoder().decode(await sandbox.readFile(path)),
+            () => shellReadFile(sandbox, path),
+          ),
+        writeFile: (sandbox, path, content) =>
+          nativeOrShell(
+            () => sandbox.writeFile(path, content),
+            () => shellWriteFile(sandbox, path, content),
+          ),
+        mkdir: (sandbox, path) =>
+          nativeOrShell(
+            () => sandbox.mkdir(path),
+            async () => { await shellOrThrow(sandbox, `mkdir -p ${shellQuote(path)}`); },
+          ),
+        readdir: (sandbox, path): Promise<FileEntry[]> =>
+          nativeOrShell(
+            async () => {
+              const entries = await sandbox.list(path);
+              return entries.map((entry) => ({
+                name: basename(entry.path),
+                type: entry.isDir ? ("directory" as const) : ("file" as const),
+                size: Number(entry.size),
+                modified: new Date(Number(entry.modifiedUnixNs / 1_000_000n)),
+              }));
+            },
+            () => shellReaddir(sandbox, path),
+          ),
         // exists goes through the shell: the data-plane stat can briefly
         // report a just-removed file as present, while `test -e` is always
         // consistent with the guest filesystem.
@@ -348,9 +419,33 @@ export const tenki = defineProvider<Session, TenkiConfig>({
           const result = await runCommand(sandbox, `test -e "${escapeShellArg(path)}"`);
           return result.exitCode === 0;
         },
-        remove: async (sandbox, path) => {
-          await sandbox.remove(path);
-        },
+        remove: (sandbox, path) =>
+          nativeOrShell(
+            () => sandbox.remove(path),
+            async () => { await shellOrThrow(sandbox, `rm -rf ${shellQuote(path)}`); },
+          ),
+      },
+    },
+
+    snapshot: {
+      create: async (config, sandboxId, options) => {
+        const client = getClient(config);
+        const snap = await client.createSnapshotAndWait(sandboxId, { name: options?.name });
+        return { id: snap.id, provider: "tenki", createdAt: snap.createdAt, metadata: options?.metadata, native: snap };
+      },
+      list: async (config, options) => {
+        const client = getClient(config);
+        const instanceId = options?.instanceId ?? options?.sandboxId;
+        const workspaceId = config.workspaceId ?? process.env.TENKI_WORKSPACE_ID;
+        const snaps = instanceId
+          ? await client.listSessionSnapshots(instanceId)
+          : await client.listSnapshots(workspaceId ? { workspaceId } : undefined);
+        const items = snaps.map((snap) => ({ id: snap.id, provider: "tenki", createdAt: snap.createdAt, native: snap }));
+        return options?.limit ? items.slice(0, options.limit) : items;
+      },
+      delete: async (config, snapshotId) => {
+        const client = getClient(config);
+        await client.deleteSnapshot(snapshotId);
       },
     },
 
