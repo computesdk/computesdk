@@ -155,6 +155,26 @@ export function defineProviderTests(config: ProviderTestConfig) {
       expect(result.exitCode).toBe(0);
     }, timeout);
 
+    it.skipIf(skipIntegration)('should apply env to every part of a compound command', async () => {
+      const value = `a b $x 'q' "dq"`;
+      const command = 'echo "1:$CSDK_ENV"; echo "2:$CSDK_ENV" && echo "3:$CSDK_ENV"';
+      const variants: RunCommandOptions[] = [{ env: { CSDK_ENV: value } }];
+      if (supportsStreaming) variants.push({ env: { CSDK_ENV: value }, onStdout: () => {} });
+
+      for (const options of variants) {
+        const result = await sandbox.runCommand(command, options);
+        expect(result.exitCode).toBe(0);
+        for (const n of [1, 2, 3]) expect(result.stdout).toContain(`${n}:${value}`);
+      }
+    }, timeout);
+
+    it.skipIf(skipIntegration)('should run commands in the requested cwd', async () => {
+      const result = await sandbox.runCommand('pwd && echo "$PWD"', { cwd: '/tmp' });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim().split('\n').map((l) => l.trim())).toEqual(['/tmp', '/tmp']);
+    }, timeout);
+
     it('should report which runtime serves streaming and processes', () => {
       const coverage = describeProcessRuntime(name, sandbox);
       processRuntimeCoverage.push(coverage);
