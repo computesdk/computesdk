@@ -314,6 +314,31 @@ describe('node bootstrap in a sandbox without node', () => {
     }
   }, 60_000)
 
+  it('reinstalls libstdc++ when a reused musl cache cannot run in a fresh container', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-home-'))
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-bin-'))
+    minimalPathBin(bin)
+    stubMusl(bin, 'x86_64')
+    const libstdcxx = path.join(home, 'libstdc++')
+    stubTool(bin, 'apk', `[ "$*" = 'add --no-cache libstdc++' ] && : > '${libstdcxx}'`)
+
+    const distName = `node-v${NODE_VERSION}-linux-x64-musl`
+    const cachedBin = path.join(home, '.computesdk', 'daemond', distName, 'bin')
+    fs.mkdirSync(cachedBin, { recursive: true })
+    const payload = JSON.stringify({
+      token: 'tok',
+      requestId: 'r',
+      daemon: { reused: false, pid: 4242, sseUrl: '' },
+      command: { exitCode: 0, signal: null, stdout: 'ok', stderr: '', combined: 'ok' },
+    })
+    fs.writeFileSync(path.join(cachedBin, 'node'), `#!/bin/sh\n[ -f '${libstdcxx}' ] || exit 127\necho '${payload}'\n`, { mode: 0o755 })
+
+    const command = daemonSeedScriptCommand({ ssePort: 38989 }, 'ignored')
+    const result = await runSeedCommand(command, { PATH: bin, HOME: home, DAEMOND_NODE_MUSL_DIST_URL: 'http://127.0.0.1:1' })
+    expect(result.status).toBe(0)
+    expect(parseSeedInvocationOutput(result.stdout).command.stdout).toBe('ok')
+  }, 60_000)
+
   it('verifies the musl download against the pinned musl digest', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-home-'))
     const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'daemond-bin-'))

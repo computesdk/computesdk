@@ -249,6 +249,10 @@ function nodeBootstrapPrelude(exec: string): string {
     `    __daemond_dist="node-v${v}-$__daemond_flavor"`,
     '    __daemond_dir="$__daemond_home/$__daemond_dist"',
     '    if [ -x "$__daemond_dir/bin/node" ]; then',
+    // A musl cache in a persisted home can outlive the container that had libstdc++.
+    '      if [ -n "$__daemond_musl" ] && command -v apk >/dev/null 2>&1 && ! "$__daemond_dir/bin/node" --version >/dev/null 2>&1; then',
+    "        apk add --no-cache libstdc++ >/dev/null 2>&1 || true",
+    "      fi",
     '      __daemond_node="$__daemond_dir/bin/node"',
     '    elif [ -d "$__daemond_dir" ]; then',
     '      __daemond_err="cached node at $__daemond_dir is unusable; remove it and retry"',
