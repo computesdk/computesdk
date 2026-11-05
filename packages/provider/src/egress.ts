@@ -86,7 +86,10 @@ function validateEgressOptions(egress: InstanceEgressOptions): void {
 const nodeResolverFor = (shimPath: string, configPath: string) =>
   'NODE_BIN="$(command -v node || command -v nodejs || true)"; ' +
   'if [ -z "$NODE_BIN" ]; then ' +
-  'NODE_BIN="$(ls -d "${HOME:-/tmp}/.computesdk/daemond/node-v"*-linux-*/bin/node 2>/dev/null | head -n 1)"; ' +
+  // Several flavors (glibc, musl) can share a persisted home; take one that runs here.
+  'for c in "${HOME:-/tmp}/.computesdk/daemond/node-v"*-linux-*/bin/node; do ' +
+  '"$c" --version >/dev/null 2>&1 && { NODE_BIN="$c"; break; }; ' +
+  'done; ' +
   'fi; ' +
   'if [ -z "$NODE_BIN" ]; then echo "egress: no JavaScript runtime found in instance" >&2; exit 127; fi; ' +
   `exec "$NODE_BIN" ${shimPath} ${configPath}`;
