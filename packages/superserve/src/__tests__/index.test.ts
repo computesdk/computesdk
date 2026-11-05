@@ -6,5 +6,6 @@ runProviderTestSuite({
   provider: superserve({}),
   supportsFilesystem: true,
   supportsStreaming: true,
+  supportsProcesses: true,
   skipIntegration: !process.env.SUPERSERVE_API_KEY,
 });
