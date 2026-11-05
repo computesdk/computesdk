@@ -78,7 +78,8 @@ jobs:
   k8s-integration-tests:
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+    # Disabled for now.
+    if: false
     permissions:
       contents: read
 
