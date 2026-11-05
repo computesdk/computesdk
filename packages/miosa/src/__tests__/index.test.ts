@@ -131,6 +131,45 @@ describe("miosa provider", () => {
       expect(requestBody(fetchMock).snapshot_id).toBe("snap-123");
     });
 
+    it("should send runtime as runtime_profile", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY, runtime: "firecracker" });
+      await provider.sandbox.create();
+      expect(requestBody(fetchMock).runtime_profile).toBe("standard");
+    });
+
+    it("should leave runtime_profile to MIOSA when runtime is unset", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY });
+      await provider.sandbox.create();
+      expect(requestBody(fetchMock)).not.toHaveProperty("runtime_profile");
+    });
+
+    it("should pause and resume the same sandbox from the native handle", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY, runtime: "firecracker" });
+      const sandbox = await provider.sandbox.create();
+      const handle = sandbox.getInstance() as unknown as {
+        pause(): Promise<MiosaSandboxRecord>;
+        resume(): Promise<MiosaSandboxRecord>;
+      };
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ id: sandbox.sandboxId, state: "paused" }),
+      );
+      expect((await handle.pause()).state).toBe("paused");
+      expect(lastRequest(fetchMock).url).toBe(
+        `${DEFAULT_BASE_URL}/sandboxes/${sandbox.sandboxId}/pause`,
+      );
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ id: sandbox.sandboxId, state: "running" }),
+      );
+      expect((await handle.resume()).state).toBe("running");
+      expect(lastRequest(fetchMock).url).toBe(
+        `${DEFAULT_BASE_URL}/sandboxes/${sandbox.sandboxId}/resume`,
+      );
+      expect(Object.keys(handle)).not.toContain("pause");
+    });
+
     it("should surface API error codes", async () => {
       fetchMock.mockResolvedValueOnce(
         jsonResponse({ error: { code: "TENANT_RESOLUTION_FAILED" } }, 422),

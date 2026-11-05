@@ -72,6 +72,30 @@ export interface MiosaConfig {
    * process and for this API key. Read the real id from `getInfo().id`.
    */
   lazyCreate?: boolean;
+  /**
+   * Sandbox runtime, sent as MIOSA's `runtime_profile`. `firecracker`
+   * (profile `standard`) is the runtime with pause/resume, snapshots and
+   * fork; `soma` is the lighter default runtime, which has none of them.
+   * Unset leaves the choice to MIOSA. `MIOSA_RUNTIME` sets it per process.
+   */
+  runtime?: MiosaRuntime;
+}
+
+export type MiosaRuntime = "firecracker" | "soma" | "auto";
+
+const RUNTIME_PROFILE: Record<MiosaRuntime, string> = {
+  firecracker: "standard",
+  soma: "soma",
+  auto: "auto",
+};
+
+function runtimeProfile(config: MiosaConfig): string | undefined {
+  const raw =
+    config.runtime ??
+    (typeof process !== "undefined" ? process.env?.MIOSA_RUNTIME : undefined);
+  if (raw === undefined) return undefined;
+  const key = raw.trim().toLowerCase() as MiosaRuntime;
+  return RUNTIME_PROFILE[key];
 }
 
 // ── MIOSA API response shapes (subset the adapter consumes) ────────────────
@@ -1934,6 +1958,51 @@ async function runFirstCommand(
 
 // ── Provider ────────────────────────────────────────────────────────────────
 
+/**
+ * Same-box pause/resume on the native handle. MIOSA suspends a Firecracker
+ * sandbox in place (memory, processes and files survive) through
+ * POST /sandboxes/:id/pause and /resume on the account API. The regional
+ * endpoint's runtime has no pause, so a regional sandbox gets a clear error
+ * naming the remedy instead of the account API's bare 404. Attached as
+ * non-enumerable methods so the handle still serialises as plain data.
+ */
+async function lifecycleVerb(
+  sandbox: MiosaSandbox,
+  verb: "pause" | "resume",
+): Promise<MiosaSandboxRecord> {
+  const sandboxId = await resolveSandboxId(sandbox.apiKey, sandbox.record.id);
+  if (sandbox.runner || sandboxTransport.get(sandboxId) === "regional") {
+    throw new Error(
+      `MIOSA cannot ${verb} sandbox ${sandboxId}: sandboxes on the regional ` +
+        `endpoint have no pause/resume — recreate it with runnerMode: false ` +
+        `(or MIOSA_RUNNER_MODE=0) to ${verb} it.`,
+    );
+  }
+  const payload = await miosaRequest<unknown>(
+    { apiKey: sandbox.apiKey, baseUrl: sandbox.baseUrl },
+    "POST",
+    `/sandboxes/${sandboxId}/${verb}`,
+  );
+  const result = unwrapSandbox(payload);
+  if (typeof result?.state === "string") sandbox.record.state = result.state;
+  return sandbox.record;
+}
+
+export type MiosaSandboxHandle = MiosaSandbox & {
+  pause(): Promise<MiosaSandboxRecord>;
+  resume(): Promise<MiosaSandboxRecord>;
+};
+
+function withLifecycle(sandbox: MiosaSandbox): MiosaSandboxHandle {
+  if (typeof (sandbox as Partial<MiosaSandboxHandle>).pause !== "function") {
+    Object.defineProperties(sandbox, {
+      pause: { value: () => lifecycleVerb(sandbox, "pause"), configurable: true },
+      resume: { value: () => lifecycleVerb(sandbox, "resume"), configurable: true },
+    });
+  }
+  return sandbox as MiosaSandboxHandle;
+}
+
 const createMiosaProvider = defineProvider<
   MiosaSandbox,
   MiosaConfig,
@@ -1984,6 +2053,8 @@ const createMiosaProvider = defineProvider<
           // the caller asked for "big", xl is the biggest big we sell.
           body.size = (fit ?? sizes[sizes.length - 1]).size;
         }
+        const profile = runtimeProfile(config);
+        if (profile !== undefined) body.runtime_profile = profile;
         if (options?.templateId !== undefined)
           body.template_id = options.templateId;
         if (options?.snapshotId !== undefined)
@@ -1993,14 +2064,14 @@ const createMiosaProvider = defineProvider<
         if (options?.metadata !== undefined) body.metadata = options.metadata;
 
         if (lazyCreateEnabled(config, auth)) {
-          const sandbox = newLazySandbox(auth, body);
+          const sandbox = withLifecycle(newLazySandbox(auth, body));
           return { instance: sandbox, instanceId: sandbox.record.id };
         }
 
         const created = await createSandboxRecord(auth, body);
         const handleAuth = settleCreated(auth, created);
         return {
-          instance: { record: created.record, ...handleAuth },
+          instance: withLifecycle({ record: created.record, ...handleAuth }),
           instanceId: created.record.id,
         };
       },
@@ -2018,7 +2089,7 @@ const createMiosaProvider = defineProvider<
           );
           const record = unwrapSandbox(payload);
           return {
-            instance: { record, ...handleAuthFor(config, auth, record.id) },
+            instance: withLifecycle({ record, ...handleAuthFor(config, auth, record.id) }),
             instanceId: record.id,
           };
         } catch (error) {
@@ -2036,7 +2107,7 @@ const createMiosaProvider = defineProvider<
           "/sandboxes",
         );
         return (payload.data ?? []).map((record) => ({
-          instance: { record, ...handleAuthFor(config, auth, record.id) },
+          instance: withLifecycle({ record, ...handleAuthFor(config, auth, record.id) }),
           instanceId: record.id,
         }));
       },

@@ -79,6 +79,10 @@ With `lazyCreate` on, `create()` makes no network call. The first `runCommand()`
 | `snapshot.create()` | `POST /sandboxes/:id/snapshots` | native Firecracker checkpoints; `name → comment` |
 | `snapshot.list({instanceId})` | `GET /sandboxes/:id/snapshots` | MIOSA snapshots are sandbox-scoped |
 
+| `getInstance().pause()` / `.resume()` | `POST /sandboxes/:id/pause` / `resume` | same-box suspend: memory, processes and files survive; Firecracker runtime only |
+
+Set `runtime: "firecracker"` (or `MIOSA_RUNTIME=firecracker`) to create sandboxes on MIOSA's Firecracker runtime (`runtime_profile: "standard"`), which has pause/resume and snapshots and keeps background processes alive between commands. Unset, MIOSA picks the runtime (currently SOMA, which has none of these).
+
 Beyond the ComputeSDK surface, the same API key unlocks the full MIOSA API: sandbox fork/branching, pause/resume, desktop graduation, deploys, and off-host exports.
 
 ## Testing
