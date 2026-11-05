@@ -1,0 +1,63 @@
+name: Provider Test
+
+# Run one provider package's tests (including its live integration suite)
+# on demand, e.g.:
+#   compute actions dispatch computesdk/computesdk --workflow provider-test.yml --inputs provider=namespace
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Package directory under packages/ (e.g. namespace, e2b)
+        required: true
+        type: string
+
+jobs:
+  provider-test:
+    runs-on: namespace-profile-default
+    permissions:
+      contents: read
+    env:
+      PROVIDER: ${{ inputs.provider }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check provider
+      run: |
+        if ! printf '%s' "$PROVIDER" | grep -Eq '^[a-z0-9-]+$' || [ ! -f "packages/$PROVIDER/package.json" ]; then
+          echo "Unknown provider: $PROVIDER"
+          exit 1
+        fi
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+
+    - name: Build packages
+      run: pnpm build
+
+    # Every repo secret is exported so each provider's suite finds the
+    # credential names it already reads (NSC_TOKEN, E2B_API_KEY, ...).
+    # Missing credentials fail the run instead of skipping the live tests.
+    - name: Run ${{ inputs.provider }} tests
+      env:
+        COMPUTESDK_REQUIRE_INTEGRATION: '1'
+        # Per-package live-test opt-ins.
+        RUN_INTEGRATION: '1'
+        MSB_RUN_INTEGRATION: '1'
+        NOVITA_RUN_INTEGRATION: '1'
+        RUNLOOP_INTEGRATION: '1'
+        LIZARD_LIVE_TESTS: '1'
+        SECRETS_JSON: ${{ toJSON(secrets) }}
+      run: |
+        eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select((.key | ascii_downcase) != "github_token") | "export \(.key)=\(.value | @sh)"')"
+        unset SECRETS_JSON
+        pnpm --filter "./packages/$PROVIDER" test

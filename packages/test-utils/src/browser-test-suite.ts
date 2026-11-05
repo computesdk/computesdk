@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 // @ts-ignore - workspace reference
+import { failIfIntegrationRequired } from './provider-test-suite';
 import type { BrowserProvider, ProviderBrowserSession } from '@computesdk/provider';
 
 export interface BrowserProviderTestConfig {
@@ -30,6 +31,8 @@ export function runBrowserProviderTestSuite(config: BrowserProviderTestConfig) {
   const { provider, name, timeout = 60000, skipIntegration = false, skipSessionReads = false } = config;
 
   describe(`${name} Browser Provider`, () => {
+    failIfIntegrationRequired(name, skipIntegration);
+
     let session: ProviderBrowserSession;
 
     beforeAll(async () => {
