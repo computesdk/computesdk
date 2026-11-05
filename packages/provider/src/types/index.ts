@@ -15,6 +15,7 @@ export type {
   StartProcessOptions,
   ProcessStatus,
   ProcessHandle,
+  ProcessTier,
   InstanceFileSystem,
   CreateInstanceOptions,
   Volume,

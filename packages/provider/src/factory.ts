@@ -30,7 +30,10 @@ import type {
   Volume,
   CreateVolumeOptions,
   ListVolumesOptions,
+  ProcessRuntimeOptions,
+  ProcessTier,
 } from './types/index.js';
+import { attachShellProcess, runCommandViaShell, startShellProcess, type CommandRunner } from './shell-process.js';
 import {
   daemonSeedScriptCommand,
   parseSeedInvocationOutput,
@@ -310,6 +313,15 @@ export interface InstanceMethods<TInstance = any, TConfig = any> {
    * a provider that can only deliver output at exit should leave this unset.
    */
   streamCommand?: (instance: TInstance, command: string, options: RunCommandOptions) => Promise<CommandResult>;
+
+  /**
+   * Optional native background-process implementation, used for
+   * `instance.startProcess` instead of the shell process tier. Same contract
+   * as the framework's handle: stdin writes (when `options.stdin`), status
+   * snapshots with all output so far, callbacks, wait and kill. Leave unset
+   * unless the provider's API runs detached processes with live output.
+   */
+  startProcess?: (instance: TInstance, command: string, options: StartProcessOptions) => Promise<ProcessHandle>;
   getInfo: (instance: TInstance) => Promise<InstanceInfo>;
   getUrl: (instance: TInstance, options: { port: number; protocol?: string }) => Promise<string>;
 
@@ -481,6 +493,10 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   /** Present only when the provider implements runtime detach. */
   readonly detachVolume?: (volume: string | Volume, mountPath?: string) => Promise<void>;
   private daemonStreamState?: DaemonStreamState;
+  /** Which runtime serves streaming `runCommand` and `startProcess`. */
+  readonly processRuntime: { streaming: ProcessTier; processes: ProcessTier };
+  /** The provider's plain `runCommand` — all the shell process tier needs. */
+  private readonly shellRunner: CommandRunner;
   constructor(
     private instance: TInstance,
     instanceId: string,
@@ -488,9 +504,16 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     private methods: InstanceMethods<TInstance>,
     private config: any,
     private destroyMethod: (config: any, instanceId: string) => Promise<void>,
-    private providerInstance: Provider
+    private providerInstance: Provider,
+    private runtimeMode: 'shell' | 'daemond' = 'shell'
   ) {
     this.instanceId = instanceId;
+    const fallback: ProcessTier = runtimeMode === 'daemond' ? 'daemond' : 'shell';
+    this.processRuntime = {
+      streaming: methods.streamCommand ? 'native' : fallback,
+      processes: methods.startProcess ? 'native' : fallback,
+    };
+    this.shellRunner = (command, options) => this.methods.runCommand(this.instance, command, options);
     this.sandboxId = instanceId;
     this.provider = providerName;
 
@@ -577,6 +600,10 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
       // routable port for it, so it is asked first.
       if (this.methods.streamCommand) {
         return await this.methods.streamCommand(this.instance, command, options);
+      }
+
+      if (this.runtimeMode !== 'daemond') {
+        return await runCommandViaShell(this.shellRunner, command, options);
       }
 
       const forwardedOptions: RunCommandOptions = { ...options };
@@ -735,7 +762,33 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     return { invocation, result };
   }
 
+  /**
+   * Order of preference: the provider's native `startProcess`, then the shell
+   * process tier over plain `runCommand`, or daemond when the provider was
+   * configured with `processRuntime: 'daemond'`.
+   */
   async startProcess(
+    command: string,
+    options: StartProcessOptions = {}
+  ): Promise<ProcessHandle> {
+    if (this.methods.startProcess) {
+      const handle = await this.methods.startProcess(this.instance, command, options);
+      return handle.runtime ? handle : Object.assign(handle, { runtime: 'native' as const });
+    }
+    if (this.runtimeMode === 'daemond') return await this.startDaemondProcess(command, options);
+    return await startShellProcess(this.shellRunner, command, options);
+  }
+
+  async attachProcess(jobId: string, options: StartProcessOptions = {}): Promise<ProcessHandle> {
+    return attachShellProcess(this.shellRunner, jobId, options);
+  }
+
+  /**
+   * Starts a process on daemond regardless of the configured runtime. The
+   * egress router uses it: its shim is a Node program, and daemond's bootstrap
+   * is what puts Node on images that lack it.
+   */
+  async startDaemondProcess(
     command: string,
     options: StartProcessOptions = {}
   ): Promise<ProcessHandle> {
@@ -799,6 +852,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     return {
       pid,
       jobId,
+      runtime: 'daemond' as const,
       async write(data: string | Uint8Array): Promise<void> {
         const bytes = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
         await self.daemonJobRequest(
@@ -1060,7 +1114,8 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     private config: TConfig,
     private providerName: string,
     private methods: InstanceMethods<TInstance, TConfig>,
-    private providerInstance: Provider & { readonly sizes: InstanceSizeManager }
+    private providerInstance: Provider & { readonly sizes: InstanceSizeManager },
+    private runtimeMode: 'shell' | 'daemond' = 'shell'
   ) {}
 
   private wrap(result: InstanceLifecycleResult<TInstance>): GeneratedInstance<TInstance> {
@@ -1072,7 +1127,8 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance
+      this.providerInstance,
+      this.runtimeMode
     );
   }
 
@@ -1130,7 +1186,11 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
         if (!attached) await this.methods.destroy(this.config, result.instanceId).catch(() => {});
       };
       try {
-        instance.egress = await setupInstanceEgress(instance, options.egress, this.providerName);
+        instance.egress = await setupInstanceEgress(
+          { filesystem: instance.filesystem, startProcess: (command) => instance.startDaemondProcess(command) },
+          options.egress,
+          this.providerName
+        );
       } catch (error) {
         // A failed router setup must not orphan the instance it was set up on.
         await cleanup();
@@ -1260,7 +1320,8 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
   readonly volume?: ProviderVolumeManager<TVolume>;
 
-  constructor(config: TConfig, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>) {
+  constructor(rawConfig: TConfig & ProcessRuntimeOptions, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>) {
+    const { config, processRuntime } = splitProcessRuntime(rawConfig);
     this.name = providerConfig.name;
     this.sizes = createInstanceSizeManager(config, providerConfig.sizes);
     Object.defineProperty(this, 'sizes', { writable: false, configurable: false });
@@ -1277,7 +1338,8 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
       config,
       providerConfig.name,
       instanceMethods,
-      this
+      this,
+      processRuntime
     );
     this.sandbox = this.instances;
 
@@ -1297,6 +1359,21 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
 }
 
 /**
+ * Takes the framework's `processRuntime` option out of a provider config, so
+ * provider methods only ever see their own fields.
+ */
+function splitProcessRuntime<TConfig>(rawConfig: TConfig & ProcessRuntimeOptions): { config: TConfig; processRuntime: 'shell' | 'daemond' } {
+  if (!rawConfig || typeof rawConfig !== 'object' || !('processRuntime' in rawConfig)) {
+    return { config: rawConfig, processRuntime: 'shell' };
+  }
+  const { processRuntime, ...rest } = rawConfig as ProcessRuntimeOptions & Record<string, unknown>;
+  if (processRuntime !== undefined && processRuntime !== 'shell' && processRuntime !== 'daemond') {
+    throw new Error(`processRuntime must be "shell" or "daemond" (got ${JSON.stringify(processRuntime)})`);
+  }
+  return { config: rest as TConfig, processRuntime: processRuntime ?? 'shell' };
+}
+
+/**
  * Create a provider from method definitions
  *
  * Auto-generates all boilerplate classes and provides feature detection
@@ -1304,8 +1381,8 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
  */
 export function defineProvider<TInstance, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume>(
   providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>
-): (config: TConfig) => Provider<TInstance, TTemplate, TSnapshot, TVolume> & { readonly sizes: InstanceSizeManager } {
-  return (config: TConfig) => {
+): (config: TConfig & ProcessRuntimeOptions) => Provider<TInstance, TTemplate, TSnapshot, TVolume> & { readonly sizes: InstanceSizeManager } {
+  return (config: TConfig & ProcessRuntimeOptions) => {
     return new GeneratedProvider(config, providerConfig);
   };
 }

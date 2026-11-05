@@ -278,6 +278,33 @@ methods: {
 
 **Note:** If you don't implement `filesystem`, the sandbox will still work but filesystem operations will throw helpful "not supported" errors.
 
+## Background processes and streaming
+
+`instance.startProcess(...)` and `runCommand(cmd, { onStdout, onStderr })` work on every provider. The framework picks the runtime in this order:
+
+1. **Native** — the provider's own `streamCommand` / `startProcess` hooks on `methods.instances`.
+2. **Shell tier (default)** — POSIX-shell process records built only on the provider's plain `runCommand`. No Node, daemon or download in the instance, so it works on any image with `sh`, including Alpine and busybox.
+3. **daemond (opt-in)** — the in-box daemon, only when the provider is configured with `processRuntime: 'daemond'`:
+
+```typescript
+const provider = e2b({ apiKey, processRuntime: 'daemond' });
+```
+
+`instance.processRuntime` reports which tier serves each capability, e.g. `{ streaming: 'native', processes: 'shell' }`.
+
+### Shell tier
+
+Each job is a directory `${TMPDIR:-/tmp}/.computesdk/jobs/<jobId>/` (mode 0700). One exec writes the job's files and launches a supervisor with `nohup setsid`; the supervisor runs the command in its own process group with stdout/stderr through FIFOs into a framed log (`out.log`, records `O<len>\n…` / `E<len>\n…` at absolute byte offsets), then writes `pid` and `exit`.
+
+- **Reads** (`status`, `wait`, streaming) are one exec each, take a byte cursor and return only new output, at most 16 KiB of log per exec (about 22 KB base64, under SSM's 24,000-character inline cap). `wait` long-polls in the box for up to 25s per exec.
+- **stdin** (`stdin: true`): a FIFO kept open by a holder process; `write` is one exec appending to it, `closeStdin` kills the holder.
+- **kill** signals the whole process group. A streaming `runCommand`'s `timeout` is enforced in the box by a watchdog that SIGKILLs the group (exit code 124), so the deadline holds when the client is gone. Without `timeout` nothing kills the command.
+- **Reattach**: `instance.attachProcess(jobId)` rebuilds a handle in a new client.
+- **Retention**: a job directory is removed 10 minutes after exit (60s after a kill).
+- **Requirements**: `sh`, `setsid`, `mkfifo`, `kill`, `cat`, `dd`, `wc`, `tail`, `head`, `base64`, `mkdir`, `rm`, `mv`, `sleep`. A missing one fails with `ShellProcessUnsupportedError` naming it.
+
+The egress router (`CreateInstanceOptions.egress`) stays on daemond: its shim is a Node program, and daemond's bootstrap is what installs Node on images without it.
+
 ## Type Definitions
 
 ### Core Types

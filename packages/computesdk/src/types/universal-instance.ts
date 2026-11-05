@@ -82,9 +82,17 @@ export interface StartProcessOptions {
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
   onExit?: (result: { exitCode: number | null; signal: string | null }) => void;
-  /** Interval for the status-polling fallback used when the daemon's SSE port is not reachable. Default 500. */
+  /** Interval for the status-polling fallback of the opt-in daemond runtime. Default 500. */
   pollIntervalMs?: number;
 }
+
+/**
+ * Which runtime serves `startProcess` and streaming `runCommand` on an instance:
+ * - `native`: the provider's own process/streaming API
+ * - `shell`: the default POSIX-shell process records, built on plain `runCommand`
+ * - `daemond`: the in-box daemon, only when the provider was configured with `processRuntime: 'daemond'`
+ */
+export type ProcessTier = 'native' | 'shell' | 'daemond';
 
 /**
  * Snapshot of a running or exited process started via `startProcess`.
@@ -104,12 +112,14 @@ export interface ProcessStatus {
 export interface ProcessHandle {
   readonly pid: number | null;
   readonly jobId: string;
+  /** The runtime serving this process, when the framework knows it. */
+  readonly runtime?: ProcessTier;
   /** Write to stdin. Rejects if the process was not started with `stdin: true` or has exited. */
   write(data: string | Uint8Array): Promise<void>;
   closeStdin(): Promise<void>;
-  /** Current snapshot (daemond `status`). */
+  /** Current snapshot: state plus all output seen so far. */
   status(): Promise<ProcessStatus>;
-  /** Resolve when the process exits (daemond `wait`). Rejects with a `daemond:`-prefixed error if `timeout` elapses first. */
+  /** Resolve when the process exits. Rejects if `timeout` elapses first. */
   wait(options?: { timeout?: number }): Promise<CommandResult & { signal: string | null }>;
   kill(signal?: string): Promise<void>;
 }
@@ -481,8 +491,10 @@ export interface Instance {
   /**
    * Start an interactive long-running process.
    *
-   * Runs `sh -lc <command>` via the on-instance daemon, returning a handle for
-   * stdin writes, status snapshots, output callbacks, and wait/kill control.
+   * Served by the provider's native process API when it has one, otherwise by
+   * the POSIX-shell process tier over plain `runCommand` (or daemond when the
+   * provider was configured with `processRuntime: 'daemond'`). Returns a handle
+   * for stdin writes, status snapshots, output callbacks, and wait/kill control.
    */
   startProcess(command: string, options?: StartProcessOptions): Promise<ProcessHandle>;
 
