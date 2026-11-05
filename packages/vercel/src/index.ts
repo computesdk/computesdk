@@ -197,14 +197,19 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
         }
       },
 
-      getInfo: async (_sandbox: VercelSandbox): Promise<InstanceInfo> => ({
-        id: 'vercel-unknown',
-        provider: 'vercel',
-        status: 'running',
-        createdAt: new Date(),
-        timeout: 300000,
-        metadata: { vercelSandboxId: 'vercel-unknown' }
-      }),
+      getInfo: async (sandbox: VercelSandbox): Promise<InstanceInfo> => {
+        const status = sandbox.status;
+        return {
+          id: sandbox.name,
+          provider: 'vercel',
+          status: status === 'failed' || status === 'aborted' ? 'error'
+            : status === 'stopping' || status === 'stopped' ? 'stopped'
+            : 'running',
+          createdAt: sandbox.createdAt,
+          timeout: sandbox.timeout ?? 300000,
+          metadata: { vercelSandboxName: sandbox.name, vercelStatus: status },
+        };
+      },
 
       getUrl: async (sandbox: VercelSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
