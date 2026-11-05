@@ -66,7 +66,7 @@ describe('shell scripts', () => {
     const sup = supervisorFile()
     expect(sup).toContain('mkfifo "$D/o" "$D/e"')
     expect(sup).toContain('sleep 2147483647 1<>"$D/in"')
-    expect(sup).toContain('setsid sh "$D/run.sh" < "$IN" > "$D/o" 2> "$D/e" &')
+    expect(sup).toContain('setsid sh "$D/run.sh" <&4 4<&- > "$D/o" 2> "$D/e" &')
     expect(sup).toContain('kill -s KILL -- "-$4"')
     expect(sup.indexOf('wait "$pg"')).toBeLessThan(sup.indexOf('mv "$D/exit.tmp" "$D/exit"'))
   })

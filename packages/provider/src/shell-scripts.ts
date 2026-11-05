@@ -120,12 +120,15 @@ export function supervisorFile(): string {
     'mkfifo "$D/o" "$D/e" || exit 1',
     'pump O "$D/o" & po=$!',
     'pump E "$D/e" & pe=$!',
-    'IN=/dev/null',
     'if [ "$STDIN" = 1 ]; then',
     '  mkfifo "$D/in" || exit 1',
     // Read-write open never blocks on a FIFO and keeps a writer alive until closeStdin.
     '  sleep 2147483647 1<>"$D/in" & echo $! > "$D/holder"',
-    '  IN="$D/in"',
+    // The command's stdin is opened now, so bytes written before it starts stay
+    // buffered and a closeStdin that comes first still ends in EOF, not a hang.
+    '  exec 4< "$D/in"',
+    'else',
+    '  exec 4< /dev/null',
     'fi',
     // With HOLD, the command waits for the client's confirm exec (`go`). An
     // instance whose execs share no state never confirms, and the command
@@ -137,8 +140,9 @@ export function supervisorFile(): string {
     '  [ -f "$D/go" ] || printf \'exit 125\\n\' > "$D/run.sh"',
     'fi',
     // Not a group leader here, so setsid does not fork: $! is the new pgid.
-    'setsid sh "$D/run.sh" < "$IN" > "$D/o" 2> "$D/e" &',
+    'setsid sh "$D/run.sh" <&4 4<&- > "$D/o" 2> "$D/e" &',
     'pg=$!',
+    'exec 4<&-',
     'echo "$pg" > "$D/pid.tmp" && mv "$D/pid.tmp" "$D/pid"',
     'wd=',
     'if [ -n "$TIMEOUT" ]; then',
