@@ -8,6 +8,9 @@ runProviderTestSuite({
   supportsFilesystem: true,
   // Freestyle exposes VMs through mapped domains, not a stock per-port URL.
   supportsGetUrl: false,
+  // Full Linux guests run the shared POSIX-shell tier for live output and processes.
+  supportsStreaming: true,
+  supportsProcesses: true,
   // Integration tests need an API key; the runtime snapshot is baked on first use.
   skipIntegration: !process.env.FREESTYLE_API_KEY,
 });

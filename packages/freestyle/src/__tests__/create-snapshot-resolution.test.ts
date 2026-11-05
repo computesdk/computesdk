@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
  * `create` used to resolve the runtime snapshot by listing snapshots and
@@ -77,10 +77,18 @@ async function freshProvider() {
 describe('create: snapshot resolution', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // A snapshot or API URL from the environment would replace the runtime slug
+    // these tests are about, so they run as if neither is configured.
+    vi.stubEnv('FREESTYLE_SNAPSHOT_ID', '');
+    vi.stubEnv('FREESTYLE_API_URL', '');
     snapshotsList.mockResolvedValue({ snapshots: [], totalCount: 0 });
     vmsDelete.mockResolvedValue(undefined);
     vmExec.mockResolvedValue({ statusCode: 0, stdout: '', stderr: '' });
     vmSnapshot.mockResolvedValue({ snapshotId: 'snap-baked' });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('names the runtime snapshot by slug instead of looking it up', async () => {
