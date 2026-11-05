@@ -8,7 +8,7 @@
 import * as fs from 'fs/promises';
 import { randomUUID } from 'node:crypto';
 import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError, TIMEOUT_EXIT_CODE, START_FAILURE_EXIT_CODE } from '@computesdk/provider';
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, CreateSnapshotOptions, RunCommandOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
 /**
  * Namespace sandbox instance
@@ -22,8 +22,19 @@ export interface NamespaceSandbox {
   createdAt: Date;
   /** Instance lifecycle state from InstanceMetadata.status, lowercased (e.g. 'running', 'destroying'). */
   status?: string;
-  /** Mountpoint of the persistent volume seeded from a snapshot, when created via snapshotId. */
+  /**
+   * Container path of the snapshot volume (opt-in `snapshotVolume`, or a
+   * `snapshotId` restore). Commands default to it as their cwd.
+   */
   snapshotVolumeMountPoint?: string;
+}
+
+/** Opt-in persistent volume that makes a sandbox snapshot-capable. */
+export interface NamespaceSnapshotVolumeOptions {
+  /** Container path the volume is mounted at; also the default cwd (default: /workspace). */
+  mountPath?: string;
+  /** Volume size in MB (default: 1024). */
+  sizeMb?: number;
 }
 
 /**
@@ -99,6 +110,14 @@ export interface NamespaceConfig {
   destroyReason?: string;
   /** Target container name for command execution (default: "main-container") */
   targetContainerName?: string;
+  /**
+   * Attach a persistent volume to every sandbox so `snapshot.create` works.
+   * Only the volume's contents are snapshotted, never the rootfs. Can also be
+   * passed per create as `create({ snapshotVolume })`.
+   */
+  snapshotVolume?: boolean | NamespaceSnapshotVolumeOptions;
+  /** How long `snapshot.create` waits for the volume snapshot to commit (default: 300000). */
+  snapshotTimeoutMs?: number;
 }
 
 const API_ENDPOINTS = {
@@ -115,6 +134,7 @@ const COMMAND_SERVICE = {
 
 const STORAGE_SERVICE = {
   LIST_PERSISTENT_VOLUMES: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumes',
+  DESCRIBE_PERSISTENT_VOLUME: '/namespace.cloud.compute.v1beta.StorageService/DescribePersistentVolume',
   DESTROY_PERSISTENT_VOLUMES: '/namespace.cloud.compute.v1beta.StorageService/DestroyPersistentVolumes',
   LIST_PERSISTENT_VOLUME_SNAPSHOTS: '/namespace.cloud.compute.v1beta.StorageService/ListPersistentVolumeSnapshots',
   DESTROY_PERSISTENT_VOLUME_SNAPSHOT: '/namespace.cloud.compute.v1beta.StorageService/DestroyPersistentVolumeSnapshot',
@@ -138,6 +158,23 @@ interface WireSnapshotRecord {
   created_at?: string;
   abandonedAt?: string;
   abandoned_at?: string;
+  releasedAt?: string;
+  released_at?: string;
+  /** The volume this one was seeded from (`from_snapshot_id`). */
+  snapshotFrom?: string;
+  snapshot_from?: string;
+}
+
+function snapshotReleasedAt(snap: WireSnapshotRecord): string | undefined {
+  return snap.releasedAt || snap.released_at || undefined;
+}
+
+function snapshotParent(snap: WireSnapshotRecord): string | undefined {
+  return snap.snapshotFrom || snap.snapshot_from || undefined;
+}
+
+function isAbandoned(snap: WireSnapshotRecord): boolean {
+  return Boolean(snap.abandonedAt || snap.abandoned_at);
 }
 
 function snapshotGeneration(snap: WireSnapshotRecord): string | undefined {
@@ -162,19 +199,110 @@ async function listPersistentVolumes(token: string): Promise<WireVolume[]> {
   return volumes;
 }
 
-async function listVolumeSnapshotRecords(token: string): Promise<WireSnapshotRecord[]> {
-  const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS, {
-    method: 'POST',
-    body: JSON.stringify({})
-  });
-  return response.snapshots || [];
+async function listVolumeSnapshotRecords(token: string, tag?: string): Promise<WireSnapshotRecord[]> {
+  const records: WireSnapshotRecord[] = [];
+  let cursor: string | undefined;
+  do {
+    const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS, {
+      method: 'POST',
+      body: JSON.stringify({ ...(tag && { tag }), ...(cursor && { pagination_cursor: cursor }) })
+    });
+    records.push(...(response.snapshots || []));
+    cursor = response.pagination_cursor || undefined;
+  } while (cursor);
+  return records;
 }
 
 /**
- * Mountpoint for the persistent volume attached when `create({ snapshotId })`
- * restores a sandbox — this is where the snapshotted filesystem state lands.
+ * Snapshot volumes: a PERSISTENT volume is snapshotted by Namespace when its
+ * instance shuts down, and `from_snapshot_id: <volumeId>` seeds a new volume
+ * from that snapshot — but only within the same tag (the API resolves it as
+ * `<tag>/<volumeId>`), so restores reuse the source tag. SDK snapshot ids are
+ * that same `<tag>/<volumeId>` reference.
  */
-const SNAPSHOT_VOLUME_MOUNTPOINT = '/computesdk-data';
+const SNAPSHOT_VOLUME_HOST_PATH = `/volumes/computesdk-snapshot`;
+const DEFAULT_SNAPSHOT_MOUNT_PATH = '/workspace';
+/** Instance label carrying the snapshot volume's tag. */
+const SNAPSHOT_TAG_LABEL = 'computesdk-snapshot-tag';
+/** Instance label carrying the container mount path (base64url — labels are tag-like strings). */
+const SNAPSHOT_MOUNT_LABEL = 'computesdk-snapshot-mount';
+const DEFAULT_SNAPSHOT_TIMEOUT_MS = 5 * 60 * 1000;
+const SNAPSHOT_POLL_INTERVAL_MS = 1000;
+
+interface WireLabel { name?: string; value?: string }
+
+function labelValue(labels: WireLabel[] | undefined, name: string): string | undefined {
+  return (labels || []).find((l) => l?.name === name)?.value || undefined;
+}
+
+/** Container path of an instance's snapshot volume, recovered from its labels. */
+function snapshotMountFromLabels(labels: WireLabel[] | undefined): string | undefined {
+  if (!labelValue(labels, SNAPSHOT_TAG_LABEL)) return undefined;
+  const encoded = labelValue(labels, SNAPSHOT_MOUNT_LABEL);
+  if (!encoded) return DEFAULT_SNAPSHOT_MOUNT_PATH;
+  try { return Buffer.from(encoded, 'base64url').toString() || DEFAULT_SNAPSHOT_MOUNT_PATH; } catch { return DEFAULT_SNAPSHOT_MOUNT_PATH; }
+}
+
+/** Splits an SDK snapshot id `<tag>/<volumeId>`. */
+export function parseNamespaceSnapshotId(snapshotId: string): { tag: string; volumeId: string } {
+  const slash = snapshotId.lastIndexOf('/');
+  if (slash <= 0 || slash === snapshotId.length - 1) {
+    throw new Error(`Invalid Namespace snapshot id "${snapshotId}": expected "<volumeTag>/<volumeId>" as returned by snapshot.create`);
+  }
+  return { tag: snapshotId.slice(0, slash), volumeId: snapshotId.slice(slash + 1) };
+}
+
+function resolveSnapshotVolumeOptions(
+  value: unknown,
+): NamespaceSnapshotVolumeOptions | undefined {
+  if (value === true) return {};
+  if (value && typeof value === 'object') return value as NamespaceSnapshotVolumeOptions;
+  return undefined;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Size and cell of a (released) source volume. A restore must request at
+ * least its size, and land in its cell — volumes are cell-local, and a
+ * restore placed elsewhere fails with `<tag>/<volumeId> does not exist`.
+ */
+async function describeSourceVolume(token: string, volumeId: string, tag: string): Promise<{ sizeMb?: number; cell?: string }> {
+  try {
+    const response = await fetchNamespace(token, STORAGE_SERVICE.DESCRIBE_PERSISTENT_VOLUME, {
+      method: 'POST',
+      body: JSON.stringify({ id: volumeId, tag }),
+    });
+    const size = Number(response?.volume?.sizeMb ?? response?.volume?.size_mb);
+    // `site` is the cell's host, e.g. `iad3-a.nscluster.cloud`.
+    const site = response?.volume?.site;
+    return {
+      ...(Number.isFinite(size) && size > 0 && { sizeMb: size }),
+      ...(typeof site === 'string' && site !== '' && { cell: site.split('.')[0] }),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** Runs `fn` over `items` with at most `limit` in flight. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }));
+  return results;
+}
+
+/** Defaults a command's cwd to the sandbox's snapshot volume. */
+function withDefaultCwd(sandbox: NamespaceSandbox, options?: RunCommandOptions): RunCommandOptions | undefined {
+  if (!sandbox.snapshotVolumeMountPoint || options?.cwd) return options;
+  return { ...options, cwd: sandbox.snapshotVolumeMountPoint };
+}
 
 /**
  * Size requested for runtime-attached persistent volumes. `VolumeRequest`
@@ -556,8 +684,64 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const containerName = config.targetContainerName || 'main-container';
         const image = options?.image;
         const mounts = options?.volumes;
+        const unifiedMounts = isUnifiedVolumeMounts(mounts) ? mounts : [];
+        const instanceOptions = plainObject(options?.instanceOptions) as Record<string, any>;
+        const containerOptions = plainObject(options?.containerOptions) as Record<string, any>;
 
         try {
+          // Snapshot volume: opt-in (config or per-create `snapshotVolume`),
+          // always present on a snapshotId restore. A restore must reuse the
+          // source volume's tag and request at least its size.
+          const volumeOptions =
+            resolveSnapshotVolumeOptions(options?.snapshotVolume) ??
+            resolveSnapshotVolumeOptions(config.snapshotVolume);
+          let snapshotVolume: { tag: string; mountPath: string; sizeMb: number; fromVolumeId?: string; cell?: string } | undefined;
+          if (options?.snapshotId) {
+            const { tag, volumeId } = parseNamespaceSnapshotId(options.snapshotId);
+            const source = await describeSourceVolume(token, volumeId, tag);
+            snapshotVolume = {
+              tag,
+              mountPath: volumeOptions?.mountPath || DEFAULT_SNAPSHOT_MOUNT_PATH,
+              sizeMb: Math.max(volumeOptions?.sizeMb ?? 0, source.sizeMb ?? RUNTIME_VOLUME_SIZE_MB),
+              fromVolumeId: volumeId,
+              ...(source.cell && { cell: source.cell }),
+            };
+          } else if (volumeOptions) {
+            snapshotVolume = {
+              tag: `computesdk-${randomUUID().slice(0, 12)}`,
+              mountPath: volumeOptions.mountPath || DEFAULT_SNAPSHOT_MOUNT_PATH,
+              sizeMb: volumeOptions.sizeMb ?? RUNTIME_VOLUME_SIZE_MB,
+            };
+          }
+
+          const volumes = [
+            ...(snapshotVolume ? [{
+              mount_point: SNAPSHOT_VOLUME_HOST_PATH,
+              tag: snapshotVolume.tag,
+              persistency_kind: 'PERSISTENT',
+              size_mb: snapshotVolume.sizeMb,
+              ...(snapshotVolume.fromVolumeId && { from_snapshot_id: snapshotVolume.fromVolumeId }),
+            }] : []),
+            // Unified mounts → tag-keyed PERSISTENT volumes; they
+            // materialize on attach.
+            ...unifiedMounts.map((m: any, i: number) => ({
+              mount_point: `${VOLUME_HOST_ROOT}/volume${i}`,
+              tag: resolveVolumeRef(m.volume).name ?? resolveVolumeRef(m.volume).id,
+              persistency_kind: 'PERSISTENT',
+              size_mb: RUNTIME_VOLUME_SIZE_MB,
+            })),
+          ];
+          // Bind each VM-level volume into the container — the
+          // CommandService execs inside the container, so a VM-side mount
+          // alone is invisible to runCommand.
+          const hostMounts = [
+            ...(snapshotVolume ? [{ host_path: SNAPSHOT_VOLUME_HOST_PATH, container_path: snapshotVolume.mountPath }] : []),
+            ...unifiedMounts.map((m: any, i: number) => ({
+              host_path: `${VOLUME_HOST_ROOT}/volume${i}`,
+              container_path: m.mountPath,
+            })),
+          ];
+
           const requestBody = {
             ...plainObject(options?.instanceOptions),
             shape: {
@@ -569,33 +753,17 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               // precedence over the factory config.
               ...(plainObject(options?.instanceOptions).shape as Record<string, unknown> | undefined),
             },
-            // snapshotId restores filesystem state by seeding a new
-            // persistent volume from the given snapshot — Namespace's
-            // fork model is volume-backed rather than whole-instance.
-            ...(options?.snapshotId && {
-              volumes: [{
-                mount_point: SNAPSHOT_VOLUME_MOUNTPOINT,
-                tag: `computesdk-${randomUUID().slice(0, 8)}`,
-                persistency_kind: 'PERSISTENT',
-                from_snapshot_id: options.snapshotId,
-              }],
+            ...(volumes.length > 0 && {
+              volumes: [...(Array.isArray(instanceOptions.volumes) ? instanceOptions.volumes : []), ...volumes],
             }),
-            // Unified mounts → instanceOptions.volumes entries (tag-keyed
-            // PERSISTENT volumes; they materialize on attach).
-            ...(isUnifiedVolumeMounts(mounts) && {
-              volumes: [
-                ...(options?.snapshotId ? [{
-                  mount_point: SNAPSHOT_VOLUME_MOUNTPOINT,
-                  tag: `computesdk-${randomUUID().slice(0, 8)}`,
-                  persistency_kind: 'PERSISTENT',
-                  from_snapshot_id: options.snapshotId,
-                }] : []),
-                ...mounts.map((m: any, i: number) => ({
-                  mount_point: `${VOLUME_HOST_ROOT}/volume${i}`,
-                  tag: resolveVolumeRef(m.volume).name ?? resolveVolumeRef(m.volume).id,
-                  persistency_kind: 'PERSISTENT',
-                  size_mb: RUNTIME_VOLUME_SIZE_MB,
-                })),
+            ...(snapshotVolume?.cell && !instanceOptions.placement && {
+              placement: [`cell:${snapshotVolume.cell}`],
+            }),
+            ...(snapshotVolume && {
+              labels: [
+                ...(Array.isArray(instanceOptions.labels) ? instanceOptions.labels : []),
+                { name: SNAPSHOT_TAG_LABEL, value: snapshotVolume.tag },
+                { name: SNAPSHOT_MOUNT_LABEL, value: Buffer.from(snapshotVolume.mountPath).toString('base64url') },
               ],
             }),
             containers: [{
@@ -616,22 +784,15 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
                 options.dockerSockPath !== '' && {
                   docker_sock_path: options.dockerSockPath
                 }),
-              // Bind each VM-level volume into this container at the
-              // requested mountPath — the CommandService execs inside the
-              // container, so a VM-side mount alone is invisible to
-              // runCommand.
-              ...(isUnifiedVolumeMounts(mounts) && {
+              ...(hostMounts.length > 0 && {
                 experimental: {
-                  ...(plainObject(options?.containerOptions) as any)?.experimental,
+                  ...containerOptions.experimental,
                   host_mount: [
-                    ...((plainObject(options?.containerOptions) as any)?.experimental?.host_mount ?? []),
-                    ...mounts.map((m: any, i: number) => ({
-                      host_path: `${VOLUME_HOST_ROOT}/volume${i}`,
-                      container_path: m.mountPath,
-                    })),
+                    ...(containerOptions.experimental?.host_mount ?? []),
+                    ...hostMounts,
                   ],
                 },
-              })
+              }),
             }],
             documented_purpose: config.documentedPurpose || 'ComputeSDK sandbox',
             deadline: new Date(
@@ -663,7 +824,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             token,
             targetContainerName: containerName,
             createdAt: new Date(),
-            ...(options?.snapshotId && { snapshotVolumeMountPoint: SNAPSHOT_VOLUME_MOUNTPOINT }),
+            ...(snapshotVolume && { snapshotVolumeMountPoint: snapshotVolume.mountPath }),
           };
 
           return { instance: sandbox, instanceId: instanceId };
@@ -702,6 +863,8 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
             createdAt: responseData.metadata?.createdAt ? new Date(responseData.metadata.createdAt) : new Date(0),
             status: instanceStatus(responseData.metadata),
           };
+          const mountPoint = snapshotMountFromLabels(responseData.metadata?.labels);
+          if (mountPoint) sandbox.snapshotVolumeMountPoint = mountPoint;
 
           return { instance: sandbox, instanceId: instanceId };
         } catch (error) {
@@ -740,6 +903,8 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
                 createdAt: instanceData.metadata?.createdAt ? new Date(instanceData.metadata.createdAt) : new Date(0),
                 status: instanceStatus(instanceData.metadata),
               };
+              const mountPoint = snapshotMountFromLabels(instanceData.metadata?.labels);
+              if (mountPoint) sandbox.snapshotVolumeMountPoint = mountPoint;
               return { instance: sandbox, instanceId: instanceId };
             });
         } catch (error) {
@@ -797,7 +962,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
               body: JSON.stringify({
                 instanceId: sandbox.instanceId,
                 targetContainerName: sandbox.targetContainerName,
-                command: wireCommand(command, options),
+                command: wireCommand(command, withDefaultCwd(sandbox, options)),
               })
             },
             sandbox.commandServiceEndpoint
@@ -828,7 +993,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         if (!sandbox.commandServiceEndpoint) {
           throw new Error('Command service endpoint not available. The instance may not support command execution.');
         }
-        return streamNamespaceCommand(sandbox, wireCommand(command, options), options);
+        return streamNamespaceCommand(sandbox, wireCommand(command, withDefaultCwd(sandbox, options)), options);
       },
 
       getInfo: async (sandbox: NamespaceSandbox): Promise<InstanceInfo> => {
@@ -883,55 +1048,103 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       getInstance: (sandbox: NamespaceSandbox): NamespaceSandbox => sandbox,
     },
 
-    // Namespace snapshots are volume-backed: persistent volumes are
-    // snapshotted automatically on instance shutdown, and a new volume can be
-    // seeded from a snapshot via VolumeRequest.from_snapshot_id.
+    // Namespace snapshots are volume-backed: a PERSISTENT volume is
+    // snapshotted when its instance shuts down, and a new volume is seeded
+    // from it via VolumeRequest.from_snapshot_id. Only sandboxes created with
+    // a snapshot volume (opt-in `snapshotVolume`, or a restore) can snapshot;
+    // the rootfs is never captured.
     snapshot: {
-      create: async () => {
-        throw new Error(
-          'Namespace cannot create snapshots on demand — persistent-volume snapshots are captured automatically when an instance with a PERSISTENT volume shuts down. Create a sandbox with a persistent volume (snapshotId path) and list snapshots after it stops.'
-        );
+      create: async (config: NamespaceConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
+        const { token } = await getAndValidateCredentials(config);
+
+        try {
+          const described = await fetchNamespace(token, API_ENDPOINTS.DESCRIBE_INSTANCE, {
+            method: 'POST',
+            body: JSON.stringify({ instance_id: sandboxId })
+          });
+          const tag = labelValue(described?.metadata?.labels, SNAPSHOT_TAG_LABEL);
+          if (!tag) {
+            throw new Error(
+              `sandbox ${sandboxId} has no snapshot volume; create it with \`snapshotVolume: true\` (provider config or create option) to make it snapshot-capable`
+            );
+          }
+          const mountPath = snapshotMountFromLabels(described?.metadata?.labels);
+          const source = (await listVolumeSnapshotRecords(token, tag))
+            .find((r) => r.id && snapshotAttachedInstance(r) === sandboxId);
+          if (!source?.id) {
+            throw new Error(`no persistent volume with tag ${tag} is attached to sandbox ${sandboxId}`);
+          }
+          const volumeId = source.id;
+
+          // The snapshot is taken on shutdown, so the source sandbox is
+          // destroyed — there is no live-instance snapshot RPC.
+          await fetchNamespace(token, API_ENDPOINTS.DESTROY_INSTANCE, {
+            method: 'POST',
+            body: JSON.stringify({ instance_id: sandboxId, reason: 'ComputeSDK snapshot' })
+          });
+
+          const timeoutMs = config.snapshotTimeoutMs ?? DEFAULT_SNAPSHOT_TIMEOUT_MS;
+          const deadline = Date.now() + timeoutMs;
+          while (Date.now() < deadline) {
+            const record = (await listVolumeSnapshotRecords(token, tag)).find((r) => r.id === volumeId);
+            const generationId = record && snapshotGeneration(record);
+            const releasedAt = record && snapshotReleasedAt(record);
+            if (generationId && releasedAt) {
+              return {
+                id: `${tag}/${volumeId}`,
+                provider: 'namespace',
+                createdAt: new Date(releasedAt),
+                metadata: {
+                  volumeId,
+                  volumeTag: tag,
+                  generationId,
+                  sourceInstance: sandboxId,
+                  ...(mountPath && { mountPath }),
+                  ...(options?.name && { name: options.name }),
+                  ...options?.metadata,
+                },
+              };
+            }
+            await sleep(SNAPSHOT_POLL_INTERVAL_MS);
+          }
+          throw new Error(`volume ${tag}/${volumeId} snapshot did not commit within ${timeoutMs}ms`);
+        } catch (error) {
+          throw new Error(
+            `Failed to create Namespace snapshot: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       },
 
       list: async (config: NamespaceConfig, options?: ListSnapshotsOptions) => {
         const { token } = await getAndValidateCredentials(config);
 
         try {
-          // Snapshot records come back workspace-wide whatever the request
-          // body — the `id` field is not a filter — so one call lists
-          // everything; each record's `id` is the VOLUME id it belongs to
-          // (not the generation) and joins it to the volume's metadata.
-          const volumes = await listPersistentVolumes(token);
-          const volumeById = new Map(volumes.map((v) => [v.id, v]));
-          const records = await listVolumeSnapshotRecords(token);
+          // Snapshot records are only listed per volume tag (an unfiltered
+          // request returns an arbitrary few), so list each tag's records.
+          // Each record's `id` is the VOLUME id; a committed record has a
+          // `completedSnapshot` generation and a `releasedAt`. Abandoned
+          // (deleted) records stay listed by the API and are skipped here.
+          const tags = [...new Set((await listPersistentVolumes(token)).map((v) => v.tag).filter((t): t is string => !!t))];
+          const recordsByTag = await mapLimit(tags, 8, (tag) => listVolumeSnapshotRecords(token, tag));
 
           const snapshots = [];
-          for (const snap of records) {
+          for (const [i, snap] of recordsByTag.flatMap((records, i) => records.map((r) => [i, r] as const))) {
+            const tag = tags[i];
             const generationId = snapshotGeneration(snap);
+            const releasedAt = snapshotReleasedAt(snap);
+            if (!snap.id || !generationId || !releasedAt || isAbandoned(snap)) continue;
             const sourceInstance = snapshotAttachedInstance(snap);
-            // attachedInstanceId links a snapshot back to the instance
-            // whose volume produced it.
             if (options?.sandboxId && sourceInstance !== options.sandboxId) continue;
-            const volume = snap.id ? volumeById.get(snap.id) : undefined;
             snapshots.push({
-              // `tag/<gen>` is what `create({ snapshotId })` restores via
-              // `from_snapshot_id`, so listed snapshots feed straight back in.
-              id: volume?.tag && generationId
-                ? `${volume.tag}/${generationId}`
-                : generationId ?? snap.id ?? '',
+              id: `${tag}/${snap.id}`,
               provider: 'namespace',
-              createdAt: snap.createdAt
-                ? new Date(snap.createdAt)
-                : snap.created_at
-                  ? new Date(snap.created_at)
-                  : new Date(0),
+              createdAt: new Date(releasedAt),
               metadata: {
-                ...(snap.id && { volumeId: snap.id }),
-                ...(generationId && { generationId }),
-                ...(volume?.tag && { volumeTag: volume.tag }),
-                ...(volume?.site && { site: volume.site }),
+                volumeId: snap.id,
+                volumeTag: tag,
+                generationId,
                 ...(sourceInstance && { sourceInstance }),
-                ...(snap.abandonedAt || snap.abandoned_at ? { abandoned: 'true' } : {}),
+                ...(snapshotParent(snap) && { snapshotFrom: snapshotParent(snap) }),
               },
             });
           }
@@ -947,39 +1160,17 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
 
       delete: async (config: NamespaceConfig, snapshotId: string) => {
         const { token } = await getAndValidateCredentials(config);
+        const { tag, volumeId } = parseNamespaceSnapshotId(snapshotId);
 
         try {
-          // DestroyPersistentVolumeSnapshot addresses the artifact by its
-          // volume — {id: volumeId, tag} — never by the generation. The match
-          // is the volume (bearing the tag, when the id names one) whose
-          // records actually hold the generation — tags are not unique, and
-          // when no volume holds it the artifact is unreachable and there is
-          // nothing left to abandon.
-          const slash = snapshotId.indexOf('/');
-          const tag = slash === -1 ? undefined : snapshotId.slice(0, slash);
-          const generationId = slash === -1 ? snapshotId : snapshotId.slice(slash + 1);
-
-          const records = await listVolumeSnapshotRecords(token);
-          const holding = new Set(
-            records
-              .filter((r) => snapshotGeneration(r) === generationId && r.id !== undefined)
-              .map((r) => r.id as string),
-          );
-          const volumes: WireVolume[] =
-            tag === undefined
-              ? await listPersistentVolumes(token)
-              : ((await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
-                  method: 'POST',
-                  body: JSON.stringify({ tag }),
-                })).volumes || []);
-          const volume = volumes.find((v) => holding.has(v.id) && v.tag !== undefined);
-          if (volume === undefined) return;
-
+          // Abandons the snapshot: later restores from it fail. The API keeps
+          // the record (with `abandonedAt`).
           await fetchNamespace(token, STORAGE_SERVICE.DESTROY_PERSISTENT_VOLUME_SNAPSHOT, {
             method: 'POST',
-            body: JSON.stringify({ id: volume.id, tag: volume.tag })
+            body: JSON.stringify({ id: volumeId, tag })
           });
         } catch (error) {
+          if (isNamespaceNotFound(error)) return;
           throw new Error(
             `Failed to delete Namespace snapshot: ${error instanceof Error ? error.message : String(error)}`
           );
