@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createSandbox } = vi.hoisted(() => ({ createSandbox: vi.fn() }));
+const { createSandbox, appFromName } = vi.hoisted(() => ({ createSandbox: vi.fn(), appFromName: vi.fn() }));
 
 const files = new Map<string, string>();
 const dirs = new Set<string>();
@@ -86,7 +86,7 @@ const fsCalls: string[][] = [];
 vi.mock('modal', () => ({
   SandboxFilesystemNotFoundError: class extends Error {},
   ModalClient: class {
-    apps = { fromName: async () => ({}) };
+    apps = { fromName: appFromName.mockImplementation(async () => ({})) };
     images = { fromRegistry: () => ({ build: async () => ({}) }) };
     sandboxes = {
       create: createSandbox.mockImplementation(async () => new FakeSandbox()),
@@ -100,7 +100,19 @@ import { modal } from '../index';
 import { SandboxFilesystemNotFoundError as FakeNotFoundError } from 'modal';
 
 describe('modal sandbox creation', () => {
-  beforeEach(() => { createSandbox.mockClear(); });
+  beforeEach(() => { createSandbox.mockClear(); appFromName.mockClear(); });
+
+  it('looks up the app on first create, not at construction, and retries a failed lookup', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    expect(appFromName).not.toHaveBeenCalled();
+
+    appFromName.mockRejectedValueOnce(new Error('Profile is missing credentials'));
+    await expect(provider.sandbox.create()).rejects.toThrow(/authentication failed/);
+
+    const sandbox = await provider.sandbox.create();
+    expect(sandbox.sandboxId).toBe('sb-test');
+    expect(appFromName).toHaveBeenCalledTimes(2);
+  });
 
   it('creates sandboxes through the standard SDK API without experimental options', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's' });

@@ -60,7 +60,7 @@ export interface ModalCreateSandboxOptions extends CreateInstanceOptions {
  */
 interface ModalInternalConfig extends ModalConfig {
   _client: ModalClient;
-  _appPromise: Promise<App>;
+  _getApp: () => Promise<App>;
   _imageCache: Map<string, Promise<Image>>;
 }
 
@@ -128,7 +128,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         try {
           const client = config._client;
 
-          const app = await config._appPromise;
+          const app = await config._getApp();
 
           const modalOptions = (options ?? {}) as ModalCreateSandboxOptions;
           const {
@@ -423,13 +423,22 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
   const appName = config.appName ?? DEFAULT_APP_NAME;
   const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
-  const appPromise = client.apps.fromName(appName, { createIfMissing: true });
+  // Resolved on first create, not here: an eager lookup rejects unobserved
+  // when credentials are missing, and a failed lookup must be retryable.
+  let appPromise: Promise<App> | undefined;
+  const getApp = (): Promise<App> => {
+    if (!appPromise) {
+      appPromise = client.apps.fromName(appName, { createIfMissing: true });
+      appPromise.catch(() => { appPromise = undefined; });
+    }
+    return appPromise;
+  };
 
   return _modal({
     ...config,
     appName,
     _client: client,
-    _appPromise: appPromise,
+    _getApp: getApp,
     _imageCache: new Map(),
   });
 }
