@@ -29,7 +29,7 @@ function resolveApiKey(config: BriqConfig): string {
   return apiKey;
 }
 
-/** Official ComputeSDK factory/daemon with Briq's acknowledged native foreground transport. */
+/** ComputeSDK provider for Briq: the official factory and daemon, with foreground commands run through Briq's own command API. */
 export function briq(config: BriqConfig = {}) {
   // Built on first use, so a provider can be constructed before the key is known and the missing
   // key is reported by the first call that needs it, with the setup steps.
@@ -146,11 +146,11 @@ export function briq(config: BriqConfig = {}) {
         'timeout',
         control
           ? 'Daemon control timed out; detached process state must be inspected separately'
-          : 'Foreground command timed out with native termination acknowledged',
+          : 'Foreground command timed out and Briq confirmed it was stopped',
       );
     // The launcher guard failed (`|| exit 126` in `launch`): the daemon was never started.
     if (control && result.exitCode === 126)
-      throw fail('unsupported', 'Pinned image Node/private launcher state could not be verified');
+      throw fail('unsupported', 'The Node binary and launcher files in the sandbox image could not be verified');
     if (result.exitCode === null)
       throw fail('outcome_unknown', 'Command did not report a confirmed exit');
     return { stdout, stderr, exitCode: result.exitCode, durationMs: performance.now() - started };
@@ -348,7 +348,7 @@ export function briq(config: BriqConfig = {}) {
         },
       };
     });
-    // Public previews retain their private credentials; factory-internal SSE remains refused.
+    // A preview keeps its private credentials; the factory's internal event stream is refused.
     instance.getUrl = protect(async ({ port, protocol }) => {
       if (protocol !== undefined && protocol !== 'http' && protocol !== 'https')
         throw fail('unsupported', 'Only HTTP previews are supported');

@@ -85,6 +85,6 @@ Other options are refused before anything is created: `timeout`, `image`, templa
 
 ## Behavior
 
-- Instances run the Briq sandbox image, Linux amd64.
+- Instances run the Briq sandbox image, Linux amd64, on Briq's `small` size. `resources` and `sizeClass` are refused.
 - A command that times out is stopped. It is never run a second time.
 - When the outcome of a command is unknown, the call fails instead of returning a guess.

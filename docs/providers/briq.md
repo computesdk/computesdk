@@ -104,7 +104,7 @@ interface BriqConfig {
 | Option | Notes |
 |---|---|
 | `name` | Lowercase letters, digits and hyphens, 32 characters at most |
-| `envs` | Stored encrypted by Briq |
+| `envs` | Stored encrypted by Briq, as literal values. Fails `unsupported` if the Briq API does not support literal environment values |
 | `metadata` | A JSON object, 1024 characters serialized |
 | `directory` | Absolute working directory. Default `/workspace` |
 | `signal` | Cancels creation |
@@ -117,4 +117,4 @@ Other options (`timeout`, `image`, templates, snapshots, `resources`, `sizeClass
 - Command timeout is 30 seconds by default and one hour at most. Output is limited to 8 MiB.
 - Files are UTF-8 text. Directory listings refuse symbolic links.
 - No templates, snapshots or volumes.
-- Instances run the Briq sandbox image, Linux amd64.
+- Instances run the Briq sandbox image, Linux amd64, on Briq's `small` size. `resources` and `sizeClass` are refused.
