@@ -7,7 +7,7 @@ runProviderTestSuite({
   name: 'arker',
   provider: arker({}),
   supportsFilesystem: true,   // Arker VMs are full OS environments with persistent filesystems
-  supportsGetUrl: false,      // ports are exposed via run-time tunnel requests, not a static URL
+  supportsGetUrl: true,      // ports are exposed via run-time tunnel requests, not a static URL
   supportsStreaming: true,    // served by the shell process tier over runCommand
   supportsProcesses: true,
   // The mock sandbox reports no runtime, so pin the tier only on live runs.
