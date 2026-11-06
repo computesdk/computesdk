@@ -21,6 +21,8 @@ runProviderTestSuite({
   ports: [3000, 8080],
   supportsStreaming: true,
   supportsProcesses: true,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   // Pinned only live: the mock sandbox reports the tier as unknown.
   expectProcessRuntime: skipIntegration ? undefined : { streaming: "shell", processes: "shell" },
   timeout: 120_000,

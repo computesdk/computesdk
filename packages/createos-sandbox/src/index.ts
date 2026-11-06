@@ -23,6 +23,8 @@
  *    paused copy (the snapshot, with its own id) and resumes the source.
  *    `create({ snapshotId })` forks that paused copy into a fresh sandbox;
  *    `snapshot.delete` destroys it.
+ *  - Pause and paused forks keep memory: files (including /tmp and /dev/shm)
+ *    and running processes survive `pause`/`resume` and snapshot restores.
  *
  * Error policy: provider operations fail loudly when the provider boundary is
  * broken. Only a genuine 404 (`CreateosSandboxNotFoundError`) is mapped to the
@@ -600,6 +602,25 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       // (pause/resume/fork/disks/...).
       getInstance: (sandbox: Sandbox): Sandbox => sandbox,
 
+      // Native pause returns while still `pausing`, and resume 409s until the
+      // pause settles, so both wait for the terminal state.
+      pause: async (sandbox: Sandbox): Promise<void> => {
+        await sandbox.refresh();
+        if (sandbox.status !== "paused") {
+          if (sandbox.status !== "pausing") await sandbox.pause();
+          await sandbox.waitUntilPaused();
+        }
+      },
+      resume: async (sandbox: Sandbox): Promise<void> => {
+        await sandbox.refresh();
+        if (sandbox.status === "pausing") await sandbox.waitUntilPaused();
+        if (sandbox.status !== "running") {
+          if (sandbox.status !== "resuming") await sandbox.resume();
+          await sandbox.waitUntilRunning();
+        }
+      },
+      pauseCapabilities: { memory: true },
+
       attachVolume: async (sandbox: Sandbox, volume, mountPath) => {
         const ref = resolveVolumeRef(volume);
         const subPath = (volume as { subPath?: string }).subPath;
@@ -654,6 +675,9 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
     },
 
     snapshot: {
+      // Paused forks are full VM snapshots: the whole rootfs (tmpfs included)
+      // and running processes come back in the restore.
+      capabilities: { scope: "rootfs", memory: true, destroysSource: false },
       create: async (
         config: CreateosConfig,
         sandboxId: string,

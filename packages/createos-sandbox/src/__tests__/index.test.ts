@@ -257,4 +257,9 @@ describe("createosSandbox provider", () => {
     expect(provider.snapshot).toBeDefined();
     expect(provider.template).toBeUndefined();
   });
+  it("declares memory-preserving pause and rootfs snapshots", () => {
+    const provider = createosSandbox({ apiKey: "test-key" });
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    expect(provider.snapshot!.capabilities).toEqual({ scope: "rootfs", memory: true, destroysSource: false });
+  });
 });

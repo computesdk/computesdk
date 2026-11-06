@@ -64,22 +64,16 @@ describe.skipIf(!live)("createos snapshot / restore (live)", () => {
     snapshotId = undefined;
   }, 480_000);
 
-  it("native pause / resume keeps the same box once the pause settles", async () => {
+  it("pause / resume keeps the same box, and getInstance still reaches the native handle", async () => {
     const box = await provider.sandbox.create({});
     sandboxIds.push(box.sandboxId);
     await box.runCommand("echo kept > pause-marker.txt");
-    const native = box.getInstance() as {
-      pause: () => Promise<unknown>;
-      waitUntilPaused: (o?: object) => Promise<unknown>;
-      resume: () => Promise<unknown>;
-      waitUntilRunning: (o?: object) => Promise<unknown>;
-    };
-    await native.pause();
-    await native.waitUntilPaused({ timeoutMs: 120_000 });
+    await box.pause!();
     expect((await box.getInfo()).metadata?.createosStatus).toBe("paused");
-    await native.resume();
-    await native.waitUntilRunning({ timeoutMs: 120_000 });
-    const r = await box.runCommand("cat pause-marker.txt");
-    expect(r.stdout.trim()).toBe("kept");
+    await box.resume!();
+    expect((await box.runCommand("cat pause-marker.txt")).stdout.trim()).toBe("kept");
+    const native = box.getInstance() as { id: string; status: string };
+    expect(native.id).toBe(box.sandboxId);
+    expect(native.status).toBe("running");
   }, 300_000);
 });
