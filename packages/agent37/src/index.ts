@@ -8,6 +8,8 @@
  * `runAsRoot: false` to run as the image's own user instead.
  */
 
+import { randomUUID } from 'node:crypto';
+import { posix } from 'node:path';
 import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 
 import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
@@ -53,6 +55,9 @@ interface ExecResponse {
 }
 
 type FsRunCommand = (sandbox: Agent37Sandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
+
+// 48 KiB becomes 64 KiB of base64, leaving room for JSON and paths under exec's 128 KB request cap.
+const WRITE_CHUNK_BYTES = 48 * 1024;
 
 function resolveConfig(config: Agent37Config) {
   const env = typeof process !== 'undefined' ? process.env : undefined;
@@ -265,9 +270,21 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
           return Buffer.from(result.stdout, 'base64').toString('utf8');
         },
         writeFile: async (sandbox: Agent37Sandbox, path: string, content: string, run: FsRunCommand): Promise<void> => {
-          const encoded = Buffer.from(content, 'utf8').toString('base64');
+          const bytes = Buffer.from(content, 'utf8');
           const target = shellPath(path);
-          await mustSucceed(run, sandbox, `mkdir -p "$(dirname ${target})" && printf '%s' '${encoded}' | base64 -d > ${target}`, `write ${path}`);
+          const directory = shellPath(posix.dirname(path));
+          const temporary = shellPath(posix.join(posix.dirname(path), `.computesdk-write-${randomUUID()}`));
+          try {
+            await mustSucceed(run, sandbox, `mkdir -p -- ${directory} && (set -C; : > ${temporary})`, `write ${path}`);
+            for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
+              const encoded = bytes.subarray(offset, offset + WRITE_CHUNK_BYTES).toString('base64');
+              await mustSucceed(run, sandbox, `printf '%s' '${encoded}' | base64 -d >> ${temporary}`, `write ${path}`);
+            }
+            // Same-directory rename publishes only complete files, even when writers share a target.
+            await mustSucceed(run, sandbox, `mv -fT -- ${temporary} ${target}`, `write ${path}`);
+          } finally {
+            await run(sandbox, `rm -f -- ${temporary}`).catch(() => {});
+          }
         },
         mkdir: async (sandbox: Agent37Sandbox, path: string, run: FsRunCommand): Promise<void> => {
           await mustSucceed(run, sandbox, `mkdir -p ${shellPath(path)}`, `create ${path}`);
