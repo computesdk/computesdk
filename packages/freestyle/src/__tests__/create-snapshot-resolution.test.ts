@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  * the bake must still happen when the snapshot genuinely is not there yet.
  */
 
-const RUNTIME_SLUG = 'computesdk-freestyle-runtime';
+const RUNTIME_SLUG = 'computesdk-freestyle-runtime-v2';
 
 class MockFreestyleApiError extends Error {
   code: string;
