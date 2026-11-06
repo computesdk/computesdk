@@ -229,6 +229,13 @@ const snapshot = await compute.snapshot.create(sandbox.instanceId)
 const copy = await compute.instances.create({ snapshotId: snapshot.id })
 ```
 
+The source keeps running. A fork resumes the exact captured state: the
+whole root filesystem (including `/tmp`), memory, and running processes
+(`provider.snapshot.capabilities` is `{ scope: 'rootfs', memory: true,
+destroysSource: false }`). There is no explicit pause: an idle sandbox
+parks itself and wakes on its next command, so `instance.pause()` is not
+offered.
+
 ## Supported
 
 | Feature | Supported |
