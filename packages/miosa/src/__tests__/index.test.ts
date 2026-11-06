@@ -170,6 +170,33 @@ describe("miosa provider", () => {
       expect(Object.keys(handle)).not.toContain("pause");
     });
 
+    it("should send a per-create runtime option as runtime_profile", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY, runtime: "soma" });
+      await provider.sandbox.create({ runtime: "firecracker" } as never);
+      expect(requestBody(fetchMock).runtime_profile).toBe("standard");
+    });
+
+    it("should expose pause and resume on the instance", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(sandboxRecord(), 201));
+      const provider = miosa({ apiKey: API_KEY });
+      expect(provider.sandbox.pause).toEqual({
+        memory: true,
+        createOptions: { runtime: "firecracker" },
+      });
+      const sandbox = await provider.sandbox.create({ runtime: "firecracker" } as never);
+      fetchMock.mockResolvedValueOnce(jsonResponse({ id: sandbox.sandboxId, state: "paused" }));
+      await sandbox.pause!();
+      expect(lastRequest(fetchMock).url).toBe(
+        `${DEFAULT_BASE_URL}/sandboxes/${sandbox.sandboxId}/pause`,
+      );
+      fetchMock.mockResolvedValueOnce(jsonResponse({ id: sandbox.sandboxId, state: "running" }));
+      await sandbox.resume!();
+      expect(lastRequest(fetchMock).url).toBe(
+        `${DEFAULT_BASE_URL}/sandboxes/${sandbox.sandboxId}/resume`,
+      );
+    });
+
     it("should surface API error codes", async () => {
       fetchMock.mockResolvedValueOnce(
         jsonResponse({ error: { code: "TENANT_RESOLUTION_FAILED" } }, 422),
@@ -597,16 +624,42 @@ describe("miosa provider", () => {
           201,
         ),
       );
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: "snap-1", sandbox_id: "sb-1", status: "ready" }] }),
+      );
       const provider = miosa({ apiKey: API_KEY });
 
       const snapshot = await provider.snapshot?.create("sb-1", {
         name: "before-upgrade",
       });
-      expect(lastRequest(fetchMock).url).toBe(
-        `${DEFAULT_BASE_URL}/sandboxes/sb-1/snapshots`,
-      );
-      expect(requestBody(fetchMock)).toEqual({ comment: "before-upgrade" });
+      const [createUrl, createInit] = fetchMock.mock.calls[0];
+      expect(String(createUrl)).toBe(`${DEFAULT_BASE_URL}/sandboxes/sb-1/snapshots`);
+      expect(JSON.parse(String((createInit as RequestInit).body))).toEqual({
+        comment: "before-upgrade",
+      });
       expect(snapshot?.id).toBe("snap-1");
+      expect(snapshot?.status).toBe("ready");
+    });
+
+    it("create should fail when the snapshot fails while pending", async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ data: { id: "snap-2", sandbox_id: "sb-1", status: "creating" } }, 201),
+      );
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: "snap-2", status: "failed", error: "disk full" }] }),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+      await expect(provider.snapshot!.create("sb-1")).rejects.toThrow(/failed: disk full/);
+    });
+
+    it("should declare rootfs snapshots on the firecracker runtime", () => {
+      const provider = miosa({ apiKey: API_KEY });
+      expect(provider.snapshot?.capabilities).toEqual({
+        scope: "rootfs",
+        memory: true,
+        destroysSource: false,
+        createOptions: { runtime: "firecracker" },
+      });
     });
 
     it("list should require a sandboxId scope", async () => {

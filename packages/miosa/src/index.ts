@@ -89,8 +89,12 @@ const RUNTIME_PROFILE: Record<MiosaRuntime, string> = {
   auto: "auto",
 };
 
-function runtimeProfile(config: MiosaConfig): string | undefined {
+function runtimeProfile(
+  config: MiosaConfig,
+  requested?: unknown,
+): string | undefined {
   const raw =
+    (typeof requested === "string" ? requested : undefined) ??
     config.runtime ??
     (typeof process !== "undefined" ? process.env?.MIOSA_RUNTIME : undefined);
   if (raw === undefined) return undefined;
@@ -1496,6 +1500,61 @@ function regionalAuth(config: MiosaConfig, auth: MiosaAuth): MiosaAuth {
  * arrival, so name the cause and the remedy instead of surfacing the bare
  * 404.
  */
+const SNAPSHOT_READY_TIMEOUT_MS = 10 * 60_000;
+const SNAPSHOT_POLL_MS = 2_000;
+const SNAPSHOT_PENDING_STATES = new Set([
+  "creating",
+  "pending",
+  "queued",
+  "snapshotting",
+  "in_progress",
+  "uploading",
+]);
+
+/**
+ * MIOSA checkpoints asynchronously: POST /sandboxes/:id/snapshots answers
+ * `creating`, and restoring from it 409s SNAPSHOT_NOT_READY until it is
+ * ready. Polls the sandbox's snapshot list so snapshot.create() hands back
+ * an id that create({ snapshotId }) can use straight away.
+ */
+async function waitForSnapshotReady(
+  auth: MiosaAuth,
+  sandboxId: string,
+  initial: MiosaSnapshotRecord,
+): Promise<MiosaSnapshotRecord> {
+  let record = initial;
+  const deadline = Date.now() + SNAPSHOT_READY_TIMEOUT_MS;
+  while (SNAPSHOT_PENDING_STATES.has(String(record.status).toLowerCase())) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        `MIOSA snapshot ${record.id} of sandbox ${sandboxId} was still ` +
+          `${record.status} after ${SNAPSHOT_READY_TIMEOUT_MS / 1000}s`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, SNAPSHOT_POLL_MS));
+    const listed = await miosaRequest<{ data?: MiosaSnapshotRecord[] }>(
+      auth,
+      "GET",
+      `/sandboxes/${sandboxId}/snapshots`,
+    );
+    const current = (listed.data ?? []).find((snap) => snap.id === record.id);
+    if (!current) {
+      throw new Error(
+        `MIOSA snapshot ${record.id} disappeared from sandbox ${sandboxId} before it was ready`,
+      );
+    }
+    record = current;
+  }
+  const status = String(record.status).toLowerCase();
+  if (status === "failed" || status === "error") {
+    throw new Error(
+      `MIOSA snapshot ${record.id} of sandbox ${sandboxId} failed` +
+        (record.error ? `: ${String(record.error)}` : ""),
+    );
+  }
+  return record;
+}
+
 function regionalSnapshotError(sandboxId: string): Error {
   return new Error(
     `MIOSA cannot snapshot sandbox ${sandboxId}: the account API does not ` +
@@ -2053,7 +2112,10 @@ const createMiosaProvider = defineProvider<
           // the caller asked for "big", xl is the biggest big we sell.
           body.size = (fit ?? sizes[sizes.length - 1]).size;
         }
-        const profile = runtimeProfile(config);
+        const profile = runtimeProfile(
+          config,
+          (options as { runtime?: unknown } | undefined)?.runtime,
+        );
         if (profile !== undefined) body.runtime_profile = profile;
         if (options?.templateId !== undefined)
           body.template_id = options.templateId;
@@ -2273,6 +2335,24 @@ const createMiosaProvider = defineProvider<
 
       getInstance: (sandbox: MiosaSandbox): MiosaSandbox => sandbox,
 
+      pause: async (sandbox: MiosaSandbox): Promise<void> => {
+        await ensureCreated(sandbox);
+        await lifecycleVerb(sandbox, "pause");
+      },
+
+      resume: async (sandbox: MiosaSandbox): Promise<void> => {
+        await ensureCreated(sandbox);
+        await lifecycleVerb(sandbox, "resume");
+      },
+
+      // Live-verified on Firecracker: files anywhere on the rootfs and
+      // background processes survive pause/resume. SOMA (the default
+      // runtime, served by the regional endpoint) has no pause.
+      pauseCapabilities: {
+        memory: true,
+        createOptions: { runtime: "firecracker" },
+      },
+
       attachVolume: async (sandbox, volume, mountPath) => {
         // Volume calls always go to the account API, never the regional
         // endpoint. A lazy handle has to exist before it can name a computer.
@@ -2488,6 +2568,15 @@ const createMiosaProvider = defineProvider<
     // request; an unrecorded id's 404 gets the same remedy appended while
     // keeping its NOT_FOUND status (the sandbox may simply be missing).
     snapshot: {
+      // Live-verified: a restore keeps the whole ext4 rootfs (/tmp, /root,
+      // /var) and memory (background processes keep running), and the
+      // source keeps running. Firecracker only.
+      capabilities: {
+        scope: "rootfs",
+        memory: true,
+        destroysSource: false,
+        createOptions: { runtime: "firecracker" },
+      },
       // Native Firecracker checkpoints: POST /sandboxes/:id/snapshots
       create: async (
         config: MiosaConfig,
@@ -2512,7 +2601,7 @@ const createMiosaProvider = defineProvider<
         const record = response.data ?? response;
         if (record?.id)
           snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), sandboxId);
-        return record;
+        return record?.id ? waitForSnapshotReady(auth, sandboxId, record) : record;
       },
 
       list: async (
