@@ -309,7 +309,8 @@ async function execCommand(
         durationMs: Date.now() - startTime,
       };
     } catch (error) {
-      if (attempt >= EXEC_CONNECT_ATTEMPTS || timedOut || !isRetryableExecError(error)) {
+      // A session that never opened ran nothing, even if the deadline fired while it was connecting.
+      if (attempt >= EXEC_CONNECT_ATTEMPTS || !isRetryableExecError(error)) {
         throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
@@ -507,6 +508,10 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
     },
 
     snapshot: {
+      // A checkpoint copies the sandbox's whole disk while the source keeps
+      // running; a sandbox booted from it starts fresh, so processes are not kept.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
+
       create: async (
         config: RailwayConfig,
         sandboxId: string,

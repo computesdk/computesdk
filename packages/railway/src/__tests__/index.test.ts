@@ -11,6 +11,8 @@ runProviderTestSuite({
   // `sandbox.exec` streams output natively; background processes run on the shell tier.
   supportsStreaming: true,
   supportsProcesses: true,
+  // Checkpoints keep the disk; restores boot fresh, so there is no native pause.
+  supportsSnapshots: true,
   // The mock sandbox reports no runtime, so the tier is only checked live.
   ...(skipIntegration ? {} : { expectProcessRuntime: { streaming: 'native', processes: 'shell' } as const }),
   skipIntegration,
