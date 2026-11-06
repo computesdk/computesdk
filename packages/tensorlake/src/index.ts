@@ -321,15 +321,24 @@ export const tensorlake = defineProvider<
         }
         // Each suspend leaves a `suspend-<id>-…` memory snapshot that outlives
         // the sandbox; drop those, but keep user checkpoints. List at project
-        // level, since the sandbox itself is gone by now.
-        const snapshots = await Sandbox.listSnapshots({ apiKey, apiUrl }).catch(() => []);
-        await Promise.all(
-          snapshots
-            .filter((s) => s.snapshotId.startsWith(`suspend-${sandboxId}-`))
-            .map((s) =>
+        // level, since the sandbox itself is gone by now. A checkpoint that is
+        // still settling can refuse deletion, so retry briefly until none remain.
+        for (let attempt = 0; attempt < 5; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+          const leftover = await Sandbox.listSnapshots({ apiKey, apiUrl })
+            .then((all) =>
+              all.filter(
+                (s) => s.snapshotId.startsWith(`suspend-${sandboxId}-`) && s.status !== "deleting",
+              ),
+            )
+            .catch(() => undefined);
+          if (leftover && leftover.length === 0) break;
+          await Promise.all(
+            (leftover ?? []).map((s) =>
               Sandbox.deleteSnapshot(s.snapshotId, { apiKey, apiUrl }).catch(() => {}),
             ),
-        );
+          );
+        }
       },
 
       runCommand: async (

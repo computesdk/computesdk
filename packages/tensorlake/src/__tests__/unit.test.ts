@@ -8,6 +8,8 @@ let probeFails = false;
 const createParams: Record<string, unknown>[] = [];
 const lifecycleCalls: string[] = [];
 const deletedSnapshots: string[] = [];
+const snapshots: string[] = [];
+let rejectDeletes = 0;
 
 class FakeSandbox {
   sandboxId = "sb-test";
@@ -77,13 +79,14 @@ vi.mock("tensorlake", () => ({
     };
     static connect = async () => new FakeSandbox();
     static list = async () => [];
-    static listSnapshots = async () => [
-      { snapshotId: "suspend-sb-test-a", sandboxId: "sb-test" },
-      { snapshotId: "suspend-sb-other-a", sandboxId: "sb-other" },
-      { snapshotId: "user-checkpoint", sandboxId: "sb-test" },
-    ];
+    static listSnapshots = async () => snapshots.map((snapshotId) => ({ snapshotId }));
     static deleteSnapshot = async (id: string) => {
+      if (rejectDeletes > 0) {
+        rejectDeletes--;
+        throw new Error("snapshot is still in progress");
+      }
       deletedSnapshots.push(id);
+      snapshots.splice(snapshots.indexOf(id), 1);
     };
   },
   SandboxStatus: { RUNNING: "RUNNING" },
@@ -199,8 +202,21 @@ describe("tensorlake pause/resume", () => {
 
   it("drops the sandbox's suspend snapshots on destroy, not its checkpoints", async () => {
     deletedSnapshots.length = 0;
+    snapshots.splice(0, snapshots.length, "suspend-sb-test-a", "suspend-sb-other-a", "user-checkpoint");
+    rejectDeletes = 0;
     const sandbox = await tensorlake({ apiKey: "test" }).sandbox.create({ ephemeral: false });
     await sandbox.destroy();
     expect(deletedSnapshots).toEqual(["suspend-sb-test-a"]);
+    expect(snapshots).toEqual(["suspend-sb-other-a", "user-checkpoint"]);
   });
+
+  it("retries a suspend snapshot that is still settling on destroy", async () => {
+    deletedSnapshots.length = 0;
+    snapshots.splice(0, snapshots.length, "suspend-sb-test-a");
+    rejectDeletes = 1;
+    const sandbox = await tensorlake({ apiKey: "test" }).sandbox.create({ ephemeral: false });
+    await sandbox.destroy();
+    expect(deletedSnapshots).toEqual(["suspend-sb-test-a"]);
+    expect(snapshots).toEqual([]);
+  }, 10000);
 });
