@@ -40,7 +40,7 @@ The setup command uses `gcloud` to:
 
 - Build a small ComputeSDK gateway container.
 - Deploy it to Cloud Run with `--sandbox-launcher` and `--no-cpu-throttling`.
-- Configure the gateway for low-latency sandbox execution with 1 CPU, 2Gi memory, concurrency 1, session affinity, CPU boost, and 100 min/max instances.
+- Configure the gateway for low-latency sandbox execution with 1 CPU, 2Gi memory, concurrency 20 (`CLOUD_RUN_CONCURRENCY`), session affinity, CPU boost, and 100 min/max instances.
 - Allow unauthenticated Cloud Run invocation with `--allow-unauthenticated`.
 - Generate a bearer token for gateway authentication.
 - Print the runtime environment variables.
@@ -51,9 +51,12 @@ Execution mode controls how SDK methods map to the Cloud Run sandbox CLI:
 
 | SDK method | Ephemeral mode (default) | Stateful mode |
 |---|---|---|
-| `create()` | Creates a local logical handle only | Calls `sandbox run <id> --detach` |
+| `create()` | Creates a local logical handle only | Calls `sandbox run --write --detach <id>` (an idle, writable session) |
+| `create({ snapshotId })` | — | Calls `sandbox run --write --import-tar <snapshot> --detach <id>` |
 | `runCommand()` | Calls `sandbox do -- /bin/sh -c <command>` | Calls `sandbox exec <id> -- /bin/sh -c <command>` |
-| `destroy()` | Removes local bookkeeping only | Calls `sandbox delete <id>` |
+| `runCommand(cmd, { onStdout })` | Streams from `sandbox do` | Streams from `sandbox exec` |
+| `destroy()` | Removes local bookkeeping only | Calls `sandbox delete --force <id>` |
+| `snapshot.create(id)` | — | Calls `sandbox tar --file=<snapshot> <id>` |
 | `filesystem` | Runs each operation with `sandbox do` | Runs each operation with `sandbox exec <id>` |
 
 Add the printed values to your app environment:
@@ -174,6 +177,14 @@ await sandbox.destroy()
 ## Notes
 
 Commands use ephemeral `sandbox do` execution by default. Filesystem writes are only preserved when your Cloud Run sandbox CLI configuration supports host-backed persistence such as `--persist-dir`. Use `executionMode: 'stateful'` when you need a detached sandbox session created with `sandbox run` and reused with `sandbox exec`.
+
+### Snapshots
+
+`compute.snapshot.create(sandboxId)` exports the stateful sandbox's writable rootfs overlay with `sandbox tar`; `compute.sandbox.create({ snapshotId })` starts a new stateful sandbox from it. The source keeps running. Files under `/tmp` and `--mount` paths are not included, and running processes and memory are not kept. Snapshots are stored in `gs://$CLOUD_RUN_SNAPSHOT_BUCKET/computesdk-snapshots/` when the gateway has `CLOUD_RUN_SNAPSHOT_BUCKET` set (setup creates the bucket and grants the service's runtime service account `roles/storage.objectAdmin`), otherwise on the gateway instance that took them.
+
+### Gateway instances
+
+A stateful sandbox lives on the gateway instance that created it. The provider replays Cloud Run's session-affinity cookie so follow-up calls reach that instance; affinity is best effort, so keep `--session-affinity` and spare `--concurrency` on the service. The gateway deletes stateful sandboxes idle for `CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS` (default one hour, `0` disables). Snapshot, restore and live streaming need the current gateway; against a gateway deployed before these features, snapshot calls fail with a redeploy hint and streamed output arrives when the command exits.
 
 `getUrl()` is not supported because the current Cloud Run sandbox CLI does not expose per-sandbox ports.
 
