@@ -1,7 +1,10 @@
 import { runProviderTestSuite } from "@computesdk/test-utils";
 import { miosa } from "../index";
+import { installSnapshotAudit } from "./snapshot-audit";
 
 const live = Boolean(process.env.MIOSA_API_KEY);
+
+if (live) installSnapshotAudit();
 
 runProviderTestSuite({
   name: "miosa",

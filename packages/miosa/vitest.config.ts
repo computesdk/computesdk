@@ -10,6 +10,6 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/__tests__/snapshot-diagnostic.test.ts"],
+    include: ["src/**/*.test.ts"],
   },
 });
