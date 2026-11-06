@@ -24,6 +24,7 @@ runProviderTestSuite({
   provider: beam({}),
   // Beam supports filesystem operations via shell commands + native listFiles
   supportsFilesystem: true,
+  supportsSnapshots: true,
   // Skip integration tests if required environment variables are not set
   skipIntegration: !process.env.BEAM_TOKEN || !process.env.BEAM_WORKSPACE_ID,
 });

@@ -538,7 +538,10 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
 
     snapshot: {
       // snapshot-memory checkpoints memory and filesystem; the checkpoint id
-      // restores through `create({ snapshotId })`.
+      // restores through `create({ snapshotId })`. Verified live: running
+      // processes, /tmp, /root, /etc and /opt survive, the source keeps
+      // running, but the /mnt/code mount (the default cwd) is not kept.
+      capabilities: { scope: 'rootfs', path: '/root', memory: true, destroysSource: false },
       create: async (config: BeamConfig, instanceId: string, options?: { name?: string; metadata?: Record<string, string> }) =>
         withBeamConfig(config, async () => {
           try {
