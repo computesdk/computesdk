@@ -8,7 +8,7 @@
 import { Arker, ArkerError, VM } from '@arker-ai/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { PolicyDoc, PolicyEntry, RunOptions } from '@arker-ai/sdk';
+import type { PatchVmRequest, PolicyDoc, PolicyEntry, RunOptions } from '@arker-ai/sdk';
 import type {
   CommandResult,
   InstanceInfo,
@@ -90,6 +90,19 @@ export interface ArkerSnapshot {
   createdAt: Date;
   metadata?: Record<string, any>;
 }
+
+/** Id of the schedule rule `pause` writes to suspend a VM. */
+const PAUSE_RULE = 'computesdk-pause';
+/** How long `pause` waits for the suspend to take effect. */
+const PAUSE_TIMEOUT_MS = 60_000;
+
+/**
+ * Write (or, with `null`, remove) one policy rule by id, keeping the others.
+ * The id-keyed `rules` form of `PATCH /v1/vms/{id}` postdates the SDK's
+ * `PatchVmRequest` type, which still describes the deprecated list form.
+ */
+const patchRule = (vm: VM, id: string, rule: Record<string, unknown> | null) =>
+  vm.update({ policies: { rules: { [id]: rule } } } as unknown as PatchVmRequest);
 
 const isNotFound = (err: unknown): boolean => err instanceof ArkerError && err.status === 404;
 
@@ -253,6 +266,35 @@ export const arker = defineProvider<VM, ArkerConfig>({
 
       getInstance: (sandbox: VM): VM => sandbox,
 
+      // An idle Arker VM is already frozen; pause suspends a running one too
+      // (in-flight runs go `pending`) with a `schedule` rule whose `at` has
+      // passed, which fires at once. The rule is removed once the VM is idle so
+      // it can't outlive the pause. Memory is kept: processes and in-flight
+      // runs carry on when the VM next starts.
+      pause: async (sandbox: VM): Promise<void> => {
+        await patchRule(sandbox, PAUSE_RULE, {
+          type: 'schedule',
+          at: new Date(Date.now() - 1000).toISOString(),
+          action: 'suspend',
+        });
+        try {
+          const deadline = Date.now() + PAUSE_TIMEOUT_MS;
+          while ((await sandbox.refresh()).state !== 'idle') {
+            if (Date.now() > deadline) throw new Error(`Arker VM ${sandbox.id} did not suspend within ${PAUSE_TIMEOUT_MS}ms`);
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        } finally {
+          await patchRule(sandbox, PAUSE_RULE, null);
+        }
+      },
+
+      // Any run starts a suspended VM, and its pending runs resume with it.
+      resume: async (sandbox: VM): Promise<void> => {
+        const result = await sandbox.run('true');
+        if (result.exitCode !== 0) throw new Error(`Arker resume failed for VM ${sandbox.id}: exit ${result.exitCode}`);
+      },
+      pauseCapabilities: { memory: true },
+
       // --- Filesystem: file bodies over Arker's native sync API, the rest over runCommand ---
 
       filesystem: {
@@ -357,6 +399,10 @@ export const arker = defineProvider<VM, ArkerConfig>({
     // A snapshot is a warm fork of the VM (disk + memory). Restore by passing
     // its id as `snapshotId` to create(), which forks from it again.
     snapshot: {
+      // The whole root disk (including /tmp, which is not a tmpfs) and running
+      // processes; the source keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
+
       create: async (config: ArkerConfig, instanceId: string, options?: CreateSnapshotOptions): Promise<ArkerSnapshot> => {
         const client = makeClient(config);
         const name = `${SNAPSHOT_PREFIX}${options?.name ? `${options.name}-` : ''}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
