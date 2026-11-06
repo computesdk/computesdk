@@ -549,11 +549,25 @@ export const sail = defineProvider<Sailbox, SailConfig>({
       },
 
       getInstance: (sandbox) => sandbox,
+
+      // Pause holds the Sailbox in memory: files anywhere on the rootfs and
+      // running processes survive. `getInstance().sleep()` stays available
+      // for Sail's to-disk sleep.
+      pause: async (sandbox) => {
+        await sandbox.pause();
+      },
+      resume: async (sandbox) => {
+        await sandbox.resume();
+      },
+      pauseCapabilities: { memory: true },
     },
 
     snapshot: {
       // A checkpoint saves the Sailbox's memory and disk and leaves it
       // running; `create({ snapshotId })` starts a new Sailbox from it.
+      // `/tmp` lives on the root disk, so the whole filesystem is kept.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
+
       create: async (
         config,
         sandboxId: string,

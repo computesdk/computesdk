@@ -52,6 +52,8 @@ vi.mock('@sailresearch/sdk', () => {
         return h.state.lastBox.listenerValue;
       }),
       waitForListener: vi.fn(async () => h.state.lastBox.listenerValue),
+      pause: vi.fn(async () => undefined),
+      resume: vi.fn(async () => undefined),
     };
     h.state.lastBox = {
       ...box,
@@ -423,6 +425,26 @@ describe('sail provider', () => {
     await compute.sandbox.destroy('sb_x');
     expect(h.state.terminate).toHaveBeenCalledWith('sb_x');
   });
+  it('pauses and resumes the native Sailbox in memory', async () => {
+    const compute = provider();
+    expect(compute.sandbox.pause).toEqual({ memory: true });
+    const sandbox = await compute.sandbox.create();
+    const box = h.state.lastBox;
+    await sandbox.pause!();
+    expect(box.pause).toHaveBeenCalledTimes(1);
+    await sandbox.resume!();
+    expect(box.resume).toHaveBeenCalledTimes(1);
+    expect(sandbox.getInstance()).toBe(box);
+  });
+
+  it('declares that checkpoints keep the rootfs and memory without stopping the source', () => {
+    expect(provider().snapshot!.capabilities).toEqual({
+      scope: 'rootfs',
+      memory: true,
+      destroysSource: false,
+    });
+  });
+
   it('checkpoints a Sailbox and restores a new one from the checkpoint', async () => {
     const compute = provider();
     const snapshot = await compute.snapshot!.create('sb_src', { name: 'snap' });
