@@ -533,6 +533,18 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         },
       },
 
+      // Freestyle's native pause freezes the VM with its memory, and `start`
+      // resumes it exactly. Default sandboxes are kept for a few minutes after
+      // a pause; only `ephemeral: true` ones (deleted on stop) can't pause.
+      pause: async (sandbox: Vm): Promise<void> => {
+        await sandbox.pause();
+      },
+      resume: async (sandbox: Vm): Promise<void> => {
+        await sandbox.start();
+      },
+      // Live-checked: files in /tmp and /root and running processes survive.
+      pauseCapabilities: { memory: true },
+
       getInstance: (sandbox: Vm): Vm => sandbox,
     },
 
@@ -567,6 +579,11 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         const client = clientFor(resolveConfig(config));
         await client.vms.snapshots.delete(snapshotId);
       },
+
+      // A Freestyle snapshot captures the whole VM, memory and disk, and
+      // leaves the source running. Live-checked: the whole ext4 rootfs (/tmp,
+      // /root) and running processes survive a restore.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
     },
   },
 });
