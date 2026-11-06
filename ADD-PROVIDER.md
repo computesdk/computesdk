@@ -528,7 +528,66 @@ pnpm --filter @computesdk/my-provider run lint
 pnpm --filter @computesdk/my-provider run test
 ```
 
-## 10. Submit Your PR
+## 10. Live Provider Workflows
+
+### Provider Test
+
+The [Provider Test workflow](.github/workflows/provider-test.yml) runs one
+provider package's tests, including live integration tests, on demand. It installs
+dependencies, builds the monorepo, enables the live-test opt-ins, and runs
+`pnpm --filter "./packages/<provider>" test`. Missing integration credentials fail
+the run rather than silently skipping the live suite.
+
+Provider keys load from the **Namespace vault**, matched to environment-variable
+names found in that package's source. Vault values override same-named repo
+secrets. Arrange the required vault entries before dispatch; never put credentials
+in a workflow input, source file, log, or PR.
+
+From a built checkout:
+
+```bash
+node packages/cli/dist/index.js actions dispatch computesdk/computesdk \
+  --workflow .github/workflows/provider-test.yml --ref main \
+  --inputs provider=<p> --json
+```
+
+Replace `<p>` with the package directory (for example, `e2b`); use your branch
+instead of `main` to test an unmerged provider. With the CLI installed, use
+`compute actions dispatch ...` instead. Keep the returned `runId` to inspect with
+`compute actions run <runId> --json` or stream with
+`compute actions logs <runId> --follow` after jobs start.
+
+### Provider Setup
+
+The [Provider Setup workflow](.github/workflows/provider-setup.yml) prepares
+per-account size templates for providers whose CPU/RAM are fixed before sandbox
+creation. It is idempotent by name: existing templates are skipped, missing ones
+are built through the provider's template API. Existing non-ready builds are
+reported, not silently replaced. Credentials load from the Namespace vault using
+the same source-name matching as Provider Test.
+
+| Input | Values / default |
+| --- | --- |
+| `provider` | Required: `superserve`, `novita`, `mosaic`, `e2b`, or `all` |
+| `dry_run` | `true` by default: list existing resources and print planned builds without creating templates |
+| `verify` | `false` by default: when enabled with `dry_run=false`, boot each template, check `nproc` and `/proc/meminfo`, and destroy the verification instance |
+
+```bash
+node packages/cli/dist/index.js actions dispatch computesdk/computesdk --workflow .github/workflows/provider-setup.yml --ref main --inputs provider=<p> dry_run=false verify=true --json
+```
+
+Or use `compute actions dispatch ...` with the CLI installed. `--inputs` takes
+space-separated `key=value` pairs. A real run creates account resources and may
+incur provider charges; start with `dry_run=true` to review the plan.
+
+E2B and Novita build Node 22 templates at 1/2, 2/4, 4/8, and 8/16 vCPU/GiB,
+named `csdk-node22-1cpu-2gb` through `csdk-node22-8cpu-16gb`. Superserve already
+has its built-in 2/4 template and builds the other three sizes plus 1/256 MiB;
+Mosaic builds only the 8/16 environment. E2B's standard `sizeClass` resolver uses
+these team templates. Superserve, Novita, and Mosaic select them by `templateId`,
+not by `sizeClass`. See [Sandbox sizes](docs/reference/sizes.md) for exact mappings.
+
+## 11. Submit Your PR
 
 Your PR should include:
 

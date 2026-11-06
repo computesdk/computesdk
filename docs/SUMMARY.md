@@ -78,8 +78,8 @@
 * [Instance (interface)](reference/Instance.md)
 * [compute](reference/compute.md)
 * [compute.instances](reference/compute.instances.md)
+* [Sandbox sizes](reference/sizes.md)
 
 ***
 
-* [LLM Documentation Files](<README (1).md>)
-
+* [LLM Documentation Files](llm-docs.md)

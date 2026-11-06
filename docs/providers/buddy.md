@@ -28,6 +28,10 @@ Buddy provider for ComputeSDK.
 
 Each sandbox is an Ubuntu microVM in your Buddy project, served from a pre-warmed pool. The provider is built on [`@buddy-works/sandbox-sdk`](https://www.npmjs.com/package/@buddy-works/sandbox-sdk), Buddy's official TypeScript SDK.
 
+## Lifecycle
+
+`pause()`/`resume()` wrap stop/start: memory and running processes do not survive. Snapshots capture rootfs without memory and keep the source. Snapshot creation already waits for a restorable result; restore with `snapshotId`.
+
 ## Installation & Setup
 
 ```bash

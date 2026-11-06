@@ -26,6 +26,10 @@ layout:
 
 [Promigence](https://www.promigence.ai) provider for ComputeSDK - production-grade sandboxes for AI agents, with filesystem and streaming output, and a spend cap on every sandbox.
 
+## Lifecycle
+
+`pause()`/`resume()` preserve memory. `snapshot.create()` now captures a running sandbox's rootfs and memory while keeping the source running, and reports ended background execs in `metadata.backgroundExecsKilled`. This exception matters even though `capabilities.memory` is `true`: do not assume every background exec survives capture. Restore with `snapshotId`.
+
 ## Installation & Setup
 
 ```bash
@@ -115,7 +119,7 @@ Errors from Promigence keep the SDK's `code` and `fix` (what to do next). Every 
 ## Limitations
 
 - There are no preview URLs yet, so `getUrl()` throws. To reach a server in the sandbox, call it from a command in the same sandbox, for example with `curl`.
-- Creating a snapshot from a running sandbox is not offered, and `snapshot.create()` throws. Build snapshots with the Promigence CLI (`promigence snapshot create --image <image>`), or pass `image` to `create()`.
+- `snapshot.create()` captures the running sandbox but ends background execs; inspect `metadata.backgroundExecsKilled` before treating it as a process-preserving fork.
 - Templates are snapshots here: the `template` methods throw, and `templateId` names a snapshot.
 - The output of a `background: true` command is not collected.
 - CPU and memory fields on `create()` are ignored, because a sandbox has its snapshot's size.

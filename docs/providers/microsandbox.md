@@ -87,6 +87,11 @@ const result = await sandbox.runCommand('node app.js', {
 
 ## Local ports and snapshots
 
+Local `pause()`/`resume()` suspend the resident VM and preserve memory/processes;
+the cloud backend rejects pause/resume. Disk snapshots instead require a source
+created with `{ ephemeral: false }`, preserve no memory, and stop/restart a running
+source during capture. The source is kept, but its running processes are not.
+
 Published ports and disk snapshots are currently local-only capabilities. Port mappings must be declared before sandbox creation:
 
 ```typescript
@@ -96,7 +101,7 @@ const provider = microsandbox({
 });
 
 compute.setConfig({ provider });
-const sandbox = await compute.instances.create();
+const sandbox = await compute.instances.create({ ephemeral: false });
 console.log(await sandbox.getUrl({ port: 3000 }));
 
 const snapshot = await provider.snapshot.create(sandbox.instanceId, {
