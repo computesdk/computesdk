@@ -12,7 +12,6 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { readFileSync } from 'node:fs';
-import { type ActionsClient } from './actions-client.js';
 import { client, fail, output, safeTerm, usageErrorOutput, type CommonOpts } from './actions.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/agents/types.ts) ────────────
