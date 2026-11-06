@@ -31,18 +31,33 @@ describe.skipIf(!hasDisk)('archil live: exec mode', () => {
   }, 120_000);
 });
 
-describe.skipIf(!hasCreds)('archil live: persistent mode', () => {
-  it('pauses and resumes the same VM, and forks snapshots that restore state', async () => {
-    const p = provider('persistent');
+describe.skipIf(!hasCreds)('archil live: default persistent VM', () => {
+  it('creates a VM by default, pauses/resumes it, and forks snapshots that restore state', async () => {
+    const previousExecution = process.env.ARCHIL_EXECUTION;
+    delete process.env.ARCHIL_EXECUTION;
+    const p = archil({
+      apiKey: process.env.ARCHIL_API_KEY,
+      region: process.env.ARCHIL_REGION,
+    });
     const marker = `marker-${Date.now()}`;
     const created: string[] = [];
     let snapshotId: string | undefined;
     try {
       const sandbox = await p.sandbox.create({ maxTtlSeconds: 600 });
       created.push(sandbox.sandboxId);
-      await sandbox.filesystem.writeFile('/root/marker.txt', marker);
-
       const handle = sandbox.getInstance() as ArchilSandbox;
+      // No disk id and no execution option: a persistent VM, not a disk handle.
+      expect(handle.vm?.id).toBe(sandbox.sandboxId);
+      expect(sandbox.sandboxId.startsWith('dsk-')).toBe(false);
+      expect(sandbox.processRuntime).toEqual({ streaming: 'native', processes: 'native' });
+
+      await sandbox.filesystem.writeFile('/root/marker.txt', marker);
+      const compound = await sandbox.runCommand('echo "$A"; (echo "$A") && pwd', {
+        cwd: '/root',
+        env: { A: 'set' },
+      });
+      expect(compound.stdout).toBe('set\nset\n/root\n');
+
       expect(typeof handle.pause).toBe('function');
       await handle.pause!();
       await handle.vm!.refresh();
@@ -59,14 +74,20 @@ describe.skipIf(!hasCreds)('archil live: persistent mode', () => {
       });
       snapshotId = snapshot.id;
       expect(snapshot.id).not.toBe(sandbox.sandboxId);
+      const snapshots = await p.snapshot!.list();
+      expect(snapshots.map((s: { id: string }) => s.id)).toContain(snapshot.id);
+      expect((await p.sandbox.list()).map((s) => s.sandboxId)).not.toContain(snapshot.id);
 
       await sandbox.filesystem.writeFile('/root/marker.txt', 'mutated');
 
       const restored = await p.sandbox.create({ snapshotId: snapshot.id });
       created.push(restored.sandboxId);
       expect(await restored.filesystem.readFile('/root/marker.txt')).toBe(marker);
+      expect(await sandbox.filesystem.readFile('/root/marker.txt')).toBe('mutated');
     } finally {
-      // Forks must be deleted before the sandbox they were forked from.
+      if (previousExecution !== undefined) process.env.ARCHIL_EXECUTION = previousExecution;
+      // Forks must be deleted before the sandbox they were forked from:
+      // restored VM, then the snapshot fork, then the parent.
       const [parent, ...children] = created;
       for (const id of children) {
         await p.sandbox.destroy(id).catch(() => undefined);

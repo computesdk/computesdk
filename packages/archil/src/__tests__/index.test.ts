@@ -49,7 +49,7 @@ describe('archil getById semantics', () => {
     );
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.getById('disk_123');
 
     expect(sandbox?.sandboxId).toBe('disk_123');
@@ -68,7 +68,7 @@ describe('archil getById semantics', () => {
     );
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.getById('my-workspace');
 
     expect(sandbox).toBeNull();
@@ -81,7 +81,7 @@ describe('archil getById semantics', () => {
 
 describe('archil create semantics', () => {
   it('requires top-level disk id', async () => {
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     await expect(provider.sandbox.create()).rejects.toThrow(/requires an existing disk id on the top-level options/i);
   });
 
@@ -89,7 +89,7 @@ describe('archil create semantics', () => {
     const fetchMock = vi.fn();
     global.fetch = fetchMock as typeof fetch;
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const created = await provider.sandbox.create({ diskId: 'disk_abc123' });
     const info = await created.getInfo();
 
@@ -137,7 +137,7 @@ describe('archil filesystem mapping', () => {
     });
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await expect(sandbox.filesystem.readFile('/tmp/hello.txt')).resolves.toBe(
@@ -156,7 +156,7 @@ describe('archil filesystem mapping', () => {
     const fetchMock = vi.fn(async () => execResponse());
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await sandbox.filesystem.mkdir('/tmp/data');
@@ -190,7 +190,7 @@ describe('archil filesystem mapping', () => {
     const fetchMock = vi.fn(async () => execResponse());
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await sandbox.filesystem.writeFile('/tmp/large.txt', 'x'.repeat(100_000));
@@ -232,7 +232,7 @@ describe('archil filesystem mapping', () => {
     });
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await expect(
@@ -250,7 +250,7 @@ describe('archil filesystem mapping', () => {
     const fetchMock = vi.fn(async () => execResponse('0\n'));
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await expect(sandbox.filesystem.readFile('/tmp/empty.txt')).resolves.toBe(
@@ -263,7 +263,7 @@ describe('archil filesystem mapping', () => {
     const fetchMock = vi.fn(async () => execResponse());
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await sandbox.filesystem.writeFile('/tmp/empty.txt', '');
@@ -284,7 +284,7 @@ describe('archil filesystem mapping', () => {
       .mockResolvedValueOnce(execResponse());
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await expect(
@@ -307,7 +307,7 @@ describe('archil filesystem mapping', () => {
       .mockResolvedValueOnce(execResponse());
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await expect(
@@ -333,7 +333,7 @@ describe('archil filesystem mapping', () => {
     });
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await expect(
@@ -350,7 +350,7 @@ describe('archil filesystem mapping', () => {
   });
 
   it('refuses to remove the disk mount root', async () => {
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_abc123' });
 
     await expect(sandbox.filesystem.remove('/')).rejects.toThrow(
@@ -386,11 +386,13 @@ describe('archil persistent mode', () => {
 
   class FakeWebSocket {
     static OPEN = 1;
+    static instances: FakeWebSocket[] = [];
     readyState = 0;
     readonly sent: string[] = [];
     private readonly listeners = new Map<string, Set<(event: any) => void>>();
 
     constructor(readonly url: string) {
+      FakeWebSocket.instances.push(this);
       queueMicrotask(() => this.emit('open', {}));
     }
 
@@ -450,17 +452,16 @@ describe('archil persistent mode', () => {
 
   afterEach(() => {
     globalThis.WebSocket = originalWebSocket;
+    FakeWebSocket.instances = [];
+    vi.unstubAllEnvs();
   });
 
-  it('provisions a sandbox on create without requiring a disk id', async () => {
+  it('provisions a persistent VM on create by default', async () => {
     const fetchMock = vi.fn(async () => json(sandboxWire()));
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+    vi.stubEnv('ARCHIL_EXECUTION', '');
 
-    const provider = archil({
-      apiKey: 'key_test',
-      region: 'aws-us-east-1',
-      execution: 'persistent',
-    });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
     const sandbox = await provider.sandbox.create({
       name: 'ci-job',
       baseImage: 'node:24-bookworm',
@@ -484,8 +485,34 @@ describe('archil persistent mode', () => {
     });
   });
 
-  it('still requires a disk id in exec mode', async () => {
+  it('rejects a disk id unless exec mode is opted into', async () => {
+    vi.stubEnv('ARCHIL_EXECUTION', '');
     const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    await expect(provider.sandbox.create({ diskId: 'dsk-1' })).rejects.toThrow(/execution: "exec"/);
+  });
+
+  it('selects exec mode from ARCHIL_EXECUTION', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as typeof fetch;
+    vi.stubEnv('ARCHIL_EXECUTION', 'exec');
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const sandbox = await provider.sandbox.create({ diskId: 'dsk-1' });
+    expect(sandbox.sandboxId).toBe('dsk-1');
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Explicit config wins over the env var.
+    vi.stubEnv('ARCHIL_EXECUTION', 'persistent');
+    const explicit = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
+    expect((await explicit.sandbox.create({ diskId: 'dsk-2' })).sandboxId).toBe('dsk-2');
+  });
+
+  it('rejects an unknown ARCHIL_EXECUTION value', async () => {
+    vi.stubEnv('ARCHIL_EXECUTION', 'serverless');
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    await expect(provider.sandbox.create()).rejects.toThrow(/Invalid ARCHIL_EXECUTION/);
+  });
+
+  it('still requires a disk id in exec mode', async () => {
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     await expect(provider.sandbox.create()).rejects.toThrow(/disk id/i);
   });
 
@@ -527,7 +554,7 @@ describe('archil persistent mode', () => {
     });
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
 
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const sandbox = await provider.sandbox.create({ diskId: 'disk_123' });
     await sandbox.runCommand('(echo a; echo b)', { env: { FOO: 'bar' }, cwd: '/w' });
     const command = JSON.parse(body).command as string;
@@ -597,6 +624,93 @@ describe('archil persistent mode', () => {
     await sandbox.runCommand('true');
     // Each command fetches a fresh short-lived connection URL.
     expect(connectionCalls).toBe(2);
+  });
+
+  function vmFetchMock() {
+    return vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? 'GET') === 'POST' && url.endsWith('/connections')) {
+        return json({ url: 'wss://fake.example.com' });
+      }
+      return json(sandboxWire());
+    });
+  }
+
+  function startFrames() {
+    return FakeWebSocket.instances
+      .flatMap((ws) => ws.sent.map((frame) => JSON.parse(frame)))
+      .filter((frame) => frame.type === 'start');
+  }
+
+  it('passes env natively and runs every part of a compound command in cwd', async () => {
+    global.fetch = adaptFetchMock(vmFetchMock() as typeof fetch);
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'persistent' });
+    const sandbox = await provider.sandbox.create();
+
+    await sandbox.runCommand('echo a; echo b && echo c', { cwd: '/app dir', env: { FOO: 'b r' }, timeout: 2500 });
+    const [start] = startFrames();
+    expect(start.command).toBe("cd '/app dir' || exit 1\necho a; echo b && echo c");
+    expect(start.env).toEqual({ FOO: 'b r' });
+    expect(start.timeout_seconds).toBe(3);
+  });
+
+  it('streams output natively through the process WebSocket', async () => {
+    global.fetch = adaptFetchMock(vmFetchMock() as typeof fetch);
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'persistent' });
+    const sandbox = await provider.sandbox.create();
+    expect(sandbox.processRuntime).toEqual({ streaming: 'native', processes: 'native' });
+
+    const chunks: string[] = [];
+    const result = await sandbox.runCommand('echo hello', { onStdout: (c) => chunks.push(c) });
+    expect(chunks.join('')).toBe('hello');
+    expect(result).toMatchObject({ stdout: 'hello', exitCode: 0 });
+  });
+
+  it('starts native processes and closes stdin unless requested', async () => {
+    global.fetch = adaptFetchMock(vmFetchMock() as typeof fetch);
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'persistent' });
+    const sandbox = await provider.sandbox.create();
+
+    const proc = await sandbox.startProcess('echo hello', { env: { A: '1' } });
+    expect(proc.runtime).toBe('native');
+    expect(proc.jobId).toBe('proc_1');
+    const result = await proc.wait({ timeout: 5000 });
+    expect(result).toMatchObject({ stdout: 'hello', exitCode: 0, signal: null });
+    expect(await proc.status()).toMatchObject({ status: 'exited', exitCode: 0 });
+    await expect(proc.write('x')).rejects.toThrow(/stdin: true/);
+    const [start] = startFrames();
+    expect(start.env).toEqual({ A: '1' });
+  });
+
+  it('lists VMs without snapshot forks', async () => {
+    const snap = { ...sandboxWire('paused', 'sbx_snap'), name: 'csdk-snap-golden-1234abcd' };
+    const fetchMock = vi.fn(async () => json({ sandboxes: [sandboxWire('running', 'sbx_a'), snap] }));
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+    vi.stubEnv('ARCHIL_EXECUTION', '');
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+
+    const listed = await provider.sandbox.list();
+    expect(listed.map((s) => s.sandboxId)).toEqual(['sbx_a']);
+    const snapshots = await provider.snapshot!.list();
+    expect(snapshots.map((s: any) => s.id)).toEqual(['sbx_snap']);
+  });
+
+  it('explains fork-before-parent ordering when Archil returns 409', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        return new Response(JSON.stringify({ success: false, error: 'sandbox has forks' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return json(sandboxWire('stopped'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'persistent' });
+    await expect(provider.sandbox.destroy('sbx_parent')).rejects.toThrow(/forks .* before their parent/);
   });
 
   it('deletes the sandbox on destroy', async () => {
@@ -684,7 +798,7 @@ describe('archil persistent mode', () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     // Exec-mode provider, ephemeral: false -> provisions a sandbox.
-    const exec = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const exec = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const vmSandbox = await exec.sandbox.create({
       ephemeral: false,
       name: 'ci-job',
@@ -710,7 +824,7 @@ describe('archil persistent mode', () => {
       );
 
     // Exec-mode provider, ephemeral:false sandbox -> destroy deletes the VM.
-    const exec = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const exec = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     const vmSandbox = await exec.sandbox.create({ ephemeral: false });
     await exec.sandbox.destroy(vmSandbox.sandboxId);
     expect(deletesFor('sbx_123').length).toBeGreaterThan(0);
@@ -734,7 +848,7 @@ describe('archil persistent mode', () => {
   it('keeps exec-mode destroy a no-op', async () => {
     const fetchMock = vi.fn();
     global.fetch = fetchMock as typeof fetch;
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     await provider.sandbox.destroy('disk_123');
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -819,7 +933,7 @@ describe('archil snapshots and forks', () => {
     ).toBe(true);
   });
 
-  it('forks a VM when snapshotId is passed under the default exec config', async () => {
+  it('forks a VM when snapshotId is passed under the default config', async () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? 'GET';
@@ -845,10 +959,10 @@ describe('archil snapshots and forks', () => {
   });
 
   it('rejects ephemeral: true combined with snapshotId', async () => {
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
     await expect(
       provider.sandbox.create({ snapshotId: 'sbx_123', ephemeral: true }),
-    ).rejects.toThrow(/cannot combine ephemeral/i);
+    ).rejects.toThrow(/cannot be restored in exec mode/i);
   });
 
   it('rejects attaching to an existing sandbox with an abort signal', async () => {
@@ -872,6 +986,9 @@ describe('archil snapshots and forks', () => {
       if (method === 'POST' && url.includes('/fork')) {
         return json(sandboxWire('running', 'sbx_snap'));
       }
+      if (method === 'POST' && url.endsWith('/pause')) {
+        return json(sandboxWire('paused', 'sbx_snap'));
+      }
       return json(sandboxWire());
     });
     global.fetch = adaptFetchMock(fetchMock as typeof fetch);
@@ -882,11 +999,15 @@ describe('archil snapshots and forks', () => {
       execution: 'persistent',
     });
     const snapshot = await provider.snapshot!.create('sbx_123', {
-      name: 'golden',
+      name: 'Golden Image',
     });
 
-    expect(snapshot).toMatchObject({ id: 'sbx_snap', provider: 'archil' });
+    expect(snapshot).toMatchObject({ id: 'sbx_snap', provider: 'archil', metadata: { name: 'Golden Image' } });
     const calls = fetchMock.mock.calls as any[][];
+    const forkCall = calls.find(([url]) => String(url).includes('/api/sandboxes/sbx_123/fork'))!;
+    expect(JSON.parse(String((forkCall[1] as RequestInit).body)).name).toMatch(/^csdk-snap-golden-image-[0-9a-f]{8}$/);
+    // The fork is paused so the snapshot holds state without running.
+    expect(calls.some(([url, init]) => String(url).endsWith('/api/sandboxes/sbx_snap/pause') && (init as RequestInit)?.method === 'POST')).toBe(true);
     expect(
       calls.some(
         ([url, init]) =>
@@ -894,13 +1015,6 @@ describe('archil snapshots and forks', () => {
           (init as RequestInit)?.method === 'POST',
       ),
     ).toBe(true);
-  });
-
-  it('does not support listing snapshots', async () => {
-    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1' });
-    await expect(provider.snapshot!.list()).rejects.toThrow(
-      /does not support listing snapshots/i,
-    );
   });
 
   it('deletes a snapshot by deleting its backing sandbox', async () => {
@@ -957,40 +1071,24 @@ describe('archil snapshots and forks', () => {
   });
 });
 
+// Persistent VMs are the default; the suite runs against them with a bounded
+// TTL so an interrupted run cannot leave a VM running for Archil's 24h default.
 runProviderTestSuite({
   name: 'archil',
   provider: (() => {
     const provider = archil({
       apiKey: process.env.ARCHIL_API_KEY,
       region: process.env.ARCHIL_REGION,
+      execution: 'persistent',
     });
-
-    // The generic provider test suite always calls create() without provider-
-    // specific options.
-    // Archil create() requires an explicit disk id, so inject ARCHIL_DISK_ID.
     const originalCreate = provider.sandbox.create.bind(provider.sandbox);
-    const configuredDiskId = process.env.ARCHIL_DISK_ID;
-
-    provider.sandbox.create = async (options?: any) => {
-      const requested = options?.diskId as string | undefined;
-      if (requested) {
-        return originalCreate(options);
-      }
-
-      if (!configuredDiskId) {
-        throw new Error('Archil integration tests require ARCHIL_DISK_ID.');
-      }
-
-      return originalCreate({
-        ...options,
-        diskId: configuredDiskId,
-      });
-    };
-
+    provider.sandbox.create = (options?: any) => originalCreate({ maxTtlSeconds: 900, ...options });
     return provider;
   })(),
   supportsFilesystem: true,
   supportsGetUrl: false,
-  skipIntegration:
-    !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION || !process.env.ARCHIL_DISK_ID,
+  supportsStreaming: true,
+  supportsProcesses: true,
+  expectProcessRuntime: { streaming: 'native', processes: 'native' },
+  skipIntegration: !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION,
 });

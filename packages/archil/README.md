@@ -2,21 +2,21 @@
 
 [Archil](https://archil.com) provider for [ComputeSDK](https://www.computesdk.com).
 
-The provider supports Archil's two compute surfaces, selected by the
-`execution` config option:
+Archil sandboxes are persistent Linux VMs, and that is what this provider
+creates by default:
 
-- **`exec`** (default): `create` resolves a handle to an existing Archil disk
-  id, and `runCommand` executes shell commands in a managed ephemeral
-  container with that disk attached via the control-plane `exec` endpoint.
-  `destroy` is a no-op because disk lifecycle is managed by Archil.
-  `getById` requires a disk id.
-- **`persistent`**: `create` provisions a persistent Archil sandbox — a
-  long-running Linux VM with a dedicated disk — and waits until it is
-  `running`. `runCommand` uses the sandbox's interactive process API over a
-  short-lived WebSocket connection (a fresh connection URL is fetched per
-  command, so expiry is handled automatically). `destroy` deletes the
-  sandbox, `getById` fetches the sandbox and resumes it if paused, and
-  `getUrl` resolves the sandbox's published endpoints.
+- `create()` provisions a VM and waits until it is `running`. `getById`
+  fetches a VM (resuming it if paused or stopped), `list` returns the
+  account's VMs, and `destroy` stops and deletes one.
+- `runCommand`, streaming (`onStdout`/`onStderr`) and `startProcess` run on
+  Archil's native process API over a short-lived WebSocket (a fresh connection
+  URL per process). Files move through Archil's native file transfer API.
+- Snapshots are paused forks of a VM; `create({ snapshotId })` restores one
+  into a new VM. `pause()`/`resume()` are on `sandbox.getInstance()`.
+
+The older disk exec surface (a fresh container per command with an existing
+disk mounted at `/mnt/archil`) is still available as an explicit opt-in; see
+[Exec mode](#exec-mode-opt-in).
 
 ## Installation
 
@@ -26,12 +26,12 @@ npm install @computesdk/archil
 
 ## Configuration
 
-| Option      | Env var            | Required | Description                                    |
-| ----------- | ------------------ | -------- | ----------------------------------------------- |
-| `apiKey`    | `ARCHIL_API_KEY`   | yes      | Archil control-plane API key                    |
-| `region`    | `ARCHIL_REGION`    | yes      | Archil region (e.g. `aws-us-east-1`)            |
-| `baseUrl`   | —                  | no       | Override control-plane URL (for testing)        |
-| `execution` | —                  | no       | `"exec"` (default) or `"persistent"`                |
+| Option      | Env var            | Required | Description                                          |
+| ----------- | ------------------ | -------- | ---------------------------------------------------- |
+| `apiKey`    | `ARCHIL_API_KEY`   | yes      | Archil control-plane API key                         |
+| `region`    | `ARCHIL_REGION`    | yes      | Archil region (e.g. `aws-us-east-1`)                 |
+| `baseUrl`   | —                  | no       | Override control-plane URL (for testing)             |
+| `execution` | `ARCHIL_EXECUTION` | no       | `"persistent"` (default) or `"exec"` (disk exec)     |
 
 ## Usage
 
@@ -40,105 +40,109 @@ import { archil } from '@computesdk/archil';
 
 const provider = archil();
 
-// Attach to an existing disk by id.
-const { sandbox } = await provider.sandbox.create({
-  diskId: 'disk_abc123',
-});
-
-const result = await provider.sandbox.runCommand(sandbox, 'echo hello > /mnt/note && cat /mnt/note');
-console.log(result.stdout); // "hello"
-
-// Look up later by disk id:
-const byId = await provider.sandbox.getById(sandbox.instanceId);
-
-await provider.sandbox.destroy(sandbox.instanceId);
-```
-
-`create()` requires top-level `diskId` as the target disk id.
-
-### Persistent mode
-
-```ts
-const provider = archil({ execution: 'persistent' });
-
 const sandbox = await provider.sandbox.create({
   name: 'ci-job',
-  baseImage: 'node:24-bookworm', // OCI image; `templateId` works too
-  vcpus: 4,                      // or `cpu` / `cpus`
+  baseImage: 'node:24-bookworm', // OCI image; `image` / `templateId` work too
+  vcpus: 4,                      // or `cpu` / `cpus`, or `sizeClass: 'lg'`
   memoryMiB: 8192,               // or `memory`
-  env: { CI: '1' },
-  maxTtlSeconds: 3600,           // per powered-on session
-  sandbox: { /* extra Archil fields, e.g. network policy */ },
+  env: { CI: '1' },              // or `envs`
+  maxTtlSeconds: 3600,           // or `timeout` in ms; per powered-on session
+  sandbox: { /* extra Archil create fields */ },
 });
 
-// cwd/env/installs and background processes persist between calls.
-await sandbox.runCommand('npm ci', { cwd: '/repo' });
-await sandbox.runCommand('npm test', { cwd: '/repo' });
+// Filesystem state, installs and background processes persist between calls.
+// `cwd` and `env` apply to every part of a compound command.
+await sandbox.runCommand('npm ci && npm test', { cwd: '/repo', env: { CI: '1' } });
 
-// Paused sandboxes are resumed automatically on getById/runCommand.
-const resumed = await provider.sandbox.getById(sandbox.instanceId);
+// Native streaming and processes.
+await sandbox.runCommand('npm run build', { onStdout: (c) => process.stdout.write(c) });
+const proc = await sandbox.startProcess('cat', { stdin: true });
+await proc.write('hello\n');
+await proc.closeStdin();
+await proc.wait();
 
-await provider.sandbox.destroy(sandbox.instanceId); // deletes the sandbox
+// Pause/resume the same VM (memory and disk preserved).
+const vm = sandbox.getInstance();
+await vm.pause!();
+await vm.resume!();
+
+await provider.sandbox.destroy(sandbox.sandboxId);
 ```
-
-Sandbox `create` accepts generic `CreateInstanceOptions` fields (`vcpus`/`cpu`/`cpus`,
-`memory`/`memoryMiB`, `image`/`templateId`, `envs`, `timeout` (ms → `maxTtlSeconds`))
-plus the Archil-specific keys shown above.
 
 The shared `ephemeral` create option overrides the configured mode per sandbox:
 `ephemeral: true` resolves an exec-mode disk handle (requires `diskId`),
-`ephemeral: false` provisions a persistent sandbox — matching the same flag on
-other dual-mode providers like Upstash. `getById`/`list`/`destroy` follow the
-configured `execution` mode.
+`ephemeral: false` provisions a VM.
 
-### Choosing a mode
+### Snapshots
 
-|                       | `exec`                          | `persistent`                                |
-| --------------------- | ------------------------------- | ------------------------------------------- |
-| Compute               | Ephemeral container per command | Persistent VM                               |
-| `cwd`/`env`/installs  | Lost between commands           | Persist while running                       |
-| Filesystem writes     | Only under `/mnt/archil`        | Anywhere on the VM                          |
-| Background processes  | Die with the container          | Keep running                                |
-| `create` input        | Existing `diskId`               | Sandbox spec (image, vcpus, memory, …)      |
-| Billing               | Per `executeMs`                 | Per running wall-clock time                 |
-| `getUrl`              | ❌                              | ✅ (published endpoints)                    |
+```ts
+const snapshot = await provider.snapshot.create(sandbox.sandboxId, { name: 'golden' });
+const restored = await provider.sandbox.create({ snapshotId: snapshot.id });
+const snapshots = await provider.snapshot.list();
+
+// Archil deletes forks before their parent (it returns 409 otherwise):
+await provider.sandbox.destroy(restored.sandboxId);
+await provider.snapshot.delete(snapshot.id);
+await provider.sandbox.destroy(sandbox.sandboxId);
+```
+
+A snapshot is a fork of the source VM's memory and disk, paused so it holds
+state without running, and named `csdk-snap-<name>-<suffix>`. `snapshot.list()`
+returns VMs with that prefix and `sandbox.list()` leaves them out. Restoring
+forks the snapshot again into an independent VM. Snapshot ids are ordinary
+Archil sandbox ids, so any VM id can be passed as `snapshotId`.
+
+## Exec mode (opt-in)
+
+```ts
+const provider = archil({ execution: 'exec' }); // or ARCHIL_EXECUTION=exec
+
+const sandbox = await provider.sandbox.create({ diskId: 'dsk-0000000000000000' });
+await sandbox.runCommand('echo hello > /mnt/archil/note && cat /mnt/archil/note');
+```
+
+Each command runs in a fresh Archil-managed container with the disk mounted at
+`/mnt/archil`. `create()` requires `diskId`; passing `diskId` without opting in
+throws. `getById`/`list` operate on disks, `destroy` is a no-op (disk lifecycle
+is managed by Archil), and ids starting with `dsk-` are always treated as disk
+handles. `cwd`, `env` and installs do not persist between commands.
 
 ## Supported operations
 
-| Method        | exec mode | persistent mode |
-| ------------- | --------- | ------------ |
-| `create`      | ✅ Resolves an existing disk from top-level `diskId`. | ✅ Provisions a sandbox, waits for `running`. |
-| `getById`     | ✅ Requires the disk id. | ✅ Fetches the sandbox; resumes if paused/stopped. |
-| `list`        | ✅ Lists all disks visible to the API key. | ✅ Lists sandboxes. |
-| `destroy`     | no-op — disk lifecycle is managed by Archil. | ✅ Deletes the sandbox and its backing disk. |
-| `runCommand`  | ✅ Executes via the HTTP `exec` endpoint. | ✅ Executes via the process API (fresh connection URL per command). |
-| `getInfo`     | ✅ | ✅ |
-| `getUrl`      | ❌ Ephemeral containers have no port to expose. | ✅ Resolves the sandbox's endpoint for the port. |
-| `filesystem`  | ✅ Maps paths into `/mnt/archil`; manages shared-mode checkout/checkin. | ✅ Uses the sandbox file transfer API; paths are the VM's real paths. |
+| Method            | Persistent VM (default) | Exec mode (opt-in) |
+| ----------------- | ----------------------- | ------------------ |
+| `create`          | ✅ Provisions a VM, waits for `running`. | ✅ Resolves an existing disk from `diskId`. |
+| `getById`         | ✅ Fetches the VM; resumes if paused/stopped. | ✅ Fetches the disk. |
+| `list`            | ✅ All VMs on the account, minus snapshots. | ✅ All disks visible to the API key. |
+| `destroy`         | ✅ Stops and deletes the VM. | no-op |
+| `runCommand`      | ✅ Native process API. | ✅ HTTP `exec` endpoint. |
+| Streaming         | ✅ Native, live over the process WebSocket. | Output delivered when the command exits. |
+| `startProcess`    | ✅ Native (stdin, kill, wait). | ❌ |
+| `filesystem`      | ✅ Native file transfer for read/write; `mkdir`/`readdir`/`exists`/`remove` run shell commands. | ✅ Maps paths into `/mnt/archil`. |
+| Snapshots         | ✅ create / list / delete / restore. | ❌ |
+| `pause`/`resume`  | ✅ On `getInstance()`. | ❌ |
+| `getUrl`          | Only for ports already published as sandbox endpoints (not proven live). | ❌ |
 
 ## Limitations
 
-- **exec mode**: each `exec` call provisions a fresh container — there is no
-  persistent state between calls beyond what is written to the disk.
-- **exec mode**: responses are truncated to ~5 MB by the Archil control plane.
-- **exec mode**: `getUrl` is not supported — each exec runs in a fresh
-  ephemeral container, so there is no long-lived process to expose a port on.
-- **exec mode**: filesystem operations accept normal absolute paths and map
-  them into the `/mnt/archil` disk mount internally. Each mutating operation
-  checks out and checks in the disk automatically. Raw `runCommand` strings
-  are not rewritten — commands that access the disk must use `/mnt/archil`
-  themselves.
-- **persistent mode**: `pause`/`resume`/`fork` are available on the underlying
-  `disk`-SDK sandbox via `getInstance()` — the generic provider interface has
-  no `pause`/`resume` methods, so only `getById`/`runCommand` auto-resume.
+- `list()` is one Archil API call: Archil's sandbox list endpoint returns every
+  sandbox in a single response (there is no cursor to page through).
+- `kill(signal)` on a native process cancels it through Archil's process
+  control; Archil does not accept a signal name, so the result reports the
+  requested signal (`SIGKILL` by default) with exit code 137. Timed-out
+  commands report exit code 124.
+- A VM with live forks (snapshots or VMs restored from it) cannot be deleted
+  until those forks are deleted.
+- Exec mode: responses are truncated to ~5 MB by the Archil control plane, and
+  raw `runCommand` strings are not rewritten — commands that access the disk
+  must use `/mnt/archil` themselves.
 
 ## Standard sizes (persistent VMs only)
 
-`archil({ execution: 'persistent' }).sizes.list()` / `resolve('sm')` declares exact
-`sm`, `md`, `lg`, and `xl` requests. `create({ sizeClass: 'sm' })` maps to adapter
-`vcpus: 1`, `memoryMiB: 2048`, then native `vcpuCount` / `memSizeMiB`. Explicit
-`ephemeral: false` can select persistent mode; the default exec mode remains
-unchanged and reports `unavailable` for VM sizing. Attach (`sandboxId`/`instanceId`)
+`archil().sizes.list()` / `resolve('sm')` declares exact `sm`, `md`, `lg`, and
+`xl` requests. `create({ sizeClass: 'sm' })` maps to adapter `vcpus: 1`,
+`memoryMiB: 2048`, then native `vcpuCount` / `memSizeMiB`. Exec mode
+(`execution: 'exec'` or `ephemeral: true`) reports `unavailable` for VM sizing. Attach (`sandboxId`/`instanceId`)
 and fork (`snapshotId`) standard requests reject as `unsupported` before API calls;
 those paths cannot apply a new VM size. Conflicting native controls reject too.
 `xs`/`2xl` remain `unknown` in this initial adapter catalog.

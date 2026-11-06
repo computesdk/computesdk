@@ -1,17 +1,16 @@
 /**
  * Archil Provider
  *
- * Supports Archil's two compute surfaces, selected by `execution`:
+ * Archil sandboxes are persistent Linux VMs (Firecracker, durable root
+ * filesystem), and that is what this provider creates by default. Commands,
+ * streaming and background processes run through Archil's native process API
+ * (a WebSocket fetched fresh per process via POST
+ * /api/sandboxes/{id}/connections); files move through its native file
+ * transfer API; snapshots are paused forks restored with create({ snapshotId }).
  *
- * - "exec" (default): each command runs in an Archil-managed ephemeral
- *   container with the configured disk mounted, then returns stdout, stderr,
- *   and exit code. "create" resolves a handle to an existing disk id; env,
- *   cwd, and installs do not persist between commands.
- * - "persistent": `create` provisions an Archil sandbox — a persistent Linux
- *   VM with a dedicated disk. `runCommand` uses the sandbox's interactive
- *   process API (a short-lived WebSocket connection fetched fresh per command
- *   via POST /api/sandboxes/{id}/connections), so filesystem state, installed
- *   tools, and background processes persist across commands.
+ * The older disk exec surface — each command runs in a fresh Archil-managed
+ * container with a disk mounted at /mnt/archil — is opt-in with
+ * `execution: "exec"` (or ARCHIL_EXECUTION=exec) plus a disk id.
  */
 
 import { defineProvider, InstanceSizeError } from '@computesdk/provider';
@@ -19,6 +18,7 @@ import { Archil as ArchilClient, ArchilError } from 'disk';
 import type {
   CreateSandboxRequest as ArchilSandboxRequest,
   Sandbox as ArchilVm,
+  SandboxProcessResult,
 } from 'disk';
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
@@ -27,7 +27,9 @@ import type {
   InstanceInfo,
   CreateInstanceOptions,
   FileEntry,
+  ProcessHandle,
   RunCommandOptions,
+  StartProcessOptions,
 } from 'computesdk';
 
 const ARCHIL_MOUNT_ROOT = '/mnt/archil';
@@ -56,8 +58,8 @@ function regionToBaseUrl(region: string): string {
 
 /**
  * Archil execution mode:
- * - "exec": serverless per-command containers on a disk (default).
- * - "persistent": a persistent sandbox VM run through the process API.
+ * - "persistent" (default): a persistent sandbox VM run through the process API.
+ * - "exec": serverless per-command containers on an existing disk (opt-in).
  */
 export type ArchilExecutionMode = 'exec' | 'persistent';
 
@@ -69,10 +71,11 @@ export interface ArchilConfig {
   /** Override the control-plane base URL (useful for testing). */
   baseUrl?: string;
   /**
-   * Which Archil compute surface to use. Defaults to "exec". In
-   * "persistent" mode create() provisions a persistent sandbox VM instead of
-   * resolving a disk handle. Per-sandbox override: `ephemeral` on
-   * create() options (true -> exec handle, false -> persistent VM).
+   * Which Archil compute surface to use. Falls back to ARCHIL_EXECUTION, then
+   * "persistent": create() provisions a persistent sandbox VM. "exec"
+   * resolves create({ diskId }) to a disk exec handle instead. Per-sandbox
+   * override: `ephemeral` on create() options (true -> exec handle, false ->
+   * persistent VM).
    */
   execution?: ArchilExecutionMode;
 }
@@ -185,7 +188,17 @@ function resolveConfig(config: ArchilConfig): ResolvedConfig {
     baseUrl = regionToBaseUrl(region);
   }
 
-  return { apiKey, baseUrl, execution: config.execution ?? 'exec' };
+  return { apiKey, baseUrl, execution: resolveExecution(config) };
+}
+
+function resolveExecution(config: ArchilConfig): ArchilExecutionMode {
+  if (config.execution) return config.execution;
+  const fromEnv = process.env.ARCHIL_EXECUTION?.trim().toLowerCase();
+  if (!fromEnv) return 'persistent';
+  if (fromEnv === 'exec' || fromEnv === 'persistent') return fromEnv;
+  throw new Error(
+    `Invalid ARCHIL_EXECUTION "${process.env.ARCHIL_EXECUTION}". Expected "persistent" (default) or "exec".`,
+  );
 }
 
 function createClient(config: ArchilConfig, resolved: ResolvedConfig): ArchilClient {
@@ -209,14 +222,6 @@ function resolveCreateDiskId(options?: ArchilCreateOptions): string {
   return diskId;
 }
 
-async function forkSandboxVm(
-  client: ArchilClient,
-  sourceId: string,
-  name?: string,
-): Promise<ArchilVm> {
-  const source = await client.sandboxes.get(sourceId);
-  return source.fork({ name });
-}
 
 function shellEscape(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -360,15 +365,12 @@ async function execOnDisk(sandbox: ArchilSandbox, command: string): Promise<Exec
   return sandbox.client.disks.exec(sandbox.disk.id, command);
 }
 
-function wrapSandboxCommand(command: string, options?: RunCommandOptions): string {
-  let wrapped = command;
-  if (options?.cwd) {
-    wrapped = `cd ${shellEscape(options.cwd)} && ${wrapped}`;
-  }
-  if (options?.background) {
-    wrapped = `nohup sh -c ${shellEscape(wrapped)} > /dev/null 2>&1 &`;
-  }
-  return wrapped;
+// Runs the command from `cwd` without regrouping it: Archil hands the command
+// string to `/bin/sh -c`, and the newline keeps every part of a compound
+// command (`a; b`, `a || b`, pipelines) inside the new working directory. env
+// is passed natively to the process, so it reaches every part as well.
+function withCwd(command: string, cwd?: string): string {
+  return cwd ? `cd ${shellEscape(cwd)} || exit 1\n${command}` : command;
 }
 
 async function ensureVmRunning(vm: ArchilVm): Promise<void> {
@@ -383,13 +385,25 @@ async function ensureVmRunning(vm: ArchilVm): Promise<void> {
   }
 }
 
-// Archil rejects deleting a live sandbox, so stop it first.
+// Archil rejects deleting a live sandbox, so stop it first. A sandbox with
+// live forks returns 409: forks (snapshots) must be deleted before their parent.
 async function stopAndDeleteVm(vm: ArchilVm): Promise<void> {
   if (vm.status === 'deleting' || vm.status === 'deleted') return;
-  if (vm.status !== 'stopped' && vm.status !== 'exited' && vm.status !== 'failed') {
-    await vm.stop();
+  try {
+    if (vm.status !== 'stopped' && vm.status !== 'exited' && vm.status !== 'failed') {
+      await vm.stop();
+    }
+    await vm.delete();
+  } catch (error) {
+    if (error instanceof ArchilError && error.status === 404) return;
+    if (error instanceof ArchilError && error.status === 409) {
+      throw new Error(
+        `Archil refused to delete sandbox ${vm.id} (409): ${error.message}. ` +
+          'Delete its forks and snapshots first; Archil deletes forks before their parent.',
+      );
+    }
+    throw error;
   }
-  await vm.delete();
 }
 
 function toSandboxRequest(options?: ArchilCreateOptions): ArchilSandboxRequest {
@@ -410,10 +424,197 @@ function toSandboxRequest(options?: ArchilCreateOptions): ArchilSandboxRequest {
   return request;
 }
 
-// Records each sandbox's effective execution mode so `destroy` — which only
-// receives an id — deletes persistent VMs even when the mode came from a
-// per-sandbox `ephemeral` override rather than the provider config.
+// Snapshots are paused forks named with this prefix, which is how
+// snapshot.list() finds them and instances.list() leaves them out.
+const SNAPSHOT_NAME_PREFIX = 'csdk-snap-';
+
+function snapshotName(name?: string): string {
+  const suffix = randomUUID().slice(0, 8);
+  const slug = (name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 63 - SNAPSHOT_NAME_PREFIX.length - suffix.length - 1)
+    .replace(/-+$/g, '');
+  return `${SNAPSHOT_NAME_PREFIX}${slug ? `${slug}-` : ''}${suffix}`;
+}
+
+function isSnapshotVm(vm: ArchilVm): boolean {
+  return vm.name?.startsWith(SNAPSHOT_NAME_PREFIX) ?? false;
+}
+
+// Archil disk ids look like `dsk-…`; sandbox ids are UUIDs.
+function isDiskId(id: string): boolean {
+  return id.startsWith('dsk-');
+}
+
+// Records each handle's effective mode so `destroy` — which only receives an
+// id — treats it correctly even when the mode came from a per-sandbox
+// `ephemeral` override rather than the provider config.
 const sandboxModes = new Map<string, ArchilExecutionMode>();
+
+function modeForId(id: string, resolved: ResolvedConfig): ArchilExecutionMode {
+  return sandboxModes.get(id) ?? (isDiskId(id) ? 'exec' : resolved.execution);
+}
+
+function diskInstance(
+  client: ArchilClient,
+  disk: DiskHandle | DiskResponse,
+  resolved: ResolvedConfig,
+): ArchilSandbox {
+  return { client, disk, resolved, createdAt: new Date() };
+}
+
+const TIMEOUT_EXIT_CODE = 124;
+const KILLED_EXIT_CODE = 137;
+
+interface VmProcessOutcome {
+  exitCode: number;
+  signal: string | null;
+  stderrSuffix: string;
+}
+
+function mapProcessResult(
+  result: SandboxProcessResult,
+  timedOut: boolean,
+  killSignal: string | null,
+): VmProcessOutcome {
+  if (timedOut || result.status === 'timed_out') {
+    return { exitCode: TIMEOUT_EXIT_CODE, signal: 'SIGKILL', stderrSuffix: '' };
+  }
+  if (result.status === 'cancelled') {
+    return { exitCode: KILLED_EXIT_CODE, signal: killSignal ?? 'SIGKILL', stderrSuffix: '' };
+  }
+  if (result.status === 'failed') {
+    return {
+      exitCode: result.exitCode ?? 1,
+      signal: null,
+      stderrSuffix: result.exitReason ?? '',
+    };
+  }
+  // Archil reports a process that died from a signal as exit code -1.
+  return { exitCode: result.exitCode ?? 0, signal: null, stderrSuffix: '' };
+}
+
+/**
+ * Starts a process through Archil's native process API with incremental
+ * output decoding. The returned `done` promise settles with the mapped result.
+ */
+async function startVmProcess(
+  vm: ArchilVm,
+  command: string,
+  options: {
+    cwd?: string;
+    env?: Record<string, string>;
+    timeout?: number;
+    onStdout?: (chunk: string) => void;
+    onStderr?: (chunk: string) => void;
+  },
+) {
+  await ensureVmRunning(vm);
+  const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
+  const output = { stdout: '', stderr: '' };
+  const emit = (stream: 'stdout' | 'stderr', text: string) => {
+    if (!text) return;
+    output[stream] += text;
+    (stream === 'stdout' ? options.onStdout : options.onStderr)?.(text);
+  };
+  const proc = await vm.processes.start(withCwd(command, options.cwd), {
+    env: options.env,
+    collectOutput: false,
+    timeoutSeconds:
+      options.timeout !== undefined ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined,
+    onOutput: (chunk) => emit(chunk.stream, decoders[chunk.stream].decode(chunk.data, { stream: true })),
+  });
+
+  const state = { timedOut: false, killSignal: null as string | null };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  if (options.timeout !== undefined) {
+    // The server-side deadline has one-second granularity; kill at the exact
+    // millisecond deadline as well.
+    timer = setTimeout(() => {
+      state.timedOut = true;
+      proc.kill().catch(() => {});
+    }, options.timeout);
+  }
+
+  const done = proc
+    .wait()
+    .then((result) => {
+      emit('stdout', decoders.stdout.decode());
+      emit('stderr', decoders.stderr.decode());
+      const mapped = mapProcessResult(result, state.timedOut, state.killSignal);
+      return {
+        stdout: output.stdout,
+        stderr: mapped.stderrSuffix
+          ? `${output.stderr}${output.stderr && !output.stderr.endsWith('\n') ? '\n' : ''}${mapped.stderrSuffix}`
+          : output.stderr,
+        exitCode: mapped.exitCode,
+        signal: mapped.signal,
+      };
+    })
+    .catch((error: unknown) => ({
+      stdout: output.stdout,
+      stderr: `${output.stderr}${error instanceof Error ? error.message : String(error)}`,
+      exitCode: 1,
+      signal: null as string | null,
+    }))
+    .finally(() => {
+      if (timer) clearTimeout(timer);
+    });
+
+  return { proc, done, state, output };
+}
+
+async function runVmCommand(
+  vm: ArchilVm,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const startTime = Date.now();
+  if (options?.background) {
+    // A process started over the native API keeps running after the client
+    // disconnects.
+    await ensureVmRunning(vm);
+    const proc = await vm.processes.start(withCwd(command, options.cwd), {
+      env: options.env,
+      collectOutput: false,
+    });
+    await proc.disconnect();
+    return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
+  }
+  const { done } = await startVmProcess(vm, command, {
+    cwd: options?.cwd,
+    env: options?.env,
+    timeout: options?.timeout,
+    onStdout: options?.onStdout,
+    onStderr: options?.onStderr,
+  });
+  const result = await done;
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    durationMs: Date.now() - startTime,
+  };
+}
+
+function commandError(error: unknown, startTime: number): CommandResult {
+  return {
+    stdout: '',
+    stderr: error instanceof Error ? error.message : String(error),
+    exitCode: 1,
+    durationMs: Date.now() - startTime,
+  };
+}
+
+function resolveSizingExecution(
+  config: ArchilConfig,
+  options?: { ephemeral?: boolean },
+): ArchilExecutionMode {
+  if (options?.ephemeral !== undefined) return options.ephemeral ? 'exec' : 'persistent';
+  return resolveExecution(config);
+}
 
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
   name: 'archil',
@@ -430,9 +631,8 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
     if (options?.snapshotId !== undefined || options?.sandboxId !== undefined || options?.instanceId !== undefined) {
       return { status: 'unsupported', reason: 'Archil attach/fork does not apply CPU/RAM overrides; create a new persistent VM to request a standard size.' };
     }
-    const execution = options?.ephemeral === undefined ? config.execution ?? 'exec' : options.ephemeral ? 'exec' : 'persistent';
-    if (execution !== 'persistent') {
-      return { status: 'unavailable', reason: 'Archil exec containers do not expose persistent VM sizing. Select execution: persistent or ephemeral: false.' };
+    if (resolveSizingExecution(config, options) !== 'persistent') {
+      return { status: 'unavailable', reason: 'Archil exec containers do not expose VM sizing. Drop execution: "exec" (persistent VMs are the default) or set ephemeral: false.' };
     }
     if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl') {
       return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
@@ -445,8 +645,8 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
 
-        // `ephemeral` on create() overrides the configured default for this
-        // sandbox: true -> serverless exec handle, false -> persistent VM.
+        // `ephemeral` on create() overrides the configured mode for this
+        // sandbox: true -> disk exec handle, false -> persistent VM.
         const execution =
           options?.ephemeral !== undefined
             ? options.ephemeral
@@ -454,94 +654,102 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
               : 'persistent'
             : resolved.execution;
 
-        if (options?.snapshotId && options?.ephemeral === true) {
+        if (options?.snapshotId && execution === 'exec') {
           throw new Error(
-            'Archil cannot combine ephemeral: true with snapshotId — snapshots fork persistent VMs. Drop ephemeral or set it to false.',
+            'Archil snapshots fork persistent VMs and cannot be restored in exec mode. Drop execution: "exec" / ephemeral: true.',
           );
         }
 
-        // snapshotId forks a new VM from that snapshot's state — Archil
-        // models snapshots as isolated writable branches of a source
-        // sandbox — so it always takes the VM path regardless of the
-        // configured execution mode.
-        if (execution === 'persistent' || options?.snapshotId) {
-          let vm: ArchilVm;
-          if (options?.snapshotId) {
-            vm = await forkSandboxVm(client, options.snapshotId, options?.name);
-          } else if (options?.sandboxId) {
-            // Attach to a live sandbox. Refuse an abort signal here: the
-            // sandbox manager destroys a resolved sandbox after an abort,
-            // which would delete a sandbox this call did not create.
-            if (options?.signal) {
-              throw new Error(
-                'create({ sandboxId }) attaches to an existing sandbox and cannot be combined with an abort signal',
-              );
-            }
-            vm = await client.sandboxes.get(options.sandboxId);
-            await ensureVmRunning(vm);
-          } else {
-            vm = await client.sandboxes.create(toSandboxRequest(options), {
-              wait: true,
-            });
-          }
-          sandboxModes.set(vm.id, 'persistent');
-          return { instance: vmInstance(client, vm, resolved), instanceId: vm.id };
+        if (execution === 'exec') {
+          const diskId = resolveCreateDiskId(options);
+          sandboxModes.set(diskId, 'exec');
+          return { instance: diskInstance(client, { id: diskId }, resolved), instanceId: diskId };
         }
 
-        const diskId = resolveCreateDiskId(options);
-        sandboxModes.set(diskId, 'exec');
-        return { instance: {
-            client,
-            disk: { id: diskId },
-            resolved,
-            createdAt: new Date(),
-          }, instanceId: diskId,
-        };
+        if (options?.diskId) {
+          throw new Error(
+            'Archil create({ diskId }) attaches a disk exec handle, which is opt-in now that persistent VMs are the default.\n\n' +
+              'Opt in with archil({ execution: "exec" }) (or ARCHIL_EXECUTION=exec), or pass ephemeral: true.',
+          );
+        }
+
+        let vm: ArchilVm;
+        if (options?.snapshotId) {
+          // A snapshot is a paused fork; forking it again yields an independent
+          // writable VM resumed from the snapshot's memory and disk state.
+          const source = await client.sandboxes.get(options.snapshotId);
+          vm = await source.fork({ name: options?.name });
+        } else if (options?.sandboxId) {
+          // Attach to a live sandbox. Refuse an abort signal here: the
+          // sandbox manager destroys a resolved sandbox after an abort,
+          // which would delete a sandbox this call did not create.
+          if (options?.signal) {
+            throw new Error(
+              'create({ sandboxId }) attaches to an existing sandbox and cannot be combined with an abort signal',
+            );
+          }
+          vm = await client.sandboxes.get(options.sandboxId);
+          await ensureVmRunning(vm);
+        } else {
+          vm = await client.sandboxes.create(toSandboxRequest(options), {
+            wait: true,
+          });
+        }
+        if (vm.status === 'failed') {
+          throw new Error(`Archil sandbox ${vm.id} failed to start${vm.exitReason ? `: ${vm.exitReason}` : ''}`);
+        }
+        sandboxModes.set(vm.id, 'persistent');
+        return { instance: vmInstance(client, vm, resolved), instanceId: vm.id };
       },
 
       getById: async (config: ArchilConfig, sandboxId: string) => {
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
         try {
-          if (resolved.execution === 'persistent') {
-            const vm = await client.sandboxes.get(sandboxId);
-            await ensureVmRunning(vm);
-            return { instance: vmInstance(client, vm, resolved), instanceId: vm.id };
+          if (modeForId(sandboxId, resolved) === 'exec') {
+            const disk = await client.disks.get(sandboxId);
+            return { instance: diskInstance(client, disk, resolved), instanceId: disk.id };
           }
-          const disk = await client.disks.get(sandboxId);
-          return { instance: { client, disk, resolved, createdAt: new Date() }, instanceId: disk.id,
-          };
+          const vm = await client.sandboxes.get(sandboxId);
+          await ensureVmRunning(vm);
+          return { instance: vmInstance(client, vm, resolved), instanceId: vm.id };
         } catch {
           return null;
         }
       },
 
+      // Archil's list endpoints return every sandbox (and the SDK follows disk
+      // pagination), so a single call yields the full account listing.
       list: async (config: ArchilConfig) => {
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
-        if (resolved.execution === 'persistent') {
-          const vms = await client.sandboxes.list();
-          return vms.map((vm) => ({ instance: vmInstance(client, vm, resolved), instanceId: vm.id }));
+        if (resolved.execution === 'exec') {
+          const disks = await client.disks.list();
+          return disks.map((disk) => ({ instance: diskInstance(client, disk, resolved), instanceId: disk.id }));
         }
-        const disks = await client.disks.list();
-        return disks.map((disk) => ({ instance: { client, disk, resolved, createdAt: new Date() }, instanceId: disk.id,
-        }));
+        const vms = await client.sandboxes.list();
+        return vms
+          .filter((vm) => !isSnapshotVm(vm) && vm.status !== 'deleting' && vm.status !== 'deleted')
+          .map((vm) => ({ instance: vmInstance(client, vm, resolved), instanceId: vm.id }));
       },
 
       destroy: async (config: ArchilConfig, sandboxId: string) => {
         const resolved = resolveConfig(config);
-        const mode = sandboxModes.get(sandboxId) ?? resolved.execution;
-        if (mode === 'persistent') {
-          const client = createClient(config, resolved);
-          const vm = await client.sandboxes.get(sandboxId);
-          await stopAndDeleteVm(vm);
-        }
         // exec handles are disk references — Archil disks have an independent
-        // lifecycle, so destroying them is a no-op. Unknown ids fall back to
-        // the configured mode.
+        // lifecycle, so destroying them is a no-op.
+        const mode = modeForId(sandboxId, resolved);
         sandboxModes.delete(sandboxId);
+        if (mode === 'exec') return;
+        const client = createClient(config, resolved);
+        let vm: ArchilVm;
+        try {
+          vm = await client.sandboxes.get(sandboxId);
+        } catch (error) {
+          if (error instanceof ArchilError && (error.status === 404 || error.status === 400)) return;
+          throw error;
+        }
+        await stopAndDeleteVm(vm);
       },
-
 
       runCommand: async (
         sandbox: ArchilSandbox,
@@ -551,39 +759,9 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         const startTime = Date.now();
         try {
           if (sandbox.vm) {
-            // The process API fetches a fresh short-lived WebSocket
-            // connection URL per process start, so expiry is handled by the
-            // underlying client.
-            await ensureVmRunning(sandbox.vm);
-            const wrapped = wrapSandboxCommand(command, options);
-            if (options?.background) {
-              const proc = await sandbox.vm.processes.start(wrapped, {
-                env: options?.env,
-              });
-              await proc.disconnect();
-              return {
-                stdout: '',
-                stderr: '',
-                exitCode: 0,
-                durationMs: Date.now() - startTime,
-              };
-            }
-            const result = await sandbox.vm.exec(wrapped, {
-              env: options?.env,
-              timeoutSeconds:
-                options?.timeout !== undefined
-                  ? Math.ceil(options.timeout / 1000)
-                  : undefined,
-            });
-            return {
-              stdout: result.stdout,
-              stderr: result.stderr,
-              exitCode:
-                result.exitCode ?? (result.status === 'completed' ? 0 : 1),
-              durationMs: Date.now() - startTime,
-            };
+            const { onStdout: _out, onStderr: _err, ...rest } = options ?? {};
+            return await runVmCommand(sandbox.vm, command, rest);
           }
-
           const result = await execOnDisk(sandbox, wrapCommand(command, options));
           return {
             stdout: result.stdout ?? '',
@@ -592,13 +770,108 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             durationMs: Date.now() - startTime,
           };
         } catch (error) {
+          return commandError(error, startTime);
+        }
+      },
+
+      // Persistent VMs stream through the process WebSocket. Disk exec only
+      // returns output once the command exits, so it is delivered at the end.
+      streamCommand: async (
+        sandbox: ArchilSandbox,
+        command: string,
+        options: RunCommandOptions,
+      ): Promise<CommandResult> => {
+        const startTime = Date.now();
+        try {
+          if (sandbox.vm) return await runVmCommand(sandbox.vm, command, options);
+          const result = await execOnDisk(sandbox, wrapCommand(command, options));
+          if (result.stdout) options.onStdout?.(result.stdout);
+          if (result.stderr) options.onStderr?.(result.stderr);
           return {
-            stdout: '',
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 1,
+            stdout: result.stdout ?? '',
+            stderr: result.stderr ?? '',
+            exitCode: result.exitCode,
             durationMs: Date.now() - startTime,
           };
+        } catch (error) {
+          return commandError(error, startTime);
         }
+      },
+
+      startProcess: async (
+        sandbox: ArchilSandbox,
+        command: string,
+        options: StartProcessOptions,
+      ): Promise<ProcessHandle> => {
+        if (!sandbox.vm) {
+          throw new Error(
+            'Archil exec mode runs each command in a fresh container, so it cannot host background processes. Use a persistent VM (the default).',
+          );
+        }
+        const startTime = Date.now();
+        const { proc, done, state, output } = await startVmProcess(sandbox.vm, command, {
+          cwd: options.cwd,
+          env: options.env,
+          onStdout: options.onStdout,
+          onStderr: options.onStderr,
+        });
+        // Without stdin: true the process sees EOF, as with `< /dev/null`.
+        if (!options.stdin) await proc.closeStdin().catch(() => {});
+
+        let exited: (typeof done extends Promise<infer R> ? R : never) | undefined;
+        const finished = done.then((result) => {
+          exited = result;
+          options.onExit?.({ exitCode: result.exitCode, signal: result.signal });
+          return result;
+        });
+        const toResult = (result: Awaited<typeof done>) => ({
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+          signal: result.signal,
+          durationMs: Date.now() - startTime,
+        });
+
+        return {
+          pid: null,
+          jobId: proc.id,
+          runtime: 'native',
+          write: async (data) => {
+            if (!options.stdin) {
+              throw new Error('Process was started without stdin: true');
+            }
+            await proc.sendInput(data);
+          },
+          closeStdin: async () => {
+            if (options.stdin && !exited) await proc.closeStdin();
+          },
+          status: async () =>
+            exited
+              ? { status: 'exited', exitCode: exited.exitCode, signal: exited.signal, stdout: exited.stdout, stderr: exited.stderr }
+              : { status: 'running', exitCode: null, signal: null, stdout: output.stdout, stderr: output.stderr },
+          wait: async (waitOptions) => {
+            if (waitOptions?.timeout === undefined) return toResult(await finished);
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const timeout = new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error(`Process ${proc.id} did not exit within ${waitOptions.timeout}ms`)),
+                waitOptions.timeout,
+              );
+            });
+            try {
+              return toResult(await Promise.race([finished, timeout]));
+            } finally {
+              clearTimeout(timer);
+            }
+          },
+          // Archil's process control only cancels (SIGKILL semantics); the
+          // requested signal name is what the result reports.
+          kill: async (signal) => {
+            if (exited) return;
+            state.killSignal = signal ?? 'SIGKILL';
+            await proc.kill();
+          },
+        };
       },
 
       getInfo: async (sandbox: ArchilSandbox): Promise<InstanceInfo> => {
@@ -892,9 +1165,10 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       getInstance: (sandbox: ArchilSandbox): ArchilSandbox => sandbox,
     },
 
-    // Archil has no separate snapshot resource: a "snapshot" is a sandbox
-    // fork (an isolated writable branch of the source sandbox's state), so
-    // snapshot ids are ordinary sandbox ids that create() forks again.
+    // Archil has no separate snapshot resource. A snapshot is a fork of the
+    // source VM (memory and disk), paused so it holds state without running,
+    // and named with SNAPSHOT_NAME_PREFIX so it can be listed. create({
+    // snapshotId }) forks it again. Forks must be deleted before their parent.
     snapshot: {
       create: async (
         config: ArchilConfig,
@@ -903,15 +1177,19 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
       ) => {
         const resolved = resolveConfig(config);
         const client = createClient(config, resolved);
+        let fork: ArchilVm | undefined;
         try {
-          const fork = await forkSandboxVm(client, sandboxId, options?.name);
+          const source = await client.sandboxes.get(sandboxId);
+          fork = await source.fork({ name: snapshotName(options?.name) });
+          if (fork.status === 'running') await fork.pause();
           return {
             id: fork.id,
             provider: 'archil',
             createdAt: fork.createdAt ?? new Date(),
-            metadata: { name: fork.name },
+            metadata: { name: options?.name, archilName: fork.name, sourceId: sandboxId },
           };
         } catch (error) {
+          if (fork) await stopAndDeleteVm(fork).catch(() => {});
           throw new Error(
             `Failed to create Archil snapshot: ${
               error instanceof Error ? error.message : String(error)
@@ -920,10 +1198,18 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         }
       },
 
-      list: async (_config: ArchilConfig) => {
-        throw new Error(
-          'Archil provider does not support listing snapshots.',
-        );
+      list: async (config: ArchilConfig) => {
+        const resolved = resolveConfig(config);
+        const client = createClient(config, resolved);
+        const vms = await client.sandboxes.list();
+        return vms
+          .filter((vm) => isSnapshotVm(vm) && vm.status !== 'deleting' && vm.status !== 'deleted')
+          .map((vm) => ({
+            id: vm.id,
+            provider: 'archil',
+            createdAt: vm.createdAt,
+            metadata: { archilName: vm.name, archilStatus: vm.status },
+          }));
       },
 
       delete: async (config: ArchilConfig, snapshotId: string) => {
