@@ -50,6 +50,11 @@ function snapshotKind(options?: CreateSnapshotOptions): 'hot' | 'cold' {
   return value
 }
 
+/** GravixLayer requires a snapshot name; generate a unique one when none is given. */
+function defaultSnapshotName(): string {
+  return `computesdk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
 /** Snapshot returned by this provider's snapshot manager. */
 export interface GravixLayerSnapshot {
   id: string
@@ -571,6 +576,17 @@ const createGravixLayerProvider = defineProvider<
 
       getInstance: (sandbox: Runtime) => sandbox,
 
+      pause: async (sandbox: Runtime) => {
+        await sandbox.pause()
+      },
+
+      resume: async (sandbox: Runtime) => {
+        await sandbox.resume()
+      },
+
+      // Pause freezes memory: files and running processes survive resume.
+      pauseCapabilities: { memory: true },
+
       filesystem: {
         readFile: async (sandbox: Runtime, path: string): Promise<string> => {
           return (await sandbox.file.read(path)).content
@@ -611,15 +627,16 @@ const createGravixLayerProvider = defineProvider<
     },
 
     snapshot: {
+      // Hot snapshots (the default) keep the whole rootfs, `/tmp` included,
+      // and running processes. The source keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
+
       create: async (
         config: GravixLayerConfig,
         sandboxId: string,
         options?: CreateSnapshotOptions,
       ): Promise<GravixLayerSnapshot> => {
-        const name = nonempty(options?.name)
-        if (!name) {
-          throw new Error('GravixLayer snapshots require a name.')
-        }
+        const name = nonempty(options?.name) ?? defaultSnapshotName()
         const client = getClient(config)
         const description =
           options &&

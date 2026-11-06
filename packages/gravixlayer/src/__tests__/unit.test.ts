@@ -790,11 +790,13 @@ describe('filesystem', () => {
 })
 
 describe('snapshots', () => {
-  it('requires a name and calls snapshots.create', async () => {
-    await expect(provider().snapshot!.create('rt_live')).rejects.toThrow(
-      /GravixLayer snapshots require a name/,
-    )
-    expect(calls('snapshots.create')).toHaveLength(0)
+  it('generates a name when none is given and calls snapshots.create', async () => {
+    await provider().snapshot!.create('rt_live')
+    await provider().snapshot!.create('rt_live')
+    const names = calls('snapshots.create').map((c) => c.args[1])
+    expect(names[0]).toMatch(/^computesdk-/)
+    expect(names[1]).not.toBe(names[0])
+    h.state.calls.length = 0
 
     const snapshot = await provider().snapshot!.create('rt_live', {
       name: 'warm',
