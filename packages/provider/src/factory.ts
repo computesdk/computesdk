@@ -30,6 +30,7 @@ import type {
   Volume,
   SnapshotCapabilities,
   PauseCapabilities,
+  LifetimeCapabilities,
   CreateVolumeOptions,
   ListVolumesOptions,
   ProcessRuntimeOptions,
@@ -347,6 +348,11 @@ export interface InstanceMethods<TInstance = any, TConfig = any> {
   resume?: (instance: TInstance) => Promise<TInstance | void>;
   pauseCapabilities?: PauseCapabilities;
 
+  /** How long instances may live. `extendable` is derived from `extendLifetime`. */
+  lifetime?: Omit<LifetimeCapabilities, 'extendable'>;
+  /** Optional native lifetime extension, exposed as `instance.extendLifetime(ms)`. */
+  extendLifetime?: (instance: TInstance, ms: number) => Promise<void>;
+
   // Optional provider-specific typed getInstance method
   getInstance?: (instance: TInstance) => TInstance;
 
@@ -382,6 +388,8 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
   delete: (config: TConfig, snapshotId: string) => Promise<void>;
   /** What snapshots keep and what the source needs; see {@link SnapshotCapabilities}. */
   capabilities?: SnapshotCapabilities;
+  /** For `readiness: 'eventual'` providers: resolve once the snapshot can be restored. */
+  waitUntilReady?: (config: TConfig, snapshotId: string, options?: { timeoutMs?: number }) => Promise<void>;
 }
 
 /**
@@ -472,6 +480,8 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   /** Present only when the provider implements native pause/resume. */
   readonly pause?: () => Promise<void>;
   readonly resume?: () => Promise<void>;
+  /** Present only when the provider implements lifetime extension. */
+  readonly extendLifetime?: (ms: number) => Promise<void>;
   private daemonStreamState?: DaemonStreamState;
   /** Which runtime serves streaming `runCommand` and `startProcess`. */
   readonly processRuntime: { streaming: ProcessTier; processes: ProcessTier };
@@ -528,6 +538,10 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
         const next = await resume(this.instance);
         if (next) this.instance = next;
       };
+    }
+    if (methods.extendLifetime) {
+      const extend = methods.extendLifetime.bind(methods);
+      this.extendLifetime = (ms) => extend(this.instance, ms);
     }
   }
 
@@ -1100,6 +1114,7 @@ function abortPromise(signal?: AbortSignal): Promise<never> {
  */
 class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceManager<TInstance> {
   readonly pause?: PauseCapabilities;
+  readonly lifetime?: LifetimeCapabilities;
   constructor(
     private config: TConfig,
     private providerName: string,
@@ -1109,6 +1124,9 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
   ) {
     if (methods.pause && methods.resume) {
       this.pause = methods.pauseCapabilities ?? { memory: false };
+    }
+    if (methods.lifetime || methods.extendLifetime) {
+      this.lifetime = { ...methods.lifetime, extendable: !!methods.extendLifetime };
     }
   }
 
@@ -1260,7 +1278,13 @@ class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotMa
     private methods: SnapshotMethods<TSnapshot, TConfig>
   ) {
     this.capabilities = methods.capabilities;
+    if (methods.waitUntilReady) {
+      const wait = methods.waitUntilReady.bind(methods);
+      this.waitUntilReady = (snapshotId, options) => wait(this.config, snapshotId, options);
+    }
   }
+
+  readonly waitUntilReady?: (snapshotId: string, options?: { timeoutMs?: number }) => Promise<void>;
 
   async create(instanceId: string, options?: CreateSnapshotOptions): Promise<TSnapshot> {
     return await this.methods.create(this.config, instanceId, options);

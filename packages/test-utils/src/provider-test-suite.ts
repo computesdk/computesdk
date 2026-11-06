@@ -62,12 +62,14 @@ export interface ProviderTestConfig {
   expectProcessRuntime?: { streaming?: ProcessTier; processes?: ProcessTier };
   /**
    * Whether to exercise `instance.pause()`/`resume()`. Sources are created
-   * with the provider's declared `sandbox.pause.createOptions`.
+   * with the provider's declared `sandbox.pause.createOptions`. Defaults to
+   * whether the provider declares `sandbox.pause`.
    */
   supportsPauseResume?: boolean;
   /**
    * Whether to exercise `provider.snapshot` create/restore/delete. Requires
    * declared `snapshot.capabilities`; markers are written under its `path`.
+   * Defaults to whether the provider declares `snapshot.capabilities`.
    */
   supportsSnapshots?: boolean;
   /** Timeout for pause and snapshot tests (default: 300000) */
@@ -104,8 +106,8 @@ export function defineProviderTests(config: ProviderTestConfig) {
     supportsStreaming = false,
     supportsProcesses = false,
     expectProcessRuntime,
-    supportsPauseResume = false,
-    supportsSnapshots = false,
+    supportsPauseResume = !!config.provider.sandbox.pause,
+    supportsSnapshots = !!config.provider.snapshot?.capabilities,
     lifecycleTimeout = 300000,
   } = config;
 
@@ -460,11 +462,35 @@ export function defineProviderTests(config: ProviderTestConfig) {
       if (sb) await cleanupSandbox(sb);
     };
 
-    const markerDir = async (sb: ProviderInstance, declared?: string) => {
+    const isUnder = (dir: string, root: string) =>
+      dir === root || dir.startsWith(root.endsWith('/') ? root : `${root}/`);
+
+    const markerDir = async (sb: ProviderInstance, declared?: string, excludes: string[] = []) => {
       if (declared) return declared;
-      const pwd = await sb.runCommand('pwd');
-      return pwd.stdout.trim() || '/tmp';
+      const out = await sb.runCommand('pwd; echo "$HOME"');
+      const candidates = [...out.stdout.split('\n').map((l) => l.trim()).filter(Boolean), '/root', '/tmp'];
+      return candidates.find((dir) => !excludes.some((ex) => isUnder(dir, ex))) ?? '/tmp';
     };
+
+    const lifetime = provider.sandbox.lifetime;
+    if (lifetime && !skipIntegration) {
+      describe('Lifetime', () => {
+        it('should declare a consistent lifetime', () => {
+          if (lifetime.defaultMs !== undefined) expect(lifetime.defaultMs).toBeGreaterThan(0);
+          if (lifetime.maxMs !== undefined && lifetime.defaultMs !== undefined) {
+            expect(lifetime.maxMs).toBeGreaterThanOrEqual(lifetime.defaultMs);
+          }
+          expect(typeof sandbox.extendLifetime === 'function').toBe(lifetime.extendable);
+        });
+
+        if (lifetime.extendable) {
+          it('should extend a live instance', async () => {
+            await sandbox.extendLifetime!(Math.min(lifetime.maxMs ?? 600000, 600000));
+            expect((await sandbox.runCommand('echo alive')).stdout.trim()).toBe('alive');
+          }, timeout);
+        }
+      });
+    }
 
     if (supportsPauseResume && !skipIntegration) {
       describe('Pause and Resume', () => {
@@ -481,9 +507,9 @@ export function defineProviderTests(config: ProviderTestConfig) {
             source = await createLifecycleSource(caps.createOptions);
             const marker = `${await markerDir(source)}/csdk-pause-${Date.now()}`;
             expect((await source.runCommand(`echo paused-state > ${marker}`)).exitCode).toBe(0);
-            const pid = caps.memory
-              ? (await source.runCommand('nohup sleep 600 >/dev/null 2>&1 & echo $!')).stdout.trim()
-              : undefined;
+            // startProcess, not `cmd &` in runCommand: some providers end a command's process group on exit.
+            const proc = caps.memory ? await source.startProcess('sleep 600') : undefined;
+            if (proc) expect((await proc.status()).status).toBe('running');
 
             await source.pause!();
             await source.resume!();
@@ -491,9 +517,7 @@ export function defineProviderTests(config: ProviderTestConfig) {
             const read = await source.runCommand(`cat ${marker}`);
             expect(read.exitCode).toBe(0);
             expect(read.stdout.trim()).toBe('paused-state');
-            if (pid) {
-              expect((await source.runCommand(`kill -0 ${pid} && echo alive`)).stdout.trim()).toBe('alive');
-            }
+            if (proc) expect((await proc.status()).status).toBe('running');
           } finally {
             await destroyQuietly(source);
           }
@@ -507,25 +531,32 @@ export function defineProviderTests(config: ProviderTestConfig) {
           const caps = provider.snapshot?.capabilities;
           expect(caps).toBeDefined();
           if (caps!.scope === 'volume') expect(caps!.path).toBeTruthy();
+          if (caps!.source) expect(caps!.destroysSource).toBe(caps!.source !== 'kept');
+          if (caps!.readiness === 'eventual') expect(typeof provider.snapshot!.waitUntilReady).toBe('function');
         });
 
         it('should restore files from a snapshot into a new instance', async () => {
           const caps = provider.snapshot!.capabilities!;
           let source: ProviderInstance | undefined;
+          const sourceState = caps.source ?? (caps.destroysSource ? 'destroyed' : 'kept');
           let restored: ProviderInstance | undefined;
+          let second: ProviderInstance | undefined;
           let snapshotId: string | undefined;
           try {
             source = await createLifecycleSource(caps.createOptions);
-            const marker = `${await markerDir(source, caps.path)}/csdk-snapshot-${Date.now()}`;
+            const marker = `${await markerDir(source, caps.path, caps.excludes)}/csdk-snapshot-${Date.now()}`;
             expect((await source.runCommand(`echo snapshot-state > ${marker}`)).exitCode).toBe(0);
 
             const snapshot: any = await provider.snapshot!.create(source.instanceId);
             snapshotId = snapshot.id;
             expect(typeof snapshotId).toBe('string');
+            if (caps.readiness === 'eventual') {
+              await provider.snapshot!.waitUntilReady!(snapshotId!, { timeoutMs: lifecycleTimeout });
+            }
 
-            if (caps.destroysSource) {
+            if (sourceState === 'destroyed') {
               source = undefined;
-            } else {
+            } else if (sourceState === 'kept') {
               expect((await source.runCommand('echo alive')).stdout.trim()).toBe('alive');
             }
 
@@ -534,8 +565,16 @@ export function defineProviderTests(config: ProviderTestConfig) {
             const read = await restored.runCommand(`cat ${marker}`);
             expect(read.exitCode).toBe(0);
             expect(read.stdout.trim()).toBe('snapshot-state');
+
+            if (caps.fork) {
+              second = await provider.sandbox.create({ snapshotId } as any);
+              expect(second.instanceId).not.toBe(restored.instanceId);
+              expect((await restored.runCommand(`echo changed > ${marker}`)).exitCode).toBe(0);
+              expect((await second.runCommand(`cat ${marker}`)).stdout.trim()).toBe('snapshot-state');
+            }
           } finally {
             // Children before parents: some providers refuse to delete a fork's source first.
+            await destroyQuietly(second);
             await destroyQuietly(restored);
             if (snapshotId) await provider.snapshot!.delete(snapshotId).catch(() => {});
             await destroyQuietly(source);

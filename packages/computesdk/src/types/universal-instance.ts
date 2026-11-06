@@ -212,8 +212,35 @@ export interface SnapshotCapabilities {
   memory: boolean;
   /** Whether `snapshot.create` stops or destroys the source instance. */
   destroysSource: boolean;
+  /**
+   * What `snapshot.create` leaves of the source: `kept` (still running),
+   * `stopped` (exists but stopped; still needs destroying) or `destroyed`.
+   * Defaults to `destroyed` when `destroysSource` is true, else `kept`.
+   */
+  source?: 'kept' | 'stopped' | 'destroyed';
+  /** Paths inside `scope` that a restore does not keep (e.g. `/tmp`, a mount). */
+  excludes?: string[];
+  /** Whether one snapshot of a live source can be restored into many instances. */
+  fork?: boolean;
+  /**
+   * `eventual`: `snapshot.create` may return before the snapshot can be
+   * restored; call `snapshot.waitUntilReady(id)` first. Defaults to `immediate`.
+   */
+  readiness?: 'immediate' | 'eventual';
   /** Create options the source instance needs for snapshots to work. */
   createOptions?: Record<string, unknown>;
+}
+
+/**
+ * How long an instance may live, and whether that can be extended.
+ */
+export interface LifetimeCapabilities {
+  /** Lifetime when the caller sets no timeout, in ms. */
+  defaultMs?: number;
+  /** Longest lifetime the provider allows, in ms; absent means unbounded. */
+  maxMs?: number;
+  /** Whether `instance.extendLifetime()` is available. */
+  extendable: boolean;
 }
 
 /**
@@ -569,4 +596,10 @@ export interface Instance {
 
   /** Resume a paused instance — present whenever `pause` is. */
   resume?(): Promise<void>;
+
+  /**
+   * Keep this instance alive for `ms` more from now, within the provider's
+   * `lifetime.maxMs`. Present only on providers that can extend a lifetime.
+   */
+  extendLifetime?(ms: number): Promise<void>;
 }

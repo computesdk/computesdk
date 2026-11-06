@@ -19,6 +19,7 @@ runProviderTestSuite({
   ...(local ? { ports: [3000, 8080] } : {}),
   supportsSnapshots: true,
   // Pause/resume is local-only: the cloud backend rejects it as unsupported.
+  supportsPauseResume: false,
   skipIntegration: !runIntegration,
   timeout: 120_000,
 });

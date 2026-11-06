@@ -29,6 +29,7 @@ export type {
   Snapshot,
   SnapshotCapabilities,
   PauseCapabilities,
+  LifetimeCapabilities,
   FileEntry,
   RunCommandOptions,
   StartProcessOptions,
