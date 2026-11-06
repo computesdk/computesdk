@@ -12,6 +12,10 @@ runProviderTestSuite({
   supportsProcesses: true,
   expectProcessRuntime: live ? { streaming: 'shell', processes: 'shell' } : undefined,
   skipIntegration: !live,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
+  // Filesystem snapshots take ~5-8 minutes to become active.
+  lifecycleTimeout: 1200000,
   timeout: 120000,
   ports: [3000, 8080],
 });

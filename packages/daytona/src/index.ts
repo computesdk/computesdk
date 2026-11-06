@@ -70,6 +70,11 @@ async function waitDaytonaVolumeReady(d: Daytona, idOrName: string, deadlineMs =
   }
 }
 
+/** Stop/start can outlast the SDK's 60s default. */
+const LIFECYCLE_TIMEOUT_S = 300;
+/** Filesystem snapshots of a fresh default sandbox take ~5-8 minutes. */
+const SNAPSHOT_TIMEOUT_S = 900;
+
 /**
  * Create a Daytona provider instance using the factory pattern
  */
@@ -328,9 +333,21 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       },
 
       getInstance: (sandbox: DaytonaSandbox): DaytonaSandbox => sandbox,
+
+      // Daytona's memory-preserving `pause()` is rejected for container
+      // sandboxes ("Pausing is not supported"), so pause is a stop: the whole
+      // rootfs (home, /tmp) survives, running processes do not.
+      pause: async (sandbox: DaytonaSandbox): Promise<void> => {
+        await sandbox.stop(LIFECYCLE_TIMEOUT_S);
+      },
+      resume: async (sandbox: DaytonaSandbox): Promise<void> => {
+        await sandbox.start(LIFECYCLE_TIMEOUT_S);
+      },
+      pauseCapabilities: { memory: false },
     },
 
     snapshot: {
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
       create: async (config: DaytonaConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
@@ -340,7 +357,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           // Image definition, not the filesystem of a running sandbox — the
           // runtime-FS capture lives on the Sandbox instance.
           const sandbox = await daytona.get(sandboxId);
-          await sandbox.createSnapshot(name);
+          await sandbox.createSnapshot(name, SNAPSHOT_TIMEOUT_S);
           return { id: name, provider: 'daytona', createdAt: new Date(), metadata: { name } };
         } catch (error) {
           throw new Error(`Failed to create Daytona snapshot: ${error instanceof Error ? error.message : String(error)}`);
