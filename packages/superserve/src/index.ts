@@ -254,11 +254,8 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
       destroy: async (config: SuperserveConfig, sandboxId: string) => {
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
-        try {
-          await SuperserveSandbox.killById(sandboxId, { apiKey, baseUrl });
-        } catch {
-          /* already destroyed */
-        }
+        // The SDK handles already-deleted sandboxes and retries transient failures.
+        await SuperserveSandbox.killById(sandboxId, { apiKey, baseUrl });
       },
 
       runCommand,
