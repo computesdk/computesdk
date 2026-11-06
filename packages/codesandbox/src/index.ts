@@ -39,6 +39,8 @@ interface SandboxState {
 }
 
 const states = new WeakMap<CodesandboxNativeSandbox, SandboxState>();
+/** Tracked states by sandbox id, so a snapshot can refresh its source's session. */
+const statesById = new Map<string, SandboxState>();
 /** Open clients by sandbox id, so destroy can close the session before deleting. */
 const openClients = new Map<string, Promise<SandboxClient>>();
 
@@ -68,6 +70,7 @@ async function closeClient(sandboxId: string): Promise<void> {
 function track(sdk: CodeSandbox, native: CodesandboxNativeSandbox): CodesandboxSandbox {
   const state: SandboxState = { sdk, current: native };
   states.set(native, state);
+  statesById.set(native.id, state);
   const sandbox = native as CodesandboxSandbox;
   Object.defineProperty(sandbox, 'pause', {
     configurable: true,
@@ -88,9 +91,19 @@ function track(sdk: CodeSandbox, native: CodesandboxNativeSandbox): CodesandboxS
   return sandbox;
 }
 
+/** Reopens a running sandbox's session with fresh connection details. */
+async function refreshSession(sandboxId: string): Promise<void> {
+  await closeClient(sandboxId);
+  const state = statesById.get(sandboxId);
+  if (!state) return;
+  state.client = undefined;
+  state.current = await state.sdk.sandboxes.resume(sandboxId);
+}
+
 function getClient(sandbox: CodesandboxNativeSandbox): Promise<SandboxClient> {
   const state = states.get(sandbox);
   if (!state) return sandbox.connect();
+  if (state.client && openClients.get(sandbox.id) !== state.client) state.client = undefined;
   if (!state.client) {
     const client = state.current.connect();
     state.client = client;
@@ -159,6 +172,13 @@ function parseWrapped(output: string, marker: string): { stdout: string; stderr:
   };
 }
 
+/** The session failed before the command started, so it is safe to retry. */
+class SessionError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+  }
+}
+
 /**
  * Runs a wrapped command and resolves with its printed output once the SDK
  * reports it finished or its result file exists (`''` if only the file did),
@@ -171,7 +191,7 @@ async function runToCompletion(
   resultFile: string,
   timeoutMs?: number,
 ): Promise<string | undefined> {
-  const cmd = await client.commands.runBackground(wrapped, runOpts);
+  const cmd = await client.commands.runBackground(wrapped, runOpts).catch((error) => { throw new SessionError(error); });
   let settled = false;
   const finished = cmd.waitUntilComplete().then(
     (output) => output,
@@ -248,6 +268,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         // Deleting a running VM intermittently fails with "An unexpected error
         // occurred", so close our session and shut the VM down first, then retry.
         await closeClient(sandboxId);
+        statesById.delete(sandboxId);
         try { await sdk.sandboxes.shutdown(sandboxId); } catch { /* delete reports the real error */ }
         let lastError: unknown;
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -270,10 +291,11 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         const runOpts: { env?: Record<string, string>; cwd?: string } = {};
         if (options?.env && Object.keys(options.env).length > 0) runOpts.env = options.env;
         if (options?.cwd) runOpts.cwd = options.cwd;
-        try {
-          const client = await getClient(sandbox);
+        const run = async (): Promise<CommandResult> => {
+          const client = await getClient(sandbox).catch((error) => { throw new SessionError(error); });
           if (options?.background) {
-            await client.commands.runBackground(`setsid bash -c ${shQuote(command)} </dev/null >/dev/null 2>&1 &`, runOpts);
+            await client.commands.runBackground(`setsid bash -c ${shQuote(command)} </dev/null >/dev/null 2>&1 &`, runOpts)
+              .catch((error) => { throw new SessionError(error); });
             return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
           }
           const token = randomToken();
@@ -293,6 +315,16 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
             return { stdout: output.replace(/\r\n/g, '\n'), stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
           }
           return { ...parsed, durationMs: Date.now() - startTime };
+        };
+        try {
+          try {
+            return await run();
+          } catch (error) {
+            if (!(error instanceof SessionError)) throw error;
+            // A stale session, e.g. after the VM was suspended: reconnect once.
+            await refreshSession(sandbox.id);
+            return await run();
+          }
         } catch (error) {
           const exitCode = typeof (error as any)?.exitCode === 'number' ? (error as any).exitCode : 127;
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode, durationMs: Date.now() - startTime };
@@ -366,6 +398,8 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
             ...(options?.name ? { title: options.name } : {}),
           });
           await sdk.sandboxes.hibernate(fork.id);
+          // Forking suspends and resumes the source VM, which can drop its session.
+          await refreshSession(sandboxId);
           return { id: fork.id, provider: 'codesandbox', createdAt: new Date(), metadata: { name: options?.name, sourceSandboxId: sandboxId } };
         } catch (error) {
           throw new Error(`Failed to create CodeSandbox snapshot: ${error instanceof Error ? error.message : String(error)}`);
@@ -389,8 +423,9 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           }
         }
       },
-      // Forks keep the whole VM, memory included; the source keeps running.
-      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
+      // Forks keep the whole VM, memory and /tmp included; the source keeps
+      // running, and each restore is an independent fork of the snapshot.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false, source: 'kept', fork: true, readiness: 'immediate' },
     },
 
     template: {
