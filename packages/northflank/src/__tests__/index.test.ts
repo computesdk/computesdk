@@ -1,14 +1,11 @@
 import { runProviderTestSuite } from '@computesdk/test-utils';
 import { northflank } from '../index';
+import { liveConfig, skipLive } from './live-config';
 
 runProviderTestSuite({
   name: 'northflank',
-  provider: northflank({
-    token: process.env.NORTHFLANK_TOKEN!,
-    projectId: process.env.NORTHFLANK_PROJECT_ID!,
-    ...(process.env.NORTHFLANK_API_URL ? { host: process.env.NORTHFLANK_API_URL } : {}),
-  }),
+  provider: northflank(liveConfig()),
   supportsFilesystem: true,
-  skipIntegration: !process.env.NORTHFLANK_TOKEN || !process.env.NORTHFLANK_PROJECT_ID,
+  skipIntegration: skipLive,
   ports: [3000],
 });

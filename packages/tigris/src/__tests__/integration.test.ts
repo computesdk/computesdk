@@ -22,7 +22,7 @@ const runIntegration = !!(
 );
 
 // Use environment bucket or default test bucket
-const testBucket = process.env.TIGRIS_TEST_BUCKET || 'computesdk-test';
+const testBucket = process.env.TIGRIS_TEST_BUCKET || process.env.TIGRIS_STORAGE_BUCKET || 'computesdk-test';
 
 if (runIntegration) {
   runStorageProviderTestSuite({

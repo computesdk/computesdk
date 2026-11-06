@@ -101,7 +101,7 @@ console.log(`Server reachable at: ${url}`);
 - ✅ **Filesystem Operations** — read, write, mkdir, ls, rm
 - ✅ **GPU Support** — Modal's native GPU access for ML workloads
 - ✅ **Serverless Scaling** — scale to thousands of concurrent sandboxes
-- ✅ **Snapshots** — save and restore sandbox state
+- ✅ **Snapshots** — filesystem snapshots of the whole rootfs (`/tmp` and `$HOME` included, mounted volumes and running processes not); the source keeps running. Restore with `create({ snapshotId })`
 - ❌ **Interactive Terminals** — not exposed by the provider
 
 ## API Reference

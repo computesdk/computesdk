@@ -3,22 +3,32 @@ import { runProviderTestSuite } from '@computesdk/test-utils';
 import { describe, expect, it } from 'vitest';
 import { microsandbox } from '../index.js';
 
+const runIntegration = process.env.MSB_RUN_INTEGRATION === '1';
+// Cloud when credentials are present (CI); MSB_BACKEND=local forces the
+// runtime on this machine, which needs KVM.
+const backend = process.env.MSB_BACKEND === 'local' || !process.env.MSB_API_KEY ? 'local' : 'cloud';
+const local = backend === 'local';
+
 runProviderTestSuite({
   name: 'microsandbox',
-  provider: microsandbox({ backend: 'local', ports: [3000, 8080] }),
+  provider: local ? microsandbox({ backend, ports: [3000, 8080] }) : microsandbox({ backend }),
   supportsFilesystem: true,
   supportsStreaming: true,
-  supportsGetUrl: true,
-  ports: [3000, 8080],
-  skipIntegration: process.env.MSB_RUN_INTEGRATION !== '1',
+  // Published ports are a local-backend feature.
+  supportsGetUrl: local,
+  ...(local ? { ports: [3000, 8080] } : {}),
+  supportsSnapshots: true,
+  // Pause/resume is local-only: the cloud backend rejects it as unsupported.
+  supportsPauseResume: false,
+  skipIntegration: !runIntegration,
   timeout: 120_000,
 });
 
-describe.runIf(process.env.MSB_RUN_INTEGRATION === '1')('microsandbox local snapshots', () => {
+describe.runIf(runIntegration && local)('microsandbox local snapshots', () => {
   it('restores filesystem state through the ComputeSDK snapshot API', async () => {
     const provider = microsandbox({ backend: 'local' });
     const suffix = randomUUID().slice(0, 8);
-    const original = await provider.sandbox.create({ name: `csdk-snapshot-source-${suffix}` });
+    const original = await provider.sandbox.create({ name: `csdk-snapshot-source-${suffix}`, ephemeral: false });
     let restored: Awaited<ReturnType<typeof provider.sandbox.create>> | undefined;
     let snapshotId: string | undefined;
 

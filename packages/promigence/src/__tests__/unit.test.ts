@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { compute } from 'computesdk';
-import { AuthError, EnvFailedError } from '@promigence/sdk';
+import { AuthError, EnvFailedError, PromigenceError } from '@promigence/sdk';
 import { promigence } from '../index';
 import type { PromigenceConfig, PromigenceInstance } from '../index';
 import { FakeClient } from './fake-client';
@@ -18,12 +18,14 @@ type Opts = Record<string, unknown>;
 
 /** Every variable a key or an API address could be read from, cleared for each test and restored after. */
 const CREDENTIAL_VAR = /^PROMIGENCE_|_API_KEY$|_API_URL$|_DOMAIN$|^XDG_CONFIG_HOME$/;
+/** A proxy in the environment would send the SDK's requests past a stubbed `fetch`. */
+const PROXY_VAR = /^(https?|all|no)_proxy$/i;
 let savedEnv: NodeJS.ProcessEnv;
 let configHome: string;
 
 beforeEach(() => {
   savedEnv = { ...process.env };
-  for (const k of Object.keys(process.env)) if (CREDENTIAL_VAR.test(k)) delete process.env[k];
+  for (const k of Object.keys(process.env)) if (CREDENTIAL_VAR.test(k) || PROXY_VAR.test(k)) delete process.env[k];
   // No sign-in stored on this machine is ever read: only a file in an empty directory is looked at.
   configHome = mkdtempSync(join(tmpdir(), 'promigence-test-'));
   process.env.XDG_CONFIG_HOME = configHome;
@@ -114,6 +116,26 @@ describe('promigence provider (unit, fake client)', () => {
       code: 'not_found',
       message: expect.stringMatching(/^Promigence read of \/nonexistent\/file\.txt failed \(not_found\)/),
     });
+  });
+
+  it('filesystem: when the API refuses the files API, files go through shell commands', async () => {
+    const refusal = new PromigenceError({
+      code: 'usage',
+      message: "this client names the file in the request's URL, which is no longer accepted",
+      fix: 'Update the CLI and SDK.',
+    });
+    const { client, c } = setup({ fail: { files: refusal } });
+    const sandbox = await c.instances.create();
+    // The fake's shell knows none of these commands, so each fails with exit 127 after it is sent.
+    await expect(sandbox.filesystem.writeFile('/work/a b.txt', 'hi')).rejects.toThrow(/write of \/work\/a b\.txt failed \(exit 127\)/);
+    expect(client.names().filter((n) => n === 'files.put')).toHaveLength(1);
+    expect(arg(client.last('sandboxes.exec'), 1).sh).toBe(
+      `mkdir -p -- "$(dirname -- "/work/a b.txt")" && printf '%s' 'aGk=' | base64 -d > "/work/a b.txt"`
+    );
+    // Once refused, the files API is not asked again for this sandbox.
+    await expect(sandbox.filesystem.readFile('/work/a b.txt')).rejects.toThrow(/read of .* failed \(exit 127\)/);
+    expect(client.names()).not.toContain('files.get');
+    expect(arg(client.last('sandboxes.exec'), 1).sh).toMatch(/base64 < "\/work\/a b\.txt"/);
   });
 
   it('filesystem: a path is quoted with escapeShellArg inside double quotes', async () => {
@@ -461,17 +483,47 @@ describe('promigence provider (unit, fake client)', () => {
     expect(typeof inst.sandbox.fork).toBe('function');
   });
 
-  it('snapshots: create from a sandbox is refused with the alternative named; list and delete map', async () => {
+  it('pause / resume: the sandbox is paused and resumed natively; memory is declared kept', async () => {
+    const { client, provider, c } = setup();
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    const sandbox = await c.instances.create();
+    await sandbox.pause!();
+    expect(client.last('sandboxes.pause')[0]).toBe(sandbox.instanceId);
+    expect((await sandbox.getInfo()).metadata?.state).toBe('paused');
+    await sandbox.resume!();
+    expect(client.last('sandboxes.resume')[0]).toBe(sandbox.instanceId);
+    expect((await sandbox.getInfo()).metadata?.state).toBe('ready');
+  });
+
+  it('pause / resume: a Promigence error names the operation', async () => {
+    const { provider } = setup();
+    const sandbox = await provider.instances.create();
+    await provider.instances.destroy(sandbox.instanceId);
+    await expect(sandbox.pause!()).rejects.toThrow(/sandbox pause failed/);
+    await expect(sandbox.resume!()).rejects.toThrow(/sandbox resume failed/);
+  });
+
+  it('snapshots: capabilities declare a whole-sandbox snapshot that leaves the source running', () => {
+    const { provider } = setup();
+    expect(provider.snapshot?.capabilities).toEqual({ scope: 'rootfs', memory: true, destroysSource: false });
+  });
+
+  it('snapshots: create takes a live snapshot that restores into a new sandbox; list and delete map', async () => {
     const { client, provider, c } = setup({
       snapshots: [{ snapshot_id: 'snap_1', alias: 'myapp', commit: '0123abc4567', tier: 'medium', verified: true, created_at: '2030-02-03T00:00:00Z' }],
     });
     const sandbox = await c.instances.create();
-    await expect(provider.snapshot!.create(sandbox.instanceId)).rejects.toMatchObject({
-      name: 'UnsupportedError',
-      code: 'unsupported',
-      fix: expect.stringContaining('promigence snapshot create --image'),
+    const snap = await c.snapshot.create(sandbox.instanceId, { name: 'nightly', metadata: { run: '7' } });
+    expect(client.last('sandboxes.snapshot')[0]).toBe(sandbox.instanceId);
+    expect(snap).toMatchObject({
+      id: 'snap_live2',
+      provider: 'promigence',
+      metadata: { name: 'nightly', run: '7', sandboxId: sandbox.instanceId, tier: 'small', backgroundExecsKilled: 0 },
     });
-    await expect(c.snapshot.create(sandbox.instanceId)).rejects.toThrow(/does not create a snapshot from a running sandbox/);
+    await c.instances.create({ snapshotId: snap.id });
+    expect(arg(client.last('runs.start'), 0).snapshot).toBe('snap_live2');
+    await expect(provider.snapshot!.create('sbx_unknown')).rejects.toThrow(/snapshot create failed/);
+    client.snapshotsStore.pop();
 
     const list = await c.snapshot.list();
     expect(list.map((s) => [s.id, s.provider, s.metadata?.alias, s.metadata?.verified])).toEqual([['snap_1', 'promigence', 'myapp', true]]);

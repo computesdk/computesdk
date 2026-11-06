@@ -82,6 +82,7 @@ export {
   ShellProcessRuntime,
 } from './shell-process';
 export type { CommandRunner, ShellProcessHandle, ShellProcessOptions, ShellJobRead, ShellLogRecord } from './shell-process';
+export { ShellFileSystem } from './shell-filesystem';
 export { SHELL_TIER_TOOLS } from './shell-scripts';
 
 // Export all types

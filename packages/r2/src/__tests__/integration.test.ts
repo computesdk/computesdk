@@ -11,7 +11,8 @@
  * then run tests. These tests are automatically skipped in CI without credentials.
  */
 
-import { describe, it } from 'vitest';
+import { beforeAll, describe, it } from 'vitest';
+import { createBucket, listBuckets } from '@tigrisdata/storage';
 import { failIfIntegrationRequired, runStorageProviderTestSuite } from '@computesdk/test-utils';
 import { r2 } from '../index';
 
@@ -26,6 +27,22 @@ const runIntegration = !!(
 const testBucket = process.env.R2_TEST_BUCKET || 'computesdk-test';
 
 if (runIntegration) {
+  const endpoint = process.env.R2_ENDPOINT || `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+  const config = {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    endpoint,
+  };
+
+  // The suite writes into one bucket; create it on a fresh account.
+  beforeAll(async () => {
+    const listed = await listBuckets({ config });
+    if (listed.error) throw new Error(`Unable to list R2 buckets: ${listed.error.message}`);
+    if (listed.data.buckets.some((b) => b.name === testBucket)) return;
+    const created = await createBucket(testBucket, { config });
+    if (created.error) throw new Error(`Unable to create R2 bucket ${testBucket}: ${created.error.message}`);
+  }, 60000);
+
   runStorageProviderTestSuite({
     name: 'Cloudflare R2',
     provider: r2({

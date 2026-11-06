@@ -31,6 +31,9 @@ export type {
   TemplateCapabilities,
   TemplateInfo,
   TemplateErrorCode,
+  SnapshotCapabilities,
+  PauseCapabilities,
+  LifetimeCapabilities,
 } from 'computesdk';
 
 // Deprecated Sandbox* aliases for backwards compatibility

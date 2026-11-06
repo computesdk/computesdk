@@ -18,8 +18,9 @@ describe('Archil standard size mapping (mock-only, installed disk SDK)', () => {
   it('discovers only persistent VM mappings without credentials or API calls', () => {
     const fetch = mockFetch();
     expect(archil({ execution: 'persistent' }).sizes.list().filter(p => p.status === 'supported').map(p => p.requested.sizeClass)).toEqual(['sm', 'md', 'lg', 'xl']);
-    expect(archil().sizes.resolve('sm').status).toBe('unavailable');
-    expect(archil().sizes.resolve('sm', { ephemeral: false }).status).toBe('supported');
+    expect(archil().sizes.resolve('sm').status).toBe('supported');
+    expect(archil({ execution: 'exec' }).sizes.resolve('sm').status).toBe('unavailable');
+    expect(archil({ execution: 'exec' }).sizes.resolve('sm', { ephemeral: false }).status).toBe('supported');
     expect(archil({ execution: 'persistent' }).sizes.resolve('sm', { ephemeral: true }).status).toBe('unavailable');
     expect(fetch).not.toHaveBeenCalled();
   });

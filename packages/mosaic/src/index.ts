@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, startShellProcess } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -23,6 +23,10 @@ const COMMAND_HTTP_TIMEOUT_BUFFER_MS = 5_000;
 const BUILD_TIMEOUT_MS = 20 * 60 * 1000;
 const BUILD_POLL_INTERVAL_MS = 2_000;
 const WORKSPACE = '/workspace';
+/** One files-API request carries at most 8 MiB, in either direction. */
+const FILE_CHUNK_BYTES = 8 * 1024 * 1024;
+/** Exec bodies are capped at 64 KiB; a shell write above this goes through the files API. */
+const INLINE_WRITE_MAX_BYTES = 32 * 1024;
 /** Mosaic's stock templates. Anything else is one of the caller's environments. */
 const STOCK_TEMPLATES = [
   'base',
@@ -68,6 +72,10 @@ export interface MosaicSandbox {
   state: string;
   createdAt: Date;
   config: MosaicConfig;
+  /** Hibernate the sandbox (POST /v1/sandboxes/{id}/pause); its disk and memory stay. */
+  pause(options?: { killProcesses?: boolean }): Promise<void>;
+  /** Wake a hibernated or archived sandbox under the same id. */
+  resume(): Promise<void>;
 }
 
 export interface MosaicSnapshot {
@@ -303,8 +311,27 @@ function bootFrom(
     : { snapshot_id: config.template };
 }
 
+function sandboxHandle(fields: Omit<MosaicSandbox, 'pause' | 'resume'>): MosaicSandbox {
+  const path = `/v1/sandboxes/${encodeURIComponent(fields.id)}`;
+  const sandbox: MosaicSandbox = {
+    ...fields,
+    pause: async (options) => {
+      await request<unknown>(fields.config, `${path}/pause`, {
+        method: 'POST',
+        body: JSON.stringify(options?.killProcesses ? { kill_processes: true } : {}),
+      });
+      sandbox.state = 'paused';
+    },
+    resume: async () => {
+      await request<unknown>(fields.config, `${path}/resume`, { method: 'POST', body: '{}' });
+      sandbox.state = 'running';
+    },
+  };
+  return sandbox;
+}
+
 function fromInfo(config: MosaicConfig, info: MarVmInfo): MosaicSandbox {
-  return {
+  return sandboxHandle({
     id: info.id,
     template: info.template,
     memoryMb: info.memory_mb,
@@ -312,7 +339,7 @@ function fromInfo(config: MosaicConfig, info: MarVmInfo): MosaicSandbox {
     state: info.state,
     createdAt: new Date(),
     config,
-  };
+  });
 }
 
 function asSnapshot(info: MarSnapshotInfo): MosaicSnapshot {
@@ -341,9 +368,41 @@ function commandWithOptions(command: string, options?: RunCommandOptions): strin
       }
       return `${key}="${escapeShellArg(value)}"`;
     });
-    result = `env ${assignments.join(' ')} ${result}`;
+    // Exported first, so every part of a compound command (and the cd) sees them.
+    result = `export ${assignments.join(' ')}; ${result}`;
   }
   return result;
+}
+
+async function exec(
+  sandbox: MosaicSandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const started = performance.now();
+  const httpTimeoutMs = options?.timeout
+    ? options.timeout + COMMAND_HTTP_TIMEOUT_BUFFER_MS
+    : undefined;
+  const result = await request<MarExecResponse>(
+    sandbox.config,
+    `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/exec`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        cmd: commandWithOptions(command, options),
+        ...(options?.timeout ? { timeout_ms: options.timeout } : {}),
+      }),
+    },
+    httpTimeoutMs,
+  );
+  options?.onStdout?.(result.stdout);
+  options?.onStderr?.(result.stderr);
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exit_code,
+    durationMs: performance.now() - started,
+  };
 }
 
 /**
@@ -354,6 +413,40 @@ function commandWithOptions(command: string, options?: RunCommandOptions): strin
  */
 function inWorkspace(path: string): boolean {
   return !path.startsWith('/') || path === WORKSPACE || path.startsWith(`${WORKSPACE}/`);
+}
+
+function filesPath(sandbox: MosaicSandbox, suffix: string): string {
+  return `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/files${suffix}`;
+}
+
+/** Reads through the files API in 8 MiB ranges, pinned to the first range's version. */
+async function readViaFilesApi(sandbox: MosaicSandbox, path: string): Promise<Buffer> {
+  const parts: Buffer[] = [];
+  let offset = 0;
+  let version: string | undefined;
+  for (;;) {
+    const query = new URLSearchParams({ path, offset: String(offset), length: String(FILE_CHUNK_BYTES) });
+    if (version) query.set('version', version);
+    const range = await request<{ content_base64: string; size: number; total_size?: number; version?: string; eof?: boolean }>(
+      sandbox.config,
+      filesPath(sandbox, `/content?${query}`),
+      { method: 'GET' },
+    );
+    const bytes = Buffer.from(range.content_base64, 'base64');
+    parts.push(bytes);
+    offset += bytes.length;
+    version = range.version ?? version;
+    const done = range.eof ?? (range.total_size === undefined || offset >= range.total_size);
+    if (done || bytes.length === 0) break;
+  }
+  return Buffer.concat(parts);
+}
+
+async function putFile(sandbox: MosaicSandbox, path: string, bytes: Buffer): Promise<void> {
+  await request<void>(sandbox.config, filesPath(sandbox, '/content'), {
+    method: 'PUT',
+    body: JSON.stringify({ path, content_base64: bytes.toString('base64'), create_parents: true }),
+  });
 }
 
 type Exec = (sandbox: MosaicSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
@@ -399,7 +492,7 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
           },
           options?.timeout,
         );
-        const sandbox: MosaicSandbox = {
+        const sandbox = sandboxHandle({
           id: created.id,
           template: boot.template ?? boot.snapshot_id ?? resolved.template,
           memoryMb,
@@ -407,7 +500,7 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
           state: created.state,
           createdAt: new Date(),
           config,
-        };
+        });
         return { instance: sandbox, instanceId: sandbox.id };
       },
 
@@ -439,51 +532,21 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
       },
 
       runCommand: async (sandbox, command, options): Promise<CommandResult> => {
+        if (!options?.background) return exec(sandbox, command, options);
+        // exec waits for the command's whole process group, so a trailing `&`
+        // hangs until the timeout; the shell tier launches it in its own
+        // session and returns once it runs. Unlike a durable process (which
+        // keeps the sandbox busy, so pause answers 409), it survives pause.
         const started = performance.now();
-        if (options?.background) {
-          // exec waits for the command's whole process group, so a trailing `&`
-          // hangs until the timeout. A durable process is the shape that
-          // outlives the request, which is what a dev server needs.
-          const durable = await request<{ id: string }>(
-            sandbox.config,
-            `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/processes`,
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                cmd: command,
-                ...(options.cwd ? { cwd: options.cwd } : {}),
-                ...(options.env ? { env: options.env } : {}),
-              }),
-            },
-          );
-          return {
-            stdout: durable.id,
-            stderr: '',
-            exitCode: 0,
-            durationMs: performance.now() - started,
-          };
-        }
-        const httpTimeoutMs = options?.timeout
-          ? options.timeout + COMMAND_HTTP_TIMEOUT_BUFFER_MS
-          : undefined;
-        const result = await request<MarExecResponse>(
-          sandbox.config,
-          `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/exec`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              cmd: commandWithOptions(command, options),
-              ...(options?.timeout ? { timeout_ms: options.timeout } : {}),
-            }),
-          },
-          httpTimeoutMs,
+        const job = await startShellProcess(
+          (script, runOptions) => exec(sandbox, script, runOptions),
+          command,
+          { cwd: options.cwd, env: options.env },
         );
-        options?.onStdout?.(result.stdout);
-        options?.onStderr?.(result.stderr);
         return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exit_code,
+          stdout: job.jobId,
+          stderr: '',
+          exitCode: 0,
           durationMs: performance.now() - started,
         };
       },
@@ -535,34 +598,54 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
           if (!inWorkspace(path)) {
             return shell(runCommand, sandbox, `cat "${escapeShellArg(path)}"`, `Failed to read ${path}`);
           }
-          const file = await request<{ content_base64: string }>(
-            sandbox.config,
-            `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/files/content?path=${encodeURIComponent(path)}`,
-            { method: 'GET' },
-          );
-          return Buffer.from(file.content_base64, 'base64').toString('utf8');
+          try {
+            return (await readViaFilesApi(sandbox, path)).toString('utf8');
+          } catch (error) {
+            // The files API refuses to follow a symlink; the shell reads
+            // through it, and reports a missing file the same way.
+            if (!(error instanceof MosaicApiError) || error.status >= 500) throw error;
+            return shell(runCommand, sandbox, `cat "${escapeShellArg(path)}"`, `Failed to read ${path}`);
+          }
         },
 
         writeFile: async (sandbox, path, content, runCommand): Promise<void> => {
-          const encoded = Buffer.from(content, 'utf8').toString('base64');
-          if (!inWorkspace(path)) {
+          const bytes = Buffer.from(content, 'utf8');
+          const workspace = inWorkspace(path);
+          if (!workspace && bytes.length <= INLINE_WRITE_MAX_BYTES) {
             const directory = path.slice(0, path.lastIndexOf('/')) || '/';
             await shell(
               runCommand,
               sandbox,
-              `mkdir -p "${escapeShellArg(directory)}" && printf %s "${escapeShellArg(encoded)}" | base64 -d > "${escapeShellArg(path)}"`,
+              `mkdir -p "${escapeShellArg(directory)}" && printf %s "${escapeShellArg(bytes.toString('base64'))}" | base64 -d > "${escapeShellArg(path)}"`,
               `Failed to write ${path}`,
             );
             return;
           }
-          await request<void>(
-            sandbox.config,
-            `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/files/content`,
-            {
-              method: 'PUT',
-              body: JSON.stringify({ path, content_base64: encoded, create_parents: true }),
-            },
-          );
+          if (workspace && bytes.length <= FILE_CHUNK_BYTES) {
+            await putFile(sandbox, path, bytes);
+            return;
+          }
+          // Too big for one exec or one files request: upload the parts under
+          // /workspace, then join them at the destination in the guest.
+          const staging = `${WORKSPACE}/.computesdk-upload-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+          const parts: string[] = [];
+          try {
+            for (let offset = 0; offset < bytes.length || parts.length === 0; offset += FILE_CHUNK_BYTES) {
+              const part = `${staging}/${String(parts.length).padStart(6, '0')}`;
+              await putFile(sandbox, part, bytes.subarray(offset, offset + FILE_CHUNK_BYTES));
+              parts.push(part);
+            }
+            const absolute = path.startsWith('/') ? path : `${WORKSPACE}/${path}`;
+            const directory = absolute.slice(0, absolute.lastIndexOf('/')) || '/';
+            await shell(
+              runCommand,
+              sandbox,
+              `mkdir -p "${escapeShellArg(directory)}" && cat "${escapeShellArg(staging)}"/* > "${escapeShellArg(absolute)}"`,
+              `Failed to write ${path}`,
+            );
+          } finally {
+            await runCommand(sandbox, `rm -rf "${escapeShellArg(staging)}"`).catch(() => undefined);
+          }
         },
 
         mkdir: async (sandbox, path, runCommand): Promise<void> => {
@@ -637,9 +720,18 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
       },
 
       getInstance: (sandbox) => sandbox,
+
+      pause: (sandbox) => sandbox.pause(),
+      resume: async (sandbox) => {
+        await sandbox.resume();
+      },
+      pauseCapabilities: { memory: true },
     },
 
     snapshot: {
+      // A checkpoint captures memory and the whole disk (including /tmp, which
+      // is not a tmpfs) while the source keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
       create: async (config, sandboxId, options?: CreateSnapshotOptions) => {
         const snapshot = await request<MarSnapshotInfo>(
           config,

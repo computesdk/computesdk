@@ -709,3 +709,84 @@ describe('Factory', () => {
     })
   })
 })
+
+describe('pause/resume and snapshot capabilities', () => {
+  const base = () => ({
+    create: vi.fn().mockResolvedValue({ sandbox: { id: 'v1' }, sandboxId: 'p-1' }),
+    getById: vi.fn().mockResolvedValue(null),
+    list: vi.fn().mockResolvedValue([]),
+    destroy: vi.fn().mockResolvedValue(undefined),
+    runCommand: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0, durationMs: 1 } as CommandResult),
+    getInfo: vi.fn(),
+    getUrl: vi.fn(),
+    getInstance: (native: any) => native,
+  })
+
+  it('omits pause/resume when the provider has none', async () => {
+    const provider = defineProvider({ name: 'mock', methods: { sandbox: base() } })({})
+    const instance = await provider.sandbox.create()
+    expect(instance.pause).toBeUndefined()
+    expect(instance.resume).toBeUndefined()
+    expect(provider.sandbox.pause).toBeUndefined()
+  })
+
+  it('wires native pause/resume and swaps in the handle resume returns', async () => {
+    const pause = vi.fn().mockResolvedValue(undefined)
+    const resume = vi.fn().mockResolvedValue({ id: 'v2' })
+    const provider = defineProvider({
+      name: 'mock',
+      methods: { sandbox: { ...base(), pause, resume, pauseCapabilities: { memory: true } } },
+    })({})
+    const instance = await provider.sandbox.create()
+    expect(provider.sandbox.pause).toEqual({ memory: true })
+    await instance.pause!()
+    expect(pause).toHaveBeenCalledWith({ id: 'v1' })
+    await instance.resume!()
+    expect(resume).toHaveBeenCalledWith({ id: 'v1' })
+    expect(instance.getInstance()).toEqual({ id: 'v2' })
+  })
+
+  it('surfaces declared snapshot capabilities', () => {
+    const capabilities = { scope: 'volume' as const, path: '/workspace', memory: false, destroysSource: true }
+    const provider = defineProvider({
+      name: 'mock',
+      methods: {
+        sandbox: base(),
+        snapshot: { create: vi.fn(), list: vi.fn(), delete: vi.fn(), capabilities },
+      },
+    })({})
+    expect(provider.snapshot?.capabilities).toEqual(capabilities)
+  })
+
+  it('wires lifetime extension and derives extendable', async () => {
+    const extendLifetime = vi.fn().mockResolvedValue(undefined)
+    const provider = defineProvider({
+      name: 'mock',
+      methods: { sandbox: { ...base(), lifetime: { defaultMs: 300000, maxMs: 86400000 }, extendLifetime } },
+    })({})
+    expect(provider.sandbox.lifetime).toEqual({ defaultMs: 300000, maxMs: 86400000, extendable: true })
+    const instance = await provider.sandbox.create()
+    await instance.extendLifetime!(60000)
+    expect(extendLifetime).toHaveBeenCalledWith({ id: 'v1' }, 60000)
+
+    const fixed = defineProvider({ name: 'mock', methods: { sandbox: { ...base(), lifetime: { maxMs: 3600000 } } } })({})
+    expect(fixed.sandbox.lifetime).toEqual({ maxMs: 3600000, extendable: false })
+    expect((await fixed.sandbox.create()).extendLifetime).toBeUndefined()
+  })
+
+  it('exposes waitUntilReady for eventually-ready snapshots', async () => {
+    const waitUntilReady = vi.fn().mockResolvedValue(undefined)
+    const provider = defineProvider({
+      name: 'mock',
+      methods: {
+        sandbox: base(),
+        snapshot: {
+          create: vi.fn(), list: vi.fn(), delete: vi.fn(), waitUntilReady,
+          capabilities: { scope: 'rootfs', memory: true, destroysSource: false, readiness: 'eventual' },
+        },
+      },
+    })({ token: 't' })
+    await provider.snapshot!.waitUntilReady!('snap-1', { timeoutMs: 1000 })
+    expect(waitUntilReady).toHaveBeenCalledWith({ token: 't' }, 'snap-1', { timeoutMs: 1000 })
+  })
+})

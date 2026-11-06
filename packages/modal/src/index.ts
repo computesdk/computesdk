@@ -8,13 +8,13 @@ import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, Run
 
 import { randomUUID } from 'node:crypto';
 
-import { ModalClient, SandboxFilesystemNotFoundError } from 'modal';
+import { ModalClient, NotFoundError, SandboxFilesystemNotFoundError } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
 
 
-const DEFAULT_IMAGE = 'node:20';
+const DEFAULT_IMAGE = 'node:22';
 const DEFAULT_APP_NAME = 'computesdk-modal';
 const DEFAULT_DAEMON_SSE_PORT = 38989;
 
@@ -60,7 +60,7 @@ export interface ModalCreateSandboxOptions extends CreateInstanceOptions {
  */
 interface ModalInternalConfig extends ModalConfig {
   _client: ModalClient;
-  _appPromise: Promise<App>;
+  _getApp: () => Promise<App>;
   _imageCache: Map<string, Promise<Image>>;
 }
 
@@ -128,7 +128,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         try {
           const client = config._client;
 
-          const app = await config._appPromise;
+          const app = await config._getApp();
 
           const modalOptions = (options ?? {}) as ModalCreateSandboxOptions;
           const {
@@ -225,7 +225,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         try {
           const client = config._client;
           const sandbox = await client.sandboxes.fromId(sandboxId);
-          if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate();
+          // Volume writes are only committed once the container has exited, so
+          // wait for exit: a sandbox mounting the same volume right after
+          // destroy() would otherwise see none of this sandbox's writes.
+          if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate({ wait: true });
         } catch { /* already terminated */ }
       },
 
@@ -233,12 +236,13 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         const startTime = Date.now();
         try {
           let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          if (options?.background) fullCommand = `nohup sh -c '${fullCommand.replace(/'/g, `'\\''`)}' > /dev/null 2>&1 &`;
+          // Exported (not `K=v cmd`) so every part of a compound command sees it.
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const exports = Object.entries(options.env).map(([k, v]) => `export ${k}="${escapeShellArg(String(v))}";`).join(' ');
+            fullCommand = `${exports} ${fullCommand}`;
+          }
           
           // Modal's exec pipes stream output — a transport hiccup during a
           // quiet stretch drops a contiguous chunk and the read still
@@ -396,7 +400,19 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         }
       },
       list: async (_config: ModalConfig) => [],
-      delete: async (_config: ModalConfig, _snapshotId: string) => { /* No-op */ }
+      delete: async (config: ModalInternalConfig, snapshotId: string) => {
+        config._imageCache.delete(snapshotId);
+        try {
+          await config._client.images.delete(snapshotId);
+        } catch (error) {
+          if (error instanceof NotFoundError) return;
+          throw new Error(`Failed to delete Modal snapshot: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      // `snapshotFilesystem` images the whole container rootfs (incl. /tmp and
+      // $HOME, not mounted volumes); processes don't carry over and the source
+      // keeps running.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
     },
 
     volume: {
@@ -423,13 +439,22 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
   const appName = config.appName ?? DEFAULT_APP_NAME;
   const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
-  const appPromise = client.apps.fromName(appName, { createIfMissing: true });
+  // Resolved on first create, not here: an eager lookup rejects unobserved
+  // when credentials are missing, and a failed lookup must be retryable.
+  let appPromise: Promise<App> | undefined;
+  const getApp = (): Promise<App> => {
+    if (!appPromise) {
+      appPromise = client.apps.fromName(appName, { createIfMissing: true });
+      appPromise.catch(() => { appPromise = undefined; });
+    }
+    return appPromise;
+  };
 
   return _modal({
     ...config,
     appName,
     _client: client,
-    _appPromise: appPromise,
+    _getApp: getApp,
     _imageCache: new Map(),
   });
 }

@@ -5,6 +5,7 @@ const dirs = new Set<string>();
 const runCalls: string[] = [];
 const createCalls: Array<Record<string, unknown>> = [];
 const publishedPorts: number[] = [];
+const templateCreateCalls: Array<Record<string, unknown>> = [];
 let pwdFails = false;
 
 const fakeSnapshot = {
@@ -76,6 +77,15 @@ vi.mock('@superserve/sdk', () => ({
     static deleteById = async () => {};
   },
   Template: class {
+    static create = async (options: Record<string, unknown>) => {
+      templateCreateCalls.push(options);
+      return {
+        waitUntilReady: async () => ({
+          id: 'tpl-1', name: options.name, status: 'ready', vcpu: options.vcpu,
+          memoryMib: options.memoryMib, diskMib: options.diskMib, createdAt: new Date(0),
+        }),
+      };
+    };
     static list = async () => [];
     static deleteById = async () => {};
   },
@@ -193,5 +203,17 @@ describe('superserve previews, streaming and snapshots', () => {
     // provider without options.
     expect(await provider.snapshot!.list()).toEqual([]);
     expect(await provider.snapshot!.list({ sandboxId: 'sb-test' })).toHaveLength(1);
+  });
+
+  it('builds sized templates and waits until they are ready', async () => {
+    const provider = superserve({ apiKey: 'test' });
+
+    await expect(provider.template!.create({ name: 'no-image' })).rejects.toThrow(/from/);
+
+    const template = await provider.template!.create({
+      name: 'node22-2cpu', from: 'node:22', vcpu: 2, memoryMib: 2048, diskMib: 4096,
+    } as never);
+    expect(templateCreateCalls[0]).toMatchObject({ name: 'node22-2cpu', from: 'node:22', vcpu: 2, memoryMib: 2048, diskMib: 4096 });
+    expect(template).toMatchObject({ id: 'tpl-1', name: 'node22-2cpu', metadata: { status: 'ready', vcpu: 2, memoryMib: 2048 } });
   });
 });

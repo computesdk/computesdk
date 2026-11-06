@@ -199,6 +199,61 @@ export interface Snapshot {
 }
 
 /**
+ * What a provider's snapshots keep, and what the source instance needs.
+ * Callers read this before snapshotting, e.g. to create the source with
+ * `createOptions` and write state they expect to survive under `path`.
+ */
+export interface SnapshotCapabilities {
+  /** `rootfs`: the whole root filesystem. `volume`: only the volume at `path`. */
+  scope: 'rootfs' | 'volume';
+  /** Directory whose contents survive a restore. Required for `volume` scope. */
+  path?: string;
+  /** Whether running processes and memory survive a restore. */
+  memory: boolean;
+  /** Whether `snapshot.create` stops or destroys the source instance. */
+  destroysSource: boolean;
+  /**
+   * What `snapshot.create` leaves of the source: `kept` (still running),
+   * `stopped` (exists but stopped; still needs destroying) or `destroyed`.
+   * Defaults to `destroyed` when `destroysSource` is true, else `kept`.
+   */
+  source?: 'kept' | 'stopped' | 'destroyed';
+  /** Paths inside `scope` that a restore does not keep (e.g. `/tmp`, a mount). */
+  excludes?: string[];
+  /** Whether one snapshot of a live source can be restored into many instances. */
+  fork?: boolean;
+  /**
+   * `eventual`: `snapshot.create` may return before the snapshot can be
+   * restored; call `snapshot.waitUntilReady(id)` first. Defaults to `immediate`.
+   */
+  readiness?: 'immediate' | 'eventual';
+  /** Create options the source instance needs for snapshots to work. */
+  createOptions?: Record<string, unknown>;
+}
+
+/**
+ * How long an instance may live, and whether that can be extended.
+ */
+export interface LifetimeCapabilities {
+  /** Lifetime when the caller sets no timeout, in ms. */
+  defaultMs?: number;
+  /** Longest lifetime the provider allows, in ms; absent means unbounded. */
+  maxMs?: number;
+  /** Whether `instance.extendLifetime()` is available. */
+  extendable: boolean;
+}
+
+/**
+ * What `instance.pause()`/`resume()` keep, and what the instance needs.
+ */
+export interface PauseCapabilities {
+  /** Whether running processes and memory survive pause/resume. */
+  memory: boolean;
+  /** Create options an instance needs before it can be paused. */
+  createOptions?: Record<string, unknown>;
+}
+
+/**
  * Options for creating a snapshot
  */
 export interface CreateSnapshotOptions {
@@ -544,4 +599,19 @@ export interface Instance {
    * that need it; others resolve the attachment from `volume` alone.
    */
   detachVolume?(volume: string | Volume, mountPath?: string): Promise<void>;
+
+  /**
+   * Pause this instance — present only on providers with native pause.
+   * Check `typeof instance.pause === 'function'` to detect support.
+   */
+  pause?(): Promise<void>;
+
+  /** Resume a paused instance — present whenever `pause` is. */
+  resume?(): Promise<void>;
+
+  /**
+   * Keep this instance alive for `ms` more from now, within the provider's
+   * `lifetime.maxMs`. Present only on providers that can extend a lifetime.
+   */
+  extendLifetime?(ms: number): Promise<void>;
 }

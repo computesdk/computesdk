@@ -18,7 +18,7 @@ import {
   type FirewallSpec,
   type SnapshotData,
 } from 'freestyle';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 import type {
   CommandResult,
   InstanceInfo,
@@ -47,7 +47,11 @@ export interface FreestyleConfig {
   idleTimeoutSeconds?: number;
   /** Default wall-clock limit for a single command, in milliseconds (default 300000). */
   timeout?: number;
-  /** Keep the VM (and its disk) after it stops instead of deleting it (default: ephemeral). */
+  /**
+   * Keep the VM (and its disk) after it stops instead of deleting it. By default
+   * a stopped or paused VM is kept for five minutes, so it can be resumed, then
+   * deleted; the shared `ephemeral: true` create option deletes it on stop.
+   */
   persistent?: boolean;
   /**
    * Outbound network policy. A Freestyle VM reaches nothing unless a rule says
@@ -59,20 +63,31 @@ export interface FreestyleConfig {
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 /**
- * The Freestyle exec API rejects `timeoutMs` above five minutes
- * (documented range 1–300000). Callers that carry a longer deadline — a job
- * timeout, say — must get the cap, not a refused call, so every timeout the
- * adapter sends is clamped here.
+ * Freestyle accepts exec timeouts up to 24h on VMs with the current guest
+ * agent; VMs booted from snapshots baked with an older agent refuse anything
+ * over five minutes. Callers with a longer deadline get the cap, and a legacy
+ * VM gets a retry at its own cap, never a refused call.
  */
-const MAX_EXEC_TIMEOUT_MS = 300_000;
+const MAX_EXEC_TIMEOUT_MS = 86_400_000;
+const LEGACY_EXEC_TIMEOUT_MS = 300_000;
 const DEFAULT_IDLE_TIMEOUT_SECS = 300;
 /** Ephemeral VMs are deleted when they stop; `-1` keeps them. */
 const AUTO_DELETE_EPHEMERAL = 0;
 const AUTO_DELETE_NEVER = -1;
+/**
+ * Default window a stopped or paused VM is kept before deletion. Freestyle
+ * refuses to pause an ephemeral (`0`) VM, so a non-zero window is what makes
+ * `pause()`/`start()` work on default sandboxes.
+ */
+const AUTO_DELETE_AFTER_STOP_SECS = 300;
 /** Marks the VMs this provider creates, so `list` returns sandboxes rather than every VM on the account. */
 const SANDBOX_METADATA_MARKER = 'computesdk';
 /** Slug of the auto-baked runtime snapshot, so it is found and reused across processes. */
-const RUNTIME_SNAPSHOT_SLUG = 'computesdk-freestyle-runtime';
+// Versioned so a re-bake picks up the current guest agent (long-running execs).
+const RUNTIME_SNAPSHOT_SLUG = 'computesdk-freestyle-runtime-v2';
+/** What the runtime snapshot boots with; `resize` can only grow from here. */
+const RUNTIME_VCPUS = 4;
+const RUNTIME_MEMORY_MIB = 8192;
 const RUNTIME_NODE_VERSION = 'v22.19.0';
 /** Snapshot list page size; the API pages, so a single call is never the whole account. */
 const SNAPSHOT_PAGE_SIZE = 200;
@@ -199,6 +214,54 @@ async function bakeRuntimeSnapshot(client: Freestyle): Promise<string> {
   }
 }
 
+/** The guest agent on VMs from older snapshots only runs execs up to five minutes. */
+function isLegacyGuestAgent(error: unknown): boolean {
+  return error instanceof FreestyleApiError && /guest agent/i.test(error.message);
+}
+
+/**
+ * Apply a requested vCPU count / memory (MiB) to a freshly booted VM. Freestyle
+ * sizes come from the snapshot and `resize` is grow-only, so only axes above
+ * what the VM booted with are sent; smaller requests keep the snapshot's size.
+ */
+async function growResources(vm: Vm, cpu?: number, memory?: number): Promise<void> {
+  if (cpu === undefined && memory === undefined) return;
+  const { resources } = await vm.data();
+  const patch: { cpu?: number; memory?: number } = {};
+  if (cpu !== undefined && cpu > resources.cpu) patch.cpu = cpu;
+  if (memory !== undefined && memory > resources.memory) patch.memory = memory;
+  if (patch.cpu === undefined && patch.memory === undefined) return;
+  const { resources: target } = await vm.resize(patch);
+  await waitForGuestResources(vm, target.cpu, target.memory);
+}
+
+/**
+ * `resize` returns once the hypervisor has the new size, but the guest
+ * hot-plugs vCPUs and memory a moment later. Wait until the guest sees them
+ * (MemTotal sits a little under the allocation), so the first command runs
+ * on the size that was asked for.
+ */
+const RESIZE_SETTLE_TIMEOUT_MS = 60_000;
+const RESIZE_POLL_INTERVAL_MS = 500;
+async function waitForGuestResources(vm: Vm, cpu: number, memoryMiB: number): Promise<void> {
+  const deadline = Date.now() + RESIZE_SETTLE_TIMEOUT_MS;
+  for (;;) {
+    const result = await vm.exec({
+      command: "nproc; awk '/MemTotal/ {print $2}' /proc/meminfo",
+      linuxUser: RUNTIME_USER,
+      timeoutMs: 10_000,
+    });
+    const [cpus, memKiB] = (result.stdout ?? '').trim().split(/\s+/).map(Number);
+    if (cpus >= cpu && memKiB >= memoryMiB * 1024 * 0.95) return;
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Freestyle VM did not reach ${cpu} vCPU / ${memoryMiB} MiB after resize (guest sees ${cpus} vCPU / ${Math.round(memKiB / 1024)} MiB)`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, RESIZE_POLL_INTERVAL_MS));
+  }
+}
+
 function isNotFound(error: unknown): boolean {
   return (
     error instanceof FreestyleApiError &&
@@ -270,6 +333,21 @@ function toSnapshot(data: SnapshotData): FreestyleSnapshot {
  */
 export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleSnapshot>({
   name: 'freestyle',
+  sizes: (config, profile, options) => {
+    if (options?.cpu !== undefined || options?.memory !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Freestyle cpu/memory fields');
+    }
+    if (options?.sandboxId || options?.snapshotId || options?.templateId || config.snapshotId) {
+      return { status: 'unsupported', reason: 'The snapshot sets the base size of a Freestyle VM; standard sizes apply to the default runtime snapshot only.' };
+    }
+    if (profile.vcpus < RUNTIME_VCPUS || profile.memoryMiB < RUNTIME_MEMORY_MIB) {
+      return { status: 'unavailable', reason: `Freestyle resize is grow-only; the runtime snapshot boots at ${RUNTIME_VCPUS} vCPU / ${RUNTIME_MEMORY_MIB} MiB.` };
+    }
+    if (profile.sizeClass === '2xl') {
+      return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
+    }
+    return { status: 'supported', nativeOptions: { cpu: profile.vcpus, memory: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       // ── Collection operations (compute.sandbox.*) ──────────────────────
@@ -290,8 +368,12 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         const snapshotId = requested ?? RUNTIME_SNAPSHOT_SLUG;
         // Shared `ephemeral` create option overrides config.persistent for this
         // sandbox: true -> deleted on stop, false -> kept.
-        const persistent =
-          options?.ephemeral !== undefined ? !options.ephemeral : config.persistent;
+        const autoDeleteSeconds =
+          options?.ephemeral === true
+            ? AUTO_DELETE_EPHEMERAL
+            : options?.ephemeral === false || config.persistent
+              ? AUTO_DELETE_NEVER
+              : AUTO_DELETE_AFTER_STOP_SECS;
         try {
           return await boot(snapshotId);
         } catch (error) {
@@ -316,7 +398,7 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         async function boot(snapshot: string) {
           const { vm, vmId } = await client.vms.create({
             snapshotId: snapshot,
-            autoDeleteSeconds: persistent ? AUTO_DELETE_NEVER : AUTO_DELETE_EPHEMERAL,
+            autoDeleteSeconds,
             automaticRestart: false,
             idleTimeoutSeconds: config.idleTimeoutSeconds ?? DEFAULT_IDLE_TIMEOUT_SECS,
             // Marker last, so a caller's own metadata can never overwrite it and
@@ -324,6 +406,12 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
             metadata: { ...(options?.metadata ?? {}), purpose: SANDBOX_METADATA_MARKER },
             firewall: config.firewall ?? ALLOW_ALL_OUTBOUND,
           });
+          try {
+            await growResources(vm, options?.cpu, options?.memory);
+          } catch (error) {
+            await client.vms.delete(vmId).catch(() => {});
+            throw error;
+          }
           return { instance: vm, instanceId: vmId };
         }
       },
@@ -369,7 +457,7 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
       ): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
-          const result = await sandbox.exec({
+          const request = {
             // Freestyle runs this through the guest's shell and applies env natively.
             command: buildCommand(command, options),
             linuxUser: RUNTIME_USER,
@@ -378,6 +466,10 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
               options?.timeout ?? DEFAULT_TIMEOUT_MS,
               MAX_EXEC_TIMEOUT_MS,
             ),
+          };
+          const result = await sandbox.exec(request).catch((error: unknown) => {
+            if (request.timeoutMs <= LEGACY_EXEC_TIMEOUT_MS || !isLegacyGuestAgent(error)) throw error;
+            return sandbox.exec({ ...request, timeoutMs: LEGACY_EXEC_TIMEOUT_MS });
           });
           return {
             stdout: result.stdout ?? '',
@@ -441,6 +533,18 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         },
       },
 
+      // Freestyle's native pause freezes the VM with its memory, and `start`
+      // resumes it exactly. Default sandboxes are kept for a few minutes after
+      // a pause; only `ephemeral: true` ones (deleted on stop) can't pause.
+      pause: async (sandbox: Vm): Promise<void> => {
+        await sandbox.pause();
+      },
+      resume: async (sandbox: Vm): Promise<void> => {
+        await sandbox.start();
+      },
+      // Live-checked: files in /tmp and /root and running processes survive.
+      pauseCapabilities: { memory: true },
+
       getInstance: (sandbox: Vm): Vm => sandbox,
     },
 
@@ -475,6 +579,11 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
         const client = clientFor(resolveConfig(config));
         await client.vms.snapshots.delete(snapshotId);
       },
+
+      // A Freestyle snapshot captures the whole VM, memory and disk, and
+      // leaves the source running. Live-checked: the whole ext4 rootfs (/tmp,
+      // /root) and running processes survive a restore.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
     },
   },
 });

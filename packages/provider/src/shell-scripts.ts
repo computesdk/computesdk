@@ -104,9 +104,11 @@ export function supervisorFile(): string {
     'cd / || exit 1',
     '. "$D/conf"',
     NAP,
-    // Two pumps append to one log, so each record is written under a mkdir lock.
-    'lock() { until mkdir "$D/lock" 2>/dev/null; do :; done; }',
-    'unlock() { rmdir "$D/lock" 2>/dev/null; }',
+    // Two pumps append to one log, so each record is written under a lock.
+    // noclobber's O_EXCL create is in the shell itself; uutils mkdir (Ubuntu
+    // 26.04) is not atomic, so racing mkdirs can both succeed.
+    'lock() { until (set -C; true > "$D/lock") 2>/dev/null; do :; done; }',
+    'unlock() { rm -f "$D/lock"; }',
     // One dd read per record: whatever the pipe holds, up to 4 KB.
     'pump() {',
     '  while :; do',
@@ -159,7 +161,7 @@ export function supervisorFile(): string {
     '[ -f "$D/holder" ] && kill "$(cat "$D/holder")" 2>/dev/null',
     '[ -n "$wd" ] && { kill -s KILL -- "-$wd" 2>/dev/null || kill -s KILL "$wd" 2>/dev/null; }',
     'printf \'%s\' "$code" > "$D/exit.tmp" && mv "$D/exit.tmp" "$D/exit"',
-    'rm -f "$D/o" "$D/e" "$D/in" "$D/O.chunk" "$D/E.chunk"; rmdir "$D/lock" 2>/dev/null',
+    'rm -f "$D/o" "$D/e" "$D/in" "$D/O.chunk" "$D/E.chunk" "$D/lock"',
     'R=$RETENTION; [ -f "$D/signal" ] && R=$KILLED_RETENTION',
     'sleep "$R"; rm -rf "$D"',
   ].join('\n') + '\n';

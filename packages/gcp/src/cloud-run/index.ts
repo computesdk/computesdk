@@ -75,7 +75,19 @@ export interface CloudRunSandbox {
   createdAt: Date
   config: CloudRunConfig
   remote: boolean
+  /** Session-affinity cookie of the gateway instance that holds this stateful sandbox. */
+  affinity?: string
 }
+
+export interface CloudRunSnapshot {
+  id: string
+  provider: typeof PROVIDER
+  createdAt: Date
+  metadata: { uri?: string; store?: 'gcs' | 'local'; size?: number; sourceSandboxId?: string }
+}
+
+/** Sandbox-run session state a gateway request is made for. */
+type GatewaySession = { affinity?: string }
 
 const activeSandboxes = new Map<string, CloudRunSandbox>()
 
@@ -97,7 +109,22 @@ function getExecutionMode(config: CloudRunConfig): CloudRunExecutionMode {
   return config.executionMode ?? 'ephemeral'
 }
 
-async function gatewayRequest(config: CloudRunConfig, path: string, body: Record<string, unknown> = {}): Promise<any> {
+function gatewayAuthHeaders(config: CloudRunConfig): Record<string, string> {
+  const token = config.gatewayAuthToken ?? process.env.CLOUD_RUN_AUTH_TOKEN
+  return token ? { 'Authorization': `Bearer ${token}` } : {}
+}
+
+// Stateful sandboxes live on one gateway instance; Cloud Run's session
+// affinity cookie routes follow-up requests back to it.
+function captureAffinity(response: Response, session?: GatewaySession): void {
+  if (!session) return
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] }
+  const cookies = headers.getSetCookie?.() ?? (headers.get('set-cookie') ? [headers.get('set-cookie')!] : [])
+  const pairs = cookies.map(cookie => cookie.split(';')[0].trim()).filter(Boolean)
+  if (pairs.length > 0) session.affinity = pairs.join('; ')
+}
+
+async function gatewayFetch(config: CloudRunConfig, path: string, body: Record<string, unknown>, session?: GatewaySession, signal?: AbortSignal): Promise<Response> {
   if (!config.sandboxUrl || !config.sandboxSecret) {
     throw new Error('Missing Cloud Run remote config. Set CLOUD_RUN_SANDBOX_URL and CLOUD_RUN_SANDBOX_SECRET.')
   }
@@ -107,12 +134,18 @@ async function gatewayRequest(config: CloudRunConfig, path: string, body: Record
     headers: {
       'Content-Type': 'application/json',
       'X-ComputeSDK-Cloud-Run-Secret': config.sandboxSecret,
-      ...(config.gatewayAuthToken ?? process.env.CLOUD_RUN_AUTH_TOKEN
-        ? { 'Authorization': `Bearer ${config.gatewayAuthToken ?? process.env.CLOUD_RUN_AUTH_TOKEN}` }
-        : {}),
+      ...gatewayAuthHeaders(config),
+      ...(session?.affinity ? { 'Cookie': session.affinity } : {}),
     },
     body: JSON.stringify(body),
+    signal,
   })
+  captureAffinity(response, session)
+  return response
+}
+
+async function gatewayRequest(config: CloudRunConfig, path: string, body: Record<string, unknown> = {}, session?: GatewaySession): Promise<any> {
+  const response = await gatewayFetch(config, path, body, session)
 
   let data: any
   try {
@@ -124,6 +157,42 @@ async function gatewayRequest(config: CloudRunConfig, path: string, body: Record
 
   if (!response.ok) throw new Error(data.error || `Cloud Run gateway request failed: ${response.status}`)
   return data
+}
+
+export type CloudRunGatewayFeature = 'stateful' | 'exec-stream' | 'snapshot' | 'fork'
+
+const gatewayFeatureCache = new Map<string, Promise<string[]>>()
+
+/** Features advertised by the gateway's `/v1/health`; gateways that predate feature flags report none. */
+function gatewayFeatures(config: CloudRunConfig): Promise<string[]> {
+  const baseUrl = config.sandboxUrl!.replace(/\/$/, '')
+  let features = gatewayFeatureCache.get(baseUrl)
+  if (!features) {
+    features = fetch(`${baseUrl}/v1/health`, { headers: gatewayAuthHeaders(config) })
+      .then(async response => {
+        const data = await response.json() as { features?: unknown }
+        return Array.isArray(data.features) ? data.features.map(String) : []
+      })
+    features.catch(() => gatewayFeatureCache.delete(baseUrl))
+    gatewayFeatureCache.set(baseUrl, features)
+  }
+  return features
+}
+
+async function requireGatewayFeature(config: CloudRunConfig, feature: CloudRunGatewayFeature, what: string): Promise<void> {
+  if (!isRemote(config)) throw new Error(`Cloud Run ${what} requires the remote gateway (set CLOUD_RUN_SANDBOX_URL and CLOUD_RUN_SANDBOX_SECRET).`)
+  if (!(await gatewayFeatures(config)).includes(feature)) {
+    throw new Error(`The Cloud Run gateway at ${config.sandboxUrl} does not support ${what}; redeploy it with the current @computesdk/gcp gateway (npx computesdk-cloud-run).`)
+  }
+}
+
+function toSnapshot(data: any): CloudRunSnapshot {
+  return {
+    id: data.snapshotId,
+    provider: PROVIDER,
+    createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+    metadata: { uri: data.uri, store: data.store, size: data.size, sourceSandboxId: data.sourceSandboxId },
+  }
 }
 
 async function assertSandboxBinary(config: CloudRunConfig): Promise<void> {
@@ -262,7 +331,7 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
         cwd: options?.cwd ?? sandbox.config.workdir,
         env: { ...sandbox.config.env, ...options?.env },
         timeout: options?.timeout,
-      }))
+      }), sandbox)
       return {
         stdout: result.stdout || '',
         stderr: result.stderr || '',
@@ -292,21 +361,83 @@ async function execInSandbox(sandbox: CloudRunSandbox, command: string, options?
   return { ...result, durationMs: Math.round(performance.now() - start) }
 }
 
+async function streamInSandbox(sandbox: CloudRunSandbox, command: string, options: RunCommandOptions): Promise<CommandResult> {
+  if (!sandbox.remote) return execInSandbox(sandbox, command, options)
+  const start = performance.now()
+  const { onStdout, onStderr, ...rest } = options
+  let features: string[] = []
+  try { features = await gatewayFeatures(sandbox.config) } catch { /* treated as a gateway without streaming */ }
+  if (!features.includes('exec-stream')) {
+    // Older gateways only answer at exit; deliver the output then.
+    const result = await execInSandbox(sandbox, command, rest)
+    if (result.stdout) onStdout?.(result.stdout)
+    if (result.stderr) onStderr?.(result.stderr)
+    return result
+  }
+
+  let stdout = ''
+  let stderr = ''
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), (options.timeout ?? DEFAULT_TIMEOUT_MS) + 30_000)
+  try {
+    const response = await gatewayFetch(sandbox.config, '/v1/sandbox/exec/stream', sandboxRequestBody(sandbox.config, {
+      sandboxId: sandbox.id,
+      command: withShellOptions(command, rest),
+      cwd: options.cwd ?? sandbox.config.workdir,
+      env: { ...sandbox.config.env, ...options.env },
+      timeout: options.timeout,
+    }), sandbox, controller.signal)
+    if (!response.ok || !response.body) {
+      const data = await response.json().catch(() => ({})) as { error?: string }
+      throw new Error(data.error || `Cloud Run gateway request failed: ${response.status}`)
+    }
+    const decoder = new TextDecoder()
+    let buffered = ''
+    let exitCode: number | undefined
+    const handleLine = (line: string) => {
+      if (!line.trim()) return
+      const event = JSON.parse(line) as { type: string; data?: string; exitCode?: number; error?: string }
+      if (event.type === 'stdout' && event.data) { stdout += event.data; onStdout?.(event.data) }
+      else if (event.type === 'stderr' && event.data) { stderr += event.data; onStderr?.(event.data) }
+      else if (event.type === 'exit') exitCode = event.exitCode ?? 1
+      else if (event.type === 'error') throw new Error(event.error || 'Cloud Run gateway stream failed')
+    }
+    for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+      buffered += decoder.decode(chunk, { stream: true })
+      const lines = buffered.split('\n')
+      buffered = lines.pop() ?? ''
+      for (const line of lines) handleLine(line)
+    }
+    handleLine(buffered + decoder.decode())
+    if (exitCode === undefined) throw new Error('Cloud Run gateway stream ended without an exit status')
+    return { stdout, stderr, exitCode, durationMs: Math.round(performance.now() - start) }
+  } catch (error) {
+    const message = controller.signal.aborted ? `Command timed out after ${options.timeout ?? DEFAULT_TIMEOUT_MS}ms` : error instanceof Error ? error.message : String(error)
+    return { stdout, stderr: stderr || message, exitCode: controller.signal.aborted ? 124 : 127, durationMs: Math.round(performance.now() - start) }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 type FsRunCommand = (sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
 
-export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
+export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, CloudRunSnapshot>({
   name: PROVIDER,
   methods: {
     instances: {
       create: async (config: CloudRunConfig = {}, options?: CreateInstanceOptions) => {
-        const sandboxConfig = {
+        const snapshotId = options?.snapshotId
+        if (snapshotId) await requireGatewayFeature(config, 'snapshot', 'snapshots')
+        const sandboxConfig: CloudRunConfig = {
           ...config,
           env: { ...config.env, ...options?.envs },
           workdir: options?.directory ?? config.workdir,
           // Shared `ephemeral` create option overrides the configured
           // executionMode for this sandbox: true -> ephemeral, false -> stateful.
-          executionMode:
-            options?.ephemeral !== undefined
+          // A snapshot restores into a stateful sandbox.
+          executionMode: snapshotId
+            ? 'stateful'
+            : options?.ephemeral !== undefined
               ? options.ephemeral
                 ? 'ephemeral'
                 : 'stateful'
@@ -315,13 +446,15 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         if (isRemote(config)) {
           const sandboxId = options?.name ?? `cloud-run-${randomUUID()}`
           if (getExecutionMode(sandboxConfig) === 'stateful') {
+            const session: GatewaySession = {}
             const response = await gatewayRequest(config, '/v1/sandbox/create', sandboxRequestBody(sandboxConfig, {
               sandboxId,
               env: sandboxConfig.env,
               workdir: sandboxConfig.workdir,
               timeout: options?.timeout,
-            }))
-            const sandbox = { id: response.sandboxId ?? sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true }
+              ...(snapshotId ? { snapshotId } : {}),
+            }), session)
+            const sandbox = { id: response.sandboxId ?? sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true, affinity: session.affinity }
             activeSandboxes.set(sandbox.id, sandbox)
             return { instance: sandbox, instanceId: sandbox.id }
           }
@@ -349,8 +482,9 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
       getById: async (config: CloudRunConfig, sandboxId: string) => {
         if (isRemote(config)) {
           try {
-            await gatewayRequest(config, '/v1/sandbox/info', { sandboxId })
-            const sandbox = activeSandboxes.get(sandboxId) ?? { id: sandboxId, createdAt: new Date(), config, remote: true }
+            const known = activeSandboxes.get(sandboxId)
+            await gatewayRequest(config, '/v1/sandbox/info', { sandboxId }, known)
+            const sandbox = known ?? { id: sandboxId, createdAt: new Date(), config, remote: true }
             return { instance: sandbox, instanceId: sandboxId }
           } catch { return null }
         }
@@ -364,10 +498,11 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         // Destroy receives only an id, so resolve the mode the sandbox was
         // actually created with — a per-sandbox `ephemeral` override beats the
         // provider's configured executionMode.
-        const effectiveConfig = activeSandboxes.get(sandboxId)?.config ?? config
+        const known = activeSandboxes.get(sandboxId)
+        const effectiveConfig = known?.config ?? config
         if (isRemote(config)) {
           try {
-            if (getExecutionMode(effectiveConfig) === 'stateful') await gatewayRequest(config, '/v1/sandbox/destroy', { sandboxId })
+            if (getExecutionMode(effectiveConfig) === 'stateful') await gatewayRequest(config, '/v1/sandbox/destroy', { sandboxId }, known)
           } finally {
             activeSandboxes.delete(sandboxId)
           }
@@ -383,6 +518,8 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
       },
 
       runCommand: execInSandbox,
+
+      streamCommand: streamInSandbox,
 
       getInfo: async (sandbox: CloudRunSandbox): Promise<InstanceInfo> => ({
         id: sandbox.id,
@@ -407,7 +544,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
 
       filesystem: {
         readFile: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<string> => {
-          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/readFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
+          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/readFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }), sandbox)
           const escapedPath = escapeShellArg(path)
           const r = await runCommand(sandbox, `if [ -f "${escapedPath}" ]; then base64 "${escapedPath}" | tr -d '\\n'; else exit 1; fi`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `File not found: ${path}`)
@@ -415,7 +552,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         },
         writeFile: async (sandbox: CloudRunSandbox, path: string, content: string, runCommand: FsRunCommand): Promise<void> => {
           if (sandbox.remote) {
-            await gatewayRequest(sandbox.config, '/v1/sandbox/writeFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path, content }))
+            await gatewayRequest(sandbox.config, '/v1/sandbox/writeFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path, content }), sandbox)
             return
           }
           const escapedPath = escapeShellArg(path)
@@ -425,14 +562,14 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
         },
         mkdir: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<void> => {
           if (sandbox.remote) {
-            await gatewayRequest(sandbox.config, '/v1/sandbox/mkdir', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
+            await gatewayRequest(sandbox.config, '/v1/sandbox/mkdir', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }), sandbox)
             return
           }
           const r = await runCommand(sandbox, `mkdir -p "${escapeShellArg(path)}"`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `Failed to create directory: ${path}`)
         },
         readdir: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<FileEntry[]> => {
-          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/readdir', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
+          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/readdir', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }), sandbox)
           const r = await runCommand(sandbox, `ls -la "${escapeShellArg(path)}"`)
           if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot read directory: ${path}`)
           const entries: FileEntry[] = []
@@ -447,13 +584,13 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
           return entries
         },
         exists: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<boolean> => {
-          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/exists', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
+          if (sandbox.remote) return gatewayRequest(sandbox.config, '/v1/sandbox/exists', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }), sandbox)
           const r = await runCommand(sandbox, `test -e "${escapeShellArg(path)}"`)
           return r.exitCode === 0
         },
         remove: async (sandbox: CloudRunSandbox, path: string, runCommand: FsRunCommand): Promise<void> => {
           if (sandbox.remote) {
-            await gatewayRequest(sandbox.config, '/v1/sandbox/remove', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }))
+            await gatewayRequest(sandbox.config, '/v1/sandbox/remove', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path }), sandbox)
             return
           }
           const r = await runCommand(sandbox, `rm -rf "${escapeShellArg(path)}"`)
@@ -462,6 +599,34 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig>({
       },
 
       getInstance: (sandbox: CloudRunSandbox) => sandbox,
+    },
+
+    snapshot: {
+      // No `capabilities` until a deployed gateway proves snapshots live: they
+      // would make benches and the derived conformance flag try snapshots on
+      // older gateways that have no snapshot routes. Expected once proven:
+      // { scope: 'rootfs', memory: false, destroysSource: false, source: 'kept',
+      //   excludes: ['/tmp'], fork: true, createOptions: { ephemeral: false } }
+      // (`sandbox tar`/`fork` export the writable rootfs overlay; /tmp and
+      // --mount paths are excluded and fork restarts the startup command).
+      create: async (config: CloudRunConfig, sandboxId: string, options?: { name?: string }) => {
+        await requireGatewayFeature(config, 'snapshot', 'snapshots')
+        const sandbox = activeSandboxes.get(sandboxId)
+        if (sandbox && getExecutionMode(sandbox.config) !== 'stateful') {
+          throw new Error('Cloud Run snapshots need a stateful sandbox; create it with executionMode: \'stateful\' or ephemeral: false.')
+        }
+        const data = await gatewayRequest(config, '/v1/sandbox/snapshot', { sandboxId, ...(options?.name ? { snapshotId: options.name } : {}) }, sandbox)
+        return toSnapshot(data)
+      },
+      list: async (config: CloudRunConfig) => {
+        await requireGatewayFeature(config, 'snapshot', 'snapshots')
+        const items = await gatewayRequest(config, '/v1/snapshot/list', {})
+        return (items as any[]).map(toSnapshot)
+      },
+      delete: async (config: CloudRunConfig, snapshotId: string) => {
+        await requireGatewayFeature(config, 'snapshot', 'snapshots')
+        await gatewayRequest(config, '/v1/snapshot/delete', { snapshotId })
+      },
     },
   },
 })
