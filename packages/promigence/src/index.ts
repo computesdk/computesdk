@@ -609,6 +609,28 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
 
       getInstance: (inst: PromigenceInstance): PromigenceInstance => inst,
 
+      /**
+       * Pauses the sandbox: it bills nothing and holds no capacity until `resume()`. Files and
+       * memory are kept; background execs (`background: true`) end at the pause.
+       */
+      pause: async (inst: PromigenceInstance): Promise<void> => {
+        try {
+          await inst.sandbox.pause();
+        } catch (e) {
+          rethrow(e, 'sandbox pause');
+        }
+      },
+
+      resume: async (inst: PromigenceInstance): Promise<void> => {
+        try {
+          await inst.sandbox.resume();
+        } catch (e) {
+          rethrow(e, 'sandbox resume');
+        }
+      },
+
+      pauseCapabilities: { memory: true },
+
       filesystem: {
         readFile: (inst: PromigenceInstance, path: string): Promise<string> =>
           viaFilesApi(inst, () => inst.sandbox.files.read(path), () => shellFs.readFile(inst, path), `read of ${path}`),
@@ -637,6 +659,9 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
     },
 
     snapshot: {
+      // The whole sandbox, memory included: a restored sandbox has the files and running processes
+      // the source had. Only background execs are ended to take it.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
       /**
        * A snapshot of the sandbox as it is now; the sandbox keeps running. Background execs are
        * ended to take it (`metadata.backgroundExecsKilled`). Restore with `create({ snapshotId })`.

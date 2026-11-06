@@ -301,6 +301,19 @@ export class FakeClient {
       s.state = 'ended';
       return { ok: true };
     },
+    pause: async (sandboxId: string) => {
+      this.record('sandboxes.pause', sandboxId);
+      const s = this.need(sandboxId);
+      const alreadyPaused = s.state === 'paused';
+      s.state = 'paused';
+      return { ok: true, sandbox_id: sandboxId, state: 'paused', paused_id: `pause_${sandboxId}`, took_ms: 5, ...(alreadyPaused ? { already_paused: true } : {}) };
+    },
+    resume: async (sandboxId: string, opts?: Record<string, unknown>) => {
+      this.record('sandboxes.resume', sandboxId, opts);
+      const s = this.need(sandboxId);
+      s.state = 'ready';
+      return { ok: true, sandbox_id: sandboxId, state: 'ready', paused_id: `pause_${sandboxId}`, took_ms: 3 };
+    },
     snapshot: async (sandboxId: string, opts?: Record<string, unknown>) => {
       this.record('sandboxes.snapshot', sandboxId, opts);
       this.need(sandboxId);

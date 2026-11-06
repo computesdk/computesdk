@@ -483,6 +483,31 @@ describe('promigence provider (unit, fake client)', () => {
     expect(typeof inst.sandbox.fork).toBe('function');
   });
 
+  it('pause / resume: the sandbox is paused and resumed natively; memory is declared kept', async () => {
+    const { client, provider, c } = setup();
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    const sandbox = await c.instances.create();
+    await sandbox.pause!();
+    expect(client.last('sandboxes.pause')[0]).toBe(sandbox.instanceId);
+    expect((await sandbox.getInfo()).metadata?.state).toBe('paused');
+    await sandbox.resume!();
+    expect(client.last('sandboxes.resume')[0]).toBe(sandbox.instanceId);
+    expect((await sandbox.getInfo()).metadata?.state).toBe('ready');
+  });
+
+  it('pause / resume: a Promigence error names the operation', async () => {
+    const { provider } = setup();
+    const sandbox = await provider.instances.create();
+    await provider.instances.destroy(sandbox.instanceId);
+    await expect(sandbox.pause!()).rejects.toThrow(/sandbox pause failed/);
+    await expect(sandbox.resume!()).rejects.toThrow(/sandbox resume failed/);
+  });
+
+  it('snapshots: capabilities declare a whole-sandbox snapshot that leaves the source running', () => {
+    const { provider } = setup();
+    expect(provider.snapshot?.capabilities).toEqual({ scope: 'rootfs', memory: true, destroysSource: false });
+  });
+
   it('snapshots: create takes a live snapshot that restores into a new sandbox; list and delete map', async () => {
     const { client, provider, c } = setup({
       snapshots: [{ snapshot_id: 'snap_1', alias: 'myapp', commit: '0123abc4567', tier: 'medium', verified: true, created_at: '2030-02-03T00:00:00Z' }],

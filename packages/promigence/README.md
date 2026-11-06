@@ -139,7 +139,8 @@ While `fallbackOnError` is on (the default), `compute.instances.create()` combin
 ## Limitations
 
 - There are no preview URLs yet, so `getUrl()` throws. To reach a server in the sandbox, call it from a command in the same sandbox, for example with `curl`.
-- `snapshot.create(sandboxId)` takes a snapshot of a running sandbox, which keeps running; start new sandboxes from it with `create({ snapshotId })`. Files, including `/tmp`, are kept; background processes are not (they are ended to take it).
+- `snapshot.create(sandboxId)` takes a snapshot of a running sandbox, which keeps running; start new sandboxes from it with `create({ snapshotId })`. The whole sandbox is kept, memory included: files anywhere (`/tmp` and `/dev/shm` too) and the processes it was running. Only commands started with `runCommand(cmd, { background: true })` are ended to take it.
+- `sandbox.pause()` stops billing and frees capacity until `sandbox.resume()`, which brings the sandbox back as it was: files, memory and running processes. Commands started with `{ background: true }` end at the pause.
 - Templates are snapshots here. The `template` methods throw, and `templateId` on `create()` names a snapshot.
 - `runCommand(cmd, { background: true })` answers at once with exit code 0 and does not collect the command's output.
 - CPU and memory fields on `create()` are ignored. A sandbox has its snapshot's size, and `tier` picks one for a sandbox created from `image`.
