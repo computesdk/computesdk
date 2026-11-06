@@ -370,6 +370,17 @@ export const tenki = defineProvider<Session, TenkiConfig>({
 
       getInstance: (sandbox) => sandbox,
 
+      // Pause keeps memory: processes, /tmp and the rest of the guest survive.
+      pause: async (sandbox) => {
+        await sandbox.pause();
+        if (sandbox.state !== "PAUSED") await sandbox.waitPaused();
+      },
+      resume: async (sandbox) => {
+        await sandbox.resume();
+        if (sandbox.state !== "RUNNING") await sandbox.waitResumed();
+      },
+      pauseCapabilities: { memory: true },
+
       attachVolume: async (sandbox, volume, mountPath) => {
         const ref = resolveVolumeRef(volume);
         await (sandbox as Session).attachVolume(ref.id ?? ref.name!, mountPath);
@@ -428,6 +439,10 @@ export const tenki = defineProvider<Session, TenkiConfig>({
     },
 
     snapshot: {
+      // Memory snapshots: the restore resumes running processes and keeps the
+      // root filesystem, except /tmp, which Tenki empties on the source while
+      // capturing. The source keeps running.
+      capabilities: { scope: "rootfs", path: "/home/tenki", memory: true, destroysSource: false },
       create: async (config, sandboxId, options) => {
         const client = getClient(config);
         const snap = await client.createSnapshotAndWait(sandboxId, { name: options?.name });

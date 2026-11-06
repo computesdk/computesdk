@@ -96,6 +96,18 @@ class FakeSession {
   async close() {
     this.closed = true;
   }
+  async pause() {
+    this.state = 'PAUSING';
+  }
+  async waitPaused() {
+    this.state = 'PAUSED';
+  }
+  async resume() {
+    this.state = 'RESUMING';
+  }
+  async waitResumed() {
+    this.state = 'RUNNING';
+  }
 }
 
 let shouldNotFind = false;
@@ -178,6 +190,17 @@ describe('tenki provider (mocked SDK)', () => {
     expect((await provider.snapshot!.list({ limit: 1 })).map((s: any) => s.id)).toEqual(['snap_a']);
     await provider.snapshot!.delete('snap_1');
     expect(lastSnapshotCall).toEqual({ deleted: 'snap_1' });
+  });
+
+  it('pauses and resumes through the native session, waiting for each state', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    expect(provider.snapshot!.capabilities).toMatchObject({ scope: 'rootfs', memory: true, destroysSource: false });
+    const sandbox = await provider.sandbox.create();
+    await sandbox.pause!();
+    expect(sharedSession.state).toBe('PAUSED');
+    await sandbox.resume!();
+    expect(sharedSession.state).toBe('RUNNING');
   });
 
   it('restores from a snapshot via create({ snapshotId })', async () => {
