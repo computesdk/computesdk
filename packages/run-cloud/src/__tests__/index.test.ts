@@ -12,6 +12,8 @@ runProviderTestSuite({
   supportsGetUrl: true,
   supportsStreaming: true,
   supportsProcesses: true,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   // Tiers are only resolved on a live sandbox.
   expectProcessRuntime: hasCredentials
     ? { streaming: 'native', processes: 'shell' }

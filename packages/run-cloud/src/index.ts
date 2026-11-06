@@ -577,6 +577,18 @@ const _provider = defineProvider<
 
       getInstance: (handle): RunCloudSandbox => handle,
 
+      pause: async (handle): Promise<void> => {
+        handle.sandbox = await handle.client.sandboxes.pause(handle.sandbox.id);
+      },
+
+      resume: async (handle): Promise<RunCloudSandbox> => {
+        handle.sandbox = await handle.client.sandboxes.resume(handle.sandbox.id);
+        return handle;
+      },
+
+      // Pause halts the microVM with memory intact: /tmp and processes survive.
+      pauseCapabilities: { memory: true },
+
       filesystem: {
         readFile: async (handle, path): Promise<string> => {
           const bytes = await withResume(handle, () =>
@@ -659,6 +671,10 @@ const _provider = defineProvider<
     },
 
     snapshot: {
+      // Filesystem snapshots of the ext4 rootfs: the tmpfs /tmp and processes
+      // are not kept, and the source keeps running.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
+
       create: async (
         config,
         sandboxId,

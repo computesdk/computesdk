@@ -9,6 +9,7 @@ const listMock = vi.fn();
 const execMock = vi.fn();
 const readFileMock = vi.fn();
 const writeFileMock = vi.fn();
+const pauseMock = vi.fn();
 const resumeMock = vi.fn();
 const destroyMock = vi.fn();
 const setTimeoutMock = vi.fn();
@@ -39,6 +40,7 @@ vi.mock('@run-cloud/sdk', () => {
       exec: execMock,
       readFile: readFileMock,
       writeFile: writeFileMock,
+      pause: pauseMock,
       resume: resumeMock,
       destroy: destroyMock,
       setTimeout: setTimeoutMock,
@@ -113,6 +115,7 @@ describe('run-cloud provider', () => {
     });
     readFileMock.mockResolvedValue(new TextEncoder().encode('file-content'));
     writeFileMock.mockResolvedValue(undefined);
+    pauseMock.mockResolvedValue(nativeSandbox({ state: 'paused' }));
     resumeMock.mockResolvedValue(nativeSandbox());
     destroyMock.mockResolvedValue(undefined);
     setTimeoutMock.mockImplementation(async () =>
@@ -489,6 +492,25 @@ describe('run-cloud provider', () => {
     expect(resumeMock).toHaveBeenCalledTimes(2);
     expect(resumeMock).toHaveBeenCalledWith('sbx_123');
     expect(execMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('pauses and resumes through the native lifecycle API', async () => {
+    const provider = runCloud({ apiKey: 'rc_test' });
+    const sandbox = await provider.sandbox.create();
+
+    await sandbox.pause!();
+    expect(pauseMock).toHaveBeenCalledWith('sbx_123');
+    expect(sandbox.getInstance().sandbox.state).toBe('paused');
+
+    await sandbox.resume!();
+    expect(resumeMock).toHaveBeenCalledWith('sbx_123');
+    expect(sandbox.getInstance().sandbox.state).toBe('running');
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    expect(provider.snapshot?.capabilities).toEqual({
+      scope: 'rootfs',
+      memory: false,
+      destroysSource: false,
+    });
   });
 
   it('does not resume on unrelated errors', async () => {
