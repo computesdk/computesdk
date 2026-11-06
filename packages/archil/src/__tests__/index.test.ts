@@ -543,6 +543,41 @@ describe('archil persistent mode', () => {
     expect(posts.some((u) => u.includes('/api/sandboxes/sbx_123/resume'))).toBe(true);
   });
 
+  it('exposes native pause/resume on the instance with declared capabilities', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'POST' && url.endsWith('/pause')) return json(sandboxWire('paused'));
+      if (method === 'POST' && url.endsWith('/resume')) return json(sandboxWire('running'));
+      return json(sandboxWire('running'));
+    });
+    global.fetch = adaptFetchMock(fetchMock as typeof fetch);
+
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'persistent' });
+    expect(provider.sandbox.pause).toEqual({ memory: true, createOptions: { ephemeral: false } });
+    expect(provider.snapshot!.capabilities).toEqual({
+      scope: 'rootfs',
+      memory: true,
+      destroysSource: false,
+      createOptions: { ephemeral: false },
+    });
+    const sandbox = await provider.sandbox.getById('sbx_123');
+    await sandbox!.pause!();
+    await sandbox!.resume!();
+
+    const posts = (fetchMock.mock.calls as any[][])
+      .filter(([, init]) => (init as RequestInit)?.method === 'POST')
+      .map(([url]) => String(url));
+    expect(posts.some((u) => u.includes('/api/sandboxes/sbx_123/pause'))).toBe(true);
+    expect(posts.some((u) => u.includes('/api/sandboxes/sbx_123/resume'))).toBe(true);
+  });
+
+  it('refuses to pause a disk exec handle', async () => {
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'exec' });
+    const sandbox = await provider.sandbox.create({ diskId: 'disk_123' });
+    await expect(sandbox.pause!()).rejects.toThrow(/cannot pause/);
+  });
+
   it('exports env for compound exec-mode commands', async () => {
     let body = '';
     const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -1089,6 +1124,10 @@ runProviderTestSuite({
   supportsGetUrl: false,
   supportsStreaming: true,
   supportsProcesses: true,
+  // Pause/resume is proven in live.test.ts instead: the suite's memory check
+  // backgrounds `nohup sleep &` inside runCommand, and Archil reaps a
+  // command's process group when it exits, before any pause happens.
+  supportsSnapshots: true,
   expectProcessRuntime: { streaming: 'native', processes: 'native' },
   skipIntegration: !process.env.ARCHIL_API_KEY || !process.env.ARCHIL_REGION,
 });

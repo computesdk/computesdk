@@ -59,14 +59,29 @@ describe.skipIf(!hasCreds)('archil live: default persistent VM', () => {
       expect(compound.stdout).toBe('set\nset\n/root\n');
 
       expect(typeof handle.pause).toBe('function');
-      await handle.pause!();
+      expect(p.sandbox.pause).toEqual({ memory: true, createOptions: { ephemeral: false } });
+      // Memory survives: a native background process and a setsid-detached
+      // one (children backgrounded inside runCommand die with the command).
+      await sandbox.runCommand('echo t > /tmp/marker.txt');
+      await sandbox.startProcess('sleep 901');
+      // setsid runs in the foreground so the new session exists before the
+      // command (and its process group) exits.
+      await sandbox.runCommand("setsid sh -c 'sleep 902 >/dev/null 2>&1 < /dev/null &'");
+      // Both start asynchronously; give them a moment to exec before counting.
+      const sleepers =
+        'for i in $(seq 50); do n=$(ps -eo args | grep -E "^sleep 90[12]$" | sort | paste -sd,); [ "$n" = "sleep 901,sleep 902" ] && break; sleep 0.1; done; echo "$n"';
+      expect((await sandbox.runCommand(sleepers)).stdout.trim()).toBe('sleep 901,sleep 902');
+
+      await sandbox.pause!();
       await handle.vm!.refresh();
       expect(handle.vm!.status).toBe('paused');
-      await handle.resume!();
+      await sandbox.resume!();
 
       const after = await sandbox.runCommand('cat /root/marker.txt');
       expect(after.exitCode).toBe(0);
       expect(after.stdout.trim()).toBe(marker);
+      expect((await sandbox.runCommand('cat /tmp/marker.txt')).stdout.trim()).toBe('t');
+      expect((await sandbox.runCommand(sleepers)).stdout.trim()).toBe('sleep 901,sleep 902');
       expect(handle.vm!.id).toBe(sandbox.sandboxId);
 
       const snapshot = await p.snapshot!.create(sandbox.sandboxId, {
@@ -83,6 +98,10 @@ describe.skipIf(!hasCreds)('archil live: default persistent VM', () => {
       const restored = await p.sandbox.create({ snapshotId: snapshot.id });
       created.push(restored.sandboxId);
       expect(await restored.filesystem.readFile('/root/marker.txt')).toBe(marker);
+      expect(await restored.filesystem.readFile('/tmp/marker.txt')).toBe('t\n');
+      expect((await restored.runCommand(sleepers)).stdout.trim()).toBe('sleep 901,sleep 902');
+      // The source keeps running after a snapshot, processes included.
+      expect((await sandbox.runCommand(sleepers)).stdout.trim()).toBe('sleep 901,sleep 902');
       expect(await sandbox.filesystem.readFile('/root/marker.txt')).toBe('mutated');
     } finally {
       if (previousExecution !== undefined) process.env.ARCHIL_EXECUTION = previousExecution;

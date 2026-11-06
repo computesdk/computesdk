@@ -12,7 +12,8 @@ creates by default:
   Archil's native process API over a short-lived WebSocket (a fresh connection
   URL per process). Files move through Archil's native file transfer API.
 - Snapshots are paused forks of a VM; `create({ snapshotId })` restores one
-  into a new VM. `pause()`/`resume()` are on `sandbox.getInstance()`.
+  into a new VM. `sandbox.pause()`/`resume()` pause the VM natively (also on
+  `sandbox.getInstance()`).
 
 The older disk exec surface (a fresh container per command with an existing
 disk mounted at `/mnt/archil`) is still available as an explicit opt-in; see
@@ -61,10 +62,9 @@ await proc.write('hello\n');
 await proc.closeStdin();
 await proc.wait();
 
-// Pause/resume the same VM (memory and disk preserved).
-const vm = sandbox.getInstance();
-await vm.pause!();
-await vm.resume!();
+// Pause/resume the same VM (memory, processes and disk preserved).
+await sandbox.pause!();
+await sandbox.resume!();
 
 await provider.sandbox.destroy(sandbox.sandboxId);
 ```
@@ -91,6 +91,15 @@ state without running, and named `csdk-snap-<name>-<suffix>`. `snapshot.list()`
 returns VMs with that prefix and `sandbox.list()` leaves them out. Restoring
 forks the snapshot again into an independent VM. Snapshot ids are ordinary
 Archil sandbox ids, so any VM id can be passed as `snapshotId`.
+
+Declared capabilities, observed live: `provider.sandbox.pause` is
+`{ memory: true, createOptions: { ephemeral: false } }` and
+`provider.snapshot.capabilities` is `{ scope: 'rootfs', memory: true,
+destroysSource: false, createOptions: { ephemeral: false } }` — the whole disk
+(`/tmp`, `/root`, `/opt`, …) and running processes survive both, and the source
+keeps running after a snapshot. A process must outlive the command that started
+it to survive: use `startProcess` or `setsid`, since Archil reaps a command's
+process group (including `nohup … &` children) when the command exits.
 
 ## Exec mode (opt-in)
 
@@ -120,7 +129,7 @@ handles. `cwd`, `env` and installs do not persist between commands.
 | `startProcess`    | ✅ Native (stdin, kill, wait). | ❌ |
 | `filesystem`      | ✅ Native file transfer for read/write; `mkdir`/`readdir`/`exists`/`remove` run shell commands. | ✅ Maps paths into `/mnt/archil`. |
 | Snapshots         | ✅ create / list / delete / restore. | ❌ |
-| `pause`/`resume`  | ✅ On `getInstance()`. | ❌ |
+| `pause`/`resume`  | ✅ Native; memory and processes survive. | ❌ |
 | `getUrl`          | Only for ports already published as sandbox endpoints (not proven live). | ❌ |
 
 ## Limitations

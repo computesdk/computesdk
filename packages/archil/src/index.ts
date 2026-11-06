@@ -385,6 +385,15 @@ async function ensureVmRunning(vm: ArchilVm): Promise<void> {
   }
 }
 
+function requireVm(sandbox: ArchilSandbox, action: 'pause' | 'resume'): ArchilVm {
+  if (!sandbox.vm) {
+    throw new Error(
+      `Archil disk exec handles cannot ${action}; create a persistent VM (ephemeral: false) instead.`,
+    );
+  }
+  return sandbox.vm;
+}
+
 // Archil rejects deleting a live sandbox, so stop it first. A sandbox with
 // live forks returns 409: forks (snapshots) must be deleted before their parent.
 async function stopAndDeleteVm(vm: ArchilVm): Promise<void> {
@@ -1162,6 +1171,20 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
       },
 
+      // Native pause keeps CPU and memory: files anywhere (including /tmp)
+      // and running processes survive. Processes must outlive the command
+      // that started them (startProcess, or setsid): Archil reaps a command's
+      // process group when it exits. Disk exec handles have no VM to pause.
+      pause: async (sandbox: ArchilSandbox) => {
+        await requireVm(sandbox, 'pause').pause();
+      },
+
+      resume: async (sandbox: ArchilSandbox) => {
+        await requireVm(sandbox, 'resume').resume();
+      },
+
+      pauseCapabilities: { memory: true, createOptions: { ephemeral: false } },
+
       getInstance: (sandbox: ArchilSandbox): ArchilSandbox => sandbox,
     },
 
@@ -1170,6 +1193,15 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
     // and named with SNAPSHOT_NAME_PREFIX so it can be listed. create({
     // snapshotId }) forks it again. Forks must be deleted before their parent.
     snapshot: {
+      // A fork copies the VM's memory and whole disk, so restores keep the
+      // rootfs (including /tmp) and running processes; the source keeps running.
+      capabilities: {
+        scope: 'rootfs',
+        memory: true,
+        destroysSource: false,
+        createOptions: { ephemeral: false },
+      },
+
       create: async (
         config: ArchilConfig,
         sandboxId: string,
