@@ -6,9 +6,9 @@
  */
 
 import { Arker, ArkerError, VM } from '@arker-ai/sdk';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 
-import type { PatchVmRequest, PolicyDoc, PolicyEntry, RunOptions } from '@arker-ai/sdk';
+import type { PatchVmRequest, PolicyDoc, PolicyEntry, ResourcesInput, RunOptions } from '@arker-ai/sdk';
 import type {
   CommandResult,
   InstanceInfo,
@@ -25,6 +25,24 @@ const DEFAULT_PROVIDER = 'aws';
 const DEFAULT_REGION = 'us-east-1';
 /** Golden forked when none is requested — small Ubuntu VM with node + python. */
 const DEFAULT_SOURCE = 'ubuntu-small';
+
+/**
+ * Catalog bounds of public ArkerHQ goldens (https://arker.ai/docs/vms). A fork
+ * takes `resources` per create, but only within its source VM's bounds.
+ */
+const GOLDEN_BOUNDS: Record<string, { maxVcpus: number; minMemoryMiB: number; maxMemoryMiB: number }> = {
+  'ubuntu-coding': { maxVcpus: 4, minMemoryMiB: 1024, maxMemoryMiB: 15360 },
+  'ubuntu-coding-8': { maxVcpus: 8, minMemoryMiB: 2560, maxMemoryMiB: 16384 },
+  'ubuntu-coding-32': { maxVcpus: 32, minMemoryMiB: 2560, maxMemoryMiB: 32768 },
+  'ubuntu-full-8': { maxVcpus: 8, minMemoryMiB: 2560, maxMemoryMiB: 16384 },
+};
+/** Same-toolchain goldens a sized create forks from when no source is pinned, smallest first. */
+const SIZED_SOURCES = ['ubuntu-coding', 'ubuntu-coding-8', 'ubuntu-coding-32'];
+
+const fitsGolden = (name: string, vcpus: number, memoryMiB: number): boolean => {
+  const b = GOLDEN_BOUNDS[name];
+  return !!b && vcpus <= b.maxVcpus && memoryMiB >= b.minMemoryMiB && memoryMiB <= b.maxMemoryMiB;
+};
 
 export interface ArkerConfig {
   /** Arker API key (starts with `ark_`). Falls back to the ARKER_API_KEY environment variable. */
@@ -133,6 +151,29 @@ async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export const arker = defineProvider<VM, ArkerConfig>({
   name: 'arker',
+  // Arker sizes per fork with `resources`, bounded by the source VM. Unpinned
+  // creates fork the smallest ubuntu-coding golden that holds the shape.
+  sizes: (config, profile, options) => {
+    // The SDK already rejects sizeClass combined with native `resources`.
+    const { vcpus, memoryMiB } = profile;
+    const sized = { resources: { vcpu: vcpus, memory_mib: memoryMiB } };
+    if (options?.snapshotId) {
+      return { status: 'unknown', reason: 'A snapshot fork keeps its source VM\'s resource bounds, which this adapter has not verified.' };
+    }
+    const pinned = options?.templateId || config.source || env('ARKER_SOURCE');
+    if (pinned) {
+      if (GOLDEN_BOUNDS[pinned] && !fitsGolden(pinned, vcpus, memoryMiB)) {
+        const b = GOLDEN_BOUNDS[pinned];
+        return { status: 'unsupported', reason: `Arker golden ${pinned} forks at 1-${b.maxVcpus} vCPU / ${b.minMemoryMiB}-${b.maxMemoryMiB} MiB, not ${vcpus} vCPU / ${memoryMiB} MiB.` };
+      }
+      return { status: 'supported', nativeOptions: sized };
+    }
+    const golden = SIZED_SOURCES.find((g) => fitsGolden(g, vcpus, memoryMiB));
+    if (!golden) {
+      return { status: 'unsupported', reason: `No public Arker golden forks at ${vcpus} vCPU / ${memoryMiB} MiB.` };
+    }
+    return { status: 'supported', nativeOptions: { templateId: golden, ...sized } };
+  },
   methods: {
     instances: {
       // --- Collection operations ---
@@ -144,18 +185,33 @@ export const arker = defineProvider<VM, ArkerConfig>({
         const platforms =
           config.platforms ??
           env('ARKER_PLATFORMS')?.split(',').map((p) => p.trim()).filter(Boolean);
+        const resources = options?.resources as ResourcesInput | undefined;
+        const source = options?.templateId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE;
 
         // SDK 1.x takes a single options object keyed by the wire schema
         // (`source_vm_id` / `source_vm_name`); the old `fork(name, opts)`
         // overload is gone.
-        const vm = options?.snapshotId
-          ? await client.fork({ source_vm_id: options.snapshotId, name })
-          : await client.fork({
-              source_vm_name:
-                options?.templateId || config.source || env('ARKER_SOURCE') || DEFAULT_SOURCE,
-              name,
-              ...(platforms?.length ? { platforms } : {}),
-            });
+        let vm: VM;
+        try {
+          vm = options?.snapshotId
+            ? await client.fork({ source_vm_id: options.snapshotId, name, ...(resources ? { resources } : {}) })
+            : await client.fork({
+                source_vm_name: source,
+                name,
+                ...(platforms?.length ? { platforms } : {}),
+                ...(resources ? { resources } : {}),
+              });
+        } catch (err) {
+          // The source VM bounds the resources a fork can take; Arker enforces them.
+          if (resources && err instanceof ArkerError && (err.status === 400 || err.status === 422) &&
+              /vcpu|memory|resource/i.test(err.message)) {
+            throw new InstanceSizeError(
+              'unsupported',
+              `Arker cannot fork ${options?.snapshotId ?? source} at ${JSON.stringify(resources)}: ${err.message}`,
+            );
+          }
+          throw err;
+        }
 
         return { instance: vm, instanceId: vm.id };
       },
