@@ -239,11 +239,24 @@ async function retryThrottled<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-async function readLargeText(sandbox: SandboxInstance, path: string): Promise<string> {
+async function readLargeText(sandbox: SandboxInstance, path: string, resolveLinks = true): Promise<string> {
   let info: Awaited<ReturnType<SandboxInstance['fs']['statFile']>>;
   try {
     return await sandbox.fs.readText(path);
   } catch (error) {
+    // The download gateway rejects absolute symlink targets, even inside the
+    // guest. Resolve there, then let the same gateway validate the target.
+    if (resolveLinks && error instanceof Error && error.message.includes('path escapes from parent')) {
+      const proc = await sandbox.exec(['readlink', '-f', '--', path]);
+      await proc.wait();
+      if (proc.exitCode === 0) {
+        const resolved = (await proc.stdout.read()).replace(/\n$/, '');
+        if (resolved.startsWith('/') && resolved !== path) {
+          return readLargeText(sandbox, resolved, false);
+        }
+      }
+      throw error;
+    }
     // Oversized downloads fail at the gateway; anything else is a real error.
     try {
       info = await retryThrottled(() => sandbox.fs.statFile(path));
