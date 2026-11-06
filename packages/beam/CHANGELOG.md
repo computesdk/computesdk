@@ -1,5 +1,21 @@
 # @computesdk/beam
 
+## 0.3.25
+
+### Patch Changes
+
+- 1904e82: `runCommand` sets `HOME` from the running user's passwd entry when Beam's exec environment leaves it unset, so `$HOME`, `~` and tools that keep state there work.
+- 1904e82: Declare snapshot capabilities: Beam memory snapshots keep running processes and the root filesystem (not the `/mnt/code` working-directory mount) and leave the source running. Snapshot conformance tests are enabled.
+- 1904e82: Add snapshots (memory + filesystem checkpoints restored with `snapshotId`), mount volumes at the requested path, move files over 8 MiB in parts below the gateway message cap, and apply `env`/`cwd` to every part of a compound command.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 0.3.24
 
 ### Patch Changes

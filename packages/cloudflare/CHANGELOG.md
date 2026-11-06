@@ -1,5 +1,20 @@
 # @computesdk/cloudflare
 
+## 2.1.12
+
+### Patch Changes
+
+- 1904e82: Add a ComputeSDK bridge Worker for Cloudflare Containers with native file transfer, preview URLs and snapshots. The adapter detects the bridge via `GET /v1/info` and keeps working unchanged against the Cloudflare sandbox demo Worker.
+- 1904e82: Move file contents in larger, parallel chunks: writes pack several base64 arguments into each exec and write them at their offsets, and reads are split into 4 MiB ranges so large files no longer exceed exec output limits. Fix the getById unit test for the egress reattach read and add a credential-gated live test.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 2.1.11
 
 ### Patch Changes

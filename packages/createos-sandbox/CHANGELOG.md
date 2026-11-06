@@ -1,5 +1,20 @@
 # @computesdk/createos-sandbox
 
+## 0.1.27
+
+### Patch Changes
+
+- 1904e82: `getUrl` enables ingress on demand: sandboxes are created with ingress off, so requesting a URL now turns it on instead of throwing "No ingress URL is available".
+- 1904e82: Native `instance.pause()`/`resume()` (waiting for the pause to settle before resuming), with declared `pauseCapabilities` and `snapshot.capabilities`: pause and snapshots keep the whole rootfs and running processes, and `snapshot.create` leaves the source running.
+- 1904e82: `snapshot.create` now returns a paused fork of the sandbox (its own id) and resumes the source, so snapshots survive the source being destroyed and can be restored many times.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+
 ## 0.1.26
 
 ### Patch Changes

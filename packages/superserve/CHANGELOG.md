@@ -1,5 +1,21 @@
 # @computesdk/superserve
 
+## 0.2.20
+
+### Patch Changes
+
+- 1904e82: Native `instance.pause()`/`resume()` (memory and processes survive) and declared snapshot capabilities: memory+disk snapshots of the whole rootfs that leave the source running.
+- 1904e82: Run the shared process conformance tests (`startProcess` stdin, kill, parallel starts, reattach) against Superserve.
+- 1904e82: Implement `template.create` via Superserve's template builder (`from`, `vcpu`, `memoryMib`, `diskMib`, `steps`, `startCmd`, `readyCmd`), waiting until the build is ready; template metadata now includes `diskMib` and build `errorMessage`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 0.2.19
 
 ### Patch Changes

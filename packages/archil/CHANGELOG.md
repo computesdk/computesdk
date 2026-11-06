@@ -1,5 +1,24 @@
 # @computesdk/archil
 
+## 0.4.29
+
+### Patch Changes
+
+- 1904e82: Native pause/resume as `instance.pause()`/`resume()` (memory and processes survive), with declared `pauseCapabilities` and `snapshot.capabilities` (rootfs forks that keep memory; the source keeps running).
+- 1904e82: Persistent sandboxes expose `pause()`/`resume()` on the instance handle (`sandbox.getInstance()`), and exec-mode commands export env vars instead of prefixing them, so compound commands like `(a; b)` or `{ a; }` no longer fail with a shell syntax error.
+- 1904e82: **Breaking default:** `archil()` now creates persistent Archil VMs. `sandbox.create()` with no disk id provisions a VM (honoring `name`, `baseImage`/`image`, `env`, `vcpus`/`memoryMiB` or `sizeClass`, and `timeout`/`maxTtlSeconds`), and `getById`, `list` and `destroy` operate on VMs. Commands, streaming and `startProcess` run on Archil's native process API, with `env` and `cwd` applying to every part of compound commands. Snapshots are paused VM forks that can now be listed, and `create({ snapshotId })` restores them.
+
+  The disk exec mode is opt-in: pass `archil({ execution: 'exec' })` (or set `ARCHIL_EXECUTION=exec`) together with `create({ diskId })`. Passing `diskId` without opting in now throws instead of returning a disk handle.
+
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 0.4.28
 
 ### Patch Changes

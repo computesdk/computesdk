@@ -1,5 +1,19 @@
 # @computesdk/lightning
 
+## 1.0.20
+
+### Patch Changes
+
+- 1904e82: Report Lightning AI's "not available in your region" HTTP 403 as a short, clear create error instead of dumping the HTML page.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 1.0.19
 
 ### Patch Changes

@@ -1,5 +1,20 @@
 # @computesdk/daytona
 
+## 1.7.52
+
+### Patch Changes
+
+- 1904e82: Daytona instances expose `pause()`/`resume()` (stop/start: the rootfs survives, processes do not), and `snapshot.capabilities` declares rootfs filesystem snapshots that leave the source running. Snapshot creation waits up to 15 minutes.
+- 1904e82: Use Daytona's native file API (upload/download/list/delete) for `filesystem`, pass `env`/`cwd` through `executeCommand`'s native fields, and run the shared provider conformance suite live.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 1.7.51
 
 ### Patch Changes

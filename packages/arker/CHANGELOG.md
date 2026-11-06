@@ -1,5 +1,21 @@
 # @computesdk/arker
 
+## 0.1.21
+
+### Patch Changes
+
+- 1904e82: Add native `pause()`/`resume()` (a schedule `suspend` rule; the next run resumes the VM with its memory, processes and in-flight runs), and declare `snapshot.capabilities` (warm fork of the whole rootfs with running processes; the source keeps running). The pause/resume and snapshot conformance tests now run live.
+- 1904e82: Run the shared streaming and process conformance tests against Arker (served by the shell process tier).
+- 1904e82: Add snapshots (warm forks of a running VM, restored via `snapshotId`), public per-port `getUrl` through an inbound policy rule, native file reads over the sync API, chunked file writes, and apply `env` to every part of a compound command.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 0.1.20
 
 ### Patch Changes

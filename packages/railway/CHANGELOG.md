@@ -1,5 +1,21 @@
 # @computesdk/railway
 
+## 2.0.19
+
+### Patch Changes
+
+- 1904e82: Add snapshot support backed by Railway sandbox checkpoints (create, list, delete, and restore via `sandbox.create({ snapshotId })`), and move the filesystem onto Railway's native `sandbox.files` API.
+- 1904e82: Declare snapshot capabilities: a Railway checkpoint keeps the whole root filesystem (including `/tmp`, not `/dev/shm`), boots restores fresh without running processes, and leaves the source running; the conformance suite now runs snapshot tests live. An exec whose WebSocket never opened is retried even when its timeout fired while connecting.
+- 1904e82: Stream command output natively through `sandbox.exec`, pass `env`/`cwd` through `sandbox.exec` so env reaches every part of a compound command, make command timeouts kill the process in the sandbox instead of only closing the client session, and retry execs whose session never opened.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 2.0.18
 
 ### Patch Changes

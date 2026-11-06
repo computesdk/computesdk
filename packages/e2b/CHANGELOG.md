@@ -1,5 +1,21 @@
 # @computesdk/e2b
 
+## 1.7.70
+
+### Patch Changes
+
+- 1904e82: Native `instance.pause()`/`resume()` (memory and processes survive) and declared `snapshot.capabilities` (`rootfs` scope with memory; the source keeps running). The conformance suite now exercises pause/resume and snapshot restore.
+- 1904e82: Serve streaming `runCommand` and `startProcess` natively over E2B's process API (live output, stdin, signals) instead of the shell process tier. Commands run in their own process group so timeouts and kills stop the whole tree; `runCommand` no longer stops at E2B's 60s default, reports timeouts as exit 124, and passes `env`/`cwd` natively (fixing `background` with `env`/`cwd`).
+- 1904e82: e2b: list and delete snapshots through the SDK's snapshot API (delete was a silent no-op), report real sandbox info from `getInfo`, and upload files as a raw octet-stream body.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 1.7.69
 
 ### Patch Changes

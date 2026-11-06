@@ -1,5 +1,24 @@
 # @computesdk/namespace
 
+## 1.6.41
+
+### Patch Changes
+
+- 28d5f17: Report a failing command's real exit code. Namespace returns exit code 1 for every failure and puts the real code in a trailing `exec failed with exit code N` stderr line, which is now stripped.
+- 1904e82: Enable the shared filesystem conformance suite for Namespace (backed by the provider shell filesystem).
+- 1904e82: Declare snapshot capabilities: volume snapshots keep `/workspace` only, need `snapshotVolume: true` on the source, and destroy the source when taken. Snapshot conformance tests now run live.
+- 1904e82: Send `env` and `cwd` in CommandService's own `Command.envVars` / `Command.cwd` fields instead of a shell prefix, so they apply to the whole command line (`echo $FOO`, `a && b` previously saw no env past the first word), and run `background` commands under `nohup sh -c` so compound commands detach as a whole.
+- 11c511e: Add native `streamCommand` using Namespace's server-streaming `CommandService/RunCommand` (Connect JSON envelopes), so streaming `runCommand` (`onStdout`/`onStderr`) no longer falls back to the daemond bootstrap. Honors `timeout` (`Connect-Timeout-Ms` + client abort, exit 124), `cwd`, `env`, and `background`; a dropped stream keeps streamed output and reports exit `-1`.
+- 1904e82: Support on-demand snapshots via persistent volumes. Opt in with `snapshotVolume: true` (provider config or create option) to attach a persistent volume at `/workspace` (also the default cwd). `snapshot.create` shuts the sandbox down and waits for the volume snapshot to commit; `create({ snapshotId })` restores it into the container (fanout supported). `snapshot.list`/`delete` work against the committed volume snapshots. Only the volume is preserved, not the rootfs.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 1.6.40
 
 ### Patch Changes

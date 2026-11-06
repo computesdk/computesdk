@@ -1,5 +1,16 @@
 # @computesdk/cli
 
+## 2.6.2
+
+### Patch Changes
+
+- b897c18: Add `compute agents` (alias `ag`): managed agents on the platform's `/api/v1/agents` API — `list`, `create`, `describe`, `update`, `delete`, `sessions`, `run`, `session`, `send`, `events` (`--follow` polls), `stop`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - computesdk@4.1.16
+  - @computesdk/platform@0.2.2
+
 ## 2.6.1
 
 ### Patch Changes

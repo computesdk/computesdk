@@ -1,5 +1,42 @@
 # @computesdk/example-basic
 
+## 0.4.126
+
+### Patch Changes
+
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+  - @computesdk/blaxel@1.6.41
+  - @computesdk/codesandbox@1.5.70
+  - @computesdk/daytona@1.7.52
+  - @computesdk/e2b@1.7.70
+  - @computesdk/modal@1.9.28
+  - computesdk@4.1.16
+  - @computesdk/superserve@0.2.20
+  - @computesdk/vercel@1.7.54
+  - @computesdk/docker@1.2.68
+  - @computesdk/runloop@1.3.74
+
 ## 0.4.125
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # computesdk
 
+## 4.1.16
+
+### Patch Changes
+
+- 1904e82: Snapshot capabilities can say what happens to the source (`kept`, `stopped`, `destroyed`), which paths a restore leaves out, whether one snapshot forks into many instances, and whether it needs `snapshot.waitUntilReady()` before restoring. Providers can declare a lifetime (`provider.sandbox.lifetime`) and expose `instance.extendLifetime()`. The conformance suite runs the pause and snapshot tests whenever a provider declares them, and its pause test keeps its probe process alive with `startProcess`.
+- 1904e82: Add optional `instance.pause()`/`resume()` (providers implement `pause`/`resume` and declare `pauseCapabilities`, surfaced as `provider.sandbox.pause`) and `snapshot.capabilities` describing what a snapshot keeps (`scope`, `path`, `memory`, `destroysSource`, `createOptions`). The conformance suite gains opt-in `supportsPauseResume` and `supportsSnapshots` tests.
+- 4924af5: Background processes and streaming `runCommand` now default to a POSIX-shell process tier built on the provider's plain `runCommand` (no Node, daemon or download; works on Alpine/busybox). Order: provider-native `streamCommand`/`startProcess` hooks, then the shell tier, then daemond only with `processRuntime: 'daemond'`. Adds the `startProcess` provider hook, `instance.processRuntime`, `instance.attachProcess(jobId)`, and process-runtime coverage in the test-utils conformance suite.
+  - daemond@0.1.8
+
 ## 4.1.15
 
 ### Patch Changes

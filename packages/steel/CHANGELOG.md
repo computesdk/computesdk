@@ -1,5 +1,19 @@
 # @computesdk/steel
 
+## 0.2.24
+
+### Patch Changes
+
+- 1904e82: Retry Steel's 404s for just-created sessions in `getById`, `getConnectUrl` and `destroy`, and only map 400/404/422 to `null` in `getById` instead of swallowing every error.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 0.2.23
 
 ### Patch Changes
