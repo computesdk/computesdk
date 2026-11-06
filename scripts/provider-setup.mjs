@@ -85,8 +85,15 @@ async function setup(id, { dryRun, check }) {
     const found = !!match;
     console.log(`${id}/${shape.name}: ${found ? 'exists' : dryRun ? 'would create' : 'creating'}`);
     if (!found && !dryRun) {
-      await cfg.create(provider, shape);
-      console.log(`${id}/${shape.name}: created`);
+      try {
+        await cfg.create(provider, shape);
+        console.log(`${id}/${shape.name}: created`);
+      } catch (error) {
+        // e.g. a shape above the account's quota: report it, build the rest.
+        console.error(`${id}/${shape.name}: failed: ${error instanceof Error ? error.message : error}`);
+        ok = false;
+        continue;
+      }
     }
     if (check && !dryRun) ok = (await verify(provider, cfg, shape)) && ok;
   }
