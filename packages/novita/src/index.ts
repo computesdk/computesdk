@@ -105,6 +105,9 @@ async function runCommand(
   }
 }
 
+// Resuming re-arms the sandbox lifetime, so remember the one it was created with.
+const sandboxTimeouts = new WeakMap<NovitaSandbox, number>();
+
 function snapshotInfo(snapshot: SnapshotInfo): NovitaSnapshot {
   return { ...snapshot, id: snapshot.snapshotId, provider: 'novita' };
 }
@@ -138,6 +141,7 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
         };
         const sandbox = await sdk.sandbox.create(options?.templateId || options?.snapshotId || 'base', createOptions);
         if (!sandbox.sandboxId) throw new Error('Novita create() returned a sandbox without an ID.');
+        sandboxTimeouts.set(sandbox, createOptions.timeoutMs!);
         return { instance: sandbox, instanceId: sandbox.sandboxId };
       },
       getById: async (config, sandboxId) => {
@@ -197,6 +201,11 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
         remove: (sandbox, path) => sandbox.files.remove(path),
       },
       getInstance: sandbox => sandbox,
+
+      pause: async (sandbox) => { await sandbox.pause(); },
+      // Connecting resumes a paused sandbox and refreshes its traffic token.
+      resume: (sandbox) => sandbox.connect({ timeoutMs: sandboxTimeouts.get(sandbox) }),
+      pauseCapabilities: { memory: true },
 
       attachVolume: async (sandbox, volume, mountPath) => {
         const ref = resolveVolumeRef(volume);
@@ -266,6 +275,7 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
         return (await collectPages(paginator, options?.limit)).map(snapshotInfo);
       },
       delete: async (config, snapshotId) => { await client(config).sandbox.deleteSnapshot(snapshotId); },
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
     },
 
     volume: {

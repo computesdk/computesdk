@@ -11,6 +11,8 @@ describe(`Novita shared provider contract (${runLive ? 'live' : 'mock'})`, () =>
     name: 'novita',
     provider: novita({}),
     supportsFilesystem: true,
+    supportsPauseResume: true,
+    supportsSnapshots: true,
     skipIntegration: !runLive,
     ports: [3000, 8080],
   });
