@@ -17,7 +17,9 @@ Create a new compute sandbox instance.
 **Parameters:**
 
 - `options` (CreateInstanceOptions, optional): Configuration options for sandbox creation
-  - `timeout` (number, optional): Sandbox execution timeout in milliseconds
+  - `sizeClass` (`xs` | `sm` | `md` | `lg` | `xl` | `2xl`, optional): Exact standard CPU/RAM request; see [Sandbox sizes](./sizes.md) for mappings and conflicts
+  - `timeout` (number, optional): Provider-specific sandbox lifetime/idle policy in milliseconds; separate from a command timeout
+  - `ephemeral` (boolean, optional): Selects the ephemeral (`true`) or persistent (`false`) surface on providers offering both; unset uses provider config
   - `templateId` (string, optional): Provider-agnostic template or image identifier to boot from
   - `snapshotId` (string, optional): Snapshot ID to restore from; each provider maps this to its native concept (E2B template, Daytona snapshot, Modal image, etc.)
   - `metadata` (Record<string, any>, optional): Custom metadata to attach to the sandbox
@@ -38,7 +40,9 @@ Create a new compute sandbox instance.
 **CreateInstanceOptions interface:**
 ```typescript
 {
-  timeout?: number;                // Execution timeout in milliseconds
+  sizeClass?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  timeout?: number;                // Provider-specific lifetime/idle policy, ms
+  ephemeral?: boolean;             // Where both execution surfaces exist
   templateId?: string;             // Provider template/image identifier
   snapshotId?: string;             // Snapshot to restore from
   metadata?: Record<string, any>;  // Custom metadata
@@ -116,7 +120,10 @@ try {
 **Notes:**
 - Configure your provider by importing and initializing a provider package (e.g., `@computesdk/e2b`) with your credentials
 - Each call creates a new sandbox instance with a unique `instanceId`
-- The `timeout` option sets maximum sandbox lifetime; sandboxes auto-terminate after this period
+- `timeout` is not a universal auto-delete guarantee: providers may use a lifetime, auto-pause/idle timeout, or reject an unsupported deadline. Check the provider page; `runCommand(..., { timeout })` is a separate command deadline.
+- Read `provider.instances.pause?.createOptions` and `provider.snapshot?.capabilities?.createOptions` before creating an instance that must pause or snapshot. The framework exposes these requirements but does not automatically apply them.
+- Direct provider managers may expose `provider.instances.lifetime` (`defaultMs`, `maxMs`, `extendable`). An absent descriptor does not establish the vendor's default or limit. See [Instance lifecycle](./Instance.md#lifecycle) for pause/resume and extension.
+- Restore with `snapshotId` on the same provider that made the snapshot. In multi-provider mode, explicitly select that provider for the new instance; a snapshot ID is not a portable image.
 - The `templateId` parameter is provider-specific (refers to templates, images, or runtime environments)
 - Environment variables set via `envs` are available to all commands and code executed in the sandbox
 - Throws an error if the provider is missing required credentials (e.g., API key)
@@ -294,4 +301,3 @@ for (const sandbox of sandboxes) {
 <br/>
 
 ---
-

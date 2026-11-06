@@ -31,6 +31,12 @@ tags:
 
 E2B provider for ComputeSDK
 
+## Sizes and lifecycle
+
+`sizeClass` supports `sm`, `md`, `lg`, and `xl` through per-size team templates, not per-create CPU overrides. Run [Provider Setup](../../ADD-PROVIDER.md#provider-setup) for `e2b` first. The default names are `csdk-node22-1cpu-2gb`, `csdk-node22-2cpu-4gb`, `csdk-node22-4cpu-8gb`, and `csdk-node22-8cpu-16gb`; `sizeTemplates` config overrides tier names. Do not pass `templateId`, `snapshotId`, or `sandboxId` with `sizeClass`. Missing mapped templates fail at create time with setup guidance; see [Sandbox sizes](../reference/sizes.md).
+
+`pause()`/`resume()` preserve memory and processes. Snapshots preserve memory and the rootfs; capture briefly pauses the source, then keeps it running. Restore with `instances.create({ snapshotId })`. Create-time `timeout` defaults to 300,000 ms (config or per-create options can override it); command timeouts are separate.
+
 ## Installation & Setup
 
 ```bash

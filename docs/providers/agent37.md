@@ -27,6 +27,10 @@ layout:
 
 [Agent37](https://www.agent37.com) provider for ComputeSDK - persistent Linux sandboxes for AI agents, with signed URLs for any port and an optional Performance type whose cores are held for it.
 
+## Sizes
+
+`instances.create({ sizeClass: 'md' })` requests 2 vCPU/4096 MiB; `lg` requests 4 vCPU/8192 MiB. Other standard tiers are `unsupported` (the vendor has a 4-vCPU ceiling). Native 4-vCPU/16- or 32-GiB shapes are not standard `xl`/`2xl`. See [Sandbox sizes](../reference/sizes.md) for conflicts and type restrictions.
+
 ## Installation & Setup
 
 ```bash

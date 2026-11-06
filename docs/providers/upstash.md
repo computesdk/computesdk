@@ -31,6 +31,10 @@ tags:
 
 Upstash provider for ComputeSDK
 
+## Lifecycle
+
+Create a persistent Box with `{ ephemeral: false }` to use `pause()`/`resume()`. These preserve the filesystem, not memory or running processes. Snapshot capabilities likewise declare rootfs-only capture with the source kept. EphemeralBox is not a pausable persistent Box.
+
 ## Installation & Setup
 
 ```bash
