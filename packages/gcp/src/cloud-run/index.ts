@@ -419,29 +419,32 @@ async function streamInSandbox(sandbox: CloudRunSandbox, command: string, option
   }
 }
 
+/** `sandbox.create()` options; Cloud Run keys default to the `cloudRun()` config. */
+export type CloudRunCreateOptions = CreateInstanceOptions & Pick<CloudRunConfig, 'allowEgress' | 'executionMode'>
+
 type FsRunCommand = (sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
 
 export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, CloudRunSnapshot>({
   name: PROVIDER,
   methods: {
     instances: {
-      create: async (config: CloudRunConfig = {}, options?: CreateInstanceOptions) => {
+      create: async (config: CloudRunConfig = {}, options?: CloudRunCreateOptions) => {
         const snapshotId = options?.snapshotId
         if (snapshotId) await requireGatewayFeature(config, 'snapshot', 'snapshots')
         const sandboxConfig: CloudRunConfig = {
           ...config,
           env: { ...config.env, ...options?.envs },
           workdir: options?.directory ?? config.workdir,
-          // Shared `ephemeral` create option overrides the configured
-          // executionMode for this sandbox: true -> ephemeral, false -> stateful.
+          allowEgress: options?.allowEgress ?? config.allowEgress,
+          // Per-sandbox executionMode, then the shared `ephemeral` option
+          // (true -> ephemeral, false -> stateful), override the configured one.
           // A snapshot restores into a stateful sandbox.
           executionMode: snapshotId
             ? 'stateful'
-            : options?.ephemeral !== undefined
-              ? options.ephemeral
-                ? 'ephemeral'
-                : 'stateful'
-              : config.executionMode,
+            : options?.executionMode
+              ?? (options?.ephemeral !== undefined
+                ? options.ephemeral ? 'ephemeral' : 'stateful'
+                : config.executionMode),
         }
         if (isRemote(config)) {
           const sandboxId = options?.name ?? `cloud-run-${randomUUID()}`
