@@ -16,11 +16,16 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomUUID } from 'node:crypto'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { realpathSync } from 'node:fs'
+import { availableParallelism, totalmem } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-export const GATEWAY_VERSION = 2
-export const GATEWAY_FEATURES = ['stateful', 'exec-stream', 'snapshot', 'fork'] as const
+export const GATEWAY_VERSION = 3
+export const GATEWAY_FEATURES = ['stateful', 'exec-stream', 'snapshot', 'fork', 'sizes'] as const
+
+/** Standard sizes setup deploys a gateway service at (`CLOUD_RUN_SIZE`); sandboxes share their instance's CPU and memory. */
+export const GATEWAY_SIZES = ['xs', 'sm', 'md', 'lg', 'xl'] as const
+export type GatewaySize = typeof GATEWAY_SIZES[number]
 
 const DEFAULT_SANDBOX_BINARY = '/usr/local/gcp/bin/sandbox'
 // A full inherited env can exceed the kernel's argv+env limit (E2BIG); the CLI
@@ -53,6 +58,11 @@ type Result = { stdout: string; stderr: string; exitCode: number }
 type Chunk = (stream: 'stdout' | 'stderr', data: string) => void
 
 const sandboxBinary = () => process.env.CLOUD_RUN_SANDBOX_BINARY ?? DEFAULT_SANDBOX_BINARY
+/** The size this service was deployed at (`CLOUD_RUN_SANDBOX_SIZE`, set by setup), or null for an unsized gateway. */
+function gatewaySize(): GatewaySize | null {
+  const size = process.env.CLOUD_RUN_SANDBOX_SIZE
+  return size && (GATEWAY_SIZES as readonly string[]).includes(size) ? size as GatewaySize : null
+}
 const idleTimeoutMs = () => Number(process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS ?? DEFAULT_IDLE_TIMEOUT_MS)
 
 /** Stateful sandboxes this instance started, keyed by id. */
@@ -482,7 +492,11 @@ export function createGatewayServer(secret: string): Server {
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
     if (url.pathname === '/v1/health') {
-      return send(res, 200, { status: 'ok', provider: 'cloud-run', version: GATEWAY_VERSION, features: GATEWAY_FEATURES, snapshotStore: snapshotStore().kind })
+      return send(res, 200, {
+        status: 'ok', provider: 'cloud-run', version: GATEWAY_VERSION, features: GATEWAY_FEATURES, snapshotStore: snapshotStore().kind,
+        size: gatewaySize(),
+        resources: { vcpus: availableParallelism(), memoryMiB: Math.round(totalmem() / 1048576) },
+      })
     }
     const provided = req.headers['x-computesdk-cloud-run-secret'] ?? req.headers.authorization?.replace(/^Bearer\s+/i, '')
     if (provided !== secret) return send(res, 401, { error: 'Unauthorized' })

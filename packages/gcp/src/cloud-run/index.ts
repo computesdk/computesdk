@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { access } from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
-import { defineProvider, escapeShellArg } from '@computesdk/provider'
+import { INSTANCE_SIZE_PROFILES, InstanceSizeError, defineProvider, escapeShellArg } from '@computesdk/provider'
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -31,6 +31,23 @@ export interface CloudRunMount {
 
 export type CloudRunExecutionMode = 'ephemeral' | 'stateful'
 
+/**
+ * Standard sizes a Cloud Run gateway service can be deployed at. Sandboxes have
+ * no CPU/memory controls of their own: they share their gateway instance's
+ * `--cpu`/`--memory`, so each size is a separate gateway service
+ * (`CLOUD_RUN_SIZE=<size> npx -p @computesdk/gcp computesdk-cloud-run`).
+ * Cloud Run instances top out at 8 vCPU, so there is no 2xl.
+ */
+export type CloudRunSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+const CLOUD_RUN_SIZES: readonly CloudRunSize[] = ['xs', 'sm', 'md', 'lg', 'xl']
+
+/** A gateway service deployed at one size; secret and auth token default to the provider's. */
+export interface CloudRunSizeGateway {
+  sandboxUrl: string
+  sandboxSecret?: string
+  gatewayAuthToken?: string
+}
+
 export interface CloudRunConfig {
   /** URL of the deployed Cloud Run gateway service for remote mode. */
   sandboxUrl?: string
@@ -38,6 +55,11 @@ export interface CloudRunConfig {
   sandboxSecret?: string
   /** Optional Google-signed identity token for Cloud Run services that require IAM auth. */
   gatewayAuthToken?: string
+  /**
+   * Gateway service per size, used for `sizeClass` or `vcpus`/`memoryMiB` creates.
+   * Defaults to CLOUD_RUN_SANDBOX_URL_<SIZE> (and CLOUD_RUN_SANDBOX_SECRET_<SIZE>, else sandboxSecret).
+   */
+  sizeGateways?: Partial<Record<CloudRunSize, string | CloudRunSizeGateway>>
   /** Execution mode. Ephemeral uses `sandbox do`; stateful uses `sandbox run`, `exec`, and `delete`. Defaults to ephemeral. */
   executionMode?: CloudRunExecutionMode
   /** Path to the Cloud Run sandbox binary. Defaults to CLOUD_RUN_SANDBOX_BINARY or /usr/local/gcp/bin/sandbox. */
@@ -77,6 +99,8 @@ export interface CloudRunSandbox {
   remote: boolean
   /** Session-affinity cookie of the gateway instance that holds this stateful sandbox. */
   affinity?: string
+  /** Standard size of the gateway this sandbox runs on, when created sized. */
+  size?: CloudRunSize
 }
 
 export interface CloudRunSnapshot {
@@ -159,24 +183,79 @@ async function gatewayRequest(config: CloudRunConfig, path: string, body: Record
   return data
 }
 
-export type CloudRunGatewayFeature = 'stateful' | 'exec-stream' | 'snapshot' | 'fork'
+export type CloudRunGatewayFeature = 'stateful' | 'exec-stream' | 'snapshot' | 'fork' | 'sizes'
 
-const gatewayFeatureCache = new Map<string, Promise<string[]>>()
+interface GatewayHealth { features: string[]; size: string | null }
 
-/** Features advertised by the gateway's `/v1/health`; gateways that predate feature flags report none. */
-function gatewayFeatures(config: CloudRunConfig): Promise<string[]> {
+const gatewayHealthCache = new Map<string, Promise<GatewayHealth>>()
+
+/** The gateway's `/v1/health`; gateways that predate feature flags report none, unsized gateways no size. */
+function gatewayHealth(config: CloudRunConfig): Promise<GatewayHealth> {
   const baseUrl = config.sandboxUrl!.replace(/\/$/, '')
-  let features = gatewayFeatureCache.get(baseUrl)
-  if (!features) {
-    features = fetch(`${baseUrl}/v1/health`, { headers: gatewayAuthHeaders(config) })
+  let health = gatewayHealthCache.get(baseUrl)
+  if (!health) {
+    health = fetch(`${baseUrl}/v1/health`, { headers: gatewayAuthHeaders(config) })
       .then(async response => {
-        const data = await response.json() as { features?: unknown }
-        return Array.isArray(data.features) ? data.features.map(String) : []
+        const data = await response.json() as { features?: unknown; size?: unknown }
+        return {
+          features: Array.isArray(data.features) ? data.features.map(String) : [],
+          size: typeof data.size === 'string' ? data.size : null,
+        }
       })
-    features.catch(() => gatewayFeatureCache.delete(baseUrl))
-    gatewayFeatureCache.set(baseUrl, features)
+    health.catch(() => gatewayHealthCache.delete(baseUrl))
+    gatewayHealthCache.set(baseUrl, health)
   }
-  return features
+  return health
+}
+
+async function gatewayFeatures(config: CloudRunConfig): Promise<string[]> {
+  return (await gatewayHealth(config)).features
+}
+
+function sizeEnvSuffix(size: CloudRunSize): string {
+  return size.toUpperCase()
+}
+
+/** The gateway configured for `size`, with the provider's secret and auth token as defaults. */
+function sizeGateway(config: CloudRunConfig, size: CloudRunSize): CloudRunSizeGateway | undefined {
+  const entry = config.sizeGateways?.[size] ?? process.env[`CLOUD_RUN_SANDBOX_URL_${sizeEnvSuffix(size)}`]
+  if (!entry) return undefined
+  const gateway = typeof entry === 'string' ? { sandboxUrl: entry } : entry
+  return {
+    ...gateway,
+    sandboxSecret: gateway.sandboxSecret ?? process.env[`CLOUD_RUN_SANDBOX_SECRET_${sizeEnvSuffix(size)}`] ?? config.sandboxSecret,
+    gatewayAuthToken: gateway.gatewayAuthToken ?? config.gatewayAuthToken,
+  }
+}
+
+function unconfiguredSizeReason(size: CloudRunSize): string {
+  return `no Cloud Run gateway is configured at size ${size}. Deploy one with \`CLOUD_RUN_SIZE=${size} npx -p @computesdk/gcp computesdk-cloud-run\` and set CLOUD_RUN_SANDBOX_URL_${sizeEnvSuffix(size)} (or sizeGateways.${size}).`
+}
+
+const SHAPES = CLOUD_RUN_SIZES.map(size => `${size} ${INSTANCE_SIZE_PROFILES[size].vcpus} vCPU/${INSTANCE_SIZE_PROFILES[size].memoryMiB} MiB`).join(', ')
+
+/**
+ * The sized gateway a `vcpus`/`memoryMiB` create runs on. Sizes are whole
+ * gateway services, so only the standard shapes exist; anything else, or a
+ * gateway that is not deployed at the size, fails instead of running another size.
+ */
+async function resolveSizedGateway(config: CloudRunConfig, vcpus?: number, memoryMiB?: number): Promise<{ size: CloudRunSize; gateway: CloudRunSizeGateway } | undefined> {
+  if (vcpus === undefined && memoryMiB === undefined) return undefined
+  if (vcpus === undefined || memoryMiB === undefined) {
+    throw new InstanceSizeError('invalid', 'Cloud Run sizing needs both vcpus and memoryMiB')
+  }
+  const size = CLOUD_RUN_SIZES.find(s => INSTANCE_SIZE_PROFILES[s].vcpus === vcpus && INSTANCE_SIZE_PROFILES[s].memoryMiB === memoryMiB)
+  if (!size) {
+    throw new InstanceSizeError('unsupported', `Cloud Run has no ${vcpus} vCPU / ${memoryMiB} MiB size; sandboxes share their gateway instance, and gateways deploy at ${SHAPES}.`)
+  }
+  const gateway = sizeGateway(config, size)
+  if (!gateway) throw new InstanceSizeError('unconfigured', unconfiguredSizeReason(size))
+  if (!gateway.sandboxSecret) throw new InstanceSizeError('unconfigured', `the size ${size} gateway has no secret; set CLOUD_RUN_SANDBOX_SECRET_${sizeEnvSuffix(size)} or sandboxSecret.`)
+  const health = await gatewayHealth(gateway)
+  if (!health.features.includes('sizes') || health.size !== size) {
+    throw new InstanceSizeError('unavailable', `the Cloud Run gateway at ${gateway.sandboxUrl} is deployed at ${health.size ?? 'no standard size'}, not ${size}; redeploy it with CLOUD_RUN_SIZE=${size}.`)
+  }
+  return { size, gateway }
 }
 
 async function requireGatewayFeature(config: CloudRunConfig, feature: CloudRunGatewayFeature, what: string): Promise<void> {
@@ -420,19 +499,35 @@ async function streamInSandbox(sandbox: CloudRunSandbox, command: string, option
 }
 
 /** `sandbox.create()` options; Cloud Run keys default to the `cloudRun()` config. */
-export type CloudRunCreateOptions = CreateInstanceOptions & Pick<CloudRunConfig, 'allowEgress' | 'executionMode'>
+export type CloudRunCreateOptions = CreateInstanceOptions & Pick<CloudRunConfig, 'allowEgress' | 'executionMode'> & {
+  /** With memoryMiB, picks the gateway deployed at that standard size (see {@link CloudRunSize}). */
+  vcpus?: number
+  memoryMiB?: number
+}
 
 type FsRunCommand = (sandbox: CloudRunSandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
 
 export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, CloudRunSnapshot>({
   name: PROVIDER,
+  sizes: (config, profile, options) => {
+    const create = options as CloudRunCreateOptions | undefined
+    if (create?.vcpus !== undefined || create?.memoryMiB !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with vcpus/memoryMiB')
+    }
+    if (profile.sizeClass === '2xl') {
+      return { status: 'unsupported', reason: 'Cloud Run instances top out at 8 vCPU, and sandboxes share their gateway instance\'s CPU and memory.' }
+    }
+    if (!sizeGateway(config, profile.sizeClass)) return { status: 'unconfigured', reason: unconfiguredSizeReason(profile.sizeClass) }
+    return { status: 'supported', nativeOptions: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB } }
+  },
   methods: {
     instances: {
       create: async (config: CloudRunConfig = {}, options?: CloudRunCreateOptions) => {
         const snapshotId = options?.snapshotId
-        if (snapshotId) await requireGatewayFeature(config, 'snapshot', 'snapshots')
+        const sized = await resolveSizedGateway(config, options?.vcpus, options?.memoryMiB)
         const sandboxConfig: CloudRunConfig = {
           ...config,
+          ...sized?.gateway,
           env: { ...config.env, ...options?.envs },
           workdir: options?.directory ?? config.workdir,
           allowEgress: options?.allowEgress ?? config.allowEgress,
@@ -446,22 +541,24 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
                 ? options.ephemeral ? 'ephemeral' : 'stateful'
                 : config.executionMode),
         }
-        if (isRemote(config)) {
+        if (snapshotId) await requireGatewayFeature(sandboxConfig, 'snapshot', 'snapshots')
+        if (isRemote(sandboxConfig)) {
           const sandboxId = options?.name ?? `cloud-run-${randomUUID()}`
+          const size = sized?.size
           if (getExecutionMode(sandboxConfig) === 'stateful') {
             const session: GatewaySession = {}
-            const response = await gatewayRequest(config, '/v1/sandbox/create', sandboxRequestBody(sandboxConfig, {
+            const response = await gatewayRequest(sandboxConfig, '/v1/sandbox/create', sandboxRequestBody(sandboxConfig, {
               sandboxId,
               env: sandboxConfig.env,
               workdir: sandboxConfig.workdir,
               timeout: options?.timeout,
               ...(snapshotId ? { snapshotId } : {}),
             }), session)
-            const sandbox = { id: response.sandboxId ?? sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true, affinity: session.affinity }
+            const sandbox = { id: response.sandboxId ?? sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true, affinity: session.affinity, size }
             activeSandboxes.set(sandbox.id, sandbox)
             return { instance: sandbox, instanceId: sandbox.id }
           }
-          const sandbox = { id: sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true }
+          const sandbox = { id: sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true, size }
           activeSandboxes.set(sandbox.id, sandbox)
           return { instance: sandbox, instanceId: sandbox.id }
         }
@@ -503,9 +600,9 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
         // provider's configured executionMode.
         const known = activeSandboxes.get(sandboxId)
         const effectiveConfig = known?.config ?? config
-        if (isRemote(config)) {
+        if (isRemote(effectiveConfig)) {
           try {
-            if (getExecutionMode(effectiveConfig) === 'stateful') await gatewayRequest(config, '/v1/sandbox/destroy', { sandboxId }, known)
+            if (getExecutionMode(effectiveConfig) === 'stateful') await gatewayRequest(effectiveConfig, '/v1/sandbox/destroy', { sandboxId }, known)
           } finally {
             activeSandboxes.delete(sandboxId)
           }
@@ -538,6 +635,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
           rootfs: sandbox.config.rootfs ?? '/',
           persistDir: sandbox.config.persistDir,
           overlayDir: sandbox.config.overlayDir,
+          ...(sandbox.size ? { size: sandbox.size, vcpus: INSTANCE_SIZE_PROFILES[sandbox.size].vcpus, memoryMiB: INSTANCE_SIZE_PROFILES[sandbox.size].memoryMiB } : {}),
         },
       }),
 
@@ -618,12 +716,13 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
         createOptions: { ephemeral: false },
       },
       create: async (config: CloudRunConfig, sandboxId: string, options?: { name?: string }) => {
-        await requireGatewayFeature(config, 'snapshot', 'snapshots')
         const sandbox = activeSandboxes.get(sandboxId)
+        const gatewayConfig = sandbox?.config ?? config
+        await requireGatewayFeature(gatewayConfig, 'snapshot', 'snapshots')
         if (sandbox && getExecutionMode(sandbox.config) !== 'stateful') {
           throw new Error('Cloud Run snapshots need a stateful sandbox; create it with executionMode: \'stateful\' or ephemeral: false.')
         }
-        const data = await gatewayRequest(config, '/v1/sandbox/snapshot', { sandboxId, ...(options?.name ? { snapshotId: options.name } : {}) }, sandbox)
+        const data = await gatewayRequest(gatewayConfig, '/v1/sandbox/snapshot', { sandboxId, ...(options?.name ? { snapshotId: options.name } : {}) }, sandbox)
         return toSnapshot(data)
       },
       list: async (config: CloudRunConfig) => {

@@ -51,10 +51,28 @@ function run(command: string, args: string[], options: { cwd?: string; input?: s
   })
 }
 
+/** Cloud Run instance shape per standard size; sandboxes share the instance's CPU and memory. */
+const SIZE_SHAPES = {
+  xs: { cpu: '1', memory: '1Gi' },
+  sm: { cpu: '1', memory: '2Gi' },
+  md: { cpu: '2', memory: '4Gi' },
+  lg: { cpu: '4', memory: '8Gi' },
+  xl: { cpu: '8', memory: '16Gi' },
+} as const
+type SetupSize = keyof typeof SIZE_SHAPES
+
 async function setup() {
+  // CLOUD_RUN_SIZE deploys a sized gateway (`computesdk-sandbox-<size>`) whose
+  // instances have that size's CPU/memory; the adapter routes sizeClass to it.
+  const size = process.env.CLOUD_RUN_SIZE as SetupSize | undefined
+  if (size && !Object.prototype.hasOwnProperty.call(SIZE_SHAPES, size)) {
+    console.error(`\n  Invalid CLOUD_RUN_SIZE=${size}; use one of ${Object.keys(SIZE_SHAPES).join(', ')} (Cloud Run instances top out at 8 vCPU).\n`)
+    process.exit(1)
+  }
+  const shape = size ? SIZE_SHAPES[size] : { cpu: '1', memory: '2Gi' }
   const projectId = process.env.CLOUD_RUN_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT ?? process.env.PROJECT_ID
   const region = process.env.CLOUD_RUN_REGION ?? process.env.GOOGLE_CLOUD_LOCATION ?? process.env.REGION
-  const serviceName = process.env.CLOUD_RUN_SERVICE_NAME ?? 'computesdk-sandbox'
+  const serviceName = process.env.CLOUD_RUN_SERVICE_NAME ?? (size ? `computesdk-sandbox-${size}` : 'computesdk-sandbox')
   // Optional GCS bucket for `sandbox tar` snapshots; without it snapshots stay
   // on the gateway instance that took them.
   const snapshotBucket = process.env.CLOUD_RUN_SNAPSHOT_BUCKET?.replace(/^gs:\/\//, '').replace(/\/$/, '')
@@ -62,7 +80,8 @@ async function setup() {
   // Stateful sandboxes live on one instance and follow-up calls reach it via
   // session affinity, which needs spare request slots on that instance.
   const concurrency = process.env.CLOUD_RUN_CONCURRENCY ?? '20'
-  const minInstances = process.env.CLOUD_RUN_MIN_INSTANCES ?? '100'
+  // A warm pool of large sized instances is expensive; sized gateways keep one warm by default.
+  const minInstances = process.env.CLOUD_RUN_MIN_INSTANCES ?? (size ? '1' : '100')
   const maxInstances = process.env.CLOUD_RUN_MAX_INSTANCES ?? '100'
   const idleTimeout = process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS
 
@@ -138,8 +157,8 @@ async function setup() {
       '--project', projectId,
       '--sandbox-launcher',
       '--allow-unauthenticated',
-      '--cpu', '1',
-      '--memory', '2Gi',
+      '--cpu', shape.cpu,
+      '--memory', shape.memory,
       '--concurrency', concurrency,
       '--min-instances', minInstances,
       '--max-instances', maxInstances,
@@ -147,7 +166,7 @@ async function setup() {
       '--cpu-boost',
       '--no-cpu-throttling',
       ...(serviceAccount ? ['--service-account', serviceAccount] : []),
-      '--set-env-vars', [`SANDBOX_SECRET=${secret}`, ...(snapshotBucket ? [`CLOUD_RUN_SNAPSHOT_BUCKET=${snapshotBucket}`] : []), ...(idleTimeout ? [`CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS=${idleTimeout}`] : [])].join(','),
+      '--set-env-vars', [`SANDBOX_SECRET=${secret}`, ...(snapshotBucket ? [`CLOUD_RUN_SNAPSHOT_BUCKET=${snapshotBucket}`] : []), ...(idleTimeout ? [`CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS=${idleTimeout}`] : []), ...(size ? [`CLOUD_RUN_SANDBOX_SIZE=${size}`] : [])].join(','),
     ], { stdio: 'inherit' })
 
     // A pinned traffic split keeps serving the old revision after deploy.
@@ -161,8 +180,9 @@ async function setup() {
     ]).trim()
 
     console.log('\n  Setup complete! Add these to your .env:\n')
-    console.log(`  CLOUD_RUN_SANDBOX_URL=${serviceUrl}`)
-    console.log(reusedSecret ? '  CLOUD_RUN_SANDBOX_SECRET is unchanged' : `  CLOUD_RUN_SANDBOX_SECRET=${secret}`)
+    const suffix = size ? `_${size.toUpperCase()}` : ''
+    console.log(`  CLOUD_RUN_SANDBOX_URL${suffix}=${serviceUrl}`)
+    console.log(reusedSecret ? '  CLOUD_RUN_SANDBOX_SECRET is unchanged' : `  CLOUD_RUN_SANDBOX_SECRET${suffix}=${secret}`)
     console.log('')
   } finally {
     rmSync(tmpDir, { recursive: true, force: true })

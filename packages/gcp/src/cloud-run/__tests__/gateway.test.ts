@@ -48,9 +48,21 @@ describe('Cloud Run gateway', () => {
   it('advertises its features on the unauthenticated health route', async () => {
     const res = await fetch(`${baseUrl}/v1/health`)
     expect(await res.json()).toEqual({
-      status: 'ok', provider: 'cloud-run', version: 2,
-      features: ['stateful', 'exec-stream', 'snapshot', 'fork'], snapshotStore: 'local',
+      status: 'ok', provider: 'cloud-run', version: 3,
+      features: ['stateful', 'exec-stream', 'snapshot', 'fork', 'sizes'], snapshotStore: 'local',
+      size: null, resources: { vcpus: expect.any(Number), memoryMiB: expect.any(Number) },
     })
+  })
+
+  it('reports the standard size it was deployed at', async () => {
+    process.env.CLOUD_RUN_SANDBOX_SIZE = 'lg'
+    try {
+      expect(await (await fetch(`${baseUrl}/v1/health`)).json()).toMatchObject({ size: 'lg' })
+      process.env.CLOUD_RUN_SANDBOX_SIZE = '2xl'
+      expect(await (await fetch(`${baseUrl}/v1/health`)).json()).toMatchObject({ size: null })
+    } finally {
+      delete process.env.CLOUD_RUN_SANDBOX_SIZE
+    }
   })
 
   it('rejects bad secrets and unsafe ids', async () => {

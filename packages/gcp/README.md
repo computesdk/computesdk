@@ -158,6 +158,7 @@ await sandbox.destroy()
 | `sandboxUrl` | `CLOUD_RUN_SANDBOX_URL` | | URL of deployed gateway service for remote mode |
 | `sandboxSecret` | `CLOUD_RUN_SANDBOX_SECRET` | | Bearer token for deployed gateway service |
 | `gatewayAuthToken` | `CLOUD_RUN_AUTH_TOKEN` | | Optional Google identity token when Cloud Run IAM auth is enabled |
+| `sizeGateways` | `CLOUD_RUN_SANDBOX_URL_<SIZE>`, `CLOUD_RUN_SANDBOX_SECRET_<SIZE>` | | Gateway per standard size (`xs`, `sm`, `md`, `lg`, `xl`), used for `sizeClass` creates; secrets default to `sandboxSecret` |
 | `executionMode` | | `ephemeral` | Use `ephemeral` for `sandbox do` or `stateful` for `sandbox run`/`exec`/`delete` |
 | `sandboxBinary` | `CLOUD_RUN_SANDBOX_BINARY` | `/usr/local/gcp/bin/sandbox` | Path to the Cloud Run sandbox CLI |
 | `mode` | | CLI default | Sandbox CLI mode, `local` or `container` |
@@ -189,6 +190,10 @@ Sandboxes use the gateway image as their root filesystem and run as root. The im
 ### Gateway instances
 
 A stateful sandbox lives on the gateway instance that created it. The provider replays Cloud Run's session-affinity cookie so follow-up calls reach that instance; affinity is best effort, so keep `--session-affinity` and spare `--concurrency` on the service. The gateway deletes stateful sandboxes idle for `CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS` (default one hour, `0` disables; set it at deploy time with the same variable), never while a command is running. Snapshot, restore and live streaming need the current gateway; against a gateway deployed before these features, snapshot calls fail with a redeploy hint and streamed output arrives when the command exits.
+
+### Sizes
+
+Cloud Run sandboxes have no CPU or memory controls of their own: they share the `--cpu`/`--memory` of the gateway instance they run on. Each size is therefore its own gateway service. Deploy one per size with `CLOUD_RUN_SIZE=<size> npx -p @computesdk/gcp computesdk-cloud-run`. This deploys `computesdk-sandbox-<size>` at `xs` 1 vCPU/1 GiB, `sm` 1 vCPU/2 GiB, `md` 2 vCPU/4 GiB, `lg` 4 vCPU/8 GiB or `xl` 8 vCPU/16 GiB with one warm instance, and prints `CLOUD_RUN_SANDBOX_URL_<SIZE>`. `compute.sandbox.create({ sizeClass: 'lg' })` (or `{ vcpus: 4, memoryMiB: 8192 }`) then runs on that gateway. The gateway reports its size in `/v1/health`. A size with no configured gateway, a gateway deployed at a different size, and `2xl` (Cloud Run instances top out at 8 vCPU) all fail with a `sizeClass:` error instead of running another size. Sandboxes on one instance share its CPU and memory, so use a low `CLOUD_RUN_CONCURRENCY` when each sandbox needs the whole size.
 
 `getUrl()` is not supported because the current Cloud Run sandbox CLI does not expose per-sandbox ports.
 

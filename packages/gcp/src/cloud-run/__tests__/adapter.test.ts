@@ -87,7 +87,7 @@ describe('cloudRun adapter against the local gateway', () => {
 /** Mimics gateways deployed before feature flags: no-op lifecycle, every call a fresh `sandbox do`. */
 type StaleRequest = { path: string; cookie?: string; body: Record<string, any> }
 
-function startStaleGateway(): Promise<{ server: Server; url: string; requests: StaleRequest[] }> {
+function startStaleGateway(health: Record<string, unknown> = {}): Promise<{ server: Server; url: string; requests: StaleRequest[] }> {
   const requests: StaleRequest[] = []
   const run = promisify(execFile)
   const server = createServer(async (req: IncomingMessage, res) => {
@@ -96,7 +96,7 @@ function startStaleGateway(): Promise<{ server: Server; url: string; requests: S
       res.writeHead(status, { 'Content-Type': 'application/json', 'Set-Cookie': 'GAESA=instance-1; Path=/; HttpOnly' })
       res.end(JSON.stringify(body))
     }
-    if (url === '/v1/health') return reply(200, { status: 'ok', provider: 'cloud-run' })
+    if (url === '/v1/health') return reply(200, { status: 'ok', provider: 'cloud-run', ...health })
     let raw = ''
     for await (const chunk of req) raw += chunk
     const body = raw ? JSON.parse(raw) : {}
@@ -163,5 +163,57 @@ describe('cloudRun adapter against a gateway without feature flags', () => {
     await expect(provider.snapshot!.create('any')).rejects.toThrow(/does not support snapshots; redeploy/)
     await expect(provider.sandbox.create({ snapshotId: 'snap-1' })).rejects.toThrow(/does not support snapshots/)
     expect(stale.requests.length).toBe(before)
+  })
+})
+
+describe('cloudRun sizes', () => {
+  let md: Awaited<ReturnType<typeof startStaleGateway>>
+  let unsized: Awaited<ReturnType<typeof startStaleGateway>>
+  beforeAll(async () => {
+    md = await startStaleGateway({ features: ['stateful', 'sizes'], size: 'md' })
+    unsized = await startStaleGateway()
+  })
+  afterAll(() => { md.server.close(); unsized.server.close() })
+
+  it('offers sizes that have a gateway, and never 2xl', () => {
+    const provider = cloudRun({ sandboxUrl: unsized.url, sandboxSecret: 'x', sizeGateways: { md: md.url } })
+    expect(provider.sizes.list().filter(p => p.status === 'supported').map(p => p.requested.sizeClass)).toEqual(['md'])
+    expect(provider.sizes.resolve('md')).toMatchObject({ status: 'supported', nativeOptions: { vcpus: 2, memoryMiB: 4096 } })
+    expect(provider.sizes.resolve('sm')).toMatchObject({ status: 'unconfigured', reason: expect.stringContaining('CLOUD_RUN_SIZE=sm') })
+    expect(provider.sizes.resolve('2xl').status).toBe('unsupported')
+    expect(() => provider.sizes.resolve('md', { vcpus: 2 } as any)).toThrow(/sizeClass: cannot combine/)
+  })
+
+  it('reads sized gateways from CLOUD_RUN_SANDBOX_URL_<SIZE>', () => {
+    process.env.CLOUD_RUN_SANDBOX_URL_XL = md.url
+    try {
+      expect(cloudRun({ sandboxUrl: unsized.url, sandboxSecret: 'x' }).sizes.resolve('xl').status).toBe('supported')
+    } finally {
+      delete process.env.CLOUD_RUN_SANDBOX_URL_XL
+    }
+  })
+
+  it('runs a sized sandbox on the gateway deployed at that size', async () => {
+    md.requests.length = 0
+    unsized.requests.length = 0
+    const provider = cloudRun({ sandboxUrl: unsized.url, sandboxSecret: 'x', executionMode: 'stateful', sizeGateways: { md: { sandboxUrl: md.url, sandboxSecret: 'md-secret' } } })
+    const sandbox = await provider.sandbox.create({ sizeClass: 'md', allowEgress: true })
+    expect((await sandbox.runCommand('echo sized')).stdout).toBe('sized\n')
+    expect((await sandbox.getInfo()).metadata).toMatchObject({ size: 'md', vcpus: 2, memoryMiB: 4096 })
+    await sandbox.destroy()
+    expect(md.requests.map(r => [r.path, r.body.allowEgress])).toEqual([
+      ['/v1/sandbox/create', true], ['/v1/sandbox/exec', true], ['/v1/sandbox/destroy', undefined],
+    ])
+    expect(unsized.requests).toEqual([])
+  })
+
+  it('fails instead of running another size', async () => {
+    const provider = cloudRun({ sandboxUrl: unsized.url, sandboxSecret: 'x', sizeGateways: { lg: md.url, sm: unsized.url } })
+    await expect(provider.sandbox.create({ sizeClass: 'xl' })).rejects.toThrow(/sizeClass: no Cloud Run gateway is configured at size xl/)
+    await expect(provider.sandbox.create({ sizeClass: '2xl' })).rejects.toThrow(/sizeClass: .*top out at 8 vCPU/)
+    await expect(provider.sandbox.create({ sizeClass: 'lg' })).rejects.toThrow(/sizeClass: .*deployed at md, not lg/)
+    await expect(provider.sandbox.create({ sizeClass: 'sm' })).rejects.toThrow(/deployed at no standard size, not sm/)
+    await expect(provider.sandbox.create({ vcpus: 3, memoryMiB: 4096 })).rejects.toThrow(/sizeClass: Cloud Run has no 3 vCPU/)
+    expect(unsized.requests.filter(r => r.path === '/v1/sandbox/create')).toEqual([])
   })
 })
