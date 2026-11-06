@@ -1,5 +1,5 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 /**
@@ -7,6 +7,8 @@ import { join } from 'node:path'
  * as the command's working directory, tars are real tarballs, and `gs://`
  * URIs map into `<state>/gcs/<bucket>/<object>`. Like the real CLI, a failing
  * command makes the CLI exit 1 rather than with the command's status.
+ * Every sandbox sees its directory as the same path, `<state>/root`, the way
+ * real sandboxes share `/`: it is rewritten in commands and output.
  */
 const SCRIPT = String.raw`
 const fs = require('fs'), path = require('path'), cp = require('child_process')
@@ -42,9 +44,14 @@ const start = (id, importTar) => {
   if (importTar) cp.execFileSync('tar', ['-xf', resolveUri(importTar), '-C', root(id)])
   fs.writeFileSync(root(id) + '.env.json', JSON.stringify(env))
 }
+const VROOT = path.join(STATE, 'root')
 const run = (id, extraEnv) => {
   const saved = fs.existsSync(root(id) + '.env.json') ? JSON.parse(fs.readFileSync(root(id) + '.env.json', 'utf8')) : {}
-  const child = cp.spawn(command[0], command.slice(1), { cwd: root(id), stdio: 'inherit', env: { PATH: process.env.PATH, HOME: root(id), ...saved, ...extraEnv } })
+  const toReal = (s) => s.split(VROOT).join(root(id))
+  const toVirtual = (s) => s.split(root(id)).join(VROOT)
+  const child = cp.spawn(command[0], command.slice(1).map(toReal), { cwd: root(id), stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: root(id), ...saved, ...extraEnv } })
+  child.stdout.on('data', (d) => process.stdout.write(toVirtual(String(d))))
+  child.stderr.on('data', (d) => process.stderr.write(toVirtual(String(d))))
   const forward = (sig) => { try { child.kill(sig) } catch {} }
   process.on('SIGTERM', () => { forward('SIGTERM'); process.exit(143) })
   return new Promise((resolve) => child.on('close', (code) => resolve(code === 0 ? 0 : 1)))
@@ -95,7 +102,11 @@ export interface FakeSandboxCli {
 }
 
 export function createFakeSandboxCli(): FakeSandboxCli {
-  const state = mkdtempSync(join(tmpdir(), 'fake-sandbox-cli-'))
+  // Not under /tmp: the real CLI excludes /tmp from snapshots, so the
+  // conformance suite skips sandbox dirs under it when placing markers.
+  const base = join(homedir(), '.cache', 'computesdk-gcp-tests')
+  mkdirSync(base, { recursive: true })
+  const state = mkdtempSync(join(base, 'fake-sandbox-cli-'))
   const binary = join(state, 'sandbox')
   writeFileSync(binary, `#!/usr/bin/env node\n${SCRIPT.replace('__STATE__', JSON.stringify(state))}`)
   chmodSync(binary, 0o755)

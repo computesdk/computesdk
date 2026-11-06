@@ -1,6 +1,7 @@
 import { describe, it } from 'vitest'
 import { runProviderTestSuite } from '@computesdk/test-utils'
 import { cloudRun } from '../index'
+import { withExpectedSnapshotCapabilities } from './helpers/snapshot-capabilities'
 
 const sandboxUrl = process.env.CLOUD_RUN_SANDBOX_URL?.replace(/\/$/, '')
 const sandboxSecret = process.env.CLOUD_RUN_SANDBOX_SECRET
@@ -18,7 +19,9 @@ const features: string[] = sandboxUrl && sandboxSecret
 if (features.includes('stateful')) {
   runProviderTestSuite({
     name: 'cloud-run',
-    provider: cloudRun({ sandboxUrl, sandboxSecret, gatewayAuthToken, executionMode: 'stateful' }),
+    provider: features.includes('snapshot')
+      ? withExpectedSnapshotCapabilities(cloudRun({ sandboxUrl, sandboxSecret, gatewayAuthToken, executionMode: 'stateful' }))
+      : cloudRun({ sandboxUrl, sandboxSecret, gatewayAuthToken, executionMode: 'stateful' }),
     supportsFilesystem: true,
     supportsGetUrl: false,
     supportsStreaming: true,
