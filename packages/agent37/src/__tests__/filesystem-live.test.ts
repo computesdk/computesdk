@@ -18,6 +18,7 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
       return originalFetch(input, init);
     });
     sandbox = await provider.sandbox.create({ templateId: 'agent37-base' });
+    expect((await sandbox.runCommand('command -v flock')).exitCode).toBe(0);
   }, 120_000);
 
   afterAll(async () => {
@@ -68,6 +69,48 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
     const leftovers = await sandbox.runCommand(`find ${directory} -name '.computesdk-write-*' -print`);
     expect(leftovers.exitCode).toBe(0);
     expect(leftovers.stdout.trim()).toBe('');
+  }, 120_000);
+
+  it('preserves executable mode, inode and hard links when overwriting through a symlink', async () => {
+    const path = `${directory}/executable`;
+    const symlink = `${directory}/symlink`;
+    const hardlink = `${directory}/hardlink`;
+    await sandbox.filesystem.writeFile(path, '#!/bin/sh\necho original\n');
+    const setup = await sandbox.runCommand(`chmod 751 ${path} && ln -s executable ${symlink} && ln ${path} ${hardlink} && stat -c '%i %a' ${path}`);
+    expect(setup.exitCode).toBe(0);
+    const original = setup.stdout.trim();
+    expect(original.split(' ').at(-1)).toBe('751');
+    const content = '#!/bin/sh\necho updated\n#' + 'x'.repeat(256 * 1024) + '\n';
+    await sandbox.filesystem.writeFile(symlink, content);
+    for (const name of [path, symlink, hardlink]) expect(await sandbox.filesystem.readFile(name)).toBe(content);
+    const result = await sandbox.runCommand(`test -L ${symlink} && test -x ${path} && stat -c '%i %a' ${path} && ${path}`);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe(`${original}\nupdated`);
+    await sandbox.filesystem.writeFile(symlink, '');
+    expect(await sandbox.filesystem.readFile(path)).toBe('');
+    const empty = await sandbox.runCommand(`test -L ${symlink} && stat -c '%i %a' ${path}`);
+    expect(empty.exitCode).toBe(0);
+    expect(empty.stdout.trim()).toBe(original);
+    console.log('Agent37 overwrite compatibility: executable mode 751, inode, symlink and hard link preserved, including empty writes');
+  }, 120_000);
+
+  it('serializes concurrent writes through symlink and hard-link aliases of the destination', async () => {
+    const path = `${directory}/alias-target`;
+    const symlink = `${directory}/alias-symlink`;
+    const hardlink = `${directory}/alias-hardlink`;
+    await sandbox.filesystem.writeFile(path, 'original');
+    const setup = await sandbox.runCommand(`ln -s alias-target ${symlink} && ln ${path} ${hardlink} && stat -c '%i' ${path}`);
+    expect(setup.exitCode).toBe(0);
+    const paths = [path, symlink, hardlink];
+    const contents = ['a'.repeat(256 * 1024), 'b'.repeat(220 * 1024), 'c'.repeat(200 * 1024)];
+    await Promise.all(paths.map((name, index) => sandbox.filesystem.writeFile(name, contents[index])));
+    const actual = await sandbox.filesystem.readFile(path);
+    expect(contents).toContain(actual);
+    for (const name of paths) expect(await sandbox.filesystem.readFile(name)).toBe(actual);
+    const result = await sandbox.runCommand(`test -L ${symlink} && stat -c '%i' ${path} && find ${directory} -name '.computesdk-write-*' -print`);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe(setup.stdout.trim());
+    console.log('Agent37 concurrent alias writes: one complete payload, original inode and symlink preserved, no staging leftovers');
   }, 120_000);
 
   it('rejects actual output-limit truncation instead of returning partial content', async () => {

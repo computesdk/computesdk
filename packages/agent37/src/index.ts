@@ -280,8 +280,8 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
               const encoded = bytes.subarray(offset, offset + WRITE_CHUNK_BYTES).toString('base64');
               await mustSucceed(run, sandbox, `printf '%s' '${encoded}' | base64 -d >> ${temporary}`, `write ${path}`);
             }
-            // Same-directory rename publishes only complete files, even when writers share a target.
-            await mustSucceed(run, sandbox, `mv -fT -- ${temporary} ${target}`, `write ${path}`);
+            // Lock without truncating, then overwrite in place to preserve modes, hard links and symlinks.
+            await mustSucceed(run, sandbox, `(flock -x 9 && cat ${temporary} > ${target}) 9>> ${target}`, `write ${path}`);
           } finally {
             await run(sandbox, `rm -f -- ${temporary}`).catch(() => {});
           }

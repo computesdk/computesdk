@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, link, lstat, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -48,6 +48,10 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
 
   async function expectNoStagingFiles() {
     expect((await readdir(directory, { recursive: true })).filter((name) => name.includes('.computesdk-write-'))).toEqual([]);
+  }
+
+  async function originalWrite(path: string, content: string) {
+    await execute('/bin/sh', ['-c', 'mkdir -p "$(dirname "$1")" && printf "%s" "$2" | base64 -d > "$1"', 'sh', path, Buffer.from(content).toString('base64')]);
   }
 
   it('writes the fidelity 256 KiB deterministic text concurrently with three small files and reads exact contents', async () => {
@@ -117,14 +121,82 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
     await expectNoStagingFiles();
   });
 
-  it.each(['chunk', 'rename', 'transport'] as const)('propagates %s failures, preserves the destination, and cleans staging files', async (failure) => {
+  it('preserves an existing executable file inode and mode like the original redirection', async () => {
+    const sb = await sandbox();
+    const path = join(directory, 'executable');
+    await writeFile(path, '#!/bin/sh\necho original\n');
+    await chmod(path, 0o751);
+    const original = await stat(path);
+    await originalWrite(path, 'old-write');
+    const updated = await stat(path);
+    expect({ inode: updated.ino, mode: updated.mode & 0o777 }).toEqual({ inode: original.ino, mode: 0o751 });
+    await sb.filesystem.writeFile(path, '#!/bin/sh\necho updated\n');
+    expect.soft((await stat(path)).mode & 0o777).toBe(0o751);
+    expect.soft((await stat(path)).ino).toBe(original.ino);
+    expect(await readFile(path, 'utf8')).toBe('#!/bin/sh\necho updated\n');
+  });
+
+  it('follows a symlink without replacing it like the original redirection', async () => {
+    const sb = await sandbox();
+    const target = join(directory, 'target');
+    const link = join(directory, 'link');
+    await writeFile(target, 'original');
+    await symlink('target', link);
+    await originalWrite(link, 'old-write');
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    expect(await readFile(target, 'utf8')).toBe('old-write');
+    await sb.filesystem.writeFile(link, 'updated');
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    expect(await readFile(target, 'utf8')).toBe('updated');
+  });
+
+  it('follows dangling symlinks and preserves the target mode and inode on empty overwrites', async () => {
+    const sb = await sandbox();
+    const target = join(directory, 'target');
+    const symlinkPath = join(directory, 'dangling');
+    await symlink('target', symlinkPath);
+    await sb.filesystem.writeFile(symlinkPath, 'created through symlink');
+    expect((await lstat(symlinkPath)).isSymbolicLink()).toBe(true);
+    expect(await readFile(target, 'utf8')).toBe('created through symlink');
+    await chmod(target, 0o751);
+    const original = await stat(target);
+    await sb.filesystem.writeFile(symlinkPath, '');
+    expect(await readFile(target, 'utf8')).toBe('');
+    expect((await stat(target)).ino).toBe(original.ino);
+    expect((await stat(target)).mode & 0o777).toBe(0o751);
+    expect((await lstat(symlinkPath)).isSymbolicLink()).toBe(true);
+  });
+
+  it('serializes concurrent writes through a path, its symlink and its hard link', async () => {
+    const sb = await sandbox();
+    const target = join(directory, 'target');
+    const symlinkPath = join(directory, 'symlink');
+    const hardlinkPath = join(directory, 'hardlink');
+    await writeFile(target, 'original');
+    await symlink('target', symlinkPath);
+    await link(target, hardlinkPath);
+    const original = await stat(target);
+    const paths = [target, symlinkPath, hardlinkPath];
+    const contents = ['a'.repeat(256 * 1024), 'b'.repeat(220 * 1024), 'c'.repeat(200 * 1024)];
+    await Promise.all(paths.map((path, index) => sb.filesystem.writeFile(path, contents[index])));
+    const actual = await readFile(target, 'utf8');
+    expect(contents).toContain(actual);
+    for (const path of paths) {
+      expect(await readFile(path, 'utf8')).toBe(actual);
+      expect((await stat(path)).ino).toBe(original.ino);
+    }
+    expect((await lstat(symlinkPath)).isSymbolicLink()).toBe(true);
+    await expectNoStagingFiles();
+  });
+
+  it.each(['chunk', 'commit', 'transport'] as const)('propagates %s failures, preserves the destination, and cleans staging files', async (failure) => {
     const sb = await sandbox();
     const path = join(directory, 'existing');
     await writeFile(path, 'original');
     let chunks = 0;
     intercept = (command) => {
       const chunk = command.includes('base64 -d >>') && ++chunks === 2;
-      if ((failure === 'rename' && command.startsWith('mv ')) || (failure !== 'rename' && chunk)) {
+      if ((failure === 'commit' && command.startsWith('(flock ')) || (failure !== 'commit' && chunk)) {
         if (failure === 'transport') return new Response('injected API failure', { status: 503 });
         return new Response(JSON.stringify({ exit_code: 1, stdout: '', stderr: 'injected shell failure' }));
       }
@@ -144,7 +216,7 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
     await expect(sb.filesystem.writeFile(join(directory, 'failed'), 'content')).rejects.toThrow('write failed');
   });
 
-  it('rejects writing over a directory instead of moving the staged file inside it', async () => {
+  it('rejects writing over a directory without leaving staging files', async () => {
     const sb = await sandbox();
     await expect(sb.filesystem.writeFile(directory, 'content')).rejects.toThrow('Failed to write');
     await expectNoStagingFiles();
