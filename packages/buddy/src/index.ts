@@ -7,8 +7,8 @@
  * time-to-first-command at the warm-pool latency instead of a poll interval.
  *
  * Snapshots are Buddy's only reusable image, so `compute.template.*` is mapped
- * onto them. `getInstance()` exposes `stop()`/`start()` for pausing a sandbox
- * and resuming the same one.
+ * onto them. `pause()`/`resume()` stop a sandbox and start the same one again
+ * (also reachable as `stop()`/`start()` on `getInstance()`).
  *
  * @see https://buddy.works/docs/api/sandboxes
  */
@@ -179,6 +179,12 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
 
       getInstance: (sandbox: BuddySandboxHandle) => sandbox,
 
+      // Stop/start under the same id. The disk survives except `/tmp`, which
+      // is cleared on boot; running processes do not.
+      pause: (sandbox: BuddySandboxHandle) => sandbox.stop(),
+      resume: (sandbox: BuddySandboxHandle) => sandbox.start(),
+      pauseCapabilities: { memory: false },
+
       filesystem: {
         readFile: (sandbox: BuddySandboxHandle, path: string) => fs.readFile(sandbox, path),
         writeFile: (sandbox: BuddySandboxHandle, path: string, content: string) =>
@@ -191,6 +197,9 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
     },
 
     snapshot: {
+      // A restore boots a new sandbox from the whole root disk; processes and
+      // the `/dev/shm` tmpfs are not kept. The source keeps running.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
       create: (config: BuddyConfig, sandboxId: string, options?: { name?: string }) =>
         createSnapshot(resolveConfig(config), sandboxId, options),
       list: (config: BuddyConfig, options?: ListSnapshotsOptions) =>

@@ -31,6 +31,8 @@ runProviderTestSuite({
   name: 'buddy',
   provider: buddy({}),
   supportsFilesystem: true,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   skipIntegration: !process.env.BUDDY_TOKEN
     || !process.env.BUDDY_WORKSPACE
     || !process.env.BUDDY_PROJECT,
