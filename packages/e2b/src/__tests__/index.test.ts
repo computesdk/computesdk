@@ -9,6 +9,9 @@ runProviderTestSuite({
   supportsStreaming: true,
   supportsProcesses: true,
   expectProcessRuntime: { streaming: 'native', processes: 'native' },
+  // Pause keeps memory and the filesystem; snapshots capture the whole rootfs.
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   skipIntegration: !process.env.E2B_API_KEY,
   ports: [3000, 8080]  // Enable getUrl tests
 });

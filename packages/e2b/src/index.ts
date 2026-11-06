@@ -193,10 +193,17 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         remove: async (sandbox: E2BSandbox, path: string): Promise<void> => { await sandbox.files.remove(path); }
       },
 
+      // Pause snapshots memory and the filesystem; connect() resumes it.
+      pause: async (sandbox: E2BSandbox): Promise<void> => { await sandbox.pause(); },
+      resume: async (sandbox: E2BSandbox): Promise<E2BSandbox> => sandbox.connect(),
+      pauseCapabilities: { memory: true },
+
       getInstance: (sandbox: E2BSandbox): E2BSandbox => sandbox,
     },
 
     snapshot: {
+      // A full memory + rootfs snapshot; the source is paused while it is taken, then keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
       create: async (config: E2BConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
         try {
