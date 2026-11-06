@@ -508,8 +508,16 @@ export function defineProviderTests(config: ProviderTestConfig) {
             const marker = `${await markerDir(source)}/csdk-pause-${Date.now()}`;
             expect((await source.runCommand(`echo paused-state > ${marker}`)).exitCode).toBe(0);
             // startProcess, not `cmd &` in runCommand: some providers end a command's process group on exit.
-            const proc = caps.memory ? await source.startProcess('sleep 600') : undefined;
-            if (proc) expect((await proc.status()).status).toBe('running');
+            // The process records its own pid, since a native handle may not survive a pause.
+            const pidFile = `${marker}.pid`;
+            if (caps.memory) {
+              await source.startProcess(`sh -c 'echo $$ > ${pidFile}; exec sleep 600'`);
+              const deadline = Date.now() + 15000;
+              while ((await source.runCommand(`cat ${pidFile}`)).stdout.trim() === '' && Date.now() < deadline) {
+                await new Promise((r) => setTimeout(r, 500));
+              }
+              expect((await source.runCommand(`kill -0 $(cat ${pidFile}) && echo alive`)).stdout.trim()).toBe('alive');
+            }
 
             await source.pause!();
             await source.resume!();
@@ -517,12 +525,8 @@ export function defineProviderTests(config: ProviderTestConfig) {
             const read = await source.runCommand(`cat ${marker}`);
             expect(read.exitCode).toBe(0);
             expect(read.stdout.trim()).toBe('paused-state');
-            if (proc) {
-              // Check the process itself: a native handle's connection may not survive a pause.
-              const alive = proc.pid != null
-                ? (await source.runCommand(`kill -0 ${proc.pid} && echo alive`)).stdout.trim() === 'alive'
-                : (await proc.status()).status === 'running';
-              expect(alive).toBe(true);
+            if (caps.memory) {
+              expect((await source.runCommand(`kill -0 $(cat ${pidFile}) && echo alive`)).stdout.trim()).toBe('alive');
             }
           } finally {
             await destroyQuietly(source);
