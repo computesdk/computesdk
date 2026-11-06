@@ -8,7 +8,7 @@ import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, Run
 
 import { randomUUID } from 'node:crypto';
 
-import { ModalClient, SandboxFilesystemNotFoundError } from 'modal';
+import { ModalClient, NotFoundError, SandboxFilesystemNotFoundError } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
 
 type ModalNativeSandbox = Sandbox;
@@ -400,7 +400,19 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         }
       },
       list: async (_config: ModalConfig) => [],
-      delete: async (_config: ModalConfig, _snapshotId: string) => { /* No-op */ }
+      delete: async (config: ModalInternalConfig, snapshotId: string) => {
+        config._imageCache.delete(snapshotId);
+        try {
+          await config._client.images.delete(snapshotId);
+        } catch (error) {
+          if (error instanceof NotFoundError) return;
+          throw new Error(`Failed to delete Modal snapshot: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      // `snapshotFilesystem` images the whole container rootfs (incl. /tmp and
+      // $HOME, not mounted volumes); processes don't carry over and the source
+      // keeps running.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
     },
 
     volume: {

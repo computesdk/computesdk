@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createSandbox, appFromName } = vi.hoisted(() => ({ createSandbox: vi.fn(), appFromName: vi.fn() }));
+const { createSandbox, appFromName, deleteImage } = vi.hoisted(() => ({ createSandbox: vi.fn(), appFromName: vi.fn(), deleteImage: vi.fn() }));
 
 const files = new Map<string, string>();
 const dirs = new Set<string>();
@@ -85,9 +85,10 @@ const fsCalls: string[][] = [];
 
 vi.mock('modal', () => ({
   SandboxFilesystemNotFoundError: class extends Error {},
+  NotFoundError: class extends Error {},
   ModalClient: class {
     apps = { fromName: appFromName.mockImplementation(async () => ({})) };
-    images = { fromRegistry: () => ({ build: async () => ({}) }) };
+    images = { fromRegistry: () => ({ build: async () => ({}) }), delete: deleteImage };
     sandboxes = {
       create: createSandbox.mockImplementation(async () => new FakeSandbox()),
       fromId: async () => new FakeSandbox(),
@@ -97,7 +98,29 @@ vi.mock('modal', () => ({
 }));
 
 import { modal } from '../index';
-import { SandboxFilesystemNotFoundError as FakeNotFoundError } from 'modal';
+import { SandboxFilesystemNotFoundError as FakeNotFoundError, NotFoundError as FakeModalNotFoundError } from 'modal';
+
+describe('modal snapshots', () => {
+  beforeEach(() => { deleteImage.mockReset(); });
+
+  it('declares whole-rootfs snapshots that keep the source running', () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    expect(provider.snapshot?.capabilities).toEqual({ scope: 'rootfs', memory: false, destroysSource: false });
+    expect(provider.sandbox.pause).toBeUndefined();
+  });
+
+  it('deletes the snapshot image and treats a missing one as deleted', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    await provider.snapshot!.delete('im-1');
+    expect(deleteImage).toHaveBeenCalledWith('im-1');
+
+    deleteImage.mockRejectedValueOnce(new FakeModalNotFoundError('Could not find image with ID im-2'));
+    await expect(provider.snapshot!.delete('im-2')).resolves.toBeUndefined();
+
+    deleteImage.mockRejectedValueOnce(new Error('boom'));
+    await expect(provider.snapshot!.delete('im-3')).rejects.toThrow(/Failed to delete Modal snapshot: boom/);
+  });
+});
 
 describe('modal sandbox creation', () => {
   beforeEach(() => { createSandbox.mockClear(); appFromName.mockClear(); });
