@@ -178,13 +178,17 @@ await sandbox.destroy()
 
 Commands use ephemeral `sandbox do` execution by default. Filesystem writes are only preserved when your Cloud Run sandbox CLI configuration supports host-backed persistence such as `--persist-dir`. Use `executionMode: 'stateful'` when you need a detached sandbox session created with `sandbox run` and reused with `sandbox exec`.
 
+### Sandbox image
+
+Sandboxes use the gateway image as their root filesystem and run as root. The image built by setup includes `git`, `python3`, `unzip`, `curl`, `sudo` and CA certificates, and keeps the apt package lists so writable sandboxes can `apt-get install` more.
+
 ### Snapshots
 
 `compute.snapshot.create(sandboxId)` exports the stateful sandbox's writable rootfs overlay with `sandbox tar`; `compute.sandbox.create({ snapshotId })` starts a new stateful sandbox from it. The source keeps running. Files under `/tmp` and `--mount` paths are not included, and running processes and memory are not kept. Snapshots are stored in `gs://$CLOUD_RUN_SNAPSHOT_BUCKET/computesdk-snapshots/` when the gateway has `CLOUD_RUN_SNAPSHOT_BUCKET` set (setup creates the bucket and grants the service's runtime service account `roles/storage.objectAdmin`), otherwise on the gateway instance that took them.
 
 ### Gateway instances
 
-A stateful sandbox lives on the gateway instance that created it. The provider replays Cloud Run's session-affinity cookie so follow-up calls reach that instance; affinity is best effort, so keep `--session-affinity` and spare `--concurrency` on the service. The gateway deletes stateful sandboxes idle for `CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS` (default one hour, `0` disables). Snapshot, restore and live streaming need the current gateway; against a gateway deployed before these features, snapshot calls fail with a redeploy hint and streamed output arrives when the command exits.
+A stateful sandbox lives on the gateway instance that created it. The provider replays Cloud Run's session-affinity cookie so follow-up calls reach that instance; affinity is best effort, so keep `--session-affinity` and spare `--concurrency` on the service. The gateway deletes stateful sandboxes idle for `CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS` (default one hour, `0` disables; set it at deploy time with the same variable), never while a command is running. Snapshot, restore and live streaming need the current gateway; against a gateway deployed before these features, snapshot calls fail with a redeploy hint and streamed output arrives when the command exits.
 
 `getUrl()` is not supported because the current Cloud Run sandbox CLI does not expose per-sandbox ports.
 
