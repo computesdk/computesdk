@@ -24,7 +24,8 @@ const PROVIDERS = {
     load: async () => (await import('../packages/superserve/dist/index.mjs')).superserve({}),
     templates: [
       ...SHAPES.filter((s) => s.vcpu !== 2),
-      { name: 'csdk-node22-1cpu-256mb', vcpu: 1, memoryMib: 256, diskMib: 1024 },
+      // node:22 doesn't fit a 1 GiB disk (image_too_large), so small boxes keep the default disk.
+      { name: 'csdk-node22-1cpu-256mb', vcpu: 1, memoryMib: 256 },
     ],
     exists: (t, name) => t.name === name,
     create: (p, s) => p.template.create({
