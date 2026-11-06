@@ -276,6 +276,16 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
 
       getInstance: (sandbox: Sandbox) => sandbox,
 
+      // Hibernate keeps the whole VM: files, memory and running processes.
+      // A hibernated sandbox can't exec or snapshot until resumed.
+      pause: async (sandbox: Sandbox) => {
+        await sandbox.hibernate()
+      },
+      resume: async (sandbox: Sandbox) => {
+        await sandbox.resume()
+      },
+      pauseCapabilities: { memory: true },
+
       filesystem: {
         readFile: async (sandbox: Sandbox, path: string): Promise<string> => {
           // Isorun's download endpoint truncates multi-MiB bodies and leaves the
@@ -357,6 +367,10 @@ export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSna
     },
 
     snapshot: {
+      // Snapshots capture the running VM (rootfs incl. /tmp, memory and
+      // processes) and leave the source running; restores get a new id.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
+
       create: async (config: ConfigWithClient, sandboxId: string): Promise<IsorunSnapshot> => {
         const sandbox = await getClient(config).get(sandboxId)
         if (!sandbox) throw new Error(`Sandbox not found: ${sandboxId}`)
