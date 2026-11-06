@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.6.3
+
+### Patch Changes
+
+- 74f256d: Add `compute agents run <agent> --resume <sessionId>` to restore a stopped conversation on a replacement sandbox with its persistent agent disk.
+
 ## 2.6.2
 
 ### Patch Changes
