@@ -102,8 +102,10 @@ async function setup() {
       // and keep the apt lists so `apt-get install` works in writable sandboxes.
       // The sandbox CLI also needs the system CAs (e.g. for gs:// snapshots).
       'RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git python3 unzip',
-      // Sandboxes cannot switch users, so apt must not drop to `_apt` and sudo just runs the command.
-      `RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99computesdk-sandbox`,
+      // Sandbox root cannot switch users or bypass file permissions: apt must not drop
+      // to `_apt` and needs its `_apt`-owned dirs, and sudo just runs the command.
+      `RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99computesdk-sandbox`
+        + ' && mkdir -p /var/lib/apt/lists/auxfiles && chown -R root:root /var/cache/apt /var/lib/apt/lists',
       'COPY sudo /usr/local/bin/sudo',
       'RUN chmod 755 /usr/local/bin/sudo',
       'WORKDIR /app',
