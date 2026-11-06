@@ -245,7 +245,7 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
     let chunks = 0;
     intercept = (command) => {
       const chunk = command.includes('base64 -d >>') && ++chunks === 2;
-      if ((failure === 'commit' && command.startsWith('(flock ')) || (failure !== 'commit' && chunk)) {
+      if ((failure === 'commit' && command.startsWith('if command -v flock ')) || (failure !== 'commit' && chunk)) {
         if (failure === 'transport') return new Response('injected API failure', { status: 503 });
         return new Response(JSON.stringify({ exit_code: 1, stdout: '', stderr: 'injected shell failure' }));
       }

@@ -280,8 +280,9 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
               const encoded = bytes.subarray(offset, offset + WRITE_CHUNK_BYTES).toString('base64');
               await mustSucceed(run, sandbox, `printf '%s' '${encoded}' | base64 -d >> ${temporary}`, `write ${path}`);
             }
-            // Lock without truncating, then overwrite in place to preserve modes, hard links and symlinks.
-            await mustSucceed(run, sandbox, `(flock -x 9 && cat ${temporary} > ${target}) 9>> ${target}`, `write ${path}`);
+            // Custom images may omit flock; only that case falls back to ordinary redirection.
+            const copy = `cat ${temporary} > ${target}`;
+            await mustSucceed(run, sandbox, `if command -v flock >/dev/null 2>&1; then (flock -x 9 && ${copy}) 9>> ${target}; else ${copy}; fi`, `write ${path}`);
           } finally {
             await run(sandbox, `rm -f -- ${temporary}`).catch(() => {});
           }

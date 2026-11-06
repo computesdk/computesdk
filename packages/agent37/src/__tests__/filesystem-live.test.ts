@@ -10,6 +10,8 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
   const directory = `/tmp/computesdk-agent37-transfer-${randomUUID()}`;
   const stagingDirectory = `${directory}/remote temp "quotes" $dollar`;
   let nonRootGuest = false;
+  let pathOverride: string | undefined;
+  let hasFlock = false;
   const requestSizes: number[] = [];
   const originalFetch = globalThis.fetch;
 
@@ -18,6 +20,7 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
       if (String(input).endsWith('/exec') && typeof init?.body === 'string') {
         const body = JSON.parse(init.body) as { command: string };
         body.command = `export TMPDIR=${escapeShellArg(stagingDirectory)}; ${body.command}`;
+        if (pathOverride) body.command = `export PATH=${escapeShellArg(pathOverride)}; ${body.command}`;
         if (nonRootGuest) body.command = `runuser -u nobody -- /bin/sh -c ${escapeShellArg(body.command)}`;
         const encoded = JSON.stringify(body);
         init = { ...init, body: encoded };
@@ -27,7 +30,7 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
     });
     sandbox = await provider.sandbox.create({ templateId: 'agent37-base' });
     expect((await sandbox.runCommand(`mkdir -p ${escapeShellArg(stagingDirectory)}`)).exitCode).toBe(0);
-    expect((await sandbox.runCommand('command -v flock')).exitCode).toBe(0);
+    hasFlock = (await sandbox.runCommand('command -v flock')).exitCode === 0;
   }, 120_000);
 
   afterAll(async () => {
@@ -70,7 +73,8 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
     expect(await sandbox.filesystem.readFile(`${directory}/new-empty`)).toBe('');
   }, 120_000);
 
-  it('does not interleave concurrent writes to one destination or leave staging files', async () => {
+  it('does not interleave concurrent writes to one destination or leave staging files', async ({ skip }) => {
+    if (!hasFlock) skip();
     const path = `${directory}/shared`;
     const contents = ['a'.repeat(256 * 1024), 'b'.repeat(200 * 1024)];
     await Promise.all(contents.map((content) => sandbox.filesystem.writeFile(path, content)));
@@ -103,6 +107,37 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
     }
   }, 120_000);
 
+  it('writes without flock and propagates real lock failures instead of falling back', async () => {
+    const bin = `${directory}/without-flock-bin`;
+    const path = `${directory}/without-flock-target`;
+    const setup = await sandbox.runCommand(`mkdir -p ${bin} && for tool in mkdir base64 cat rm; do source=$(command -v "$tool") && ln -s "$source" ${bin}/"$tool" || exit 1; done`);
+    expect(setup.exitCode).toBe(0);
+    pathOverride = bin;
+    try {
+      expect((await sandbox.runCommand('command -v flock')).exitCode).not.toBe(0);
+      const content = 'a'.repeat(48 * 1024 - 1) + '😀漢字é\0\n'.repeat(4000);
+      for (const value of ['x'.repeat(256 * 1024), content, 'short', '']) {
+        await sandbox.filesystem.writeFile(path, value);
+        expect(await sandbox.filesystem.readFile(path)).toBe(value);
+      }
+    } finally {
+      pathOverride = undefined;
+    }
+    const inject = await sandbox.runCommand(`printf '%s' ${escapeShellArg('#!/bin/sh\nprintf "injected lock failure" >&2\nexit 73\n')} > ${bin}/flock && chmod 755 ${bin}/flock`);
+    expect(inject.exitCode).toBe(0);
+    pathOverride = bin;
+    try {
+      await expect(sandbox.filesystem.writeFile(path, 'must not fall back')).rejects.toThrow('injected lock failure');
+      expect(await sandbox.filesystem.readFile(path)).toBe('');
+    } finally {
+      pathOverride = undefined;
+    }
+    const cleanup = await sandbox.runCommand(`find ${escapeShellArg(stagingDirectory)} -name '.computesdk-write-*' -print`);
+    expect(cleanup.exitCode).toBe(0);
+    expect(cleanup.stdout.trim()).toBe('');
+    console.log('Agent37 no-flock fallback: new/overwrite/UTF-8/empty exact readbacks; real flock error propagated; remote TMPDIR cleaned');
+  }, 120_000);
+
   it('preserves executable mode, inode and hard links when overwriting through a symlink', async () => {
     const path = `${directory}/executable`;
     const symlink = `${directory}/symlink`;
@@ -126,7 +161,8 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
     console.log('Agent37 overwrite compatibility: executable mode 751, inode, symlink and hard link preserved, including empty writes');
   }, 120_000);
 
-  it('serializes concurrent writes through symlink and hard-link aliases of the destination', async () => {
+  it('serializes concurrent writes through symlink and hard-link aliases of the destination', async ({ skip }) => {
+    if (!hasFlock) skip();
     const path = `${directory}/alias-target`;
     const symlink = `${directory}/alias-symlink`;
     const hardlink = `${directory}/alias-hardlink`;
