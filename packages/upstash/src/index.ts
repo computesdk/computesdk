@@ -2,7 +2,7 @@
  * Upstash Box Provider - Factory-based Implementation
  *
  * Wraps @upstash/box SDK with ComputeSDK's provider interface.
- * Supports code execution, shell commands, filesystem, snapshots, and preview URLs.
+ * Supports code execution, shell commands, filesystem, pause/resume, snapshots, and preview URLs.
  */
 
 import { Box, EphemeralBox } from '@upstash/box';
@@ -399,6 +399,24 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         },
       },
 
+      // Native pause releases compute; a paused box also resumes on its next exec or file call.
+      pause: async (sandbox: UpstashSandboxInstance): Promise<void> => {
+        if (isEphemeralSandboxInstance(sandbox)) {
+          throw new Error('Ephemeral Upstash boxes cannot be paused. Create the box with ephemeral: false.');
+        }
+        await sandbox.pause();
+      },
+
+      resume: async (sandbox: UpstashSandboxInstance): Promise<void> => {
+        if (isEphemeralSandboxInstance(sandbox)) {
+          throw new Error('Ephemeral Upstash boxes cannot be paused or resumed. Create the box with ephemeral: false.');
+        }
+        await sandbox.resume();
+      },
+
+      // Files survive except on tmpfs mounts (/var/tmp, /var/cache, /var/log, /root, /run, /dev/shm); running processes do not.
+      pauseCapabilities: { memory: false, createOptions: { ephemeral: false } },
+
       // Provider-specific typed getInstance method
       getInstance: (sandbox: UpstashSandboxInstance): UpstashSandboxInstance => {
         return sandbox;
@@ -406,6 +424,9 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
     },
 
     snapshot: {
+      // Restores keep the root filesystem, except tmpfs mounts (/var/tmp, /var/cache, /var/log, /root, /run, /dev/shm).
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
+
       create: async (config: UpstashConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = config.apiKey || process.env.UPSTASH_BOX_API_KEY!;
 
