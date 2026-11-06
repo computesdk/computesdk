@@ -10,6 +10,8 @@ runProviderTestSuite({
   // Background processes have no native hook yet, so they run on the shell tier.
   supportsProcesses: true,
   expectProcessRuntime: { streaming: 'native', processes: 'shell' },
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   // Skip integration tests unless an explicit API key is provided and SKIP_INTEGRATION=false.
   // This avoids dependency on external Tensorlake infrastructure for local development.
   skipIntegration:

@@ -206,6 +206,13 @@ export const tensorlake = defineProvider<
         // `diskMb` is the SDK's create-option name; `ephemeralDiskMb` is kept
         // as an alias for existing callers.
         const diskMb = options?.diskMb ?? options?.ephemeralDiskMb;
+        // Only named sandboxes can be suspended, and names are fixed at
+        // create, so `ephemeral: false` asks for a generated unique name.
+        const name =
+          options?.name ??
+          (options?.ephemeral === false
+            ? `computesdk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+            : undefined);
 
         const params: CreateAndConnectOptions & Partial<SandboxClientOptions> = {
           ...(image && { image }),
@@ -213,7 +220,7 @@ export const tensorlake = defineProvider<
           ...(options?.cpus && { cpus: options.cpus }),
           ...(options?.memoryMb && { memoryMb: options.memoryMb }),
           ...(diskMb && { diskMb }),
-          ...(options?.name && { name: options.name }),
+          ...(name && { name }),
           ...(options?.snapshotId && { snapshotId: options.snapshotId }),
           proxyUrl: config.proxyUrl,
           apiKey,
@@ -309,6 +316,18 @@ export const tensorlake = defineProvider<
           const { apiKey, apiUrl } = resolveAuth(config);
           const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
           await sandbox.terminate();
+          // Each suspend leaves a `suspend-<id>-…` memory snapshot that
+          // outlives the sandbox; drop those, but keep user checkpoints.
+          const snapshots = await Sandbox.connect({ sandboxId, apiKey, apiUrl })
+            .then((s) => s.listSnapshots())
+            .catch(() => []);
+          await Promise.all(
+            snapshots
+              .filter((s) => s.snapshotId.startsWith(`suspend-${sandboxId}-`))
+              .map((s) =>
+                Sandbox.deleteSnapshot(s.snapshotId, { apiKey, apiUrl }).catch(() => {}),
+              ),
+          );
         } catch {
           // Sandbox may already be terminated
         }
@@ -536,11 +555,25 @@ export const tensorlake = defineProvider<
         },
       },
 
+      // Suspend keeps memory, running processes and the whole disk; the same
+      // handle is usable again once resume() returns.
+      pause: async (ctx: TensorlakeSandboxContext): Promise<void> => {
+        await ctx.sandbox.suspend();
+      },
+      resume: async (ctx: TensorlakeSandboxContext): Promise<void> => {
+        await ctx.sandbox.resume();
+      },
+      pauseCapabilities: { memory: true, createOptions: { ephemeral: false } },
+
       getInstance: (ctx: TensorlakeSandboxContext): TensorlakeSandboxContext =>
         ctx,
     },
 
     snapshot: {
+      // checkpoint() defaults to a filesystem checkpoint: the whole disk
+      // (/tmp and $HOME included) is restored, processes are not, and the
+      // source keeps running.
+      capabilities: { scope: "rootfs", memory: false, destroysSource: false },
       create: async (
         config: TensorlakeConfig,
         sandboxId: string,
