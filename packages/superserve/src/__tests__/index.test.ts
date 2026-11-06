@@ -7,5 +7,7 @@ runProviderTestSuite({
   supportsFilesystem: true,
   supportsStreaming: true,
   supportsProcesses: true,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   skipIntegration: !process.env.SUPERSERVE_API_KEY,
 });

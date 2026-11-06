@@ -358,9 +358,31 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
       },
 
       getInstance: (sandbox: SuperserveSandbox): SuperserveSandbox => sandbox,
+
+      pause: async (sandbox: SuperserveSandbox): Promise<void> => {
+        try {
+          await sandbox.pause({ wait: true });
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to pause Superserve sandbox');
+        }
+      },
+
+      resume: async (sandbox: SuperserveSandbox): Promise<void> => {
+        try {
+          // The access token rotates on resume; the SDK refreshes the handle in place.
+          await sandbox.resume();
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to resume Superserve sandbox');
+        }
+      },
+
+      pauseCapabilities: { memory: true },
     },
 
     snapshot: {
+      // Snapshots hold memory and disk: restores keep the whole filesystem,
+      // tmpfs /tmp included, and running processes. The source keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
       create: async (config: SuperserveConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
