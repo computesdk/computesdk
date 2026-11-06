@@ -118,10 +118,16 @@ function buildClaimOptions(
   options?: CreateInstanceOptions,
 ): Sandbox0ClaimOptions | undefined {
   const providerOptions = options as Record<string, unknown> | undefined;
-  const ttl = optionalPositiveSeconds('ttl', providerOptions?.ttl ?? config.ttl);
+  // The unified `timeout` is the sandbox lifetime; without it a claim ends at
+  // the platform default TTL. Native ttl/hardTtl still win.
+  const timeoutSeconds =
+    typeof options?.timeout === 'number' && Number.isFinite(options.timeout) && options.timeout > 0
+      ? Math.ceil(options.timeout / 1000)
+      : undefined;
+  const ttl = optionalPositiveSeconds('ttl', providerOptions?.ttl ?? timeoutSeconds ?? config.ttl);
   const hardTtl = optionalPositiveSeconds(
     'hardTtl',
-    providerOptions?.hardTtl ?? config.hardTtl,
+    providerOptions?.hardTtl ?? timeoutSeconds ?? config.hardTtl,
   );
   const autoResume = providerOptions?.autoResume;
   if (autoResume !== undefined && typeof autoResume !== 'boolean') {

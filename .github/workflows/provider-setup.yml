@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        description: Provider to set up (superserve, novita, mosaic) or all
+        description: Provider to set up (superserve, novita, mosaic, e2b) or all
         required: true
         type: string
       dry_run:
@@ -34,8 +34,8 @@ jobs:
     - name: Check provider
       run: |
         case "$PROVIDER" in
-          superserve|novita|mosaic) packages="$PROVIDER" ;;
-          all) packages="superserve novita mosaic" ;;
+          superserve|novita|mosaic|e2b) packages="$PROVIDER" ;;
+          all) packages="superserve novita mosaic e2b" ;;
           *) echo "Unknown provider: $PROVIDER"; exit 1 ;;
         esac
         echo "PACKAGES=$packages" >> "$GITHUB_ENV"

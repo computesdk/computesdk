@@ -43,6 +43,18 @@ const PROVIDERS = {
     }),
     boot: (s) => ({ templateId: s.name }),
   },
+  // CPU and memory are fixed at template build; `sizeClass` boots these by name.
+  // https://docs.e2b.dev/template/build.md
+  e2b: {
+    load: async () => (await import('../packages/e2b/dist/index.mjs')).e2b({}),
+    templates: SHAPES,
+    // GET /v2/templates names are team-scoped ("<team>/<name>").
+    exists: (t, name) => (t.names ?? []).some((n) => n === name || n.endsWith(`/${name}`)),
+    create: (p, s) => p.template.create({
+      name: s.name, image: NODE, build: { cpuCount: s.vcpu, memoryMB: s.memoryMib },
+    }),
+    boot: (s) => ({ sizeClass: { 1: 'sm', 2: 'md', 4: 'lg', 8: 'xl' }[s.vcpu] }),
+  },
   // Create only accepts the smaller shapes; 8 vCPU / 16 GiB exists only as a
   // built environment, which instances restore at its captured shape.
   mosaic: {

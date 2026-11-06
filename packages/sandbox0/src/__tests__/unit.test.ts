@@ -188,6 +188,16 @@ describe('sandbox0 provider', () => {
     }
   });
 
+  it('maps the unified timeout onto the claim TTLs', async () => {
+    const provider = sandbox0({ token: 's0_test', ttl: 30, hardTtl: 300 });
+
+    await provider.sandbox.create({ templateId: 'node', timeout: 21_900_500 });
+
+    expect(claimMock).toHaveBeenLastCalledWith('node', {
+      config: { ttl: 21_901, hardTtl: 21_901 },
+    });
+  });
+
   it('maps create options to the official Sandbox0 SDK', async () => {
     const provider = sandbox0({
       token: 's0_test',
