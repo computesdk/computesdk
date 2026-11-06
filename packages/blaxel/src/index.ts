@@ -448,6 +448,11 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		},
 
 		snapshot: {
+			// Live-observed: a fork restores the whole overlay rootfs (/tmp, home
+			// and /opt included) and the source's running processes; the source
+			// keeps running.
+			capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
+
 			create: async (config: BlaxelConfig, sandboxId: string, options?: CreateSnapshotOptions) =>
 				withBlaxelConfig(config, async () => {
 					try {
