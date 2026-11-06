@@ -147,6 +147,44 @@ it('fails unsupported create policy before allocation', async () => {
   }
   expect(state.creates).not.toHaveBeenCalled();
 });
+it.each([
+  ['sm', 'small'],
+  ['md', 'medium'],
+  ['lg', 'large'],
+  ['xl', 'xlarge'],
+])('maps the %s size class to the Briq %s size', async (sizeClass, size) => {
+  const provider = briq({ apiKey: 'fixture' });
+  state.creates.mockClear();
+  const instance = await provider.instances.create({ sizeClass } as never);
+  expect(state.creates).toHaveBeenCalledTimes(1);
+  expect(state.creates.mock.calls[0][0]).toMatchObject({ size });
+  expect(state.creates.mock.calls[0][0]).not.toHaveProperty('sizeClass');
+  await instance.destroy();
+});
+it('sends no size when none is requested, so the SDK default applies', async () => {
+  const provider = briq({ apiKey: 'fixture' });
+  state.creates.mockClear();
+  const instance = await provider.instances.create();
+  expect(state.creates.mock.calls[0][0]).not.toHaveProperty('size');
+  await instance.destroy();
+});
+it.each(['xs', '2xl'])('refuses the %s size class before any request', async (sizeClass) => {
+  const provider = briq({ apiKey: 'fixture' });
+  state.creates.mockClear();
+  await expect(provider.instances.create({ sizeClass } as never)).rejects.toMatchObject({
+    code: 'unsupported',
+  });
+  expect(state.creates).not.toHaveBeenCalled();
+});
+it('refuses a size class combined with the size option, and a size Briq does not have', async () => {
+  const provider = briq({ apiKey: 'fixture' });
+  state.creates.mockClear();
+  await expect(
+    provider.instances.create({ sizeClass: 'md', size: 'small' } as never),
+  ).rejects.toMatchObject({ code: 'conflict' });
+  await expect(provider.instances.create({ size: 'nano' } as never)).rejects.toBeDefined();
+  expect(state.creates).not.toHaveBeenCalled();
+});
 it('creates with no exec and runs a plain command as the first and only exec', async () => {
   const provider = briq({ apiKey: 'fixture' });
   state.run.mockClear();

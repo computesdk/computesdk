@@ -107,9 +107,21 @@ interface BriqConfig {
 | `envs` | Stored encrypted by Briq, as literal values. Fails `unsupported` if the Briq API does not support literal environment values |
 | `metadata` | A JSON object, 1024 characters serialized |
 | `directory` | Absolute working directory. Default `/workspace` |
+| `sizeClass` | `sm`, `md`, `lg` or `xl`. See Sizes |
 | `signal` | Cancels creation |
 
-Other options (`timeout`, `image`, templates, snapshots, `resources`, `sizeClass`, `volumes`, `egress`) are refused before anything is created.
+Other options (`timeout`, `image`, templates, snapshots, `resources`, `volumes`, `egress`) are refused before anything is created.
+
+## Sizes
+
+| `sizeClass` | Briq size |
+|---|---|
+| `sm` | `small` (the default) |
+| `md` | `medium` |
+| `lg` | `large` |
+| `xl` | `xlarge` |
+
+`xs` and `2xl` have no Briq size: they fail with `unsupported` before any request. Your Briq plan decides which sizes you can use.
 
 ## Limitations
 
@@ -117,4 +129,4 @@ Other options (`timeout`, `image`, templates, snapshots, `resources`, `sizeClass
 - Command timeout is 30 seconds by default and one hour at most. Output is limited to 8 MiB.
 - Files are UTF-8 text. Directory listings refuse symbolic links.
 - No templates, snapshots or volumes.
-- Instances run the Briq sandbox image, Linux amd64, on Briq's `small` size. `resources` and `sizeClass` are refused.
+- Instances run the Briq sandbox image, Linux amd64, on Briq's `small` size unless you pass a `sizeClass`. `resources` is refused.

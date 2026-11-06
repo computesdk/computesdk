@@ -41,7 +41,7 @@
     "compute"
   ],
   "dependencies": {
-    "@briq-cloud/sdk": "^0.1.0",
+    "@briq-cloud/sdk": "^0.1.1",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
     "daemond": "workspace:*"

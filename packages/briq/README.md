@@ -66,10 +66,23 @@ Without a key, the first call fails with the setup steps.
 | `envs` | Stored encrypted by Briq. The API must support literal environment values. |
 | `metadata` | A JSON object, 1024 characters serialized. Returned by `getInfo`. |
 | `directory` | Absolute path used as the working directory. Default `/workspace`. |
+| `sizeClass` | `sm`, `md`, `lg` or `xl`. See [Sizes](#sizes). |
 | `signal` | Cancels creation. |
 
 Other options are refused before anything is created: `timeout`, `image`, templates, snapshots,
-`resources`, `sizeClass`, `volumes` and `egress`.
+`resources`, `volumes` and `egress`.
+
+## Sizes
+
+| `sizeClass` | Briq size |
+|---|---|
+| `sm` | `small` (the default) |
+| `md` | `medium` |
+| `lg` | `large` |
+| `xl` | `xlarge` |
+
+`xs` and `2xl` have no Briq size: they fail with `unsupported` before any request. Without a
+`sizeClass`, the instance is `small`. Your Briq plan decides which sizes you can use. `resources` is refused.
 
 ## Capabilities
 
@@ -85,6 +98,6 @@ Other options are refused before anything is created: `timeout`, `image`, templa
 
 ## Behavior
 
-- Instances run the Briq sandbox image, Linux amd64, on Briq's `small` size. `resources` and `sizeClass` are refused.
+- Instances run the Briq sandbox image, Linux amd64, on Briq's `small` size unless you pass a `sizeClass` (see Sizes).
 - A command that times out is stopped. It is never run a second time.
 - When the outcome of a command is unknown, the call fails instead of returning a guess.

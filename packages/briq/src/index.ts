@@ -1,8 +1,9 @@
 import { posix } from 'node:path';
-import { BriqOperationError, fail, nativeSandbox } from '@briq-cloud/sdk';
+import { BriqOperationError, type SandboxSize, fail, nativeSandbox } from '@briq-cloud/sdk';
 import {
   type CommandResult,
   type CreateInstanceOptions,
+  InstanceSizeError,
   type ProviderInstance,
   type RunCommandOptions,
   defineProvider,
@@ -14,6 +15,15 @@ export type { BriqConfig, BriqInstance } from './types';
 const META = 'briq/computesdk-metadata';
 const DIRECTORY = 'briq/computesdk-directory';
 const COMMAND_TIMEOUT = 30000;
+/** Briq's size for each standard size class. `xs` and `2xl` have no Briq size. */
+const SIZES: Readonly<Record<string, SandboxSize>> = {
+  sm: 'small',
+  md: 'medium',
+  lg: 'large',
+  xl: 'xlarge',
+};
+const isSize = (value: unknown): value is SandboxSize =>
+  typeof value === 'string' && Object.values(SIZES).includes(value as SandboxSize);
 /** The API key from the config, else `BRIQ_API_KEY`; fails with the setup steps when neither is set. */
 function resolveApiKey(config: BriqConfig): string {
   const apiKey = config.apiKey || process.env.BRIQ_API_KEY;
@@ -161,6 +171,17 @@ export function briq(config: BriqConfig = {}) {
   };
   const factory = defineProvider<BriqInstance, BriqConfig>({
     name: 'briq',
+    sizes: (_config, profile, options) => {
+      if (options?.size !== undefined)
+        throw new InstanceSizeError('conflict', 'cannot combine sizeClass with the size option');
+      const size = SIZES[profile.sizeClass];
+      if (!size)
+        return {
+          status: 'unsupported',
+          reason: `Briq has no size for ${profile.sizeClass}. Use sm, md, lg or xl.`,
+        };
+      return { status: 'supported', nativeOptions: { size } };
+    },
     methods: {
       instances: {
         async create(_config, options: CreateInstanceOptions = {}) {
@@ -172,6 +193,7 @@ export function briq(config: BriqConfig = {}) {
             'signal',
             'directory',
             'ephemeral',
+            'size',
           ]);
           for (const [key, value] of Object.entries(options)) {
             if (value !== undefined && !supported.has(key))
@@ -182,6 +204,8 @@ export function briq(config: BriqConfig = {}) {
                   : `Unsupported create option: ${key}`,
               );
           }
+          if (options.size !== undefined && !isSize(options.size))
+            throw fail('unsupported', 'size must be small, medium, large or xlarge');
           if (options.provider !== undefined && options.provider !== 'briq')
             throw fail('invalid_argument', 'Provider name does not match');
           const cwd = options.directory ?? '/workspace';
@@ -203,6 +227,7 @@ export function briq(config: BriqConfig = {}) {
               ...(cwd === '/workspace' ? {} : { [DIRECTORY]: cwd }),
             },
             env: options.envs ?? {},
+            ...(options.size === undefined ? {} : { size: options.size }),
             ...(options.name === undefined ? {} : { name: options.name }),
             ...(options.signal ? { signal: options.signal } : {}),
           });
