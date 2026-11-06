@@ -3,13 +3,16 @@
  *
  * Supports two connection modes:
  *
- * 1. **Remote mode** — User deploys the Cloudflare sandbox demo Worker, then
- *    connects from anywhere using sandboxUrl + sandboxApiKey.
+ * 1. **Remote mode** — User deploys the bridge Worker in `worker/` (or the
+ *    Cloudflare sandbox demo Worker), then connects from anywhere using
+ *    sandboxUrl + sandboxApiKey.
  *
  * 2. **Direct mode** — User's code runs inside a Cloudflare Worker with a
- *    cross-script Durable Object binding to the sandbox demo Worker.
+ *    cross-script Durable Object binding to either Worker's Sandbox class.
  *
  * The mode is selected automatically based on which config fields are provided.
+ * In remote mode, `GET /v1/info` tells the bridge apart from the demo Worker;
+ * native files, preview URLs and snapshots are used only when it lists them.
  */
 
 import { defineProvider } from '@computesdk/provider';
@@ -49,6 +52,8 @@ export interface CloudflareSandboxOptions {
   diskMb?: number;
   /** Name of an image declared by the sandbox Worker, for example `builder`. */
   image?: string;
+  /** Snapshot to restore instead of an image. Bridge Worker only. */
+  snapshotId?: string;
 }
 
 export interface CloudflareSandboxStub {
@@ -72,13 +77,13 @@ export interface CloudflareSandboxBinding {
 }
 
 export interface CloudflareConfig {
-  /** URL of the deployed sandbox demo Worker. */
+  /** URL of the deployed bridge Worker (or Cloudflare sandbox demo Worker). */
   sandboxUrl?: string;
   /** API key that matches the Worker's SANDBOX_API_KEY secret. */
   sandboxApiKey?: string;
   /** @deprecated Use sandboxApiKey instead. */
   sandboxSecret?: string;
-  /** Durable Object namespace exported by the sandbox demo Worker. */
+  /** Durable Object namespace of the Worker's Sandbox class. */
   sandboxBinding?: CloudflareSandboxBinding;
   /** Default execution timeout in milliseconds. */
   timeout?: number;
@@ -141,15 +146,8 @@ async function createBridgeSandboxId(
   config: CloudflareConfig,
   options?: CloudflareSandboxOptions
 ): Promise<string> {
-  const sandboxApiKey = getSandboxApiKey(config)!;
   const data = await bridgeJSONRequest(
-    {
-      sandboxId: '',
-      remote: true,
-      timeoutMs: config.timeout ?? DEFAULT_EXEC_TIMEOUT_MS,
-      sandboxUrl: config.sandboxUrl,
-      sandboxApiKey,
-    },
+    bridgeTarget(config),
     'POST',
     '/v1/sandbox',
     options
@@ -164,26 +162,102 @@ async function createBridgeSandboxId(
   return data.id;
 }
 
-function bridgeUrl(cfSandbox: CloudflareSandbox, path: string): string {
-  const base = (cfSandbox.sandboxUrl || '').replace(/\/$/, '');
+interface BridgeTarget {
+  sandboxUrl?: string;
+  sandboxApiKey?: string;
+}
+
+type BridgeFeature = 'files' | 'ports' | 'snapshots';
+
+function bridgeUrl(target: BridgeTarget, path: string): string {
+  const base = (target.sandboxUrl || '').replace(/\/$/, '');
   return `${base}${path}`;
 }
 
-async function bridgeRequest(
-  cfSandbox: CloudflareSandbox,
+function bridgeTarget(config: CloudflareConfig): BridgeTarget {
+  return { sandboxUrl: config.sandboxUrl, sandboxApiKey: getSandboxApiKey(config) };
+}
+
+function bridgeFetch(
+  target: BridgeTarget,
   method: string,
   path: string,
   body?: BodyInit,
   headers: Record<string, string> = {}
 ): Promise<Response> {
-  const response = await fetch(bridgeUrl(cfSandbox, path), {
+  return fetch(bridgeUrl(target, path), {
     method,
     headers: {
-      Authorization: `Bearer ${cfSandbox.sandboxApiKey || ''}`,
+      Authorization: `Bearer ${target.sandboxApiKey || ''}`,
       ...headers,
     },
     body,
   });
+}
+
+const NO_BRIDGE_FEATURES: ReadonlySet<string> = new Set();
+const bridgeFeatureCache = new Map<string, Promise<ReadonlySet<string>>>();
+
+async function probeBridgeFeatures(target: BridgeTarget): Promise<ReadonlySet<string>> {
+  const response = await bridgeFetch(target, 'GET', '/v1/info');
+  // The Cloudflare sandbox demo Worker has no info route.
+  if (response.status === 404) {
+    await response.body?.cancel();
+    return NO_BRIDGE_FEATURES;
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`Sandbox Worker info request failed: ${response.status}`);
+  }
+  const info = (await response.json().catch(() => null)) as {
+    bridge?: unknown;
+    features?: unknown;
+  } | null;
+  if (info?.bridge !== 'computesdk' || !Array.isArray(info.features)) {
+    return NO_BRIDGE_FEATURES;
+  }
+  return new Set(info.features.filter((feature): feature is string => typeof feature === 'string'));
+}
+
+/** Whether the Worker at `target` serves `feature`. Failed probes are retried. */
+async function hasBridgeFeature(target: BridgeTarget, feature: BridgeFeature): Promise<boolean> {
+  if (!target.sandboxUrl) return false;
+  const key = `${target.sandboxUrl.replace(/\/$/, '')}\n${target.sandboxApiKey ?? ''}`;
+  let features = bridgeFeatureCache.get(key);
+  if (!features) {
+    features = probeBridgeFeatures(target);
+    bridgeFeatureCache.set(key, features);
+    features.catch(() => bridgeFeatureCache.delete(key));
+  }
+  try {
+    return (await features).has(feature);
+  } catch {
+    return false;
+  }
+}
+
+async function requireBridgeFeature(
+  config: CloudflareConfig,
+  feature: BridgeFeature,
+  description: string
+): Promise<BridgeTarget> {
+  const target = bridgeTarget(config);
+  if (!isRemote(config) || !(await hasBridgeFeature(target, feature))) {
+    throw new Error(
+      `Cloudflare ${description} need the ComputeSDK bridge Worker (run npx computesdk-cloudflare for deploy steps)`
+    );
+  }
+  return target;
+}
+
+async function bridgeRequest(
+  target: BridgeTarget,
+  method: string,
+  path: string,
+  body?: BodyInit,
+  headers: Record<string, string> = {}
+): Promise<Response> {
+  const response = await bridgeFetch(target, method, path, body, headers);
 
   if (!response.ok) {
     const text = await response.text().catch(() => '(unreadable)');
@@ -199,7 +273,7 @@ async function bridgeRequest(
 }
 
 async function bridgeJSONRequest(
-  cfSandbox: CloudflareSandbox,
+  cfSandbox: BridgeTarget,
   method: string,
   path: string,
   body?: object
@@ -508,6 +582,51 @@ function assertCommandSucceeded(result: CommandResult, action: string): void {
   }
 }
 
+async function usesNativeFiles(cfSandbox: CloudflareSandbox, path: string): Promise<boolean> {
+  return cfSandbox.remote && path.startsWith('/') && (await hasBridgeFeature(cfSandbox, 'files'));
+}
+
+function filesRoute(cfSandbox: CloudflareSandbox, route: string, path: string): string {
+  return `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/${route}?path=${encodeURIComponent(path)}`;
+}
+
+interface BridgeFileEntry {
+  name: string;
+  type: string;
+  size: number;
+  modifiedAt: string;
+}
+
+function toFileEntry(entry: BridgeFileEntry): FileEntry {
+  return {
+    name: entry.name,
+    type: entry.type === 'directory' ? 'directory' : 'file',
+    size: entry.size,
+    modified: new Date(entry.modifiedAt),
+  };
+}
+
+export interface CloudflareSnapshot {
+  id: string;
+  name: string | null;
+  size: number;
+  sandboxId: string;
+  createdAt: Date;
+}
+
+function toSnapshot(record: Record<string, any>): CloudflareSnapshot {
+  if (typeof record.id !== 'string' || record.id === '') {
+    throw new Error('Sandbox Worker snapshot response is missing an id');
+  }
+  return {
+    id: record.id,
+    name: typeof record.name === 'string' ? record.name : null,
+    size: Number(record.size ?? 0),
+    sandboxId: String(record.sandboxId ?? ''),
+    createdAt: new Date(record.createdAt ?? Date.now()),
+  };
+}
+
 function parseFindOutput(stdout: string): FileEntry[] {
   const fields = stdout.split('\0');
   if (fields.at(-1) === '') fields.pop();
@@ -554,10 +673,19 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         );
         const startOptions = sandboxOptions(options);
 
+        if (options?.snapshotId !== undefined && !options.sandboxId) {
+          await requireBridgeFeature(config, 'snapshots', 'snapshots');
+        }
+
         if (isRemote(config)) {
           const sandboxId =
             options?.sandboxId ||
-            (await createBridgeSandboxId(config, startOptions));
+            (await createBridgeSandboxId(
+              config,
+              options?.snapshotId === undefined
+                ? startOptions
+                : { ...startOptions, snapshotId: options.snapshotId }
+            ));
           if (!isBridgeSandboxId(sandboxId)) {
             throw new Error(
               'Invalid Cloudflare sandbox ID. Expected a 64-character hexadecimal Durable Object ID.'
@@ -674,15 +802,8 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
 
       destroy: async (config: CloudflareConfig, sandboxId: string) => {
         if (isRemote(config)) {
-          const sandboxApiKey = getSandboxApiKey(config)!;
           await bridgeJSONRequest(
-            {
-              sandboxId,
-              remote: true,
-              timeoutMs: config.timeout ?? DEFAULT_EXEC_TIMEOUT_MS,
-              sandboxUrl: config.sandboxUrl,
-              sandboxApiKey,
-            },
+            bridgeTarget(config),
             'DELETE',
             `/v1/sandbox/${encodeURIComponent(sandboxId)}`
           );
@@ -739,14 +860,35 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
         }
       },
 
-      getUrl: async () => {
-        throw new Error(
-          'Cloudflare sandbox Worker does not support port forwarding'
+      getUrl: async (
+        cfSandbox: CloudflareSandbox,
+        options: { port: number; protocol?: string }
+      ): Promise<string> => {
+        if (!cfSandbox.remote || !(await hasBridgeFeature(cfSandbox, 'ports'))) {
+          throw new Error(
+            'Cloudflare sandbox Worker does not support port forwarding'
+          );
+        }
+        const { port } = options;
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new RangeError(`Invalid port: ${port}`);
+        }
+        const url = new URL(
+          bridgeUrl(cfSandbox, `/v1/sandbox/${encodeURIComponent(cfSandbox.sandboxId)}/ports/${port}/`)
         );
+        const protocol = options.protocol?.replace(/:$/, '');
+        if (protocol === 'ws' || protocol === 'wss') {
+          url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+        }
+        return url.toString();
       },
 
       filesystem: {
         readFile: async (cfSandbox: CloudflareSandbox, path: string) => {
+          if (await usesNativeFiles(cfSandbox, path)) {
+            const response = await bridgeRequest(cfSandbox, 'GET', filesRoute(cfSandbox, 'files', path));
+            return await response.text();
+          }
           return (await readFileBytes(cfSandbox, path)).toString('utf8');
         },
 
@@ -755,6 +897,16 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           path: string,
           content: string
         ): Promise<void> => {
+          if (await usesNativeFiles(cfSandbox, path)) {
+            await bridgeRequest(
+              cfSandbox,
+              'PUT',
+              filesRoute(cfSandbox, 'files', path),
+              new TextEncoder().encode(content),
+              { 'Content-Type': 'application/octet-stream' }
+            );
+            return;
+          }
           const tempPath = `/tmp/.computesdk-${crypto.randomUUID()}`;
           try {
             let result = await exec(cfSandbox, `: > ${shellQuote(tempPath)}`);
@@ -792,6 +944,10 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           cfSandbox: CloudflareSandbox,
           path: string
         ): Promise<void> => {
+          if (await usesNativeFiles(cfSandbox, path)) {
+            await bridgeRequest(cfSandbox, 'POST', filesRoute(cfSandbox, 'files/mkdir', path));
+            return;
+          }
           const result = await exec(
             cfSandbox,
             `mkdir -p -- ${shellQuote(path)}`
@@ -803,6 +959,14 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           cfSandbox: CloudflareSandbox,
           path: string
         ): Promise<FileEntry[]> => {
+          if (await usesNativeFiles(cfSandbox, path)) {
+            const { entries } = await bridgeJSONRequest(
+              cfSandbox,
+              'GET',
+              filesRoute(cfSandbox, 'files/list', path)
+            );
+            return (entries as BridgeFileEntry[]).map(toFileEntry);
+          }
           const result = await exec(
             cfSandbox,
             `find -- ${shellQuote(
@@ -817,6 +981,13 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           cfSandbox: CloudflareSandbox,
           path: string
         ): Promise<boolean> => {
+          if (await usesNativeFiles(cfSandbox, path)) {
+            const response = await bridgeFetch(cfSandbox, 'GET', filesRoute(cfSandbox, 'files/stat', path));
+            await response.body?.cancel();
+            if (response.status === 404) return false;
+            if (!response.ok) throw new Error(`Sandbox Worker request failed: ${response.status}`);
+            return true;
+          }
           const result = await exec(cfSandbox, `test -e ${shellQuote(path)}`);
           return result.exitCode === 0;
         },
@@ -825,9 +996,50 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
           cfSandbox: CloudflareSandbox,
           path: string
         ): Promise<void> => {
+          if (await usesNativeFiles(cfSandbox, path)) {
+            await bridgeRequest(cfSandbox, 'DELETE', filesRoute(cfSandbox, 'files', path));
+            return;
+          }
           const result = await exec(cfSandbox, `rm -rf -- ${shellQuote(path)}`);
           assertCommandSucceeded(result, 'File removal');
         },
+      },
+    },
+
+    snapshot: {
+      create: async (
+        config: CloudflareConfig,
+        instanceId: string,
+        options?: { name?: string }
+      ): Promise<CloudflareSnapshot> => {
+        const target = await requireBridgeFeature(config, 'snapshots', 'snapshots');
+        const record = await bridgeJSONRequest(
+          target,
+          'POST',
+          `/v1/sandbox/${encodeURIComponent(instanceId)}/snapshot`,
+          options?.name ? { name: options.name } : {}
+        );
+        return toSnapshot(record);
+      },
+
+      list: async (
+        config: CloudflareConfig,
+        options?: { instanceId?: string; limit?: number }
+      ): Promise<CloudflareSnapshot[]> => {
+        const target = await requireBridgeFeature(config, 'snapshots', 'snapshots');
+        const { snapshots } = await bridgeJSONRequest(target, 'GET', '/v1/snapshots');
+        const all = (snapshots as Record<string, any>[]).map(toSnapshot);
+        const filtered = options?.instanceId
+          ? all.filter((snapshot) => snapshot.sandboxId === options.instanceId)
+          : all;
+        return options?.limit === undefined ? filtered : filtered.slice(0, options.limit);
+      },
+
+      // Cloudflare keeps snapshot data until 30 days after its last restore;
+      // deleting removes the handle, so the bridge no longer restores it.
+      delete: async (config: CloudflareConfig, snapshotId: string): Promise<void> => {
+        const target = await requireBridgeFeature(config, 'snapshots', 'snapshots');
+        await bridgeRequest(target, 'DELETE', `/v1/snapshots/${encodeURIComponent(snapshotId)}`);
       },
     },
   },
