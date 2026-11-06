@@ -49,8 +49,6 @@ interface BriqConfig {
   apiKey?: string;
   /** API address. Falls back to BRIQ_API_URL, then https://api.briq.cloud. */
   baseUrl?: string;
-  /** Stack that holds the instances. Default "computesdk". */
-  stack?: string;
   /** Custom HTTP transport. It must honor AbortSignal; redirects are refused. */
   fetch?: typeof fetch;
 }
@@ -93,11 +91,12 @@ Other options are refused before anything is created: `timeout`, `image`, templa
 | `startProcess` | Yes | stdin, status, wait, kill and callbacks. |
 | Filesystem | Yes | UTF-8 text. Listings refuse symbolic links. |
 | `getUrl` | Yes | A private HTTP preview. One port per instance: a new port replaces the old one. |
-| `list` | Yes | Instances this provider created in the stack. |
+| `list` | Yes | Instances this provider created, found by their label. |
 | Templates, snapshots, volumes | No | |
 
 ## Behavior
 
 - Instances run the Briq sandbox image, Linux amd64, on Briq's `small` size unless you pass a `sizeClass` (see Sizes).
+- Each instance has its own network, so instances cannot reach each other by name.
 - A command that times out is stopped. It is never run a second time.
 - When the outcome of a command is unknown, the call fails instead of returning a guess.

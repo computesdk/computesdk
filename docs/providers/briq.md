@@ -92,8 +92,6 @@ interface BriqConfig {
   apiKey?: string;
   /** API address - if not provided, will use BRIQ_API_URL, then https://api.briq.cloud */
   baseUrl?: string;
-  /** Stack that holds the instances. Default "computesdk" */
-  stack?: string;
   /** Custom HTTP transport. It must honor AbortSignal */
   fetch?: typeof fetch;
 }
@@ -129,4 +127,5 @@ Other options (`timeout`, `image`, templates, snapshots, `resources`, `volumes`,
 - Command timeout is 30 seconds by default and one hour at most. Output is limited to 8 MiB.
 - Files are UTF-8 text. Directory listings refuse symbolic links.
 - No templates, snapshots or volumes.
+- Each instance has its own network, so instances cannot reach each other by name.
 - Instances run the Briq sandbox image, Linux amd64, on Briq's `small` size unless you pass a `sizeClass`. `resources` is refused.

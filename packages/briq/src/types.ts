@@ -3,8 +3,6 @@ export interface BriqConfig {
   apiKey?: string;
   /** API address. Falls back to `BRIQ_API_URL`, then `https://api.briq.cloud`. */
   baseUrl?: string;
-  /** Stack that holds the instances. Default `computesdk`. */
-  stack?: string;
   /** Custom HTTP transport must honor AbortSignal. Redirects remain forbidden. */
   fetch?: typeof fetch;
 }

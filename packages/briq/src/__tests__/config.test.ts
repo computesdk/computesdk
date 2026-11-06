@@ -35,12 +35,13 @@ describe('briq config', () => {
 
   it('prefers the config over the environment and builds the client once', async () => {
     vi.stubEnv('BRIQ_API_KEY', 'env-key');
-    const provider = briq({ apiKey: 'config-key', baseUrl: 'https://custom.test', stack: 's' });
+    const provider = briq({ apiKey: 'config-key', baseUrl: 'https://custom.test' });
     await provider.instances.list();
     await provider.instances.list();
     expect(native).toHaveBeenCalledTimes(1);
     expect(native).toHaveBeenCalledWith(
-      expect.objectContaining({ apiKey: 'config-key', baseUrl: 'https://custom.test', stack: 's' }),
+      expect.objectContaining({ apiKey: 'config-key', baseUrl: 'https://custom.test' }),
     );
+    expect(native.mock.calls[0]?.[0]).not.toHaveProperty('stack');
   });
 });

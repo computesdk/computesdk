@@ -49,7 +49,6 @@ export function briq(config: BriqConfig = {}) {
       ...config,
       apiKey: resolveApiKey(config),
       baseUrl: config.baseUrl || process.env.BRIQ_API_URL || undefined,
-      stack: config.stack ?? 'computesdk',
       image: IMAGE,
       marker: 'briq/computesdk-provider',
       // create is the POST alone: the first exec is the caller's own command.
