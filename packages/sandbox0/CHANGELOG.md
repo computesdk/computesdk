@@ -1,5 +1,11 @@
 # @computesdk/sandbox0
 
+## 1.0.23
+
+### Patch Changes
+
+- c9718e9: Map the unified `timeout` create option onto the claim's `ttl`/`hardTtl` (seconds), so a requested lifetime is honored instead of ending at the platform default TTL. Native `ttl`/`hardTtl` still take precedence.
+
 ## 1.0.22
 
 ### Patch Changes

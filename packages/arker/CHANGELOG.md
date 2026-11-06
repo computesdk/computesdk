@@ -1,5 +1,11 @@
 # @computesdk/arker
 
+## 0.1.22
+
+### Patch Changes
+
+- c9718e9: Support standard `sizeClass` sizes. Arker sizes each fork with `resources.vcpu`/`resources.memory_mib`; unpinned creates fork the smallest `ubuntu-coding` golden that fits the shape, and shapes outside a known golden's bounds fail with `InstanceSizeError`.
+
 ## 0.1.21
 
 ### Patch Changes

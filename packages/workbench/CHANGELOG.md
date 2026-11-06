@@ -1,5 +1,17 @@
 # @computesdk/workbench
 
+## 33.0.29
+
+### Patch Changes
+
+- Updated dependencies [c9718e9]
+- Updated dependencies [c9718e9]
+- Updated dependencies [c9718e9]
+- Updated dependencies [c9718e9]
+  - @computesdk/e2b@1.7.71
+  - @computesdk/gcp@0.1.11
+  - @computesdk/cloud-run@0.1.27
+
 ## 33.0.28
 
 ### Patch Changes
