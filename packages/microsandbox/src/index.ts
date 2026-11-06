@@ -493,6 +493,33 @@ function detachedCleanupScript(paths: DetachedPaths): string {
   return `rm -f ${paths.pid} ${paths.out} ${paths.err} ${paths.outLen} ${paths.errLen} ${paths.code}`;
 }
 
+/** The cloud relay closes the channel on a single fs write of ~1 MiB, so
+ *  larger payloads are streamed in chunks well under that limit. */
+const FS_WRITE_CHUNK_BYTES = 256 * 1024;
+
+async function writeGuestFile(fs: ReturnType<NativeSandbox['fs']>, path: string, content: string): Promise<void> {
+  const data = Buffer.from(content);
+  if (data.byteLength <= FS_WRITE_CHUNK_BYTES) {
+    await fs.write(path, data);
+    return;
+  }
+  const sink = await fs.writeStream(path);
+  try {
+    for (let offset = 0; offset < data.byteLength; offset += FS_WRITE_CHUNK_BYTES) {
+      await sink.write(data.subarray(offset, offset + FS_WRITE_CHUNK_BYTES));
+    }
+  } finally {
+    await sink.close();
+  }
+}
+
+/** A one-shot read of a large file (~64 MiB) drops the relay channel; the
+ *  streamed read does not. */
+async function readGuestFileStreamed(fs: ReturnType<NativeSandbox['fs']>, path: string): Promise<string> {
+  const stream = await fs.readStream(path);
+  return new TextDecoder().decode(await stream.collect());
+}
+
 async function execShort(native: NativeSandbox, script: string) {
   return native.execWith('/bin/sh', (builder) => builder.args(['-c', script]));
 }
@@ -955,12 +982,12 @@ const _microsandbox = defineProvider<
       getInstance: (sandbox) => sandbox,
 
       filesystem: {
-        readFile: async (sandbox, path) => (await connectedSandbox(sandbox)).fs().readToString(path),
+        readFile: async (sandbox, path) => readGuestFileStreamed((await connectedSandbox(sandbox)).fs(), path),
         writeFile: async (sandbox, path, content) => {
           const fs = (await connectedSandbox(sandbox)).fs();
           const parent = posixPath.dirname(path);
           if (parent !== '.' && parent !== '/' && !(await fs.exists(parent))) await fs.mkdir(parent);
-          await fs.write(path, content);
+          await writeGuestFile(fs, path, content);
         },
         mkdir: async (sandbox, path) => (await connectedSandbox(sandbox)).fs().mkdir(path),
         readdir: async (sandbox, path): Promise<FileEntry[]> => {

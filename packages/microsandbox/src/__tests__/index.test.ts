@@ -45,8 +45,25 @@ vi.mock('microsandbox', () => {
       if (value == null) throw new Error(`missing ${path}`);
       return value;
     }
+    writes: Array<{ path: string; bytes: number }> = [];
     async write(path: string, value: string | Uint8Array) {
+      this.writes.push({ path, bytes: typeof value === 'string' ? Buffer.byteLength(value) : value.byteLength });
       this.files.set(path, typeof value === 'string' ? value : new TextDecoder().decode(value));
+    }
+    async writeStream(path: string) {
+      const chunks: Uint8Array[] = [];
+      return {
+        write: async (chunk: Uint8Array) => {
+          this.writes.push({ path, bytes: chunk.byteLength });
+          chunks.push(chunk);
+        },
+        close: async () => { this.files.set(path, Buffer.concat(chunks).toString('utf8')); },
+      };
+    }
+    async readStream(path: string) {
+      const value = this.files.get(path);
+      if (value == null) throw new Error(`missing ${path}`);
+      return { collect: async () => new TextEncoder().encode(value) };
     }
     async list(path: string) {
       return [...this.files.keys()]
@@ -753,5 +770,17 @@ describe('microsandbox provider', () => {
     ]);
     await sandbox.filesystem.remove('/workspace/hello.txt');
     expect(await sandbox.filesystem.exists('/workspace/hello.txt')).toBe(false);
+  });
+
+  it('streams large file writes in chunks under the relay frame limit', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'fs-large-box' });
+    const content = 'x'.repeat(1024 * 1024 + 7);
+    await sandbox.filesystem.writeFile('/large.txt', content);
+
+    const fsOps = (sandbox.getInstance() as any).sandbox.fsOps;
+    const writes = fsOps.writes.filter((w: { path: string }) => w.path === '/large.txt');
+    expect(writes.length).toBe(5);
+    expect(Math.max(...writes.map((w: { bytes: number }) => w.bytes))).toBeLessThanOrEqual(256 * 1024);
+    expect(await sandbox.filesystem.readFile('/large.txt')).toBe(content);
   });
 });
