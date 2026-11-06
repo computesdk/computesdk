@@ -7,6 +7,20 @@ import { randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
+/** Sandboxes already run as root and cannot switch users: drop sudo's options and run the command. */
+const SUDO_SHIM = `#!/bin/sh
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -u|-g|-C|-D|-h|-p|-r|-t|-U|-T) shift 2 ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+[ $# -eq 0 ] && exit 0
+exec env "$@"
+`
+
 function loadEnvFile(filePath: string) {
   if (!existsSync(filePath)) return
   const content = readFileSync(filePath, 'utf8')
@@ -81,12 +95,16 @@ async function setup() {
   try {
     copyFileSync(gatewayPath, join(tmpDir, 'gateway.mjs'))
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ type: 'module', scripts: { start: 'node gateway.mjs' } }, null, 2))
+    writeFileSync(join(tmpDir, 'sudo'), SUDO_SHIM)
     writeFileSync(join(tmpDir, 'Dockerfile'), [
       'FROM node:22-slim',
       // Sandboxes run as root on this image's rootfs: ship common agent tools,
       // and keep the apt lists so `apt-get install` works in writable sandboxes.
       // The sandbox CLI also needs the system CAs (e.g. for gs:// snapshots).
-      'RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git python3 sudo unzip',
+      'RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git python3 unzip',
+      // Sandboxes cannot switch users, so apt must not drop to `_apt` and sudo just runs the command.
+      `RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99computesdk-sandbox`,
+      'COPY --chmod=755 sudo /usr/local/bin/sudo',
       'WORKDIR /app',
       'COPY package.json gateway.mjs ./',
       'ENV NODE_ENV=production',

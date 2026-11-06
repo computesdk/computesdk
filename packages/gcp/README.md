@@ -180,7 +180,7 @@ Commands use ephemeral `sandbox do` execution by default. Filesystem writes are 
 
 ### Sandbox image
 
-Sandboxes use the gateway image as their root filesystem and run as root. The image built by setup includes `git`, `python3`, `unzip`, `curl`, `sudo` and CA certificates, and keeps the apt package lists so writable sandboxes can `apt-get install` more.
+Sandboxes use the gateway image as their root filesystem and run as root. The image built by setup includes `git`, `python3`, `unzip`, `curl` and CA certificates, and keeps the apt package lists so writable sandboxes can `apt-get install` more. Sandboxes can't switch users, so apt runs its downloads as root and `sudo` is a shim that runs the command directly. Network access (`git clone`, `apt-get`, `curl`) needs `allowEgress: true`.
 
 ### Snapshots
 
