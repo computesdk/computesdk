@@ -92,4 +92,90 @@ describe.skipIf(!live)('cloudflare live', () => {
     const result = await again!.runCommand('test -f /tmp/cf-live-large.txt');
     expect(result.exitCode).toBe(0);
   }, 120_000);
+
+  describe('bridge Worker', () => {
+    let features: string[] | undefined;
+
+    beforeAll(async () => {
+      const response = await fetch(new URL('/v1/info', sandboxUrl), {
+        headers: { Authorization: `Bearer ${sandboxApiKey}` },
+      });
+      if (response.status === 404) {
+        await response.body?.cancel();
+        return;
+      }
+      expect(response.status).toBe(200);
+      features = ((await response.json()) as { features: string[] }).features;
+    }, 60_000);
+
+    it('lists its native features in /v1/info', (ctx) => {
+      if (!features) ctx.skip();
+      expect(features).toEqual(
+        expect.arrayContaining(['exec-stream', 'files', 'ports', 'snapshots'])
+      );
+    });
+
+    it('forwards HTTP requests to a port through getUrl', async (ctx) => {
+      if (!features?.includes('ports')) ctx.skip();
+      const web = await provider.sandbox.create({ image: 'builder' } as never);
+      try {
+        await web.runCommand(
+          `node -e "require('http').createServer((q,s)=>{let b='';q.on('data',c=>b+=c);q.on('end',()=>s.end(q.method+' '+q.url+' '+b))}).listen(8080,'0.0.0.0')"`,
+          { background: true }
+        );
+        const url = await web.getUrl({ port: 8080 });
+        let body = '';
+        for (let attempt = 0; attempt < 30 && !body.startsWith('GET'); attempt++) {
+          const response = await fetch(`${url}hello?x=1`);
+          body = await response.text();
+          if (!body.startsWith('GET')) await new Promise((r) => setTimeout(r, 2_000));
+        }
+        expect(body).toBe('GET /hello?x=1 ');
+        const posted = await fetch(`${url}echo`, { method: 'POST', body: 'payload' });
+        expect(await posted.text()).toBe('POST /echo payload');
+      } finally {
+        await web.destroy().catch(() => undefined);
+      }
+    }, 300_000);
+
+    it('restores snapshots into new sandboxes', async (ctx) => {
+      if (!features?.includes('snapshots')) ctx.skip();
+      await sandbox.runCommand(
+        'mkdir -p /root/cf-snap && echo rootfs > /root/cf-snap/a.txt && echo tmp > /tmp/cf-snap.txt'
+      );
+      await sandbox.runCommand('sh -c "exec sleep 100000" cf-snap-sleeper', {
+        background: true,
+      });
+      const snapshot = await provider.snapshot!.create(sandbox.sandboxId, {
+        name: 'cf-live',
+      });
+      const restored: Awaited<ReturnType<typeof provider.sandbox.create>>[] = [];
+      try {
+        const source = await sandbox.runCommand(
+          'cat /root/cf-snap/a.txt; pgrep -f "[s]leep 100000" >/dev/null && echo proc'
+        );
+        expect(source.stdout).toBe('rootfs\nproc\n');
+
+        const listed = await provider.snapshot!.list({ instanceId: sandbox.sandboxId });
+        expect(listed.map((entry) => entry.id)).toContain(snapshot.id);
+
+        for (let i = 0; i < 2; i++) {
+          restored.push(
+            await provider.sandbox.create({ snapshotId: snapshot.id } as never)
+          );
+        }
+        for (const copy of restored) {
+          const probe = await copy.runCommand(
+            'cat /root/cf-snap/a.txt /tmp/cf-snap.txt; pgrep -f "[s]leep 100000" >/dev/null && echo proc || echo no-proc'
+          );
+          expect(probe.stdout).toBe('rootfs\ntmp\nno-proc\n');
+        }
+      } finally {
+        await Promise.all(restored.map((copy) => copy.destroy().catch(() => undefined)));
+        await provider.snapshot!.delete(snapshot.id);
+      }
+      const after = await provider.snapshot!.list();
+      expect(after.map((entry) => entry.id)).not.toContain(snapshot.id);
+    }, 600_000);
+  });
 });

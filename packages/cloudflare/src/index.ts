@@ -1007,6 +1007,15 @@ export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
     },
 
     snapshot: {
+      capabilities: {
+        scope: 'rootfs',
+        memory: false,
+        destroysSource: false,
+        source: 'kept',
+        fork: true,
+        readiness: 'immediate',
+      },
+
       create: async (
         config: CloudflareConfig,
         instanceId: string,

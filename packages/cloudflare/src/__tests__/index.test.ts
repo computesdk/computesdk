@@ -989,8 +989,15 @@ describe('Cloudflare bridge Worker features', () => {
     expect(calls.at(-1)!.method).toBe('DELETE');
   });
 
-  it('does not declare snapshot capabilities before live verification', () => {
-    expect(bridgeProvider().snapshot?.capabilities).toBeUndefined();
+  it('declares filesystem-only snapshots that keep the source running', () => {
+    expect(bridgeProvider().snapshot?.capabilities).toEqual({
+      scope: 'rootfs',
+      memory: false,
+      destroysSource: false,
+      source: 'kept',
+      fork: true,
+      readiness: 'immediate',
+    });
   });
 
   it('refuses bridge-only features against the demo Worker', async () => {
