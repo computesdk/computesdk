@@ -11,10 +11,10 @@ const NODE = 'node:22';
 
 // Shapes are vCPU / MiB. Names stay stable: callers boot them by name.
 const SHAPES = [
-  { name: 'node22-1cpu-2gb', vcpu: 1, memoryMib: 2048 },
-  { name: 'node22-2cpu-4gb', vcpu: 2, memoryMib: 4096 },
-  { name: 'node22-4cpu-8gb', vcpu: 4, memoryMib: 8192 },
-  { name: 'node22-8cpu-16gb', vcpu: 8, memoryMib: 16384 },
+  { name: 'csdk-node22-1cpu-2gb', vcpu: 1, memoryMib: 2048 },
+  { name: 'csdk-node22-2cpu-4gb', vcpu: 2, memoryMib: 4096 },
+  { name: 'csdk-node22-4cpu-8gb', vcpu: 4, memoryMib: 8192 },
+  { name: 'csdk-node22-8cpu-16gb', vcpu: 8, memoryMib: 16384 },
 ];
 
 const PROVIDERS = {
@@ -24,7 +24,7 @@ const PROVIDERS = {
     load: async () => (await import('../packages/superserve/dist/index.mjs')).superserve({}),
     templates: [
       ...SHAPES.filter((s) => s.vcpu !== 2),
-      { name: 'node22-1cpu-256mb', vcpu: 1, memoryMib: 256, diskMib: 1024 },
+      { name: 'csdk-node22-1cpu-256mb', vcpu: 1, memoryMib: 256, diskMib: 1024 },
     ],
     exists: (t, name) => t.name === name,
     create: (p, s) => p.template.create({
@@ -74,7 +74,14 @@ async function setup(id, { dryRun, check }) {
   const existing = await provider.template.list();
   let ok = true;
   for (const shape of cfg.templates) {
-    const found = existing.some((t) => cfg.exists(t, shape.name));
+    const match = existing.find((t) => cfg.exists(t, shape.name));
+    const status = match?.metadata?.status ?? match?.buildStatus;
+    if (match && status && !/ready|success|built|available/i.test(status)) {
+      console.warn(`${id}/${shape.name}: exists but is ${status}; delete it and rerun to rebuild`);
+      ok = false;
+      continue;
+    }
+    const found = !!match;
     console.log(`${id}/${shape.name}: ${found ? 'exists' : dryRun ? 'would create' : 'creating'}`);
     if (!found && !dryRun) {
       await cfg.create(provider, shape);
