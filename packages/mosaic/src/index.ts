@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, startShellProcess } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -374,6 +374,37 @@ function commandWithOptions(command: string, options?: RunCommandOptions): strin
   return result;
 }
 
+async function exec(
+  sandbox: MosaicSandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const started = performance.now();
+  const httpTimeoutMs = options?.timeout
+    ? options.timeout + COMMAND_HTTP_TIMEOUT_BUFFER_MS
+    : undefined;
+  const result = await request<MarExecResponse>(
+    sandbox.config,
+    `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/exec`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        cmd: commandWithOptions(command, options),
+        ...(options?.timeout ? { timeout_ms: options.timeout } : {}),
+      }),
+    },
+    httpTimeoutMs,
+  );
+  options?.onStdout?.(result.stdout);
+  options?.onStderr?.(result.stderr);
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exit_code,
+    durationMs: performance.now() - started,
+  };
+}
+
 /**
  * The files API is scoped to /workspace, where a sandbox's work belongs and
  * where it is fastest and binary-safe. Anything outside it — /tmp, /etc — is
@@ -501,51 +532,21 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
       },
 
       runCommand: async (sandbox, command, options): Promise<CommandResult> => {
+        if (!options?.background) return exec(sandbox, command, options);
+        // exec waits for the command's whole process group, so a trailing `&`
+        // hangs until the timeout; the shell tier launches it in its own
+        // session and returns once it runs. Unlike a durable process (which
+        // keeps the sandbox busy, so pause answers 409), it survives pause.
         const started = performance.now();
-        if (options?.background) {
-          // exec waits for the command's whole process group, so a trailing `&`
-          // hangs until the timeout. A durable process is the shape that
-          // outlives the request, which is what a dev server needs.
-          const durable = await request<{ id: string }>(
-            sandbox.config,
-            `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/processes`,
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                cmd: command,
-                ...(options.cwd ? { cwd: options.cwd } : {}),
-                ...(options.env ? { env: options.env } : {}),
-              }),
-            },
-          );
-          return {
-            stdout: durable.id,
-            stderr: '',
-            exitCode: 0,
-            durationMs: performance.now() - started,
-          };
-        }
-        const httpTimeoutMs = options?.timeout
-          ? options.timeout + COMMAND_HTTP_TIMEOUT_BUFFER_MS
-          : undefined;
-        const result = await request<MarExecResponse>(
-          sandbox.config,
-          `/v1/sandboxes/${encodeURIComponent(sandbox.id)}/exec`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              cmd: commandWithOptions(command, options),
-              ...(options?.timeout ? { timeout_ms: options.timeout } : {}),
-            }),
-          },
-          httpTimeoutMs,
+        const job = await startShellProcess(
+          (script, runOptions) => exec(sandbox, script, runOptions),
+          command,
+          { cwd: options.cwd, env: options.env },
         );
-        options?.onStdout?.(result.stdout);
-        options?.onStderr?.(result.stderr);
         return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exit_code,
+          stdout: job.jobId,
+          stderr: '',
+          exitCode: 0,
           durationMs: performance.now() - started,
         };
       },
@@ -720,9 +721,6 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
 
       getInstance: (sandbox) => sandbox,
 
-      // A durable process (`runCommand` with `background`) makes the pause
-      // refuse with 409 sandbox_busy; `getInstance().pause({ killProcesses: true })`
-      // ends those first. Shell-started processes survive.
       pause: (sandbox) => sandbox.pause(),
       resume: async (sandbox) => {
         await sandbox.resume();

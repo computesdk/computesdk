@@ -121,19 +121,27 @@ describe('Mosaic ComputeSDK provider', () => {
     expect(calls[0].body.metadata).toEqual({ session_id: 'abc' });
   });
 
-  it('starts a background command as a durable process', async () => {
+  it('detaches a background command through the shell tier, not a durable process', async () => {
     const calls = gateway({
       'POST /v1/sandboxes': () => json({ id: 'sbx-bg', state: 'running', tti_ms: 1 }),
-      'POST /v1/sandboxes/sbx-bg/processes': () =>
-        json({ id: 'proc-1', sandbox_id: 'sbx-bg', state: 'running', started_at_ns: 1, pty: false }),
+      'POST /v1/sandboxes/sbx-bg/exec': () =>
+        json({ stdout: '@@computesdk-job ok 4242\n', stderr: '', exit_code: 0 }),
     });
 
     const sandbox = await mosaic(config).sandbox.create();
     const result = await sandbox.runCommand('npm run dev', { background: true, cwd: '/workspace/app' });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toBe('proc-1');
-    expect(calls[1].body).toEqual({ cmd: 'npm run dev', cwd: '/workspace/app' });
+    expect(result.stdout).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
+      'POST /v1/sandboxes',
+      'POST /v1/sandboxes/sbx-bg/exec',
+    ]);
+    const encoded = /printf '%s' '([^']+)'/.exec(calls[1].body.cmd as string)?.[1] ?? '';
+    const launch = Buffer.from(encoded, 'base64').toString('utf8');
+    expect(launch).toContain('setsid');
+    expect(launch).toContain('npm run dev');
+    expect(launch).toContain('/workspace/app');
   });
 
   it('mints a preview URL for a port', async () => {
