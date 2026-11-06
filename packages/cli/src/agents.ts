@@ -24,6 +24,9 @@ export interface AgentVolume {
   diskId?: string;
   path?: string;
   bucket?: string;
+  prefix?: string;
+  region?: string;
+  managed?: boolean;
 }
 
 export interface AgentSummary {
@@ -312,13 +315,14 @@ export function registerAgentsCommands(program: Command): void {
     cmd
       .command('run <ref> [message]')
       .description('Start a session on a routed sandbox and optionally send a first message')
+      .option('--resume <sessionId>', 'resume a stopped conversation on a new sandbox using its persistent disk')
       .option('--size <size>', 'platform size for the session\'s sandbox'),
-  ).action(async (ref: string, message: string | undefined, opts: CommonOpts & { size?: string }) => {
+  ).action(async (ref: string, message: string | undefined, opts: CommonOpts & { size?: string; resume?: string }) => {
     try {
       const c = await client(opts);
       const res = await c.post<{ session: AgentSessionSummary; events: AgentEventView[] }>(
         `/api/v1/agents/${encodeURIComponent(ref)}/sessions`,
-        { message, size: opts.size },
+        { message, size: opts.size, resumeSessionId: opts.resume },
       );
       output(opts, res, (r) => {
         printSession(r.session);
