@@ -13,7 +13,7 @@ import { Command } from 'commander';
 import pc from 'picocolors';
 import { readFileSync } from 'node:fs';
 import { type ActionsClient } from './actions-client.js';
-import { client, fail, output, usageErrorOutput, type CommonOpts } from './actions.js';
+import { client, fail, output, safeTerm, usageErrorOutput, type CommonOpts } from './actions.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/agents/types.ts) ────────────
 
@@ -68,20 +68,21 @@ function formatLocalTime(iso: string | null): string {
 
 function printAgent(a: AgentSummary): void {
   console.log(
-    `${pc.cyan(a.name)}  ${a.id.slice(0, 8)}  ${a.harness}${a.model ? `  ${a.model}` : ''}  sessions: ${a.sessionCount}  created: ${formatLocalTime(a.createdAt)}`,
+    `${pc.cyan(safeTerm(a.name))}  ${a.id.slice(0, 8)}  ${a.harness}${a.model ? `  ${safeTerm(a.model)}` : ''}  sessions: ${a.sessionCount}  created: ${formatLocalTime(a.createdAt)}`,
   );
 }
 
 function printAgentDetail(a: AgentSummary): void {
   printAgent(a);
-  if (a.providerOrder) console.log(`  order: ${a.providerOrder.join(', ')}`);
-  if (a.secrets.length > 0) console.log(`  secrets: ${a.secrets.join(', ')}`);
+  if (a.providerOrder) console.log(`  order: ${safeTerm(a.providerOrder.join(', '))}`);
+  if (a.secrets.length > 0) console.log(`  secrets: ${safeTerm(a.secrets.join(', '))}`);
   if (a.volume) console.log(`  volume: ${a.volume.diskId ?? '—'} at ${a.volume.path ?? '—'}`);
 }
 
 function printSession(s: AgentSessionSummary): void {
+  // Full session id — `send`, `events` and `stop` all take it as an argument.
   console.log(
-    `${pc.cyan(s.id.slice(0, 8))}  ${s.status}  sandbox: ${s.sandboxId?.slice(0, 8) ?? '—'}  ${formatLocalTime(s.createdAt)}${s.error ? `  ${pc.red(s.error)}` : ''}`,
+    `${pc.cyan(s.id)}  ${s.status}  sandbox: ${s.sandboxId ?? '—'}  ${formatLocalTime(s.createdAt)}${s.error ? `  ${pc.red(safeTerm(s.error))}` : ''}`,
   );
 }
 
@@ -89,7 +90,7 @@ function printSession(s: AgentSessionSummary): void {
 function printEvent(e: AgentEventView): void {
   const payload = (e.payload ?? {}) as Record<string, unknown>;
   if (e.kind === 'user') {
-    console.log(`${pc.green('you')} #${e.seq}  ${String(payload.message ?? '')}`);
+    console.log(`${pc.green('you')} #${e.seq}  ${safeTerm(String(payload.message ?? ''))}`);
     return;
   }
   if (e.kind === 'turn') {
@@ -97,12 +98,12 @@ function printEvent(e: AgentEventView): void {
     for (const ev of events) {
       const o = ev as Record<string, unknown>;
       const text = o.text ?? o.message ?? o.content;
-      if (typeof text === 'string') console.log(pc.dim(`#${e.seq}`) + ` ${text}`);
-      else console.log(pc.dim(`#${e.seq} ${JSON.stringify(o)}`));
+      if (typeof text === 'string') console.log(pc.dim(`#${e.seq}`) + ` ${safeTerm(text)}`);
+      else console.log(pc.dim(`#${e.seq} ${safeTerm(JSON.stringify(o))}`));
     }
     return;
   }
-  console.log(pc.dim(`#${e.seq} ${e.kind} ${JSON.stringify(payload)}`));
+  console.log(pc.dim(`#${e.seq} ${e.kind} ${safeTerm(JSON.stringify(payload))}`));
 }
 
 function authOpts(cmd: Command): Command {
@@ -128,10 +129,18 @@ export function registerAgentsCommands(program: Command): void {
     async (opts: CommonOpts) => {
       try {
         const c = await client(opts);
-        const res = await c.get<{ agents: AgentSummary[]; nextCursor: string | null }>(
-          '/api/v1/agents',
-        );
-        output(opts, res, (r) => {
+        const agents: AgentSummary[] = [];
+        let cursor: string | undefined;
+        for (;;) {
+          const res = await c.get<{ agents: AgentSummary[]; nextCursor: string | null }>(
+            '/api/v1/agents',
+            { cursor },
+          );
+          agents.push(...res.agents);
+          if (res.nextCursor === null) break;
+          cursor = res.nextCursor;
+        }
+        output(opts, { agents }, (r) => {
           if (r.agents.length === 0) console.log('No agents yet — `compute agents create`.');
           for (const a of r.agents) printAgent(a);
         });
@@ -216,6 +225,7 @@ export function registerAgentsCommands(program: Command): void {
       .option('--harness <harness>')
       .option('--model <model>')
       .option('--secret <name...>')
+      .option('--clear-secrets', 'remove all declared vault secrets')
       .option('--order <providers>')
       .option('--volume-disk <diskId>')
       .option('--volume-path <path>'),
@@ -229,6 +239,7 @@ export function registerAgentsCommands(program: Command): void {
         harness?: string;
         model?: string;
         secret?: string[];
+        clearSecrets?: boolean;
         order?: string;
         volumeDisk?: string;
         volumePath?: string;
@@ -241,7 +252,7 @@ export function registerAgentsCommands(program: Command): void {
           prompt,
           harness: opts.harness,
           model: opts.model,
-          secrets: opts.secret,
+          secrets: opts.clearSecrets ? [] : opts.secret,
           providerOrder: opts.order?.split(',').map((s) => s.trim()).filter(Boolean),
         };
         if (opts.volumeDisk !== undefined || opts.volumePath !== undefined) {
