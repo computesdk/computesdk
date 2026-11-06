@@ -11,14 +11,20 @@ vi.mock('@vercel/sandbox', () => {
 
   const mockSandboxInstance = {
     name: 'mock-sandbox-id',
+    persistent: true,
     snapshot: vi.fn().mockResolvedValue(mockSnapshotInstance),
     stop: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    listSnapshots: vi.fn().mockResolvedValue([
+      { id: 'snap-auto', status: 'created', creationMethod: 'automatic' },
+      { id: 'snap-user', status: 'created', creationMethod: 'manual' },
+    ]),
   };
 
   return {
     Sandbox: {
       create: vi.fn().mockResolvedValue(mockSandboxInstance),
-      get: vi.fn().mockResolvedValue(mockSandboxInstance),
+      get: vi.fn().mockResolvedValue({ ...mockSandboxInstance, name: 'resumed' }),
     },
     Snapshot: {
       get: vi.fn().mockResolvedValue(mockSnapshotInstance),
@@ -127,5 +133,37 @@ describe('Vercel Snapshot Support', () => {
     const snapshots = await provider.snapshot.list();
     expect(VercelSnapshot.list).toHaveBeenCalledWith(expect.objectContaining({ token: 'mock-token', projectId: 'mock-project' }));
     expect(snapshots.map((s: any) => s.id)).toEqual(['snap-1']);
+  });
+
+  it('declares rootfs snapshots that stop the source', () => {
+    expect(provider.snapshot?.capabilities).toEqual({ scope: 'rootfs', memory: false, destroysSource: true });
+  });
+
+  it('pauses by stopping a persistent sandbox and resumes with a fresh handle', async () => {
+    expect(provider.sandbox.pause).toEqual({ memory: false, createOptions: { persistent: true } });
+    const sandbox = await provider.sandbox.create({ persistent: true } as any);
+    const created = await (VercelSandbox.create as any).mock.results[0].value;
+    await sandbox.pause!();
+    expect(created.stop).toHaveBeenCalled();
+    await sandbox.resume!();
+    expect(VercelSandbox.get).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'mock-sandbox-id', resume: true, token: 'mock-token', projectId: 'mock-project',
+    }));
+    expect((sandbox.getInstance() as any).name).toBe('resumed');
+  });
+
+  it('refuses to pause a non-persistent sandbox', async () => {
+    (VercelSandbox.create as any).mockResolvedValueOnce({ name: 'eph', persistent: false, stop: vi.fn() });
+    const sandbox = await provider.sandbox.create();
+    await expect(sandbox.pause!()).rejects.toThrow(/persistent/);
+  });
+
+  it('destroy deletes the sandbox and only its automatic snapshots', async () => {
+    await provider.sandbox.destroy('sandbox-123');
+    const fetched = await (VercelSandbox.get as any).mock.results[0].value;
+    expect(fetched.stop).toHaveBeenCalled();
+    expect(fetched.delete).toHaveBeenCalled();
+    expect(VercelSnapshot.get).toHaveBeenCalledTimes(1);
+    expect(VercelSnapshot.get).toHaveBeenCalledWith(expect.objectContaining({ snapshotId: 'snap-auto' }));
   });
 });

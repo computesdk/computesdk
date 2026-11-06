@@ -13,6 +13,9 @@ runProviderTestSuite({
   // The mock sandbox reports no process runtime, so only assert it live.
   expectProcessRuntime: skipIntegration ? undefined : { streaming: 'native', processes: 'shell' },
   skipIntegration,
+  // Pause is a stop of a persistent sandbox; snapshots keep the whole rootfs.
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   // Note: Vercel blocks certain ports (80, 443, 8080). Use allowed ports for getUrl tests.
   ports: [3000, 8000],
 });

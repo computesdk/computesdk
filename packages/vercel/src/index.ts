@@ -76,6 +76,15 @@ function credentialParams(creds: ResolvedCredentials) {
   return creds.useOidc ? {} : { token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
 }
 
+// The credentials each handle was fetched with, so `resume` can fetch the
+// fresh session handle the same way.
+const handleCredentials = new WeakMap<VercelSandbox, ResolvedCredentials>();
+
+function track(sandbox: VercelSandbox, creds: ResolvedCredentials): VercelSandbox {
+  handleCredentials.set(sandbox, creds);
+  return sandbox;
+}
+
 // `setsid` gives the command its own process group, so the watchdog can kill
 // the whole tree, not just the outer shell.
 const DEADLINE_WRAPPER = 'if command -v setsid >/dev/null 2>&1; then setsid sh -c "$1" & else sh -c "$1" & fi; pid=$!; (sleep "$0"; kill -KILL -"$pid" || kill -KILL "$pid") >/dev/null 2>&1 & w=$!; wait "$pid"; rc=$?; kill "$w" 2>/dev/null; exit $rc';
@@ -184,7 +193,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
             params.projectId = creds.projectId;
           }
 
-          const sandbox = await VercelSandbox.create(params);
+          const sandbox = track(await VercelSandbox.create(params), creds);
           return { instance: sandbox, instanceId: sandbox.name };
         } catch (error) {
           if (error instanceof Error) {
@@ -205,7 +214,7 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           const sandbox = creds.useOidc
             ? await VercelSandbox.get({ name: sandboxId })
             : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          return { instance: sandbox, instanceId: sandboxId };
+          return { instance: track(sandbox, creds), instanceId: sandboxId };
         } catch { return null; }
       },
 
@@ -218,18 +227,52 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           VercelSandbox.get({ name: s.name, ...credentialParams(creds) } as any).catch(() => null)));
         return sandboxes
           .filter((s): s is VercelSandbox => s !== null)
-          .map((sandbox) => ({ instance: sandbox, instanceId: sandbox.name }));
+          .map((sandbox) => ({ instance: track(sandbox, creds), instanceId: sandbox.name }));
       },
 
+      // Deletes the named sandbox. Persistent sandboxes snapshot themselves on
+      // every stop; those automatic snapshots go too, snapshots taken with
+      // snapshot.create stay.
       destroy: async (config: VercelConfig, sandboxId: string) => {
         const creds = resolveCredentials(config);
+        let sandbox: VercelSandbox;
         try {
-          const sandbox = creds.useOidc
-            ? await VercelSandbox.get({ name: sandboxId })
-            : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          await sandbox.stop();
-        } catch { /* already destroyed or doesn't exist */ }
+          sandbox = await VercelSandbox.get({ name: sandboxId, ...credentialParams(creds) } as any);
+        } catch { return; /* already destroyed or doesn't exist */ }
+        await sandbox.stop().catch(() => { /* already stopped */ });
+        const automatic: string[] = [];
+        if (sandbox.persistent) {
+          try {
+            for await (const snap of await sandbox.listSnapshots()) {
+              if (snap.creationMethod === 'automatic' && snap.status === 'created') automatic.push(snap.id);
+            }
+          } catch { /* nothing to clean up */ }
+        }
+        await sandbox.delete().catch(() => { /* already deleted */ });
+        await Promise.all(automatic.map(async (snapshotId) => {
+          try {
+            await (await VercelSnapshot.get({ snapshotId, ...credentialParams(creds) } as any)).delete();
+          } catch { /* expired or already deleted */ }
+        }));
       },
+
+      // Vercel's pause is a stop: a persistent sandbox snapshots its whole
+      // filesystem on stop and restores it in the next session. Processes do
+      // not survive, and a non-persistent sandbox would lose its files.
+      pause: async (sandbox: VercelSandbox) => {
+        if (!sandbox.persistent) {
+          throw new Error(`Vercel can only pause persistent sandboxes; create the sandbox with { persistent: true }.`);
+        }
+        await sandbox.stop();
+      },
+
+      resume: async (sandbox: VercelSandbox) => {
+        const creds = handleCredentials.get(sandbox) ?? resolveCredentials({});
+        const resumed = await VercelSandbox.get({ name: sandbox.name, resume: true, ...credentialParams(creds) } as any);
+        return track(resumed, creds);
+      },
+
+      pauseCapabilities: { memory: false, createOptions: { persistent: true } },
 
       runCommand: (sandbox: VercelSandbox, command: string, options?: RunCommandOptions) => execCommand(sandbox, command, options),
 
@@ -330,7 +373,11 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
           ? await VercelSnapshot.get({ snapshotId })
           : await VercelSnapshot.get({ snapshotId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
         await snapshot.delete();
-      }
+      },
+      // The whole rootfs (/tmp, $HOME, /etc, ...) is restored; processes are
+      // not. Snapshotting stops the source; its next call starts a new
+      // session from the snapshot.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: true },
     },
 
     template: {
