@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { escapeShellArg } from '@computesdk/provider';
 import { agent37 } from '../index';
 
 const provider = agent37({});
@@ -7,17 +8,25 @@ const provider = agent37({});
 describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (live)', () => {
   let sandbox: Awaited<ReturnType<typeof provider.sandbox.create>>;
   const directory = `/tmp/computesdk-agent37-transfer-${randomUUID()}`;
+  const stagingDirectory = `${directory}/remote temp "quotes" $dollar`;
+  let nonRootGuest = false;
   const requestSizes: number[] = [];
   const originalFetch = globalThis.fetch;
 
   beforeAll(async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).endsWith('/exec') && typeof init?.body === 'string') {
-        requestSizes.push(Buffer.byteLength(init.body));
+        const body = JSON.parse(init.body) as { command: string };
+        body.command = `export TMPDIR=${escapeShellArg(stagingDirectory)}; ${body.command}`;
+        if (nonRootGuest) body.command = `runuser -u nobody -- /bin/sh -c ${escapeShellArg(body.command)}`;
+        const encoded = JSON.stringify(body);
+        init = { ...init, body: encoded };
+        requestSizes.push(Buffer.byteLength(encoded));
       }
       return originalFetch(input, init);
     });
     sandbox = await provider.sandbox.create({ templateId: 'agent37-base' });
+    expect((await sandbox.runCommand(`mkdir -p ${escapeShellArg(stagingDirectory)}`)).exitCode).toBe(0);
     expect((await sandbox.runCommand('command -v flock')).exitCode).toBe(0);
   }, 120_000);
 
@@ -66,9 +75,32 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
     const contents = ['a'.repeat(256 * 1024), 'b'.repeat(200 * 1024)];
     await Promise.all(contents.map((content) => sandbox.filesystem.writeFile(path, content)));
     expect(contents).toContain(await sandbox.filesystem.readFile(path));
-    const leftovers = await sandbox.runCommand(`find ${directory} -name '.computesdk-write-*' -print`);
+    const leftovers = await sandbox.runCommand(`find ${escapeShellArg(stagingDirectory)} -name '.computesdk-write-*' -print`);
     expect(leftovers.exitCode).toBe(0);
     expect(leftovers.stdout.trim()).toBe('');
+  }, 120_000);
+
+  it('overwrites a writable file in a non-writable directory as a non-root guest', async () => {
+    const parent = `${directory}/read-only`;
+    const path = `${parent}/writable-file`;
+    const setup = await sandbox.runCommand(`mkdir -p ${parent} && printf original > ${path} && chmod 755 ${directory} && chmod 777 ${escapeShellArg(stagingDirectory)} && chmod 666 ${path} && chmod 555 ${parent} && id -u`);
+    expect(setup.exitCode).toBe(0);
+    nonRootGuest = setup.stdout.trim() === '0';
+    try {
+      const baseline = await sandbox.runCommand(`id -u && if (: > ${parent}/cannot-create) 2>/dev/null; then exit 1; fi; printf old-write > ${path}`);
+      expect(baseline.exitCode).toBe(0);
+      expect(baseline.stdout.trim()).not.toBe('0');
+      expect(await sandbox.filesystem.readFile(path)).toBe('old-write');
+      const content = 'x'.repeat(256 * 1024);
+      await sandbox.filesystem.writeFile(path, content);
+      expect(await sandbox.filesystem.readFile(path)).toBe(content);
+      const cleanup = await sandbox.runCommand(`find ${escapeShellArg(stagingDirectory)} -name '.computesdk-write-*' -print`);
+      expect(cleanup.exitCode).toBe(0);
+      expect(cleanup.stdout.trim()).toBe('');
+      console.log(`Agent37 read-only directory compatibility: non-root uid=${baseline.stdout.trim()}, 256 KiB exact readback, remote TMPDIR cleaned`);
+    } finally {
+      nonRootGuest = false;
+    }
   }, 120_000);
 
   it('preserves executable mode, inode and hard links when overwriting through a symlink', async () => {
@@ -107,7 +139,7 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
     const actual = await sandbox.filesystem.readFile(path);
     expect(contents).toContain(actual);
     for (const name of paths) expect(await sandbox.filesystem.readFile(name)).toBe(actual);
-    const result = await sandbox.runCommand(`test -L ${symlink} && stat -c '%i' ${path} && find ${directory} -name '.computesdk-write-*' -print`);
+    const result = await sandbox.runCommand(`test -L ${symlink} && stat -c '%i' ${path} && find ${escapeShellArg(stagingDirectory)} -name '.computesdk-write-*' -print`);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe(setup.stdout.trim());
     console.log('Agent37 concurrent alias writes: one complete payload, original inode and symlink preserved, no staging leftovers');

@@ -273,9 +273,9 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
           const bytes = Buffer.from(content, 'utf8');
           const target = shellPath(path);
           const directory = shellPath(posix.dirname(path));
-          const temporary = shellPath(posix.join(posix.dirname(path), `.computesdk-write-${randomUUID()}`));
+          const temporary = `"\${TMPDIR:-/tmp}/.computesdk-write-${randomUUID()}"`;
           try {
-            await mustSucceed(run, sandbox, `mkdir -p -- ${directory} && (set -C; : > ${temporary})`, `write ${path}`);
+            await mustSucceed(run, sandbox, `mkdir -p -- ${directory} && (umask 077; set -C; : > ${temporary})`, `write ${path}`);
             for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
               const encoded = bytes.subarray(offset, offset + WRITE_CHUNK_BYTES).toString('base64');
               await mustSucceed(run, sandbox, `printf '%s' '${encoded}' | base64 -d >> ${temporary}`, `write ${path}`);

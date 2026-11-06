@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmod, link, lstat, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -12,12 +12,19 @@ const instance = { id: 'filesystem-test', status: 'running', template: 'agent37-
 describe('Agent37 filesystem exec transfers (local shell, mocked transport)', () => {
   let directory: string;
   let bodies: string[];
-  let intercept: ((command: string) => Response | undefined) | undefined;
+  let intercept: ((command: string) => Response | undefined | Promise<Response | undefined>) | undefined;
+  let guest: { uid?: number; gid?: number };
+  let stagingDirectory: string;
+  let readOnlyDirectory: string | undefined;
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'agent37-filesystem-'));
     bodies = [];
     intercept = undefined;
+    guest = {};
+    readOnlyDirectory = undefined;
+    stagingDirectory = join(directory, 'remote temp "quotes" $dollar');
+    await mkdir(stagingDirectory);
     vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
       if (url.endsWith('/v1/instances')) return new Response(JSON.stringify(instance), { status: 201 });
       if (!url.endsWith('/exec')) throw new Error(`Unexpected request: ${url}`);
@@ -25,10 +32,10 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
       bodies.push(body);
       if (Buffer.byteLength(body) > 128_000) return new Response('The request body must be at most 128 KB.', { status: 413 });
       const { command } = JSON.parse(body) as { command: string };
-      const failure = intercept?.(command);
+      const failure = await intercept?.(command);
       if (failure) return failure;
       try {
-        const { stdout, stderr } = await execute('/bin/sh', ['-c', command], { cwd: directory, maxBuffer: 2 * 1024 * 1024 });
+        const { stdout, stderr } = await execute('/bin/sh', ['-c', command], { ...guest, env: { ...process.env, TMPDIR: stagingDirectory }, cwd: directory, maxBuffer: 2 * 1024 * 1024 });
         return new Response(JSON.stringify({ exit_code: 0, stdout: stdout.slice(0, 512_000), stderr, truncated: stdout.length > 512_000 }));
       } catch (error) {
         const result = error as { code: number; stdout: string; stderr: string };
@@ -39,6 +46,7 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
 
   afterEach(async () => {
     vi.unstubAllGlobals();
+    if (readOnlyDirectory) await chmod(readOnlyDirectory, 0o755);
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -51,8 +59,31 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
   }
 
   async function originalWrite(path: string, content: string) {
-    await execute('/bin/sh', ['-c', 'mkdir -p "$(dirname "$1")" && printf "%s" "$2" | base64 -d > "$1"', 'sh', path, Buffer.from(content).toString('base64')]);
+    await execute('/bin/sh', ['-c', 'mkdir -p "$(dirname "$1")" && printf "%s" "$2" | base64 -d > "$1"', 'sh', path, Buffer.from(content).toString('base64')], guest);
   }
+
+  it('overwrites a writable file in a read-only directory as a non-root guest like the original write', async () => {
+    if (process.getuid?.() === 0) guest = { uid: 65534, gid: 65534 };
+    await chmod(directory, 0o755);
+    await chmod(stagingDirectory, 0o777);
+    readOnlyDirectory = join(directory, 'read-only-dir');
+    await mkdir(readOnlyDirectory);
+    const path = join(readOnlyDirectory, 'writable-file');
+    await writeFile(path, 'original');
+    await chmod(path, 0o666);
+    await chmod(readOnlyDirectory, 0o555);
+    const identity = await execute('/bin/sh', ['-c', 'id -u'], guest);
+    expect(identity.stdout.trim()).not.toBe('0');
+    await expect(execute('/bin/sh', ['-c', ': > "$1"', 'sh', join(readOnlyDirectory, 'cannot-create')], guest)).rejects.toThrow();
+    await originalWrite(path, 'old-write');
+    expect(await readFile(path, 'utf8')).toBe('old-write');
+    const sb = await sandbox();
+    const content = 'x'.repeat(256 * 1024);
+    await sb.filesystem.writeFile(path, content);
+    expect(await readFile(path, 'utf8')).toBe(content);
+    expect((await stat(path)).mode & 0o777).toBe(0o666);
+    await expectNoStagingFiles();
+  });
 
   it('writes the fidelity 256 KiB deterministic text concurrently with three small files and reads exact contents', async () => {
     const sb = await sandbox();
@@ -70,6 +101,24 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
     expect(Math.max(...bodies.map((body) => Buffer.byteLength(body)))).toBeLessThan(128_000);
     expect(bodies.filter((body) => JSON.parse(body).command.includes('base64 -d >>'))).toHaveLength(9);
     await expectNoStagingFiles();
+  });
+
+  it('stages privately in the remote TMPDIR, not beside the destination', async () => {
+    const sb = await sandbox();
+    let checked = false;
+    intercept = async (command) => {
+      if (command.includes('base64 -d >>')) {
+        const files = await readdir(stagingDirectory);
+        expect(files).toHaveLength(1);
+        expect(files[0]).toMatch(/^\.computesdk-write-/);
+        expect((await stat(join(stagingDirectory, files[0]))).mode & 0o777).toBe(0o600);
+        checked = true;
+      }
+      return undefined;
+    };
+    await sb.filesystem.writeFile(join(directory, 'destination'), 'private staging');
+    expect(checked).toBe(true);
+    expect(await readdir(stagingDirectory)).toEqual([]);
   });
 
   it.each([1, 48 * 1024 - 1, 48 * 1024, 48 * 1024 + 1, 96 * 1024])('writes %i bytes across chunk boundaries', async (length) => {

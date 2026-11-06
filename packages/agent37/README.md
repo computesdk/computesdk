@@ -84,7 +84,7 @@ interface Agent37Config {
 
 - Output is returned when the command finishes; there is no streaming.
 - `runCommand`'s `timeout` stops waiting for the result. The command itself keeps running in the sandbox.
-- Filesystem content is UTF-8 text, not arbitrary binary. Writes use bounded exec requests and a unique staging file, then overwrite in place under an inode lock (`flock`, included in the base template). Existing permissions and hard links are preserved, and symlinks are followed. Concurrent SDK writes to the same inode do not interleave; readers can observe the final copy in progress, as with ordinary shell redirection. Failed uploads leave the destination unchanged; a failure during the final copy can leave partial content.
+- Filesystem content is UTF-8 text, not arbitrary binary. Writes use bounded exec requests and a unique mode-0600 staging file in the remote shell's writable `TMPDIR` (default `/tmp`), then overwrite in place under an inode lock (`flock`, included in the base template). Staging does not require destination-directory write permission. Existing permissions and hard links are preserved, and symlinks are followed. Concurrent SDK writes to the same inode do not interleave; readers can observe the final copy in progress, as with ordinary shell redirection. Failed uploads leave the destination unchanged; a failure during the final copy can leave partial content.
 - Reads use base64 over exec, whose stdout is capped at 512 KB (about 384 KiB of decoded content). A truncated response throws instead of returning partial content.
 - Sandboxes have no lifetime limit, so always call `destroy()` when you are done.
 
