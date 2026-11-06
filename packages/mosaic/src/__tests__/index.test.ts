@@ -503,4 +503,26 @@ describe('Mosaic ComputeSDK provider', () => {
       ['/v1/sandboxes/sbx-nap/resume', {}],
     ]);
   });
+
+  it('pauses and resumes through the ComputeSDK instance and declares what survives', async () => {
+    const calls = gateway({
+      'POST /v1/sandboxes': () => json({ id: 'sbx-life', state: 'running' }),
+      'POST /v1/sandboxes/sbx-life/pause': () => json({ id: 'sbx-life', state: 'paused' }),
+      'POST /v1/sandboxes/sbx-life/resume': () => json({ id: 'sbx-life', state: 'running' }),
+    });
+
+    const provider = mosaic(config);
+    const sandbox = await provider.sandbox.create();
+    await sandbox.pause!();
+    expect(sandbox.getInstance().state).toBe('paused');
+    await sandbox.resume!();
+
+    expect(sandbox.getInstance().state).toBe('running');
+    expect(calls.slice(1).map((call) => [new URL(call.url).pathname, call.body])).toEqual([
+      ['/v1/sandboxes/sbx-life/pause', {}],
+      ['/v1/sandboxes/sbx-life/resume', {}],
+    ]);
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    expect(provider.snapshot!.capabilities).toEqual({ scope: 'rootfs', memory: true, destroysSource: false });
+  });
 });

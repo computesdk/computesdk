@@ -368,7 +368,8 @@ function commandWithOptions(command: string, options?: RunCommandOptions): strin
       }
       return `${key}="${escapeShellArg(value)}"`;
     });
-    result = `env ${assignments.join(' ')} ${result}`;
+    // Exported first, so every part of a compound command (and the cd) sees them.
+    result = `export ${assignments.join(' ')}; ${result}`;
   }
   return result;
 }
@@ -718,9 +719,21 @@ export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot
       },
 
       getInstance: (sandbox) => sandbox,
+
+      // A durable process (`runCommand` with `background`) makes the pause
+      // refuse with 409 sandbox_busy; `getInstance().pause({ killProcesses: true })`
+      // ends those first. Shell-started processes survive.
+      pause: (sandbox) => sandbox.pause(),
+      resume: async (sandbox) => {
+        await sandbox.resume();
+      },
+      pauseCapabilities: { memory: true },
     },
 
     snapshot: {
+      // A checkpoint captures memory and the whole disk (including /tmp, which
+      // is not a tmpfs) while the source keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
       create: async (config, sandboxId, options?: CreateSnapshotOptions) => {
         const snapshot = await request<MarSnapshotInfo>(
           config,
