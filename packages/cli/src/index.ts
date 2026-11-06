@@ -27,6 +27,7 @@ import { registerMarketCommands } from './market.js';
 import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
 import { parseBenchDispatch, runBench } from './bench.js';
+import { registerManifestCommand } from './manifest.js';
 import { benchAuth, benchAuthOverrides, envBaseUrl, fetchWhoami, formatWhoami } from './session.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -307,6 +308,15 @@ program
   .action(() => {
     // Never reached: bench args are dispatched pre-parse below.
   });
+
+// ─── __manifest (hidden) ─────────────────────────────────────────────────────
+// Regenerate the committed cli-manifest.json with
+// `pnpm --filter @computesdk/cli run manifest` after changing commands.
+
+registerManifestCommand(program, {
+  version: packageJson.version,
+  packageDir: join(__dirname, '..'),
+});
 
 // ─── Run ─────────────────────────────────────────────────────────────────────
 

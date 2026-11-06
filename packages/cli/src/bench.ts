@@ -7,7 +7,8 @@
 
 import { withFetchFailureContext } from './net.js';
 
-const BENCH_COMMANDS = new Set(['bench', 'benchmark']);
+/** The canonical name first; the rest are dispatch aliases. */
+export const BENCH_COMMANDS = new Set(['bench', 'benchmark']);
 
 /** Verbs `@benchsdk/runner` parses itself; its parser has no `--org`. */
 const RUNNER_VERBS = new Set(['run', 'check', '__manifest']);

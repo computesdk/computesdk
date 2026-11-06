@@ -133,6 +133,28 @@ COMPUTE_ORG=acme compute bench auth status --json      # same as: compute bench 
 org API key has no user, so they print the key's organization and
 `API key (no user identity)` (with `--json`: `"user": null`,
 `"credential": "api_key"`).
+
+## Command manifest
+
+`cli-manifest.json` (shipped in the package) lists every `compute` command:
+its canonical path, alias spellings, arguments and flags, plus the global
+flags and the `@benchsdk/runner` / `@benchsdk/cli` versions behind
+`compute bench …`. The bench commands themselves are described by the bench
+manifest in `@benchsdk/runner`. The benchmarks platform vendors both files
+to check that the commands its API surface map names exist.
+
+The hidden `compute __manifest` command prints the manifest (`--released`
+marks it as describing a published version; `--check <file>` exits 1 when
+`<file>` is out of date, ignoring a vendored `source.ref`). After adding,
+renaming or removing commands or flags, regenerate the committed file:
+
+```bash
+pnpm --filter @computesdk/cli run manifest   # builds, then writes cli-manifest.json
+```
+
+`src/__tests__/manifest.test.ts` fails when the committed file differs from
+the built CLI's output.
+
 ## Migrating from @computesdk/cli 1.x
 
 v2 removes the legacy console authentication and its commands:
