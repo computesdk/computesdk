@@ -104,7 +104,8 @@ async function setup() {
       'RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git python3 unzip',
       // Sandboxes cannot switch users, so apt must not drop to `_apt` and sudo just runs the command.
       `RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99computesdk-sandbox`,
-      'COPY --chmod=755 sudo /usr/local/bin/sudo',
+      'COPY sudo /usr/local/bin/sudo',
+      'RUN chmod 755 /usr/local/bin/sudo',
       'WORKDIR /app',
       'COPY package.json gateway.mjs ./',
       'ENV NODE_ENV=production',
