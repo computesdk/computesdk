@@ -9,6 +9,8 @@ runProviderTestSuite({
   supportsFilesystem: true,
   supportsStreaming: true,    // served by the shell process tier over runCommand
   supportsProcesses: true,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   expectProcessRuntime: live ? { streaming: 'shell', processes: 'shell' } : undefined,
   skipIntegration: !live
 });

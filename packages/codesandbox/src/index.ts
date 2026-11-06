@@ -346,6 +346,11 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
         }
       },
 
+      // Hibernate keeps the VM's memory and disk; resume wakes the same sandbox id.
+      pause: (sandbox: CodesandboxSandbox) => sandbox.pause(),
+      resume: (sandbox: CodesandboxSandbox) => sandbox.resume(),
+      pauseCapabilities: { memory: true },
+
       getInstance: (sandbox: CodesandboxSandbox): CodesandboxSandbox => sandbox,
     },
 
@@ -383,7 +388,9 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
             throw new Error(`Failed to delete CodeSandbox snapshot "${snapshotId}": ${message}`);
           }
         }
-      }
+      },
+      // Forks keep the whole VM, memory included; the source keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
     },
 
     template: {
