@@ -8,7 +8,7 @@
  * `runAsRoot: false` to run as the image's own user instead.
  */
 
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 
 import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
 
@@ -166,8 +166,30 @@ async function mustSucceed(run: FsRunCommand, sandbox: Agent37Sandbox, command: 
   return result;
 }
 
+// Agent37 offers four create shapes (vCPU / GB RAM): 2/4, 4/8, 4/16 and 4/32. 4 vCPU is the ceiling on
+// every type, and a request for more cores is quietly capped, so only exact shapes are claimed.
+// https://www.agent37.com/docs/agents-api/instance-sizing
+const SHAPES = new Set(['2/4096', '4/8192', '4/16384', '4/32768']);
+const NATIVE_SIZE_FIELDS = ['cpu', 'vcpus', 'cpus', 'memory', 'memoryMiB', 'memoryMb', 'memMiB'] as const;
+
 export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
   name: 'agent37',
+  sizes: (_config, profile, options) => {
+    if (NATIVE_SIZE_FIELDS.some((field) => options?.[field] !== undefined)) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Agent37 cpu/memory fields');
+    }
+    const type = options?.type ?? 'default';
+    if (type !== 'default' && type !== 'performance' && type !== 'vm') {
+      return { status: 'unknown', reason: `Agent37 shapes are published for the default, performance and vm types, not ${JSON.stringify(type)}.` };
+    }
+    if (!SHAPES.has(`${profile.vcpus}/${profile.memoryMiB}`)) {
+      return {
+        status: 'unsupported',
+        reason: `Agent37 has no ${profile.vcpus} vCPU / ${profile.memoryMiB / 1024} GB shape; it offers 2/4, 4/8, 4/16 and 4/32 (4 vCPU ceiling).`,
+      };
+    }
+    return { status: 'supported', nativeOptions: { cpu: profile.vcpus, memoryMiB: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: async (config: Agent37Config, options?: CreateInstanceOptions) => {

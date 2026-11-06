@@ -67,6 +67,7 @@ interface Agent37Config {
 | `type` | `type` | `default`, `performance` (a whole machine whose cores are held for it) or `vm`. |
 | `cpu` (or `vcpus`, `cpus`) | `resources.cpu` | vCPUs. Sizes are 2 vCPU / 4 GB, 4 / 8, 4 / 16 and 4 / 32. |
 | `memory` (MB, or `memoryMiB`, `memoryMb`) | `resources.memory` | Rounded up to whole GB. |
+| `sizeClass` | `resources` | Standard sizes: `md` (2 vCPU / 4 GB) and `lg` (4 / 8). `xs`, `sm`, `xl` and `2xl` fail with `unsupported`; combining `sizeClass` with `cpu`/`memory` is a `conflict`. |
 | `diskMb` (or `diskMiB`) | `resources.disk` | Rounded up to whole GB. |
 | `region` | `region` | `us` (default), `eu` or `ap-south`. |
 | `envs` | `env` | Environment variables for the sandbox. |
