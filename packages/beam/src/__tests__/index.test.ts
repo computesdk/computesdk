@@ -44,6 +44,8 @@ function mockSandbox() {
       listFiles: vi.fn().mockResolvedValue([]),
       writeText: vi.fn().mockResolvedValue(undefined),
       readText: vi.fn().mockResolvedValue(''),
+      statFile: vi.fn().mockRejectedValue(new Error('no such file')),
+      readBytes: vi.fn(),
     },
   } as unknown as SandboxInstance;
   vi.spyOn(Sandbox.prototype, 'create').mockResolvedValue(instance);
@@ -149,6 +151,76 @@ describe('lazy sandbox readiness', () => {
 
     const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
     await expect(sandbox.filesystem.readFile('/missing.txt')).rejects.toThrow('Failed to read file /missing.txt: no such file');
+    expect(instance.exec).not.toHaveBeenCalled();
+  });
+
+  test('resolves gateway-rejected symlinks in the guest and reads their native target', async () => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    const path = "/root/link '$(touch bad).txt";
+    const target = '/root/target with spaces.txt';
+    vi.mocked(instance.fs.readText)
+      .mockRejectedValueOnce(new Error('openat: path escapes from parent'))
+      .mockResolvedValueOnce('linked content\n');
+    const proc = await instance.exec(['true']);
+    vi.mocked(proc.stdout.read).mockResolvedValue(`${target}\n`);
+    vi.mocked(instance.exec).mockClear();
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile(path)).resolves.toBe('linked content\n');
+
+    expect(instance.exec).toHaveBeenCalledOnce();
+    expect(instance.exec).toHaveBeenCalledWith(['readlink', '-f', '--', path]);
+    expect(instance.fs.readText).toHaveBeenNthCalledWith(2, target);
+    expect(proc.wait).toHaveBeenCalledOnce();
+  });
+
+  test('retains chunked downloads for large symlink targets', async () => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    vi.mocked(instance.fs.readText)
+      .mockRejectedValueOnce(new Error('path escapes from parent'))
+      .mockRejectedValueOnce(new Error('Request failed with status code 429'));
+    vi.mocked(instance.fs.statFile).mockResolvedValue({ size: 2 * 1024 * 1024 } as Awaited<ReturnType<typeof instance.fs.statFile>>);
+    vi.mocked(instance.fs.readBytes).mockResolvedValue(Buffer.alloc(1024 * 1024, 'x'));
+    const proc = await instance.exec(['true']);
+    vi.mocked(proc.stdout.read).mockResolvedValue('/root/large.txt\n');
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile('/root/link.txt')).resolves.toBe('x'.repeat(2 * 1024 * 1024));
+
+    expect(instance.fs.statFile).toHaveBeenCalledWith('/root/large.txt');
+    expect(instance.fs.readBytes).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(instance.exec).mock.calls.some(([argv]) =>
+      (argv as string[]).some((arg) => arg.includes("split -a 6 -d -b 1048576 '/root/large.txt'")),
+    )).toBe(true);
+  });
+
+  test('does not retry symlink resolution if the gateway also rejects the resolved target', async () => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    vi.mocked(instance.fs.readText).mockRejectedValue(new Error('path escapes from parent'));
+    const proc = await instance.exec(['true']);
+    vi.mocked(proc.stdout.read).mockResolvedValue('/root/target.txt\n');
+    vi.mocked(instance.exec).mockClear();
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile('/root/link.txt')).rejects.toThrow('path escapes from parent');
+    expect(instance.exec).toHaveBeenCalledOnce();
+    expect(instance.fs.readText).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([1, 0])('keeps the native error when readlink fails or returns no target (exit %i)', async (exitCode) => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    vi.mocked(instance.fs.readText).mockRejectedValue(new Error('path escapes from parent'));
+    const proc = await instance.exec(['true']);
+    proc.exitCode = exitCode;
+    vi.mocked(instance.exec).mockClear();
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile('/root/link.txt')).rejects.toThrow('path escapes from parent');
+    expect(instance.fs.readText).toHaveBeenCalledOnce();
   });
 
   test('reuses the sandbox builder across equivalent provider instances', async () => {
