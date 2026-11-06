@@ -8,7 +8,6 @@ import { runProviderTestSuite } from '@computesdk/test-utils'
 import { cloudRun } from '../index'
 import { createGatewayServer } from '../gateway'
 import { createFakeSandboxCli } from './helpers/fake-sandbox-cli'
-import { withExpectedSnapshotCapabilities } from './helpers/snapshot-capabilities'
 
 // The gateway reads its binary from the env on each call, so this must be set
 // before any test runs; the local gateway serves both the suite and unit tests.
@@ -28,7 +27,7 @@ afterAll(() => {
 
 runProviderTestSuite({
   name: 'cloud-run',
-  provider: withExpectedSnapshotCapabilities(cloudRun({ sandboxUrl: gatewayUrl, sandboxSecret: SECRET, executionMode: 'stateful' })),
+  provider: cloudRun({ sandboxUrl: gatewayUrl, sandboxSecret: SECRET, executionMode: 'stateful' }),
   supportsFilesystem: true,
   supportsGetUrl: false,
   supportsStreaming: true,
@@ -42,8 +41,16 @@ runProviderTestSuite({
 describe('cloudRun adapter against the local gateway', () => {
   const provider = cloudRun({ sandboxUrl: gatewayUrl, sandboxSecret: SECRET })
 
-  it('does not declare snapshot capabilities before live verification', () => {
-    expect(provider.snapshot?.capabilities).toBeUndefined()
+  it('declares rootfs snapshots that keep the source', () => {
+    expect(provider.snapshot?.capabilities).toEqual({
+      scope: 'rootfs',
+      memory: false,
+      destroysSource: false,
+      source: 'kept',
+      excludes: ['/tmp'],
+      fork: true,
+      createOptions: { ephemeral: false },
+    })
   })
 
   it('keeps state for stateful sandboxes and restores snapshots', async () => {

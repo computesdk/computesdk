@@ -240,4 +240,19 @@ describe('Cloud Run gateway', () => {
       delete process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS
     }
   })
+
+  it('does not reap a sandbox while a command is running, and 0 disables reaping', async () => {
+    await call('/v1/sandbox/create', stateful('busy-1'))
+    process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS = '1'
+    try {
+      const running = call('/v1/sandbox/exec', stateful('busy-1', { command: 'sleep 1; echo done' }))
+      await new Promise(resolve => setTimeout(resolve, 200))
+      expect(await gateway.reapIdleSandboxes(Date.now() + 60_000)).not.toContain('busy-1')
+      expect((await running).data.stdout).toBe('done\n')
+      process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS = '0'
+      expect(await gateway.reapIdleSandboxes(Date.now() + 60_000)).toEqual([])
+    } finally {
+      delete process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS
+    }
+  })
 })

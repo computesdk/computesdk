@@ -56,7 +56,7 @@ const sandboxBinary = () => process.env.CLOUD_RUN_SANDBOX_BINARY ?? DEFAULT_SAND
 const idleTimeoutMs = () => Number(process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS ?? DEFAULT_IDLE_TIMEOUT_MS)
 
 /** Stateful sandboxes this instance started, keyed by id. */
-const sandboxes = new Map<string, { createdAt: number; lastUsed: number }>()
+const sandboxes = new Map<string, { createdAt: number; lastUsed: number; busy: number }>()
 
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message) }
@@ -184,11 +184,10 @@ function commandTimeout(timeout?: number): number {
 }
 
 function execCommand(sandboxId: string, command: string, body: Json = {}, onChunk?: Chunk) {
-  touch(sandboxId)
   const args = ['exec']
   pushExecArgs(args, body)
   args.push(sandboxId, ...commandArgs(command, body.timeout))
-  return runSandbox(args, commandTimeout(body.timeout), onChunk)
+  return inUse(sandboxId, () => runSandbox(args, commandTimeout(body.timeout), onChunk))
 }
 
 function fsCommand(sandboxId: string, command: string, body: Json = {}) {
@@ -197,9 +196,15 @@ function fsCommand(sandboxId: string, command: string, body: Json = {}) {
     : doCommand(command, body)
 }
 
-function touch(sandboxId: string): void {
+/** Keeps a sandbox from being reaped while `work` runs; idle time restarts when it ends. */
+async function inUse<T>(sandboxId: string, work: () => Promise<T>): Promise<T> {
   const entry = sandboxes.get(sandboxId)
-  if (entry) entry.lastUsed = Date.now()
+  if (entry) { entry.busy++; entry.lastUsed = Date.now() }
+  try {
+    return await work()
+  } finally {
+    if (entry) { entry.busy--; entry.lastUsed = Date.now() }
+  }
 }
 
 async function deleteSandbox(sandboxId: string): Promise<void> {
@@ -208,11 +213,11 @@ async function deleteSandbox(sandboxId: string): Promise<void> {
   await runSandbox(['delete', '--force', sandboxId], DELETE_TIMEOUT_MS)
 }
 
-/** Deletes stateful sandboxes idle for longer than CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS. */
+/** Deletes stateful sandboxes idle for longer than CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS (0 disables). */
 export async function reapIdleSandboxes(now = Date.now()): Promise<string[]> {
   const limit = idleTimeoutMs()
   if (!(limit > 0)) return []
-  const idle = [...sandboxes].filter(([, s]) => now - s.lastUsed > limit).map(([id]) => id)
+  const idle = [...sandboxes].filter(([, s]) => s.busy === 0 && now - s.lastUsed > limit).map(([id]) => id)
   await Promise.all(idle.map(id => deleteSandbox(id).catch(() => {})))
   return idle
 }
@@ -312,7 +317,7 @@ async function startSandbox(sandboxId: string, body: Json, importTar?: string): 
   args.push('--detach', sandboxId)
   const result = await runSandbox(args, body.timeout)
   if (result.exitCode !== 0) throw new HttpError(500, result.stderr.trim() || `Failed to create Cloud Run sandbox ${sandboxId}`)
-  sandboxes.set(sandboxId, { createdAt: Date.now(), lastUsed: Date.now() })
+  sandboxes.set(sandboxId, { createdAt: Date.now(), lastUsed: Date.now(), busy: 0 })
   return { sandboxId, status: 'running', ...(body.snapshotId ? { snapshotId: body.snapshotId } : {}) }
 }
 
@@ -350,7 +355,7 @@ export async function handle(pathname: string, body: Json, onChunk?: Chunk): Pro
     if (!known) {
       const probe = await execCommand(sandboxId, 'true', { timeout: DELETE_TIMEOUT_MS })
       if (probe.exitCode !== 0) throw new HttpError(404, `Sandbox ${sandboxId} is not running on this gateway instance`)
-      sandboxes.set(sandboxId, { createdAt: Date.now(), lastUsed: Date.now() })
+      sandboxes.set(sandboxId, { createdAt: Date.now(), lastUsed: Date.now(), busy: 0 })
     }
     return { sandboxId, status: 'running', createdAt: new Date(sandboxes.get(sandboxId)!.createdAt).toISOString() }
   }
@@ -367,18 +372,16 @@ export async function handle(pathname: string, body: Json, onChunk?: Chunk): Pro
     const uri = snapshotUri(snapshotId)
     const store = snapshotStore()
     if (store.kind === 'local') await mkdir(store.dir, { recursive: true })
-    touch(sandboxId)
-    const result = await runSandbox(['tar', `--file=${uri}`, sandboxId], body.timeout)
+    const result = await inUse(sandboxId, () => runSandbox(['tar', `--file=${uri}`, sandboxId], body.timeout))
     if (result.exitCode !== 0) throw cliError(result, `Failed to snapshot sandbox ${sandboxId}`)
     return { snapshotId, uri, store: store.kind, sourceSandboxId: sandboxId, createdAt: new Date().toISOString() }
   }
 
   if (pathname === '/v1/sandbox/fork') {
     const targetId = validateId(String(body.targetSandboxId ?? `cloud-run-${randomUUID()}`), 'targetSandboxId')
-    touch(sandboxId)
-    const result = await runSandbox(['fork', '--detach', sandboxId, targetId], body.timeout)
+    const result = await inUse(sandboxId, () => runSandbox(['fork', '--detach', sandboxId, targetId], body.timeout))
     if (result.exitCode !== 0) throw cliError(result, `Failed to fork sandbox ${sandboxId}`)
-    sandboxes.set(targetId, { createdAt: Date.now(), lastUsed: Date.now() })
+    sandboxes.set(targetId, { createdAt: Date.now(), lastUsed: Date.now(), busy: 0 })
     return { sandboxId: targetId, sourceSandboxId: sandboxId, status: 'running' }
   }
 
@@ -515,7 +518,7 @@ if (isMain()) {
     process.exit(1)
   }
   const server = createGatewayServer(secret)
-  const reaper = setInterval(() => { void reapIdleSandboxes() }, 60_000)
+  const reaper = setInterval(() => { void reapIdleSandboxes() }, Math.min(60_000, Math.max(1_000, idleTimeoutMs() / 3 || 60_000)))
   reaper.unref()
   process.on('SIGTERM', () => {
     clearInterval(reaper)

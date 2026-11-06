@@ -602,13 +602,18 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
     },
 
     snapshot: {
-      // No `capabilities` until a deployed gateway proves snapshots live: they
-      // would make benches and the derived conformance flag try snapshots on
-      // older gateways that have no snapshot routes. Expected once proven:
-      // { scope: 'rootfs', memory: false, destroysSource: false, source: 'kept',
-      //   excludes: ['/tmp'], fork: true, createOptions: { ephemeral: false } }
-      // (`sandbox tar`/`fork` export the writable rootfs overlay; /tmp and
-      // --mount paths are excluded and fork restarts the startup command).
+      // Proven against a deployed v2 gateway: `sandbox tar`/`fork` export the
+      // writable rootfs overlay; /tmp and --mount paths are excluded, the source
+      // keeps running and fork restarts the startup command (no memory).
+      capabilities: {
+        scope: 'rootfs',
+        memory: false,
+        destroysSource: false,
+        source: 'kept',
+        excludes: ['/tmp'],
+        fork: true,
+        createOptions: { ephemeral: false },
+      },
       create: async (config: CloudRunConfig, sandboxId: string, options?: { name?: string }) => {
         await requireGatewayFeature(config, 'snapshot', 'snapshots')
         const sandbox = activeSandboxes.get(sandboxId)

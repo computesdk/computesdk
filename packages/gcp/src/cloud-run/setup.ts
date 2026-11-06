@@ -50,6 +50,7 @@ async function setup() {
   const concurrency = process.env.CLOUD_RUN_CONCURRENCY ?? '20'
   const minInstances = process.env.CLOUD_RUN_MIN_INSTANCES ?? '100'
   const maxInstances = process.env.CLOUD_RUN_MAX_INSTANCES ?? '100'
+  const idleTimeout = process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS
 
   console.log('\n  ComputeSDK Cloud Run Setup\n')
 
@@ -69,7 +70,9 @@ async function setup() {
     process.exit(1)
   }
 
-  const secret = randomBytes(32).toString('hex')
+  // Redeploying with the current secret keeps existing clients working.
+  const reusedSecret = process.env.CLOUD_RUN_SANDBOX_SECRET
+  const secret = reusedSecret || randomBytes(32).toString('hex')
   const distDir = dirname(realpathSync(fileURLToPath(import.meta.url)))
   const gatewayPath = join(distDir, 'gateway.mjs')
   const tmpDir = mkdtempSync(join(tmpdir(), 'computesdk-cloud-run-'))
@@ -80,6 +83,8 @@ async function setup() {
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ type: 'module', scripts: { start: 'node gateway.mjs' } }, null, 2))
     writeFileSync(join(tmpDir, 'Dockerfile'), [
       'FROM node:22-slim',
+      // The sandbox CLI verifies TLS against system CAs (e.g. for gs:// snapshots).
+      'RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*',
       'WORKDIR /app',
       'COPY package.json gateway.mjs ./',
       'ENV NODE_ENV=production',
@@ -119,8 +124,11 @@ async function setup() {
       '--cpu-boost',
       '--no-cpu-throttling',
       ...(serviceAccount ? ['--service-account', serviceAccount] : []),
-      '--set-env-vars', [`SANDBOX_SECRET=${secret}`, ...(snapshotBucket ? [`CLOUD_RUN_SNAPSHOT_BUCKET=${snapshotBucket}`] : [])].join(','),
+      '--set-env-vars', [`SANDBOX_SECRET=${secret}`, ...(snapshotBucket ? [`CLOUD_RUN_SNAPSHOT_BUCKET=${snapshotBucket}`] : []), ...(idleTimeout ? [`CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS=${idleTimeout}`] : [])].join(','),
     ], { stdio: 'inherit' })
+
+    // A pinned traffic split keeps serving the old revision after deploy.
+    run('gcloud', ['run', 'services', 'update-traffic', serviceName, '--to-latest', '--region', region, '--project', projectId], { stdio: 'inherit' })
 
     const serviceUrl = run('gcloud', [
       'run', 'services', 'describe', serviceName,
@@ -131,7 +139,7 @@ async function setup() {
 
     console.log('\n  Setup complete! Add these to your .env:\n')
     console.log(`  CLOUD_RUN_SANDBOX_URL=${serviceUrl}`)
-    console.log(`  CLOUD_RUN_SANDBOX_SECRET=${secret}`)
+    console.log(reusedSecret ? '  CLOUD_RUN_SANDBOX_SECRET is unchanged' : `  CLOUD_RUN_SANDBOX_SECRET=${secret}`)
     console.log('')
   } finally {
     rmSync(tmpDir, { recursive: true, force: true })

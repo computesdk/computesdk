@@ -184,7 +184,7 @@ Commands use ephemeral `sandbox do` execution by default. Filesystem writes are 
 
 ### Gateway instances
 
-A stateful sandbox lives on the gateway instance that created it. The provider replays Cloud Run's session-affinity cookie so follow-up calls reach that instance; affinity is best effort, so keep `--session-affinity` and spare `--concurrency` on the service. The gateway deletes stateful sandboxes idle for `CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS` (default one hour, `0` disables). Snapshot, restore and live streaming need the current gateway; against a gateway deployed before these features, snapshot calls fail with a redeploy hint and streamed output arrives when the command exits.
+A stateful sandbox lives on the gateway instance that created it. The provider replays Cloud Run's session-affinity cookie so follow-up calls reach that instance; affinity is best effort, so keep `--session-affinity` and spare `--concurrency` on the service. The gateway deletes stateful sandboxes idle for `CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS` (default one hour, `0` disables; set it at deploy time with the same variable), never while a command is running. Snapshot, restore and live streaming need the current gateway; against a gateway deployed before these features, snapshot calls fail with a redeploy hint and streamed output arrives when the command exits.
 
 `getUrl()` is not supported because the current Cloud Run sandbox CLI does not expose per-sandbox ports.
 
