@@ -1054,6 +1054,13 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
     // a snapshot volume (opt-in `snapshotVolume`, or a restore) can snapshot;
     // the rootfs is never captured.
     snapshot: {
+      capabilities: {
+        scope: 'volume',
+        path: DEFAULT_SNAPSHOT_MOUNT_PATH,
+        memory: false,
+        destroysSource: true,
+        createOptions: { snapshotVolume: true },
+      },
       create: async (config: NamespaceConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
         const { token } = await getAndValidateCredentials(config);
 

@@ -13,5 +13,7 @@ runProviderTestSuite({
   // No native file API; the provider's shell filesystem covers it.
   supportsFilesystem: true,
   supportsGetUrl: false,
+  // Volume snapshots: the source needs `snapshotVolume`; restores keep /workspace only.
+  supportsSnapshots: true,
   skipIntegration: !process.env.NSC_TOKEN,
 });
