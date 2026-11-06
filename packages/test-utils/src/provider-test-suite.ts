@@ -517,7 +517,13 @@ export function defineProviderTests(config: ProviderTestConfig) {
             const read = await source.runCommand(`cat ${marker}`);
             expect(read.exitCode).toBe(0);
             expect(read.stdout.trim()).toBe('paused-state');
-            if (proc) expect((await proc.status()).status).toBe('running');
+            if (proc) {
+              // Check the process itself: a native handle's connection may not survive a pause.
+              const alive = proc.pid != null
+                ? (await source.runCommand(`kill -0 ${proc.pid} && echo alive`)).stdout.trim() === 'alive'
+                : (await proc.status()).status === 'running';
+              expect(alive).toBe(true);
+            }
           } finally {
             await destroyQuietly(source);
           }
