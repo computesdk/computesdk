@@ -1,0 +1,106 @@
+name: Provider Setup
+
+# One-time, idempotent account setup for providers that need resources
+# created before instances can use them (e.g. templates that fix the size),
+# e.g.:
+#   compute actions dispatch computesdk/computesdk --workflow provider-setup.yml --inputs provider=superserve --inputs dry_run=true
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Provider to set up (superserve, novita, mosaic) or all
+        required: true
+        type: string
+      dry_run:
+        description: Only print what would be created
+        type: boolean
+        default: true
+      verify:
+        description: Boot each template and check its CPU and memory
+        type: boolean
+        default: false
+
+jobs:
+  provider-setup:
+    runs-on: namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal
+    permissions:
+      contents: read
+    env:
+      PROVIDER: ${{ inputs.provider }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check provider
+      run: |
+        case "$PROVIDER" in
+          superserve|novita|mosaic) packages="$PROVIDER" ;;
+          all) packages="superserve novita mosaic" ;;
+          *) echo "Unknown provider: $PROVIDER"; exit 1 ;;
+        esac
+        echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+
+    - name: Seed Namespace token file
+      env:
+        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
+      run: |
+        if [ -n "${NSC_TOKEN:-}" ] && [ ! -f /var/run/nsc/token.json ]; then
+          mkdir -p /var/run/nsc
+          case "$NSC_TOKEN" in
+            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+          esac
+          chmod 600 /var/run/nsc/token.json
+          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
+          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
+        fi
+
+    - uses: namespacelabs/nscloud-setup@v0
+
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+
+    - name: Build packages
+      run: pnpm build
+
+    # Loads the Namespace vault entries named like an env var in each
+    # provider's source, the same way Provider Test does.
+    - name: Set up ${{ inputs.provider }}
+      env:
+        DRY_RUN: ${{ inputs.dry_run }}
+        VERIFY: ${{ inputs.verify }}
+      run: |
+        keys=$(for p in $PACKAGES; do grep -rhoE '\b[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9]\b' "packages/$p/src" || true; done | sort -u | jq -Rsc 'split("\n") | map(select(. != ""))')
+        envdef="$RUNNER_TEMP/vault.envdef"
+        nsc vault list --output json | jq -r --argjson keys "$keys" '
+          [ .[]
+            | select((.deleted_at // null) == null)
+            | ((((.labels // []) | map(select(.name == "name")) | .[0].value) // .description // "")) as $name
+            | select($keys | index($name) != null)
+            | {name: $name, object_id: .object_id} ]
+          | group_by(.name) | map(last) | .[]
+          | "\(.name)=\(.object_id)"' > "$envdef"
+        echo "Loading $(cut -d= -f1 "$envdef" | tr '\n' ' ')from the Namespace vault"
+        if [ -s "$envdef" ]; then
+          vault_exported=$(nsc vault export --envdef "$envdef" --shell=bash)
+          eval "$vault_exported"
+          unset vault_exported
+          while IFS='=' read -r key _; do
+            if [ -n "${!key-}" ]; then printf '::add-mask::%s\n' "${!key}"; fi
+          done < "$envdef"
+        fi
+        rm -f "$envdef"
+
+        flags=""
+        if [ "$DRY_RUN" = "true" ]; then flags="$flags --dry-run"; fi
+        if [ "$VERIFY" = "true" ]; then flags="$flags --verify"; fi
+        node scripts/provider-setup.mjs "$PROVIDER" $flags
