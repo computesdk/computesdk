@@ -27,6 +27,8 @@ export type {
   CommandResult,
   InstanceInfo,
   Snapshot,
+  SnapshotCapabilities,
+  PauseCapabilities,
   FileEntry,
   RunCommandOptions,
   StartProcessOptions,

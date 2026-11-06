@@ -12,6 +12,8 @@ import type {
   CreateVolumeOptions,
   InstanceInterface,
   ListVolumesOptions,
+  PauseCapabilities,
+  SnapshotCapabilities,
   Volume,
 } from 'computesdk';
 
@@ -142,6 +144,8 @@ export interface ProviderInstanceManager<TInstance = any> {
   list(): Promise<ProviderInstance<TInstance>[]>;
   /** Destroy an instance */
   destroy(instanceId: string): Promise<void>;
+  /** Present when the provider's instances support `pause()`/`resume()`. */
+  readonly pause?: PauseCapabilities;
 }
 
 /** @deprecated Use {@link ProviderInstanceManager} instead. */
@@ -169,6 +173,8 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
   list(options?: ListSnapshotsOptions): Promise<TSnapshot[]>;
   /** Delete a snapshot */
   delete(snapshotId: string): Promise<void>;
+  /** What snapshots keep; absent on providers that haven't declared it. */
+  readonly capabilities?: SnapshotCapabilities;
 }
 
 /**

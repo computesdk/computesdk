@@ -199,6 +199,34 @@ export interface Snapshot {
 }
 
 /**
+ * What a provider's snapshots keep, and what the source instance needs.
+ * Callers read this before snapshotting, e.g. to create the source with
+ * `createOptions` and write state they expect to survive under `path`.
+ */
+export interface SnapshotCapabilities {
+  /** `rootfs`: the whole root filesystem. `volume`: only the volume at `path`. */
+  scope: 'rootfs' | 'volume';
+  /** Directory whose contents survive a restore. Required for `volume` scope. */
+  path?: string;
+  /** Whether running processes and memory survive a restore. */
+  memory: boolean;
+  /** Whether `snapshot.create` stops or destroys the source instance. */
+  destroysSource: boolean;
+  /** Create options the source instance needs for snapshots to work. */
+  createOptions?: Record<string, unknown>;
+}
+
+/**
+ * What `instance.pause()`/`resume()` keep, and what the instance needs.
+ */
+export interface PauseCapabilities {
+  /** Whether running processes and memory survive pause/resume. */
+  memory: boolean;
+  /** Create options an instance needs before it can be paused. */
+  createOptions?: Record<string, unknown>;
+}
+
+/**
  * Options for creating a snapshot
  */
 export interface CreateSnapshotOptions {
@@ -532,4 +560,13 @@ export interface Instance {
    * that need it; others resolve the attachment from `volume` alone.
    */
   detachVolume?(volume: string | Volume, mountPath?: string): Promise<void>;
+
+  /**
+   * Pause this instance — present only on providers with native pause.
+   * Check `typeof instance.pause === 'function'` to detect support.
+   */
+  pause?(): Promise<void>;
+
+  /** Resume a paused instance — present whenever `pause` is. */
+  resume?(): Promise<void>;
 }

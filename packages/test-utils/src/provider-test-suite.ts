@@ -60,6 +60,18 @@ export interface ProviderTestConfig {
    * this set it also fails when a provider silently changes tier.
    */
   expectProcessRuntime?: { streaming?: ProcessTier; processes?: ProcessTier };
+  /**
+   * Whether to exercise `instance.pause()`/`resume()`. Sources are created
+   * with the provider's declared `sandbox.pause.createOptions`.
+   */
+  supportsPauseResume?: boolean;
+  /**
+   * Whether to exercise `provider.snapshot` create/restore/delete. Requires
+   * declared `snapshot.capabilities`; markers are written under its `path`.
+   */
+  supportsSnapshots?: boolean;
+  /** Timeout for pause and snapshot tests (default: 300000) */
+  lifecycleTimeout?: number;
 }
 
 /**
@@ -92,6 +104,9 @@ export function defineProviderTests(config: ProviderTestConfig) {
     supportsStreaming = false,
     supportsProcesses = false,
     expectProcessRuntime,
+    supportsPauseResume = false,
+    supportsSnapshots = false,
+    lifecycleTimeout = 300000,
   } = config;
 
   return () => {
@@ -437,6 +452,97 @@ export function defineProviderTests(config: ProviderTestConfig) {
         expect(result.stdout.trim()).toBe('test content');
       }, timeout);
     });
+
+    const createLifecycleSource = (createOptions?: Record<string, unknown>) =>
+      provider.sandbox.create({ ...(ports?.length ? { ports } : {}), ...(createOptions ?? {}) } as any);
+
+    const destroyQuietly = async (sb: ProviderInstance | undefined) => {
+      if (sb) await cleanupSandbox(sb);
+    };
+
+    const markerDir = async (sb: ProviderInstance, declared?: string) => {
+      if (declared) return declared;
+      const pwd = await sb.runCommand('pwd');
+      return pwd.stdout.trim() || '/tmp';
+    };
+
+    if (supportsPauseResume && !skipIntegration) {
+      describe('Pause and Resume', () => {
+        it('should expose pause and resume on instances', () => {
+          expect(provider.sandbox.pause).toBeDefined();
+          expect(typeof sandbox.pause).toBe('function');
+          expect(typeof sandbox.resume).toBe('function');
+        });
+
+        it('should keep files across pause and resume', async () => {
+          const caps = provider.sandbox.pause!;
+          let source: ProviderInstance | undefined;
+          try {
+            source = await createLifecycleSource(caps.createOptions);
+            const marker = `${await markerDir(source)}/csdk-pause-${Date.now()}`;
+            expect((await source.runCommand(`echo paused-state > ${marker}`)).exitCode).toBe(0);
+            const pid = caps.memory
+              ? (await source.runCommand('nohup sleep 600 >/dev/null 2>&1 & echo $!')).stdout.trim()
+              : undefined;
+
+            await source.pause!();
+            await source.resume!();
+
+            const read = await source.runCommand(`cat ${marker}`);
+            expect(read.exitCode).toBe(0);
+            expect(read.stdout.trim()).toBe('paused-state');
+            if (pid) {
+              expect((await source.runCommand(`kill -0 ${pid} && echo alive`)).stdout.trim()).toBe('alive');
+            }
+          } finally {
+            await destroyQuietly(source);
+          }
+        }, lifecycleTimeout);
+      });
+    }
+
+    if (supportsSnapshots && !skipIntegration) {
+      describe('Snapshots', () => {
+        it('should declare what snapshots keep', () => {
+          const caps = provider.snapshot?.capabilities;
+          expect(caps).toBeDefined();
+          if (caps!.scope === 'volume') expect(caps!.path).toBeTruthy();
+        });
+
+        it('should restore files from a snapshot into a new instance', async () => {
+          const caps = provider.snapshot!.capabilities!;
+          let source: ProviderInstance | undefined;
+          let restored: ProviderInstance | undefined;
+          let snapshotId: string | undefined;
+          try {
+            source = await createLifecycleSource(caps.createOptions);
+            const marker = `${await markerDir(source, caps.path)}/csdk-snapshot-${Date.now()}`;
+            expect((await source.runCommand(`echo snapshot-state > ${marker}`)).exitCode).toBe(0);
+
+            const snapshot: any = await provider.snapshot!.create(source.instanceId);
+            snapshotId = snapshot.id;
+            expect(typeof snapshotId).toBe('string');
+
+            if (caps.destroysSource) {
+              source = undefined;
+            } else {
+              expect((await source.runCommand('echo alive')).stdout.trim()).toBe('alive');
+            }
+
+            restored = await provider.sandbox.create({ snapshotId } as any);
+            expect(restored.instanceId).not.toBe(source?.instanceId);
+            const read = await restored.runCommand(`cat ${marker}`);
+            expect(read.exitCode).toBe(0);
+            expect(read.stdout.trim()).toBe('snapshot-state');
+          } finally {
+            // Children before parents: some providers refuse to delete a fork's source first.
+            await destroyQuietly(restored);
+            if (snapshotId) await provider.snapshot!.delete(snapshotId).catch(() => {});
+            await destroyQuietly(source);
+          }
+        }, lifecycleTimeout);
+      });
+    }
   };
 }
 
