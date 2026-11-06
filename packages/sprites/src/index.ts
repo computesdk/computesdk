@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, startShellProcess } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -154,6 +154,40 @@ function withDeadline(command: string, timeoutMs?: number): string {
     `wait $__sp_pid; __sp_rc=$?; kill -KILL -- -$__sp_wd 2>/dev/null; exit $__sp_rc )`;
 }
 
+async function runForeground(sandbox: SpritesSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
+    const startTime = Date.now();
+    const id = `${Date.now()}_${randomUUID().slice(0, 8)}`;
+    const delimiter = `__COMPUTESDK_EXIT_${id}__`;
+    const errDelimiter = `__COMPUTESDK_STDERR_${id}__`;
+    const errFile = `/tmp/.computesdk-stderr-${id}`;
+
+    // Frames are one per HTTP chunk and a proxy may merge them, so the
+    // exit code and stderr travel in-band behind delimiters on stdout
+    // rather than relying on frame boundaries.
+    const script = `${subshell(command)} 2>${escapeShellArg(errFile)}; __sp_ec=$?; echo "${delimiter}$__sp_ec"; echo "${errDelimiter}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}\n`;
+
+    try {
+      const raw = await execFrames(sandbox, script, options);
+      const delimIdx = raw.stdout.lastIndexOf(delimiter);
+      if (delimIdx === -1) {
+        return { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode ?? 1, durationMs: Date.now() - startTime };
+      }
+      const stdout = raw.stdout.substring(0, delimIdx);
+      const after = raw.stdout.substring(delimIdx + delimiter.length);
+      const nlIdx = after.indexOf('\n');
+      const exitCode = parseInt((nlIdx === -1 ? after : after.substring(0, nlIdx)).trim(), 10) || 0;
+      let stderr = '';
+      if (nlIdx !== -1) {
+        const rest = after.substring(nlIdx + 1);
+        const errIdx = rest.indexOf(`${errDelimiter}\n`);
+        if (errIdx !== -1) stderr = rest.substring(errIdx + errDelimiter.length + 1);
+      }
+      return { stdout, stderr: raw.stderr + stderr, exitCode, durationMs: Date.now() - startTime };
+    } catch (error) {
+      return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
+    }
+}
+
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
   name: 'sprites',
   methods: {
@@ -258,37 +292,16 @@ export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
       },
 
       runCommand: async (sandbox: SpritesSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+        if (!options?.background) return runForeground(sandbox, command, options);
+        // The foreground script waits for the command to exit; the shell tier
+        // launches it in its own session and returns once it runs.
         const startTime = Date.now();
-        const id = `${Date.now()}_${randomUUID().slice(0, 8)}`;
-        const delimiter = `__COMPUTESDK_EXIT_${id}__`;
-        const errDelimiter = `__COMPUTESDK_STDERR_${id}__`;
-        const errFile = `/tmp/.computesdk-stderr-${id}`;
-
-        // Frames are one per HTTP chunk and a proxy may merge them, so the
-        // exit code and stderr travel in-band behind delimiters on stdout
-        // rather than relying on frame boundaries.
-        const script = `${subshell(command)} 2>${escapeShellArg(errFile)}; __sp_ec=$?; echo "${delimiter}$__sp_ec"; echo "${errDelimiter}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}\n`;
-
-        try {
-          const raw = await execFrames(sandbox, script, options);
-          const delimIdx = raw.stdout.lastIndexOf(delimiter);
-          if (delimIdx === -1) {
-            return { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode ?? 1, durationMs: Date.now() - startTime };
-          }
-          const stdout = raw.stdout.substring(0, delimIdx);
-          const after = raw.stdout.substring(delimIdx + delimiter.length);
-          const nlIdx = after.indexOf('\n');
-          const exitCode = parseInt((nlIdx === -1 ? after : after.substring(0, nlIdx)).trim(), 10) || 0;
-          let stderr = '';
-          if (nlIdx !== -1) {
-            const rest = after.substring(nlIdx + 1);
-            const errIdx = rest.indexOf(`${errDelimiter}\n`);
-            if (errIdx !== -1) stderr = rest.substring(errIdx + errDelimiter.length + 1);
-          }
-          return { stdout, stderr: raw.stderr + stderr, exitCode, durationMs: Date.now() - startTime };
-        } catch (error) {
-          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
-        }
+        const job = await startShellProcess(
+          (script, runOptions) => runForeground(sandbox, script, runOptions),
+          command,
+          { cwd: options.cwd, env: options.env },
+        );
+        return { stdout: job.jobId, stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
       },
 
       // The exec response streams stdout and stderr as separate frames while
