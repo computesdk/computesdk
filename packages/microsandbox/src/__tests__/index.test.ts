@@ -180,6 +180,9 @@ vi.mock('microsandbox', () => {
     async connect() { return this.native; }
     async startDetached() { this.status = 'running'; return this.native; }
     async stopWithTimeout() { await this.native.stopWithTimeout(); this.status = 'stopped'; }
+    async waitUntilStopped() { return { name: this.name, status: this.status }; }
+    async pause() { this.status = 'paused'; }
+    async resume() { this.status = 'running'; }
     async remove() {
       mock.removeAttempts++;
       if (mock.removeAttempts <= mock.removeFailures) throw new Error('temporary deletion failure');
@@ -201,7 +204,6 @@ vi.mock('microsandbox', () => {
       this.config = { name, ports: [] };
     }
     image(value: string) { this.config.image = value; return this; }
-    fromSnapshot(value: string) { this.config.snapshot = value; return this; }
     rootDisk(value: number) { this.config.rootDisk = value; return this; }
     cpus(value: number) { this.config.cpus = value; return this; }
     memory(value: number) { this.config.memory = value; return this; }
@@ -247,6 +249,22 @@ vi.mock('microsandbox', () => {
     },
     Sandbox: {
       builder: (name: string) => new FakeSandboxBuilder(name),
+      restore: (snapshot: string) => {
+        let name = '';
+        const builder = {
+          name(value: string) { name = value; return builder; },
+          idleTimeout() { return builder; },
+          disableNetwork() { return builder; },
+          port() { return builder; },
+          portBind() { return builder; },
+          async restore() {
+            const fake = new FakeSandboxBuilder(name);
+            fake.config.snapshot = snapshot;
+            return fake.create();
+          },
+        };
+        return builder;
+      },
       get: async (name: string) => {
         const handle = mock.handles.get(name);
         if (!handle) throw Object.assign(new Error('not found'), { code: 'sandboxNotFound' });
@@ -384,7 +402,8 @@ describe('microsandbox provider', () => {
     expect(instance).not.toHaveProperty('apiKey');
     expect(await sandbox.getInfo()).toMatchObject({ id: 'cloud-box', status: 'running' });
     await expect(sandbox.getUrl({ port: 3000 })).rejects.toThrow(/cloud does not currently support published ports/);
-    await expect(provider.snapshot?.list()).rejects.toThrow(/cloud does not currently support disk snapshots/);
+    await expect(provider.snapshot?.list()).resolves.toEqual([]);
+    await expect(sandbox.pause!()).rejects.toThrow(/cloud does not currently support pause\/resume/);
   });
 
   it('defaults to a cloud backend resolved by the microsandbox SDK', async () => {
@@ -745,6 +764,30 @@ describe('microsandbox provider', () => {
     const result = await sandbox.runCommand('sleep 60', { timeout: 5 });
 
     expect(result.exitCode).toBe(124);
+  });
+
+  it('pauses and resumes a local sandbox through the unified lifecycle', async () => {
+    const provider = microsandbox({ backend: 'local' });
+    const sandbox = await provider.sandbox.create({ name: 'pause-box' });
+
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    await sandbox.pause!();
+    expect(mock.handles.get('pause-box')!.status).toBe('paused');
+    await sandbox.resume!();
+    expect(mock.handles.get('pause-box')!.status).toBe('running');
+  });
+
+  it('declares disk snapshots of a persistent source and restores by reference', async () => {
+    const provider = microsandbox({ backend: 'local' });
+
+    expect(provider.snapshot?.capabilities).toEqual({
+      scope: 'rootfs',
+      memory: false,
+      destroysSource: false,
+      createOptions: { ephemeral: false },
+    });
+    await provider.sandbox.create({ name: 'restored-box', snapshotId: 'snap-ref' } as any);
+    expect(mock.created[0]).toMatchObject({ name: 'restored-box', snapshot: 'snap-ref' });
   });
 
   it('refuses to snapshot a running ephemeral sandbox instead of stopping it away', async () => {

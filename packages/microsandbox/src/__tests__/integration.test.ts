@@ -17,6 +17,8 @@ runProviderTestSuite({
   // Published ports are a local-backend feature.
   supportsGetUrl: local,
   ...(local ? { ports: [3000, 8080] } : {}),
+  supportsSnapshots: true,
+  // Pause/resume is local-only: the cloud backend rejects it as unsupported.
   skipIntegration: !runIntegration,
   timeout: 120_000,
 });
