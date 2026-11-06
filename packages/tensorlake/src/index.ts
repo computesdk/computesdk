@@ -312,25 +312,24 @@ export const tensorlake = defineProvider<
       },
 
       destroy: async (config: TensorlakeConfig, sandboxId: string) => {
+        const { apiKey, apiUrl } = resolveAuth(config);
         try {
-          const { apiKey, apiUrl } = resolveAuth(config);
           const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
           await sandbox.terminate();
-          // Each suspend leaves a `suspend-<id>-…` memory snapshot that
-          // outlives the sandbox; drop those, but keep user checkpoints.
-          const snapshots = await Sandbox.connect({ sandboxId, apiKey, apiUrl })
-            .then((s) => s.listSnapshots())
-            .catch(() => []);
-          await Promise.all(
-            snapshots
-              .filter((s) => s.snapshotId.startsWith(`suspend-${sandboxId}-`))
-              .map((s) =>
-                Sandbox.deleteSnapshot(s.snapshotId, { apiKey, apiUrl }).catch(() => {}),
-              ),
-          );
         } catch {
           // Sandbox may already be terminated
         }
+        // Each suspend leaves a `suspend-<id>-…` memory snapshot that outlives
+        // the sandbox; drop those, but keep user checkpoints. List at project
+        // level, since the sandbox itself is gone by now.
+        const snapshots = await Sandbox.listSnapshots({ apiKey, apiUrl }).catch(() => []);
+        await Promise.all(
+          snapshots
+            .filter((s) => s.snapshotId.startsWith(`suspend-${sandboxId}-`))
+            .map((s) =>
+              Sandbox.deleteSnapshot(s.snapshotId, { apiKey, apiUrl }).catch(() => {}),
+            ),
+        );
       },
 
       runCommand: async (

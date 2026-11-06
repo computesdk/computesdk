@@ -66,13 +66,6 @@ class FakeSandbox {
     lifecycleCalls.push("resume");
   }
 
-  async listSnapshots() {
-    return [
-      { snapshotId: `suspend-${this.sandboxId}-a` },
-      { snapshotId: "user-checkpoint" },
-    ];
-  }
-
   async terminate() {}
 }
 
@@ -84,7 +77,11 @@ vi.mock("tensorlake", () => ({
     };
     static connect = async () => new FakeSandbox();
     static list = async () => [];
-    static listSnapshots = async () => [];
+    static listSnapshots = async () => [
+      { snapshotId: "suspend-sb-test-a", sandboxId: "sb-test" },
+      { snapshotId: "suspend-sb-other-a", sandboxId: "sb-other" },
+      { snapshotId: "user-checkpoint", sandboxId: "sb-test" },
+    ];
     static deleteSnapshot = async (id: string) => {
       deletedSnapshots.push(id);
     };
