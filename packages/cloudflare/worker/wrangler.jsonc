@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "computesdk-sandbox",
+  "name": "sandbox",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   // @cloudflare/sandbox resolves Linux errno names through node:os.

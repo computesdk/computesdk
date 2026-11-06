@@ -25,7 +25,7 @@ npx wrangler deploy
 Then configure your application with the deployed Worker URL and the same API key:
 
 ```bash
-CLOUDFLARE_SANDBOX_URL=https://computesdk-sandbox.<your-subdomain>.workers.dev
+CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
 CLOUDFLARE_SANDBOX_API_KEY=<same value as SANDBOX_API_KEY>
 ```
 

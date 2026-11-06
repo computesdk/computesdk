@@ -28,7 +28,7 @@ console.log(`
 
   3. Configure your app with the Worker URL and the same API key:
 
-     CLOUDFLARE_SANDBOX_URL=https://computesdk-sandbox.<your-subdomain>.workers.dev
+     CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
      CLOUDFLARE_SANDBOX_API_KEY=<same value as SANDBOX_API_KEY>
 
   4. Use it with ComputeSDK:
