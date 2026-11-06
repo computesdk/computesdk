@@ -1,5 +1,20 @@
 # @computesdk/givemeanode
 
+## 1.2.15
+
+### Patch Changes
+
+- 1904e82: Split `filesystem.writeFile` content larger than one exec can carry into appended slices (the exec channel voided any command over ~112 KiB with `exec_channel_lost`), and report voided/cancelled exec results with their cause instead of a generic failure.
+- 1904e82: Declare snapshot capabilities: a snapshot keeps the running source's whole rootfs, memory and processes, and does not stop it.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 1.2.14
 
 ### Patch Changes

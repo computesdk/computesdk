@@ -1,5 +1,17 @@
 # @computesdk/platform
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+
 ## 0.2.1
 
 ### Patch Changes

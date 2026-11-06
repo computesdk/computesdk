@@ -1,5 +1,18 @@
 # @computesdk/r2
 
+## 1.2.23
+
+### Patch Changes
+
+- 1904e82: `list()` reads the storage SDK's `items`/`hasMore`/`paginationToken` response, so listed objects, truncation and continuation tokens are no longer dropped.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+
 ## 1.2.22
 
 ### Patch Changes

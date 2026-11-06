@@ -1,5 +1,89 @@
 # @computesdk/workbench
 
+## 33.0.28
+
+### Patch Changes
+
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [28d5f17]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [11c511e]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+  - @computesdk/beam@0.3.25
+  - @computesdk/blaxel@1.6.41
+  - @computesdk/cloudflare@2.1.12
+  - @computesdk/codesandbox@1.5.70
+  - @computesdk/daytona@1.7.52
+  - @computesdk/e2b@1.7.70
+  - @computesdk/freestyle@0.2.19
+  - @computesdk/gcp@0.1.10
+  - @computesdk/isorun@0.1.21
+  - @computesdk/lelantos@0.2.20
+  - @computesdk/microsandbox@0.1.25
+  - @computesdk/modal@1.9.28
+  - @computesdk/namespace@1.6.41
+  - @computesdk/novita@0.0.17
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+  - @computesdk/sprites@0.1.34
+  - @computesdk/tenki@0.1.22
+  - @computesdk/upstash@0.3.28
+  - @computesdk/vercel@1.7.54
+  - @computesdk/cloud-run@0.1.26
+  - @computesdk/agentuity@0.0.30
+  - @computesdk/collimate@0.1.19
+  - @computesdk/hopx@0.2.45
+  - @computesdk/just-bash@0.4.33
+  - @computesdk/k8s@0.2.22
+  - @computesdk/northflank@1.1.21
+  - @computesdk/runloop@1.3.74
+  - @computesdk/secure-exec@0.1.29
+
 ## 33.0.27
 
 ### Patch Changes

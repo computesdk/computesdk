@@ -1,5 +1,20 @@
 # @computesdk/gravixlayer
 
+## 1.0.17
+
+### Patch Changes
+
+- 1904e82: Snapshots now default to `hot` (filesystem and memory), so `/tmp` contents are restored. Pass `metadata: { kind: 'cold' }` for a filesystem-only snapshot.
+- 1904e82: Native pause/resume (`instance.pause()`/`resume()`, keeping memory and running processes), declared `snapshot.capabilities` (hot rootfs snapshots that keep processes and leave the source running), and a generated snapshot name when none is given.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 1.0.16
 
 ### Patch Changes

@@ -1,5 +1,20 @@
 # @computesdk/blaxel
 
+## 1.6.41
+
+### Patch Changes
+
+- 1904e82: Declare snapshot capabilities: a snapshot fork restores the whole root filesystem and running processes, and the source keeps running.
+- 1904e82: Run commands through Blaxel's process API natively: env and cwd use the request's `env`/`workingDir` fields so they apply to every part of a compound command, background commands start without waiting, `streamCommand` streams output live, and timed-out commands are killed in the box.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 1.6.40
 
 ### Patch Changes

@@ -1,5 +1,21 @@
 # @computesdk/modal
 
+## 1.9.28
+
+### Patch Changes
+
+- 1904e82: Look up the Modal app on first sandbox create instead of at `modal()` construction, so a missing-credentials lookup no longer surfaces as an unhandled rejection and a failed lookup is retried.
+- 1904e82: Declare snapshot capabilities (whole rootfs, no memory, source keeps running), delete snapshot images on `snapshot.delete`, and run the shared snapshot conformance tests.
+- 1904e82: Default image is now `node:22` (ships `node:sqlite`), `destroy()` waits for the sandbox to exit so mounted Volume writes are committed before the next mount, and `runCommand` env applies to every part of a compound command.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 1.9.27
 
 ### Patch Changes

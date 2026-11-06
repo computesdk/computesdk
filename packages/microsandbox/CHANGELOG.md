@@ -1,5 +1,21 @@
 # @computesdk/microsandbox
 
+## 0.1.25
+
+### Patch Changes
+
+- 1904e82: Use `MSB_API_KEY` (and `MSB_API_URL`) from the environment to select the cloud backend, and refuse to snapshot running ephemeral sandboxes instead of stopping them away.
+- 1904e82: Stream large `writeFile`/`readFile` payloads so files of 1 MiB and up work on microsandbox cloud, where a single large fs call drops the channel.
+- 1904e82: Upgrade to microsandbox 0.7: restore snapshots via `Sandbox.restore`, enable disk snapshots on the cloud backend, declare snapshot capabilities, and expose local pause/resume through `instance.pause()`/`resume()`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
 ## 0.1.24
 
 ### Patch Changes
