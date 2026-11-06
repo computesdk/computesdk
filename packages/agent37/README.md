@@ -84,6 +84,8 @@ interface Agent37Config {
 
 - Output is returned when the command finishes; there is no streaming.
 - `runCommand`'s `timeout` stops waiting for the result. The command itself keeps running in the sandbox.
+- Filesystem content is UTF-8 text, not arbitrary binary. Writes use bounded exec requests and a unique same-directory staging file, then atomically replace the destination (including an existing symlink). Replacement uses a new inode and the current user's default file permissions; it does not retain the old file's metadata.
+- Reads use base64 over exec, whose stdout is capped at 512 KB (about 384 KiB of decoded content). A truncated response throws instead of returning partial content.
 - Sandboxes have no lifetime limit, so always call `destroy()` when you are done.
 
 ## Links
