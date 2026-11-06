@@ -103,14 +103,34 @@ async function runBare(
   command: string,
   options?: RunCommandOptions,
 ): Promise<CommandResult> {
+  return await runSh(ctx, command, options?.cwd, options);
+}
+
+/** Foreground `sh -c` run. A timed run goes through the process API with a
+ *  client-side deadline instead of `run({ timeout })`: Tensorlake enforces
+ *  that server-side timeout by killing everything the command spawned, even
+ *  after the shell has exited, so `nohup … &` / `setsid` launchers would see
+ *  their detached children die when the deadline passes. */
+async function runSh(
+  ctx: TensorlakeSandboxContext,
+  command: string,
+  workingDir: string | undefined,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  if (options?.timeout !== undefined) {
+    return await streamTensorlakeCommand(ctx.sandbox, command, {
+      ...(options.env && { env: options.env }),
+      ...(workingDir && { cwd: workingDir }),
+      timeout: options.timeout,
+    });
+  }
   const startTime = Date.now();
   try {
     const result = await ctx.sandbox.run("sh", {
       args: ["-c", command],
       ...(options?.env &&
         Object.keys(options.env).length > 0 && { env: options.env }),
-      ...(options?.cwd && { workingDir: options.cwd }),
-      ...(options?.timeout !== undefined && { timeout: options.timeout / 1000 }),
+      ...(workingDir && { workingDir }),
     });
     return {
       stdout: result.stdout,
@@ -186,6 +206,13 @@ export const tensorlake = defineProvider<
         // `diskMb` is the SDK's create-option name; `ephemeralDiskMb` is kept
         // as an alias for existing callers.
         const diskMb = options?.diskMb ?? options?.ephemeralDiskMb;
+        // Only named sandboxes can be suspended, and names are fixed at
+        // create, so `ephemeral: false` asks for a generated unique name.
+        const name =
+          options?.name ??
+          (options?.ephemeral === false
+            ? `computesdk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+            : undefined);
 
         const params: CreateAndConnectOptions & Partial<SandboxClientOptions> = {
           ...(image && { image }),
@@ -193,7 +220,7 @@ export const tensorlake = defineProvider<
           ...(options?.cpus && { cpus: options.cpus }),
           ...(options?.memoryMb && { memoryMb: options.memoryMb }),
           ...(diskMb && { diskMb }),
-          ...(options?.name && { name: options.name }),
+          ...(name && { name }),
           ...(options?.snapshotId && { snapshotId: options.snapshotId }),
           proxyUrl: config.proxyUrl,
           apiKey,
@@ -285,12 +312,32 @@ export const tensorlake = defineProvider<
       },
 
       destroy: async (config: TensorlakeConfig, sandboxId: string) => {
+        const { apiKey, apiUrl } = resolveAuth(config);
         try {
-          const { apiKey, apiUrl } = resolveAuth(config);
           const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
           await sandbox.terminate();
         } catch {
           // Sandbox may already be terminated
+        }
+        // Each suspend leaves a `suspend-<id>-…` memory snapshot that outlives
+        // the sandbox; drop those, but keep user checkpoints. List at project
+        // level, since the sandbox itself is gone by now. A checkpoint that is
+        // still settling can refuse deletion, so retry briefly until none remain.
+        for (let attempt = 0; attempt < 5; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+          const leftover = await Sandbox.listSnapshots({ apiKey, apiUrl })
+            .then((all) =>
+              all.filter(
+                (s) => s.snapshotId.startsWith(`suspend-${sandboxId}-`) && s.status !== "deleting",
+              ),
+            )
+            .catch(() => undefined);
+          if (leftover && leftover.length === 0) break;
+          await Promise.all(
+            (leftover ?? []).map((s) =>
+              Sandbox.deleteSnapshot(s.snapshotId, { apiKey, apiUrl }).catch(() => {}),
+            ),
+          );
         }
       },
 
@@ -323,32 +370,15 @@ export const tensorlake = defineProvider<
               durationMs: Date.now() - startTime,
             };
           }
-        }
-
-        try {
-          const result = await ctx.sandbox.run("sh", {
-            args: ["-c", command],
-            ...(options?.env &&
-              Object.keys(options.env).length > 0 && { env: options.env }),
-            workingDir,
-            ...(options?.timeout !== undefined && { timeout: options.timeout / 1000 }),
-          });
-
-          const durationMs = Date.now() - startTime;
-          return {
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode ?? 0,
-            durationMs,
-          };
-        } catch (error) {
           return {
             stdout: "",
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127,
+            stderr: "",
+            exitCode: 0,
             durationMs: Date.now() - startTime,
           };
         }
+
+        return await runSh(ctx, command, workingDir, options);
       },
 
       // Native streaming: `run()` returns a command's output only once it has
@@ -533,11 +563,25 @@ export const tensorlake = defineProvider<
         },
       },
 
+      // Suspend keeps memory, running processes and the whole disk; the same
+      // handle is usable again once resume() returns.
+      pause: async (ctx: TensorlakeSandboxContext): Promise<void> => {
+        await ctx.sandbox.suspend();
+      },
+      resume: async (ctx: TensorlakeSandboxContext): Promise<void> => {
+        await ctx.sandbox.resume();
+      },
+      pauseCapabilities: { memory: true, createOptions: { ephemeral: false } },
+
       getInstance: (ctx: TensorlakeSandboxContext): TensorlakeSandboxContext =>
         ctx,
     },
 
     snapshot: {
+      // checkpoint() defaults to a filesystem checkpoint: the whole disk
+      // (/tmp and $HOME included) is restored, processes are not, and the
+      // source keeps running.
+      capabilities: { scope: "rootfs", memory: false, destroysSource: false },
       create: async (
         config: TensorlakeConfig,
         sandboxId: string,

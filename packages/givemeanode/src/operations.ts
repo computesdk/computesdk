@@ -222,6 +222,10 @@ interface ExecResult {
   oom_kills?: number
   truncated?: boolean
   error?: string
+  /** `{outcome: 'void', cause}`: an infrastructure failure, not a fact about the command. */
+  outcome?: { outcome?: string; cause?: string }
+  /** A delete won a race against the exec; its verdict is unknowable. */
+  cancelled?: boolean
 }
 
 interface StatsResponse {
@@ -768,6 +772,17 @@ const RETRYABLE_EXEC_ERROR = 'did not answer the exec call'
 /** Retries for that one error. One is the contract; 0 opts out. */
 export const DEFAULT_EXEC_RETRIES = 1
 
+function describeMissingExitCode(sandboxId: string, result: ExecResult): string {
+  if (result.outcome?.outcome === 'void') {
+    return (
+      `givemeanode voided the exec for ${sandboxId} (${result.outcome.cause ?? 'no cause given'}): ` +
+      'an infrastructure failure on the provider side, unbilled, not a verdict on the command'
+    )
+  }
+  if (result.cancelled) return `givemeanode exec for ${sandboxId} was cancelled by a delete of the sandbox`
+  return `givemeanode exec failed for ${sandboxId}`
+}
+
 export async function runCommand(
   sandbox: SandboxHandle,
   command: string,
@@ -802,7 +817,7 @@ export async function runCommand(
     // failure into a silent success, which is the exact bug that cost a
     // whole benchmark run once already.
     if (result.exit_code === undefined || result.exit_code === null) {
-      lastError = result.error ?? `givemeanode exec failed for ${sandbox.id}`
+      lastError = result.error ?? describeMissingExitCode(sandbox.id, result)
       // Retry ONLY the reconnect case. A command that ran and failed has
       // an exit code and never reaches here; anything else with no exit
       // code is a condition a retry cannot change.
@@ -951,6 +966,45 @@ export function writeFileCommand(path: string, content: string): string {
   return `mkdir -p "$(dirname "${quoted}")" && printf %s '${toBase64(content)}' | base64 -d > "${quoted}"`
 }
 
+/**
+ * Base64 characters carried by one exec when writing a file. The exec
+ * channel drops a command much larger than this: a 100 KiB write (about
+ * 137 KB of base64) came back `{outcome: 'void', cause: 'exec_channel_lost'}`
+ * every time, on every shape. A multiple of 4, so each slice decodes alone.
+ */
+export const WRITE_CHUNK_BASE64_CHARS = 32 * 1024
+
+/**
+ * The commands a `writeFile` runs, in order. Content that fits one exec is
+ * one command; larger content is appended to a sibling part file slice by
+ * slice and renamed over the target by the last, so a reader never sees a
+ * half-written file.
+ */
+export function writeFileCommands(
+  path: string,
+  content: string,
+  chunkChars: number = WRITE_CHUNK_BASE64_CHARS,
+): string[] {
+  const encoded = toBase64(content)
+  if (encoded.length <= chunkChars) return [writeFileCommand(path, content)]
+  const size = Math.max(4, chunkChars - (chunkChars % 4))
+  const quoted = escapeShellArg(path)
+  const part = `${quoted}${WRITE_PART_SUFFIX}`
+  const commands: string[] = []
+  for (let offset = 0; offset < encoded.length; offset += size) {
+    const slice = encoded.slice(offset, offset + size)
+    const first = offset === 0
+    const last = offset + size >= encoded.length
+    const write = `printf %s '${slice}' | base64 -d ${first ? '>' : '>>'} "${part}"`
+    commands.push(
+      (first ? `mkdir -p "$(dirname "${quoted}")" && ` : '') + write + (last ? ` && mv -f "${part}" "${quoted}"` : ''),
+    )
+  }
+  return commands
+}
+
+export const WRITE_PART_SUFFIX = '.gmn-part'
+
 type Run = (sandbox: SandboxHandle, command: string, options?: RunOptions) => Promise<CommandResultShape>
 
 export const filesystem = {
@@ -973,8 +1027,24 @@ export const filesystem = {
   },
 
   writeFile: async (sandbox: SandboxHandle, path: string, content: string, run: Run): Promise<void> => {
-    const r = await run(sandbox, writeFileCommand(path, content))
-    if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot write file: ${path}`)
+    const commands = writeFileCommands(path, content)
+    const cleanUp = async () => {
+      if (commands.length === 1) return
+      await run(sandbox, `rm -f "${escapeShellArg(path)}${WRITE_PART_SUFFIX}"`).catch(() => undefined)
+    }
+    for (const command of commands) {
+      let r: CommandResultShape
+      try {
+        r = await run(sandbox, command)
+      } catch (err) {
+        await cleanUp()
+        throw err
+      }
+      if (r.exitCode !== 0) {
+        await cleanUp()
+        throw new Error(r.stderr || `Cannot write file: ${path}`)
+      }
+    }
   },
 
   mkdir: async (sandbox: SandboxHandle, path: string, run: Run): Promise<void> => {

@@ -28,6 +28,9 @@ import type {
   ProcessHandle,
   InstanceEgressInfo,
   Volume,
+  SnapshotCapabilities,
+  PauseCapabilities,
+  LifetimeCapabilities,
   CreateVolumeOptions,
   ListVolumesOptions,
   ProcessRuntimeOptions,
@@ -44,6 +47,7 @@ import {
 } from 'daemond';
 import { readInstanceEgress, setupInstanceEgress } from './egress.js';
 import { withVolumeSettle } from './utils.js';
+import { ShellFileSystem } from './shell-filesystem';
 import { InstanceSizeError, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeMetadata } from 'computesdk';
 import { applyInstanceSizePatch, createInstanceSizeManager, type InstanceSizeResolver } from './sizes.js';
 
@@ -335,6 +339,20 @@ export interface InstanceMethods<TInstance = any, TConfig = any> {
   attachVolume?: (instance: TInstance, volume: string | Volume, mountPath: string) => Promise<void>;
   detachVolume?: (instance: TInstance, volume: string | Volume, mountPath?: string) => Promise<void>;
 
+  /**
+   * Optional native pause/resume, exposed as `instance.pause()`/`resume()`.
+   * Implement both or neither. `resume` may return a fresh native handle,
+   * which replaces the old one. Declare what survives in `pauseCapabilities`.
+   */
+  pause?: (instance: TInstance) => Promise<void>;
+  resume?: (instance: TInstance) => Promise<TInstance | void>;
+  pauseCapabilities?: PauseCapabilities;
+
+  /** How long instances may live. `extendable` is derived from `extendLifetime`. */
+  lifetime?: Omit<LifetimeCapabilities, 'extendable'>;
+  /** Optional native lifetime extension, exposed as `instance.extendLifetime(ms)`. */
+  extendLifetime?: (instance: TInstance, ms: number) => Promise<void>;
+
   // Optional provider-specific typed getInstance method
   getInstance?: (instance: TInstance) => TInstance;
 
@@ -368,6 +386,10 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
   create: (config: TConfig, instanceId: string, options?: CreateSnapshotOptions) => Promise<TSnapshot>;
   list: (config: TConfig, options?: ListSnapshotsOptions) => Promise<TSnapshot[]>;
   delete: (config: TConfig, snapshotId: string) => Promise<void>;
+  /** What snapshots keep and what the source needs; see {@link SnapshotCapabilities}. */
+  capabilities?: SnapshotCapabilities;
+  /** For `readiness: 'eventual'` providers: resolve once the snapshot can be restored. */
+  waitUntilReady?: (config: TConfig, snapshotId: string, options?: { timeoutMs?: number }) => Promise<void>;
 }
 
 /**
@@ -399,43 +421,6 @@ export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any,
     volume?: VolumeMethods<TVolume, TConfig>;
   };
 }
-
-/**
- * Auto-generated filesystem implementation that throws "not supported" errors
- */
-class UnsupportedFileSystem implements InstanceFileSystem {
-  private readonly providerName: string;
-
-  constructor(providerName: string) {
-    this.providerName = providerName;
-  }
-
-  async readFile(_path: string): Promise<string> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async writeFile(_path: string, _content: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async mkdir(_path: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async readdir(_path: string): Promise<FileEntry[]> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async exists(_path: string): Promise<boolean> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async remove(_path: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-}
-
-
 
 /**
  * Auto-generated filesystem implementation that wraps provider methods
@@ -492,6 +477,11 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   readonly attachVolume?: (volume: string | Volume, mountPath: string) => Promise<void>;
   /** Present only when the provider implements runtime detach. */
   readonly detachVolume?: (volume: string | Volume, mountPath?: string) => Promise<void>;
+  /** Present only when the provider implements native pause/resume. */
+  readonly pause?: () => Promise<void>;
+  readonly resume?: () => Promise<void>;
+  /** Present only when the provider implements lifetime extension. */
+  readonly extendLifetime?: (ms: number) => Promise<void>;
   private daemonStreamState?: DaemonStreamState;
   /** Which runtime serves streaming `runCommand` and `startProcess`. */
   readonly processRuntime: { streaming: ProcessTier; processes: ProcessTier };
@@ -521,7 +511,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     if (methods.filesystem) {
       this.filesystem = new SupportedFileSystem(instance, methods.filesystem, methods);
     } else {
-      this.filesystem = new UnsupportedFileSystem(providerName);
+      this.filesystem = new ShellFileSystem((command, options) => this.methods.runCommand(this.instance, command, options));
     }
 
     // Runtime attach/detach are only exposed when the provider implements
@@ -539,6 +529,19 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     if (methods.detachVolume) {
       const detach = methods.detachVolume.bind(methods);
       this.detachVolume = (volume, mountPath) => detach(this.instance, volume, mountPath);
+    }
+    if (methods.pause && methods.resume) {
+      const pause = methods.pause.bind(methods);
+      const resume = methods.resume.bind(methods);
+      this.pause = () => pause(this.instance);
+      this.resume = async () => {
+        const next = await resume(this.instance);
+        if (next) this.instance = next;
+      };
+    }
+    if (methods.extendLifetime) {
+      const extend = methods.extendLifetime.bind(methods);
+      this.extendLifetime = (ms) => extend(this.instance, ms);
     }
   }
 
@@ -1110,13 +1113,22 @@ function abortPromise(signal?: AbortSignal): Promise<never> {
  * Auto-generated Instance Manager implementation
  */
 class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceManager<TInstance> {
+  readonly pause?: PauseCapabilities;
+  readonly lifetime?: LifetimeCapabilities;
   constructor(
     private config: TConfig,
     private providerName: string,
     private methods: InstanceMethods<TInstance, TConfig>,
     private providerInstance: Provider & { readonly sizes: InstanceSizeManager },
     private runtimeMode: 'shell' | 'daemond' = 'shell'
-  ) {}
+  ) {
+    if (methods.pause && methods.resume) {
+      this.pause = methods.pauseCapabilities ?? { memory: false };
+    }
+    if (methods.lifetime || methods.extendLifetime) {
+      this.lifetime = { ...methods.lifetime, extendable: !!methods.extendLifetime };
+    }
+  }
 
   private wrap(result: InstanceLifecycleResult<TInstance>): GeneratedInstance<TInstance> {
     const { instance, instanceId } = normalizeInstanceResult(result);
@@ -1213,7 +1225,11 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
 
     const instance = this.wrap(result);
     // Reattach a running router's info; nothing to read if none ever ran.
-    instance.egress = await readInstanceEgress(instance).catch(() => undefined);
+    // Only via a native file API: the shell fallback would turn every getById
+    // into command execs on the box.
+    if (this.methods.filesystem) {
+      instance.egress = await readInstanceEgress(instance).catch(() => undefined);
+    }
     return instance;
   }
 
@@ -1256,10 +1272,19 @@ class GeneratedTemplateManager<TTemplate, TConfig, TCreateOptions extends Create
  * Auto-generated Snapshot Manager implementation
  */
 class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotManager<TSnapshot> {
+  readonly capabilities?: SnapshotCapabilities;
   constructor(
     private config: TConfig,
     private methods: SnapshotMethods<TSnapshot, TConfig>
-  ) {}
+  ) {
+    this.capabilities = methods.capabilities;
+    if (methods.waitUntilReady) {
+      const wait = methods.waitUntilReady.bind(methods);
+      this.waitUntilReady = (snapshotId, options) => wait(this.config, snapshotId, options);
+    }
+  }
+
+  readonly waitUntilReady?: (snapshotId: string, options?: { timeoutMs?: number }) => Promise<void>;
 
   async create(instanceId: string, options?: CreateSnapshotOptions): Promise<TSnapshot> {
     return await this.methods.create(this.config, instanceId, options);

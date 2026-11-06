@@ -27,6 +27,9 @@ export type {
   InstanceEgressInfo,
   RunloopLaunchParameters,
   VercelSandboxResources,
+  SnapshotCapabilities,
+  PauseCapabilities,
+  LifetimeCapabilities,
 } from 'computesdk';
 
 // Deprecated Sandbox* aliases for backwards compatibility

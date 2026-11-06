@@ -261,8 +261,8 @@ jobs:
             fi
             ;;
           archil)
-            if [ -z "$ARCHIL_API_KEY" ] || [ -z "$ARCHIL_REGION" ] || [ -z "$ARCHIL_DISK_ID" ]; then
-              echo "Skipping computesdk integration for archil - missing Archil credentials (ARCHIL_API_KEY, ARCHIL_REGION, ARCHIL_DISK_ID)"
+            if [ -z "$ARCHIL_API_KEY" ] || [ -z "$ARCHIL_REGION" ]; then
+              echo "Skipping computesdk integration for archil - missing Archil credentials (ARCHIL_API_KEY, ARCHIL_REGION)"
               exit 0
             fi
             ;;

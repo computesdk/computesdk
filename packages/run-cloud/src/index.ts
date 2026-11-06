@@ -27,6 +27,11 @@ const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const DEFAULT_TUNNEL_TTL_SECONDS = 3_600;
 /** Refresh a cached tunnel slightly before it expires. */
 const TUNNEL_REFRESH_MARGIN_MS = 30_000;
+/**
+ * The exec stream rejects command frames somewhere between 128 KB and 200 KB,
+ * so longer commands are staged as a script through the file API first.
+ */
+const MAX_INLINE_COMMAND_BYTES = 96 * 1024;
 
 export interface RunCloudConfig {
   /** API key. Falls back to RUN_CLOUD_API_KEY, then RUN_CLOUD_API_TOKEN. */
@@ -148,6 +153,28 @@ function isNotFound(error: unknown): boolean {
       (error as { status?: unknown }).status === 404
     )
   );
+}
+
+/** Run Cloud reports `<code>: sandbox is paused, not running` for idle-paused sandboxes. */
+function isPaused(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /\bsandbox is paused\b/i.test(error.message)
+  );
+}
+
+/** Retries an operation once after resuming a sandbox that idle-paused under it. */
+async function withResume<T>(
+  handle: RunCloudSandbox,
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isPaused(error)) throw error;
+    handle.sandbox = await handle.client.sandboxes.resume(handle.sandbox.id);
+    return await operation();
+  }
 }
 
 function millisecondsToSeconds(
@@ -413,6 +440,67 @@ async function createSandbox(
   };
 }
 
+/** Decodes streamed byte chunks to text without splitting multi-byte characters. */
+function textSink(callback: (text: string) => void) {
+  const decoder = new TextDecoder();
+  return {
+    write: (chunk: Uint8Array) => {
+      const text = decoder.decode(chunk, { stream: true });
+      if (text) callback(text);
+    },
+    flush: () => {
+      const text = decoder.decode();
+      if (text) callback(text);
+    },
+  };
+}
+
+/** Runs a command over the SDK's exec stream, forwarding output as it arrives. */
+async function execCommand(
+  handle: RunCloudSandbox,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  const startedAt = Date.now();
+  const timeout = options?.timeout ?? handle.commandTimeout;
+  let script: string | undefined;
+  let body = command;
+  if (Buffer.byteLength(command, 'utf8') > MAX_INLINE_COMMAND_BYTES) {
+    script = `/tmp/.computesdk-cmd-${globalThis.crypto.randomUUID()}.sh`;
+    const path = script;
+    await withResume(handle, () =>
+      handle.client.sandboxes.writeFile(
+        handle.sandbox.id,
+        path,
+        new TextEncoder().encode(command),
+      ),
+    );
+    body = `/bin/sh ${path}; status=$?; rm -f ${path}; exit $status`;
+  }
+  const fullCommand = options?.background
+    ? `nohup sh -c ${singleQuote(body)} >/dev/null 2>&1 &`
+    : body;
+  const stdout = options?.onStdout ? textSink(options.onStdout) : undefined;
+  const stderr = options?.onStderr ? textSink(options.onStderr) : undefined;
+  const result = await withResume(handle, () =>
+    handle.client.sandboxes.exec(handle.sandbox.id, fullCommand, {
+      cwd: options?.cwd,
+      env: options?.env,
+      timeoutSeconds: millisecondsToSeconds('command timeout', timeout),
+      ...(stdout && { onStdout: stdout.write }),
+      ...(stderr && { onStderr: stderr.write }),
+    }),
+  );
+  stdout?.flush();
+  stderr?.flush();
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
 const _provider = defineProvider<
   RunCloudSandbox,
   RunCloudConfig,
@@ -453,34 +541,9 @@ const _provider = defineProvider<
         }
       },
 
-      runCommand: async (
-        handle,
-        command,
-        options?: RunCommandOptions,
-      ): Promise<CommandResult> => {
-        const startedAt = Date.now();
-        const timeout = options?.timeout ?? handle.commandTimeout;
-        const fullCommand = options?.background
-          ? `nohup sh -c ${singleQuote(command)} >/dev/null 2>&1 &`
-          : command;
-        const result = await handle.client.sandboxes.exec(
-          handle.sandbox.id,
-          fullCommand,
-          {
-            cwd: options?.cwd,
-            env: options?.env,
-            timeoutSeconds: millisecondsToSeconds('command timeout', timeout),
-          },
-        );
-        if (result.stdout && options?.onStdout) options.onStdout(result.stdout);
-        if (result.stderr && options?.onStderr) options.onStderr(result.stderr);
-        return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-          durationMs: Date.now() - startedAt,
-        };
-      },
+      runCommand: execCommand,
+
+      streamCommand: execCommand,
 
       getInfo: async (handle): Promise<InstanceInfo> => {
         handle.sandbox = await handle.client.sandboxes.get(handle.sandbox.id);
@@ -514,29 +577,34 @@ const _provider = defineProvider<
 
       getInstance: (handle): RunCloudSandbox => handle,
 
+      pause: async (handle): Promise<void> => {
+        handle.sandbox = await handle.client.sandboxes.pause(handle.sandbox.id);
+      },
+
+      resume: async (handle): Promise<RunCloudSandbox> => {
+        handle.sandbox = await handle.client.sandboxes.resume(handle.sandbox.id);
+        return handle;
+      },
+
+      // Pause halts the microVM with memory intact: /tmp and processes survive.
+      pauseCapabilities: { memory: true },
+
       filesystem: {
         readFile: async (handle, path): Promise<string> => {
-          const bytes = await handle.client.sandboxes.readFile(
-            handle.sandbox.id,
-            path,
+          const bytes = await withResume(handle, () =>
+            handle.client.sandboxes.readFile(handle.sandbox.id, path),
           );
           return new TextDecoder().decode(bytes);
         },
 
-        writeFile: async (handle, path, content, runCommand): Promise<void> => {
-          const encoded = Buffer.from(content, 'utf8').toString('base64');
-          const quotedPath = `"${escapeShellArg(path)}"`;
-          const result = await runCommand(
-            handle,
-            `mkdir -p "$(dirname ${quotedPath})" && ` +
-              `printf '%s' "${encoded}" | base64 -d > ${quotedPath}`,
+        writeFile: async (handle, path, content): Promise<void> => {
+          await withResume(handle, () =>
+            handle.client.sandboxes.writeFile(
+              handle.sandbox.id,
+              path,
+              new TextEncoder().encode(content),
+            ),
           );
-          if (result.exitCode !== 0) {
-            throw new Error(
-              `Run Cloud writeFile failed for ${path}: ` +
-                (result.stderr || `exit ${result.exitCode}`),
-            );
-          }
         },
 
         mkdir: async (handle, path, runCommand): Promise<void> => {
@@ -603,6 +671,10 @@ const _provider = defineProvider<
     },
 
     snapshot: {
+      // Filesystem snapshots of the ext4 rootfs: the tmpfs /tmp and processes
+      // are not kept, and the source keeps running.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
+
       create: async (
         config,
         sandboxId,

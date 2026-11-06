@@ -306,7 +306,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.68)(@computesdk/modal@1.9.26)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.51(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.69)(@computesdk/modal@1.9.27)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -1714,8 +1714,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       microsandbox:
-        specifier: ^0.6.18
-        version: 0.6.18
+        specifier: ^0.7.13
+        version: 0.7.13
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -2118,8 +2118,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@promigence/sdk':
-        specifier: ^0.1.0-beta.9
-        version: 0.1.0-beta.9
+        specifier: 0.1.0-beta.15
+        version: 0.1.0-beta.15
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3510,17 +3510,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.50':
-    resolution: {integrity: sha512-BTnM1SFugx+iqb3KwBQppvPnQmsY92cvkx/UyaJzeruiQ4k9Njsso5YWD2/7NsOgjD6YibA8EaNBESrv3n6cjg==}
+  '@computesdk/daytona@1.7.51':
+    resolution: {integrity: sha512-A1ft4QjjYvrxk+Anj6iQwnr6qv/z7QEDLNvXFxphaBDQjz8B3TmLQFGQwUKV7ivpcr0vyzkCag2/bVDLkIbhZg==}
 
-  '@computesdk/e2b@1.7.68':
-    resolution: {integrity: sha512-44HwFGDmn9MFOnskgGHDTBf3wl9e/KCwrN58lE+jij2Qqr9wvQ5pHi3w7ooBYr6wODlLgWkXC0m3tiY6mGL9yA==}
+  '@computesdk/e2b@1.7.69':
+    resolution: {integrity: sha512-E+yyQHKr/aRkzxx3GNTfjCdDao2jUZDhTyA2sdECLA7ha4egLZ6U320uKlv4+50Fp3m/66bC4UkpceeJp1Gj6Q==}
 
-  '@computesdk/modal@1.9.26':
-    resolution: {integrity: sha512-D8+HWaEfElArFI15mo0wEKPf0UChAu67N2Bxbap6MSexgKRFXrnmRbnQZ/EYrKzR7seVLGAtL/TIrIK/Zr69sw==}
+  '@computesdk/modal@1.9.27':
+    resolution: {integrity: sha512-5ijVq/XjnjgroSOCFdoPqJUYkWtetOq2CSj8gL1IRuC1ATWDHiVR0p+bKorsxEXXTFyAc14FFniNq5O8rTBF1Q==}
 
-  '@computesdk/provider@2.1.20':
-    resolution: {integrity: sha512-BlvIouuwrxMeAyxQ1vaDiqHxSguJFlAFRtLTpLZ1kfWZa6VKsEDxvAqUqdsxKzLmjwZl9noqVMgFoCHam87yCw==}
+  '@computesdk/provider@2.1.21':
+    resolution: {integrity: sha512-gjqedh7SfXnACoP9xmrqQaU6cOVpt6TLyWhkQxInfK2gwHtyrkLDrkhZIAXxmELhxnAIWx0L3oSJo43eOsL66A==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -4569,6 +4569,9 @@ packages:
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
 
+  '@microsandbox/types@0.7.13':
+    resolution: {integrity: sha512-46PiHv30/FdeES5QHS3T+mwDaBFLiUcUQ9z/RX0I5V1Za55TFtp0gstLZFpQ6mAd3FCXd/KycnGoSFYLs2GboQ==}
+
   '@miosa/sdk@3.7.14':
     resolution: {integrity: sha512-JErb4xP9B/W4LYslYZCyp85M6SFAsQEHZ4TE/u7578vcSlV8+ZYzixf6lnw4yNjIwUibazT2HrAhln0Hl7l3rQ==}
     engines: {node: '>=18.0.0'}
@@ -5165,8 +5168,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.8
 
-  '@promigence/sdk@0.1.0-beta.9':
-    resolution: {integrity: sha512-6ShyRuFePXf41Qqvd+NllJtvOrRYMKVWSMFo8DMI7Dx/jPLUuiSY5sbp3ovwSNT5AiCoBAKCEIayy/gBWswW2g==}
+  '@promigence/sdk@0.1.0-beta.15':
+    resolution: {integrity: sha512-u7ew7WtMNjgNVPASxo41N70cu7det6UdwTHjcco2UxSRn3OfmkiyCdMQcCXIvZJ6pM5o76OFPNK43W2GoyoH3w==}
     engines: {node: '>=20'}
 
   '@protobufjs/aspromise@1.1.2':
@@ -5456,15 +5459,17 @@ packages:
   '@smithy/core@3.24.1':
     resolution: {integrity: sha512-3mT7o4qQyUWttYnVK3A0Z/u3Xha3E81tXn32Tz6vjZiUXhBrkEivpw1hBYfh84iFF9CSzkBU9Y1DJ3Q6RQ231g==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to bug in browser bundling instructions https://github.com/smithy-lang/smithy-typescript/issues/2025
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.29.0':
     resolution: {integrity: sha512-sEvpvkBVoMxjoek35XyJFn2ZD3EJ1RpiZrT47WaZodxzAIWS44zkdvbqGE/ZlugtjiQp62cffYZ9ldyRkjAGnA==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.35.2':
     resolution: {integrity: sha512-ejTukBuP/Pg3t9N8Ux+0zKsXeHWm7p6W3HbXFOyltKasSxZwCFmvTut7kBdZSCF3m9y1bXXyVu6p2xuMFcsTyQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.4.5':
     resolution: {integrity: sha512-LnjUTNG0GgQlKIq7IioeOrPaEmC5xOd1WtAz24TLSiYQnWX2uHr53GrFuQhkrJBktPYCMga/NbUOW7hFbSA2Cg==}
@@ -5544,32 +5549,32 @@ packages:
   '@speed-highlight/core@1.2.17':
     resolution: {integrity: sha512-Z92FwKpCtfaW1V0jTU/fh3QzYEZN8wDwrzRIBoADCJfn4mJCNcJN/XegifX7BDrQ8/h9Xh/JnbyMchL0FqXrkg==}
 
-  '@superradcompany/microsandbox-darwin-arm64@0.6.18':
-    resolution: {integrity: sha512-C+bz9+v8JXQ6BG0FXbiTywM/dSNjIFifF3fOh5IU3JW3OiB0HcgjBiVRFWpZYk/pV6eKhZTYSkUiIWwYc3SRNA==}
+  '@superradcompany/microsandbox-darwin-arm64@0.7.13':
+    resolution: {integrity: sha512-j4o5dlEATkJhalKUuvM/CEIE3Q1NaHAi1JG6JafHDk9HMEvSKE0Rh+hAaLI4hURjrduzARTpcAKxPkSoaCG3uw==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [darwin]
 
-  '@superradcompany/microsandbox-linux-arm64-gnu@0.6.18':
-    resolution: {integrity: sha512-UVtFm32CExLeB0VhiLIW+mvVCkyWi6Yg+1AYWQAvfXj8ngDYEprZz/0Kksp/T8lAnV5hFIYZ2ZrPs0jAGbAR6A==}
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.13':
+    resolution: {integrity: sha512-sQQ4MgzbM0yHKwxYuinOxMZgC51QSKaOJLt4iHIhvRLLtACj2K+TsyDmiEoarYVw6tLD9Q18l07uIAQnZ/M3ZQ==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [linux]
 
-  '@superradcompany/microsandbox-linux-x64-gnu@0.6.18':
-    resolution: {integrity: sha512-b9Mu+tu1Vq407c8sr7scNOxBgGpJX/Znd4NGFQ/Dx44SS6bHU3pjUEAdso3IpEB2Cx9nrGIBtBdaRrVw1ro+6w==}
+  '@superradcompany/microsandbox-linux-x64-gnu@0.7.13':
+    resolution: {integrity: sha512-833z4BHBJ5RwbZMHYHIGcxYxhnPGWOi0Lm2Zusu6Kl4taBM+4u76WPudKg246ElJgtPb0UIuwHlIQJA3crRodg==}
     engines: {node: '>= 22'}
     cpu: [x64]
     os: [linux]
 
-  '@superradcompany/microsandbox-win32-arm64-msvc@0.6.18':
-    resolution: {integrity: sha512-QDW9JfnTHd4lbFpms3y+c5oyEdOXK1kZCNPONm6nVrdz1Wr+UVy+zMiMadzL1AJgG4rF3Tg6WT9Xa1j0ekPk6w==}
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.13':
+    resolution: {integrity: sha512-ggs8eWAQJzrUNYhTpshe0UUgboZsagK9ngwBmeHXY/hW4sogBAgHnz9QJxrf00VWDMNFKSnISgCuQEIqtqLVIA==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [win32]
 
-  '@superradcompany/microsandbox-win32-x64-msvc@0.6.18':
-    resolution: {integrity: sha512-PS1vBcboB4QwZjruBouRApAsqyhUk9U1c2w+hQOCzYzFMoWVsSyUanAwuswiloqyoj2SREwBG5wY8jnAJFzr2g==}
+  '@superradcompany/microsandbox-win32-x64-msvc@0.7.13':
+    resolution: {integrity: sha512-pVOltXMyFQ+cKnnnIfChsMvgmLOguUSMF84ywrrwALB3PNusG4tz9XHxh0UU1YaPi5nyRxpoBcCjGgALHSvhUQ==}
     engines: {node: '>= 22'}
     cpu: [x64]
     os: [win32]
@@ -6409,8 +6414,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.14:
-    resolution: {integrity: sha512-87WwccvpbsfuiN6IxoUhNhLzm0RvwVcai3bPleG1x2EgLRLfd5O96EZSnSQGfdVBkkGBPt5hpvMwR8v7VOCsEg==}
+  computesdk@4.1.15:
+    resolution: {integrity: sha512-Ns+Nwtdgme0p8RnSrxkiLmiu4/7q2hm+woTuGTay2dPtuOdSy/7iJnWKt01y3vrAiQsJ8o6sW4FIO5tGHhr76w==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -7786,8 +7791,8 @@ packages:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
 
-  microsandbox@0.6.18:
-    resolution: {integrity: sha512-M38LkxCk6ppz7qXuQ+bHAgahX4bWNgNdrN5OIFpm7OVV1Bqfpvbwog+zP/QvIiImNHgIleB7M8dU1Kd4jTdwvg==}
+  microsandbox@0.7.13:
+    resolution: {integrity: sha512-+tt4XK0Lghnfk1ev/+SaSGUwMu1QM5Wuz3+nwSSWGiR6onGM6oD+FORMJ2QV8hl7LpsuIHkNbedQzJFDBjFJLg==}
     engines: {node: '>= 22'}
     hasBin: true
 
@@ -9729,15 +9734,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.68)(@computesdk/modal@1.9.26)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.51(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.69)(@computesdk/modal@1.9.27)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      '@computesdk/e2b': 1.7.68
-      '@computesdk/modal': 1.9.26
+      '@computesdk/daytona': 1.7.51(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@computesdk/e2b': 1.7.69
+      '@computesdk/modal': 1.9.27
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10524,11 +10529,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@computesdk/daytona@1.7.51(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      '@computesdk/provider': 2.1.20
+      '@computesdk/provider': 2.1.21
       '@daytonaio/sdk': 0.224.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      computesdk: 4.1.14
+      computesdk: 4.1.15
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -10536,24 +10541,24 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@computesdk/e2b@1.7.68':
+  '@computesdk/e2b@1.7.69':
     dependencies:
-      '@computesdk/provider': 2.1.20
-      computesdk: 4.1.14
+      '@computesdk/provider': 2.1.21
+      computesdk: 4.1.15
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.26':
+  '@computesdk/modal@1.9.27':
     dependencies:
-      '@computesdk/provider': 2.1.20
-      computesdk: 4.1.14
+      '@computesdk/provider': 2.1.21
+      computesdk: 4.1.15
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.20':
+  '@computesdk/provider@2.1.21':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.14
+      computesdk: 4.1.15
       daemond: 0.1.8
     optional: true
 
@@ -11355,6 +11360,8 @@ snapshots:
       globby: 11.1.0
       read-yaml-file: 1.1.0
 
+  '@microsandbox/types@0.7.13': {}
+
   '@miosa/sdk@3.7.14(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     optionalDependencies:
       undici: 7.29.1
@@ -12117,7 +12124,7 @@ snapshots:
       - supports-color
     optional: true
 
-  '@promigence/sdk@0.1.0-beta.9': {}
+  '@promigence/sdk@0.1.0-beta.15': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -12529,19 +12536,19 @@ snapshots:
 
   '@speed-highlight/core@1.2.17': {}
 
-  '@superradcompany/microsandbox-darwin-arm64@0.6.18':
+  '@superradcompany/microsandbox-darwin-arm64@0.7.13':
     optional: true
 
-  '@superradcompany/microsandbox-linux-arm64-gnu@0.6.18':
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.13':
     optional: true
 
-  '@superradcompany/microsandbox-linux-x64-gnu@0.6.18':
+  '@superradcompany/microsandbox-linux-x64-gnu@0.7.13':
     optional: true
 
-  '@superradcompany/microsandbox-win32-arm64-msvc@0.6.18':
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.13':
     optional: true
 
-  '@superradcompany/microsandbox-win32-x64-msvc@0.6.18':
+  '@superradcompany/microsandbox-win32-x64-msvc@0.7.13':
     optional: true
 
   '@superserve/sdk@0.9.3': {}
@@ -13638,7 +13645,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.14:
+  computesdk@4.1.15:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.8
@@ -15250,13 +15257,15 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.1
 
-  microsandbox@0.6.18:
+  microsandbox@0.7.13:
+    dependencies:
+      '@microsandbox/types': 0.7.13
     optionalDependencies:
-      '@superradcompany/microsandbox-darwin-arm64': 0.6.18
-      '@superradcompany/microsandbox-linux-arm64-gnu': 0.6.18
-      '@superradcompany/microsandbox-linux-x64-gnu': 0.6.18
-      '@superradcompany/microsandbox-win32-arm64-msvc': 0.6.18
-      '@superradcompany/microsandbox-win32-x64-msvc': 0.6.18
+      '@superradcompany/microsandbox-darwin-arm64': 0.7.13
+      '@superradcompany/microsandbox-linux-arm64-gnu': 0.7.13
+      '@superradcompany/microsandbox-linux-x64-gnu': 0.7.13
+      '@superradcompany/microsandbox-win32-arm64-msvc': 0.7.13
+      '@superradcompany/microsandbox-win32-x64-msvc': 0.7.13
 
   miller-rabin@4.0.1:
     dependencies:

@@ -121,19 +121,27 @@ describe('Mosaic ComputeSDK provider', () => {
     expect(calls[0].body.metadata).toEqual({ session_id: 'abc' });
   });
 
-  it('starts a background command as a durable process', async () => {
+  it('detaches a background command through the shell tier, not a durable process', async () => {
     const calls = gateway({
       'POST /v1/sandboxes': () => json({ id: 'sbx-bg', state: 'running', tti_ms: 1 }),
-      'POST /v1/sandboxes/sbx-bg/processes': () =>
-        json({ id: 'proc-1', sandbox_id: 'sbx-bg', state: 'running', started_at_ns: 1, pty: false }),
+      'POST /v1/sandboxes/sbx-bg/exec': () =>
+        json({ stdout: '@@computesdk-job ok 4242\n', stderr: '', exit_code: 0 }),
     });
 
     const sandbox = await mosaic(config).sandbox.create();
     const result = await sandbox.runCommand('npm run dev', { background: true, cwd: '/workspace/app' });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toBe('proc-1');
-    expect(calls[1].body).toEqual({ cmd: 'npm run dev', cwd: '/workspace/app' });
+    expect(result.stdout).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
+      'POST /v1/sandboxes',
+      'POST /v1/sandboxes/sbx-bg/exec',
+    ]);
+    const encoded = /printf '%s' '([^']+)'/.exec(calls[1].body.cmd as string)?.[1] ?? '';
+    const launch = Buffer.from(encoded, 'base64').toString('utf8');
+    expect(launch).toContain('setsid');
+    expect(launch).toContain('npm run dev');
+    expect(launch).toContain('/workspace/app');
   });
 
   it('mints a preview URL for a port', async () => {
@@ -428,5 +436,101 @@ describe('Mosaic ComputeSDK provider', () => {
     await expect(mosaic(config).sandbox.create({ memoryMb: 65_536 })).rejects.toThrow(
       /unsupported_shape: node-20 is served at 4096 MB \/ 2 vCPU: Ask for one of the published shapes/,
     );
+  });
+  it('reads a file larger than one files request in pinned 8 MiB ranges', async () => {
+    const chunk = 8 * 1024 * 1024;
+    const calls = gateway({
+      'POST /v1/sandboxes': () => json({ id: 'sbx-big', state: 'running' }),
+      'GET /v1/sandboxes/sbx-big/files/content': (_body, url) => {
+        const offset = Number(url.searchParams.get('offset'));
+        const size = offset === 0 ? chunk : 3;
+        const content = Buffer.alloc(size, offset === 0 ? 'a' : 'b').toString('base64');
+        return json({ path: 'big', content_base64: content, size, offset, total_size: chunk + 3, version: 'v1', eof: offset > 0 });
+      },
+    });
+
+    const sandbox = await mosaic(config).sandbox.create();
+    const text = await sandbox.filesystem.readFile('/workspace/big');
+
+    expect(text.length).toBe(chunk + 3);
+    expect(text.endsWith('bbb')).toBe(true);
+    const reads = calls.filter((call) => call.method === 'GET').map((call) => new URL(call.url).searchParams);
+    expect(reads.map((query) => [query.get('offset'), query.get('version')])).toEqual([
+      ['0', null],
+      [String(chunk), 'v1'],
+    ]);
+  });
+
+  it('reads through a symlink the files API refuses to follow', async () => {
+    const calls = gateway({
+      'POST /v1/sandboxes': () => json({ id: 'sbx-link', state: 'running' }),
+      'GET /v1/sandboxes/sbx-link/files/content': () =>
+        json({ error: { code: 'invalid_path', message: 'path is a symlink' } }, 400),
+      'POST /v1/sandboxes/sbx-link/exec': () => json({ stdout: 'payload', stderr: '', exit_code: 0 }),
+    });
+
+    const sandbox = await mosaic(config).sandbox.create();
+
+    expect(await sandbox.filesystem.readFile('/workspace/link.txt')).toBe('payload');
+    expect(calls.at(-1)?.body.cmd).toContain('cat "/workspace/link.txt"');
+  });
+
+  it('writes a file too big for one exec body through staged uploads', async () => {
+    const calls = gateway({
+      'POST /v1/sandboxes': () => json({ id: 'sbx-up', state: 'running' }),
+      'PUT /v1/sandboxes/sbx-up/files/content': () => json({ path: 'part', size: 1 }),
+      'POST /v1/sandboxes/sbx-up/exec': () => json({ stdout: '', stderr: '', exit_code: 0 }),
+    });
+
+    const sandbox = await mosaic(config).sandbox.create();
+    await sandbox.filesystem.writeFile('/tmp/bench/big.txt', 'x'.repeat(100 * 1024));
+
+    const execs = calls.filter((call) => call.method === 'POST' && call.url.endsWith('/exec'));
+    expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
+    expect(execs.every((call) => JSON.stringify(call.body).length < 1024)).toBe(true);
+    expect(execs[0].body.cmd).toMatch(/cat "\/workspace\/\.computesdk-upload-[^"]+"\/\* > "\/tmp\/bench\/big\.txt"/);
+    expect(execs[1].body.cmd).toMatch(/^rm -rf "\/workspace\/\.computesdk-upload-/);
+  });
+
+  it('pauses and resumes the same sandbox through its native handle', async () => {
+    const calls = gateway({
+      'POST /v1/sandboxes': () => json({ id: 'sbx-nap', state: 'running' }),
+      'POST /v1/sandboxes/sbx-nap/pause': () => json({ id: 'sbx-nap', state: 'paused' }),
+      'POST /v1/sandboxes/sbx-nap/resume': () => json({ id: 'sbx-nap', state: 'running' }),
+    });
+
+    const sandbox = await mosaic(config).sandbox.create();
+    const native = sandbox.getInstance();
+    await native.pause({ killProcesses: true });
+    expect(native.state).toBe('paused');
+    await native.resume();
+
+    expect(native.state).toBe('running');
+    expect(calls.slice(1).map((call) => [new URL(call.url).pathname, call.body])).toEqual([
+      ['/v1/sandboxes/sbx-nap/pause', { kill_processes: true }],
+      ['/v1/sandboxes/sbx-nap/resume', {}],
+    ]);
+  });
+
+  it('pauses and resumes through the ComputeSDK instance and declares what survives', async () => {
+    const calls = gateway({
+      'POST /v1/sandboxes': () => json({ id: 'sbx-life', state: 'running' }),
+      'POST /v1/sandboxes/sbx-life/pause': () => json({ id: 'sbx-life', state: 'paused' }),
+      'POST /v1/sandboxes/sbx-life/resume': () => json({ id: 'sbx-life', state: 'running' }),
+    });
+
+    const provider = mosaic(config);
+    const sandbox = await provider.sandbox.create();
+    await sandbox.pause!();
+    expect(sandbox.getInstance().state).toBe('paused');
+    await sandbox.resume!();
+
+    expect(sandbox.getInstance().state).toBe('running');
+    expect(calls.slice(1).map((call) => [new URL(call.url).pathname, call.body])).toEqual([
+      ['/v1/sandboxes/sbx-life/pause', {}],
+      ['/v1/sandboxes/sbx-life/resume', {}],
+    ]);
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    expect(provider.snapshot!.capabilities).toEqual({ scope: 'rootfs', memory: true, destroysSource: false });
   });
 });

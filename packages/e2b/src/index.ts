@@ -3,11 +3,11 @@
  */
 
 import { Sandbox as E2BSandbox, Volume as E2BVolume } from 'e2b';
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, StartProcessOptions } from '@computesdk/provider';
+import { runE2BCommand, startE2BProcess } from './process';
 
-type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 type E2BFileEntry = {
   name: string;
   isDir?: boolean;
@@ -23,6 +23,13 @@ type E2BSandboxStatics = typeof E2BSandbox & {
   listTemplates?: (options: { apiKey?: string }) => Promise<unknown[]>;
   deleteTemplate?: (snapshotId: string, options: { apiKey?: string }) => Promise<unknown>;
 };
+
+/** Drains a paginator from the e2b SDK (`hasNext` / `nextItems`). */
+async function drain<T>(paginator: { hasNext: boolean; nextItems: () => Promise<T[]> }): Promise<T[]> {
+  const items: T[] = [];
+  while (paginator.hasNext) items.push(...await paginator.nextItems());
+  return items;
+}
 
 export interface E2BConfig {
   /** E2B API key - if not provided, will fallback to E2B_API_KEY environment variable */
@@ -127,33 +134,35 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         } catch { /* already destroyed */ }
       },
 
-      runCommand: async (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const startTime = Date.now();
-        try {
-          let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          const execution = await sandbox.commands.run(fullCommand, { timeoutMs: options?.timeout });
-          return { stdout: execution.stdout, stderr: execution.stderr, exitCode: execution.exitCode, durationMs: Date.now() - startTime };
-        } catch (error) {
-          const result = (error as { result?: E2BExecutionResult })?.result;
-          if (result) return { stdout: result.stdout || '', stderr: result.stderr || '', exitCode: result.exitCode || 1, durationMs: Date.now() - startTime };
-          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
-        }
-      },
+      runCommand: (sandbox: E2BSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> =>
+        runE2BCommand(sandbox, command, options),
 
-      getInfo: async (sandbox: E2BSandbox): Promise<InstanceInfo> => ({
-        id: sandbox.sandboxId || 'e2b-unknown',
-        provider: 'e2b',
-        status: 'running',
-        createdAt: new Date(),
-        timeout: 300000,
-        metadata: { e2bSessionId: sandbox.sandboxId }
-      }),
+      // envd streams output, takes stdin and signals processes itself.
+      streamCommand: (sandbox: E2BSandbox, command: string, options: RunCommandOptions): Promise<CommandResult> =>
+        runE2BCommand(sandbox, command, options),
+
+      startProcess: (sandbox: E2BSandbox, command: string, options: StartProcessOptions) =>
+        startE2BProcess(sandbox, command, options),
+
+      getInfo: async (sandbox: E2BSandbox): Promise<InstanceInfo> => {
+        const info = await sandbox.getInfo();
+        return {
+          id: info.sandboxId,
+          provider: 'e2b',
+          status: info.state === 'paused' ? 'stopped' : 'running',
+          createdAt: info.startedAt,
+          timeout: Math.max(0, info.endAt.getTime() - info.startedAt.getTime()),
+          metadata: {
+            ...info.metadata,
+            e2bSessionId: info.sandboxId,
+            templateId: info.templateId,
+            ...(info.name && { templateName: info.name }),
+            cpuCount: info.cpuCount,
+            memoryMB: info.memoryMB,
+            endAt: info.endAt.toISOString(),
+          },
+        };
+      },
 
       getUrl: async (sandbox: E2BSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
@@ -167,7 +176,9 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
       filesystem: {
         readFile: async (sandbox: E2BSandbox, path: string): Promise<string> => sandbox.files.read(path),
-        writeFile: async (sandbox: E2BSandbox, path: string, content: string): Promise<void> => { await sandbox.files.write(path, content); },
+        // A raw octet-stream body instead of multipart; the SDK falls back to
+        // multipart on envd versions that lack it.
+        writeFile: async (sandbox: E2BSandbox, path: string, content: string): Promise<void> => { await sandbox.files.write(path, content, { useOctetStream: true }); },
         mkdir: async (sandbox: E2BSandbox, path: string): Promise<void> => { await sandbox.files.makeDir(path); },
         readdir: async (sandbox: E2BSandbox, path: string): Promise<FileEntry[]> => {
           const entries = await sandbox.files.list(path);
@@ -182,10 +193,17 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         remove: async (sandbox: E2BSandbox, path: string): Promise<void> => { await sandbox.files.remove(path); }
       },
 
+      // Pause snapshots memory and the filesystem; connect() resumes it.
+      pause: async (sandbox: E2BSandbox): Promise<void> => { await sandbox.pause(); },
+      resume: async (sandbox: E2BSandbox): Promise<E2BSandbox> => sandbox.connect(),
+      pauseCapabilities: { memory: true },
+
       getInstance: (sandbox: E2BSandbox): E2BSandbox => sandbox,
     },
 
     snapshot: {
+      // A full memory + rootfs snapshot; the source is paused while it is taken, then keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
       create: async (config: E2BConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = config.apiKey || process.env.E2B_API_KEY!;
         try {
@@ -199,21 +217,13 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
         }
       },
       list: async (config: E2BConfig) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.listTemplates === 'function') {
-            return await e2bStatic.listTemplates({ apiKey: config.apiKey || process.env.E2B_API_KEY });
-          }
-          return [];
-        } catch { return []; }
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        return drain(E2BSandbox.listSnapshots({ apiKey }));
       },
       delete: async (config: E2BConfig, snapshotId: string) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.deleteTemplate === 'function') {
-            await e2bStatic.deleteTemplate(snapshotId, { apiKey: config.apiKey || process.env.E2B_API_KEY });
-          }
-        } catch { /* ignore */ }
+        const apiKey = config.apiKey || process.env.E2B_API_KEY!;
+        // false = already gone, which is what delete asked for.
+        await E2BSandbox.deleteSnapshot(snapshotId, { apiKey });
       }
     },
 

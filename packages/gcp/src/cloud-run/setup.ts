@@ -41,6 +41,15 @@ async function setup() {
   const projectId = process.env.CLOUD_RUN_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT ?? process.env.PROJECT_ID
   const region = process.env.CLOUD_RUN_REGION ?? process.env.GOOGLE_CLOUD_LOCATION ?? process.env.REGION
   const serviceName = process.env.CLOUD_RUN_SERVICE_NAME ?? 'computesdk-sandbox'
+  // Optional GCS bucket for `sandbox tar` snapshots; without it snapshots stay
+  // on the gateway instance that took them.
+  const snapshotBucket = process.env.CLOUD_RUN_SNAPSHOT_BUCKET?.replace(/^gs:\/\//, '').replace(/\/$/, '')
+  const serviceAccount = process.env.CLOUD_RUN_SERVICE_ACCOUNT
+  // Stateful sandboxes live on one instance and follow-up calls reach it via
+  // session affinity, which needs spare request slots on that instance.
+  const concurrency = process.env.CLOUD_RUN_CONCURRENCY ?? '20'
+  const minInstances = process.env.CLOUD_RUN_MIN_INSTANCES ?? '100'
+  const maxInstances = process.env.CLOUD_RUN_MAX_INSTANCES ?? '100'
 
   console.log('\n  ComputeSDK Cloud Run Setup\n')
 
@@ -78,6 +87,18 @@ async function setup() {
       '',
     ].join('\n'))
 
+    if (snapshotBucket) {
+      try {
+        run('gcloud', ['storage', 'buckets', 'describe', `gs://${snapshotBucket}`, '--project', projectId])
+      } catch {
+        console.log(`  Creating snapshot bucket gs://${snapshotBucket}...`)
+        run('gcloud', ['storage', 'buckets', 'create', `gs://${snapshotBucket}`, '--project', projectId, '--location', region, '--uniform-bucket-level-access'], { stdio: 'inherit' })
+      }
+      const member = serviceAccount ?? `${run('gcloud', ['projects', 'describe', projectId, '--format', 'value(projectNumber)']).trim()}-compute@developer.gserviceaccount.com`
+      console.log(`  Granting ${member} roles/storage.objectAdmin on gs://${snapshotBucket}...`)
+      run('gcloud', ['storage', 'buckets', 'add-iam-policy-binding', `gs://${snapshotBucket}`, '--member', `serviceAccount:${member}`, '--role', 'roles/storage.objectAdmin', '--project', projectId], { stdio: 'inherit' })
+    }
+
     console.log(`  Building gateway image ${image}...`)
     run('gcloud', ['builds', 'submit', '--tag', image, '--project', projectId], { cwd: tmpDir, stdio: 'inherit' })
 
@@ -91,13 +112,14 @@ async function setup() {
       '--allow-unauthenticated',
       '--cpu', '1',
       '--memory', '2Gi',
-      '--concurrency', '1',
-      '--min-instances', '100',
-      '--max-instances', '100',
+      '--concurrency', concurrency,
+      '--min-instances', minInstances,
+      '--max-instances', maxInstances,
       '--session-affinity',
       '--cpu-boost',
       '--no-cpu-throttling',
-      '--set-env-vars', `SANDBOX_SECRET=${secret}`,
+      ...(serviceAccount ? ['--service-account', serviceAccount] : []),
+      '--set-env-vars', [`SANDBOX_SECRET=${secret}`, ...(snapshotBucket ? [`CLOUD_RUN_SNAPSHOT_BUCKET=${snapshotBucket}`] : [])].join(','),
     ], { stdio: 'inherit' })
 
     const serviceUrl = run('gcloud', [

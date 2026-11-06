@@ -7,5 +7,7 @@ runProviderTestSuite({
   supportsFilesystem: true,
   supportsGetUrl: false, // preview URLs are not offered yet: getUrl() throws
   supportsStreaming: true, // onStdout / onStderr are served by the provider itself
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   skipIntegration: !process.env.PROMIGENCE_API_KEY,
 });

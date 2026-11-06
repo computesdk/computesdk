@@ -60,6 +60,20 @@ export interface ProviderTestConfig {
    * this set it also fails when a provider silently changes tier.
    */
   expectProcessRuntime?: { streaming?: ProcessTier; processes?: ProcessTier };
+  /**
+   * Whether to exercise `instance.pause()`/`resume()`. Sources are created
+   * with the provider's declared `sandbox.pause.createOptions`. Defaults to
+   * whether the provider declares `sandbox.pause`.
+   */
+  supportsPauseResume?: boolean;
+  /**
+   * Whether to exercise `provider.snapshot` create/restore/delete. Requires
+   * declared `snapshot.capabilities`; markers are written under its `path`.
+   * Defaults to whether the provider declares `snapshot.capabilities`.
+   */
+  supportsSnapshots?: boolean;
+  /** Timeout for pause and snapshot tests (default: 300000) */
+  lifecycleTimeout?: number;
 }
 
 /**
@@ -92,6 +106,9 @@ export function defineProviderTests(config: ProviderTestConfig) {
     supportsStreaming = false,
     supportsProcesses = false,
     expectProcessRuntime,
+    supportsPauseResume = !!config.provider.sandbox.pause,
+    supportsSnapshots = !!config.provider.snapshot?.capabilities,
+    lifecycleTimeout = 300000,
   } = config;
 
   return () => {
@@ -153,6 +170,26 @@ export function defineProviderTests(config: ProviderTestConfig) {
 
       expect(result).toBeDefined();
       expect(result.exitCode).toBe(0);
+    }, timeout);
+
+    it.skipIf(skipIntegration)('should apply env to every part of a compound command', async () => {
+      const value = `a b $x 'q' "dq"`;
+      const command = 'echo "1:$CSDK_ENV"; echo "2:$CSDK_ENV" && echo "3:$CSDK_ENV"';
+      const variants: RunCommandOptions[] = [{ env: { CSDK_ENV: value } }];
+      if (supportsStreaming) variants.push({ env: { CSDK_ENV: value }, onStdout: () => {} });
+
+      for (const options of variants) {
+        const result = await sandbox.runCommand(command, options);
+        expect(result.exitCode).toBe(0);
+        for (const n of [1, 2, 3]) expect(result.stdout).toContain(`${n}:${value}`);
+      }
+    }, timeout);
+
+    it.skipIf(skipIntegration)('should run commands in the requested cwd', async () => {
+      const result = await sandbox.runCommand('pwd && echo "$PWD"', { cwd: '/tmp' });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim().split('\n').map((l) => l.trim())).toEqual(['/tmp', '/tmp']);
     }, timeout);
 
     it('should report which runtime serves streaming and processes', () => {
@@ -268,14 +305,15 @@ export function defineProviderTests(config: ProviderTestConfig) {
           // about ordering against the command's own completion rather than
           // about the final text.
           const chunks: string[] = [];
-          const startedAt = Date.now();
           let firstChunkAt: number | undefined;
+          let lastChunkAt: number | undefined;
 
           const result = await sandbox.runCommand(
             `sh -c 'for i in 1 2 3 4 5; do echo tick $i; sleep 1; done'`,
             {
               onStdout: (text: string) => {
                 firstChunkAt ??= Date.now();
+                lastChunkAt = Date.now();
                 chunks.push(text);
               }
             }
@@ -283,12 +321,10 @@ export function defineProviderTests(config: ProviderTestConfig) {
 
           expect(result.exitCode).toBe(0);
           expect(firstChunkAt).toBeDefined();
-          // The first tick is printed immediately and the last four seconds are
-          // spent sleeping, so a first chunk that arrives in the first half of
-          // the command's life could not have been buffered until exit.
-          expect((firstChunkAt as number) - startedAt).toBeLessThan(
-            result.durationMs / 2
-          );
+          // The ticks are printed a second apart, so output buffered until exit
+          // arrives in one burst while streamed output is spread over the run.
+          // Measured between chunks, so slow connection setup doesn't count.
+          expect((lastChunkAt as number) - (firstChunkAt as number)).toBeGreaterThanOrEqual(60);
           // Everything streamed is exactly what the command produced: no chunk
           // dropped, and none delivered twice.
           expect(chunks.join('')).toBe(result.stdout);
@@ -418,6 +454,144 @@ export function defineProviderTests(config: ProviderTestConfig) {
         expect(result.stdout.trim()).toBe('test content');
       }, timeout);
     });
+
+    const createLifecycleSource = (createOptions?: Record<string, unknown>) =>
+      provider.sandbox.create({ ...(ports?.length ? { ports } : {}), ...(createOptions ?? {}) } as any);
+
+    const destroyQuietly = async (sb: ProviderInstance | undefined) => {
+      if (sb) await cleanupSandbox(sb);
+    };
+
+    const isUnder = (dir: string, root: string) =>
+      dir === root || dir.startsWith(root.endsWith('/') ? root : `${root}/`);
+
+    const markerDir = async (sb: ProviderInstance, declared?: string, excludes: string[] = []) => {
+      if (declared) return declared;
+      const out = await sb.runCommand('pwd; echo "$HOME"');
+      const candidates = [...out.stdout.split('\n').map((l) => l.trim()).filter(Boolean), '/root', '/tmp'];
+      return candidates.find((dir) => !excludes.some((ex) => isUnder(dir, ex))) ?? '/tmp';
+    };
+
+    const lifetime = provider.sandbox.lifetime;
+    if (lifetime && !skipIntegration) {
+      describe('Lifetime', () => {
+        it('should declare a consistent lifetime', () => {
+          if (lifetime.defaultMs !== undefined) expect(lifetime.defaultMs).toBeGreaterThan(0);
+          if (lifetime.maxMs !== undefined && lifetime.defaultMs !== undefined) {
+            expect(lifetime.maxMs).toBeGreaterThanOrEqual(lifetime.defaultMs);
+          }
+          expect(typeof sandbox.extendLifetime === 'function').toBe(lifetime.extendable);
+        });
+
+        if (lifetime.extendable) {
+          it('should extend a live instance', async () => {
+            await sandbox.extendLifetime!(Math.min(lifetime.maxMs ?? 600000, 600000));
+            expect((await sandbox.runCommand('echo alive')).stdout.trim()).toBe('alive');
+          }, timeout);
+        }
+      });
+    }
+
+    if (supportsPauseResume && !skipIntegration) {
+      describe('Pause and Resume', () => {
+        it('should expose pause and resume on instances', () => {
+          expect(provider.sandbox.pause).toBeDefined();
+          expect(typeof sandbox.pause).toBe('function');
+          expect(typeof sandbox.resume).toBe('function');
+        });
+
+        it('should keep files across pause and resume', async () => {
+          const caps = provider.sandbox.pause!;
+          let source: ProviderInstance | undefined;
+          try {
+            source = await createLifecycleSource(caps.createOptions);
+            const marker = `${await markerDir(source)}/csdk-pause-${Date.now()}`;
+            expect((await source.runCommand(`echo paused-state > ${marker}`)).exitCode).toBe(0);
+            // startProcess, not `cmd &` in runCommand: some providers end a command's process group on exit.
+            // The process records its own pid, since a native handle may not survive a pause.
+            const pidFile = `${marker}.pid`;
+            if (caps.memory) {
+              await source.startProcess(`sh -c 'echo $$ > ${pidFile}; exec sleep 600'`);
+              const deadline = Date.now() + 15000;
+              while ((await source.runCommand(`cat ${pidFile}`)).stdout.trim() === '' && Date.now() < deadline) {
+                await new Promise((r) => setTimeout(r, 500));
+              }
+              expect((await source.runCommand(`kill -0 $(cat ${pidFile}) && echo alive`)).stdout.trim()).toBe('alive');
+            }
+
+            await source.pause!();
+            await source.resume!();
+
+            const read = await source.runCommand(`cat ${marker}`);
+            expect(read.exitCode).toBe(0);
+            expect(read.stdout.trim()).toBe('paused-state');
+            if (caps.memory) {
+              expect((await source.runCommand(`kill -0 $(cat ${pidFile}) && echo alive`)).stdout.trim()).toBe('alive');
+            }
+          } finally {
+            await destroyQuietly(source);
+          }
+        }, lifecycleTimeout);
+      });
+    }
+
+    if (supportsSnapshots && !skipIntegration) {
+      describe('Snapshots', () => {
+        it('should declare what snapshots keep', () => {
+          const caps = provider.snapshot?.capabilities;
+          expect(caps).toBeDefined();
+          if (caps!.scope === 'volume') expect(caps!.path).toBeTruthy();
+          if (caps!.source) expect(caps!.destroysSource).toBe(caps!.source !== 'kept');
+          if (caps!.readiness === 'eventual') expect(typeof provider.snapshot!.waitUntilReady).toBe('function');
+        });
+
+        it('should restore files from a snapshot into a new instance', async () => {
+          const caps = provider.snapshot!.capabilities!;
+          let source: ProviderInstance | undefined;
+          const sourceState = caps.source ?? (caps.destroysSource ? 'destroyed' : 'kept');
+          let restored: ProviderInstance | undefined;
+          let second: ProviderInstance | undefined;
+          let snapshotId: string | undefined;
+          try {
+            source = await createLifecycleSource(caps.createOptions);
+            const marker = `${await markerDir(source, caps.path, caps.excludes)}/csdk-snapshot-${Date.now()}`;
+            expect((await source.runCommand(`echo snapshot-state > ${marker}`)).exitCode).toBe(0);
+
+            const snapshot: any = await provider.snapshot!.create(source.instanceId);
+            snapshotId = snapshot.id;
+            expect(typeof snapshotId).toBe('string');
+            if (caps.readiness === 'eventual') {
+              await provider.snapshot!.waitUntilReady!(snapshotId!, { timeoutMs: lifecycleTimeout });
+            }
+
+            if (sourceState === 'destroyed') {
+              source = undefined;
+            } else if (sourceState === 'kept') {
+              expect((await source.runCommand('echo alive')).stdout.trim()).toBe('alive');
+            }
+
+            restored = await provider.sandbox.create({ snapshotId } as any);
+            expect(restored.instanceId).not.toBe(source?.instanceId);
+            const read = await restored.runCommand(`cat ${marker}`);
+            expect(read.exitCode).toBe(0);
+            expect(read.stdout.trim()).toBe('snapshot-state');
+
+            if (caps.fork) {
+              second = await provider.sandbox.create({ snapshotId } as any);
+              expect(second.instanceId).not.toBe(restored.instanceId);
+              expect((await restored.runCommand(`echo changed > ${marker}`)).exitCode).toBe(0);
+              expect((await second.runCommand(`cat ${marker}`)).stdout.trim()).toBe('snapshot-state');
+            }
+          } finally {
+            // Children before parents: some providers refuse to delete a fork's source first.
+            await destroyQuietly(second);
+            await destroyQuietly(restored);
+            if (snapshotId) await provider.snapshot!.delete(snapshotId).catch(() => {});
+            await destroyQuietly(source);
+          }
+        }, lifecycleTimeout);
+      });
+    }
   };
 }
 
@@ -425,8 +599,8 @@ export function defineProviderTests(config: ProviderTestConfig) {
  * Runs the complete provider test suite (legacy function for backward compatibility)
  */
 export function runProviderTestSuite(config: ProviderTestConfig) {
-  const testFunction = defineProviderTests(config);
-  testFunction();
+  // Scoped so the per-test live sandbox hooks don't wrap a package's own unit tests.
+  describe(`${config.name} conformance`, defineProviderTests(config));
 }
 
 /**
