@@ -222,7 +222,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
         const creds = resolveCredentials(config);
         validateCredentials(creds);
         const page = await VercelSandbox.list({ ...credentialParams(creds), sortBy: 'createdAt', sortOrder: 'desc' } as any);
-        const live = (page.sandboxes ?? []).filter((s: any) => s.status === 'running' || s.status === 'pending');
+        // Paused (stopped) persistent sandboxes stay listed so callers can resume them.
+        const live = (page.sandboxes ?? []).filter((s: any) => s.status === 'running' || s.status === 'pending'
+          || (s.persistent && (s.status === 'stopping' || s.status === 'stopped' || s.status === 'snapshotting')));
         const sandboxes = await Promise.all(live.map((s: any) =>
           VercelSandbox.get({ name: s.name, ...credentialParams(creds) } as any).catch(() => null)));
         return sandboxes
@@ -375,9 +377,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
         await snapshot.delete();
       },
       // The whole rootfs (/tmp, $HOME, /etc, ...) is restored; processes are
-      // not. Snapshotting stops the source; its next call starts a new
-      // session from the snapshot.
-      capabilities: { scope: 'rootfs', memory: false, destroysSource: true },
+      // not. Snapshotting stops the source (it still exists and needs
+      // destroying); its next call starts a new session from the snapshot.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: true, source: 'stopped' },
     },
 
     template: {

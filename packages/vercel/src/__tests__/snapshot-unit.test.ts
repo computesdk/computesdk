@@ -136,7 +136,7 @@ describe('Vercel Snapshot Support', () => {
   });
 
   it('declares rootfs snapshots that stop the source', () => {
-    expect(provider.snapshot?.capabilities).toEqual({ scope: 'rootfs', memory: false, destroysSource: true });
+    expect(provider.snapshot?.capabilities).toEqual({ scope: 'rootfs', memory: false, destroysSource: true, source: 'stopped' });
   });
 
   it('pauses by stopping a persistent sandbox and resumes with a fresh handle', async () => {
