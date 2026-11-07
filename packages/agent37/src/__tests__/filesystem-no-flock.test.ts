@@ -16,7 +16,7 @@ describe('Agent37 custom images without flock (local shell, mocked transport)', 
     directory = await mkdtemp(join(tmpdir(), 'agent37-no-flock-'));
     const bin = join(directory, 'bin');
     await mkdir(bin);
-    for (const name of ['mkdir', 'dirname', 'base64', 'cat', 'rm']) await symlink(`/usr/bin/${name}`, join(bin, name));
+    for (const name of ['mkdir', 'dirname', 'base64', 'cat', 'rm', 'stat', 'dd']) await symlink(`/usr/bin/${name}`, join(bin, name));
     env = { ...process.env, PATH: bin, TMPDIR: directory };
     vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
       if (url.endsWith('/v1/instances')) return new Response(JSON.stringify({ id: 'without-flock', status: 'running' }));
@@ -72,6 +72,7 @@ describe('Agent37 custom images without flock (local shell, mocked transport)', 
       await sandbox.filesystem.writeFile(symlinkPath, value);
       for (const path of [target, symlinkPath, hardlinkPath]) {
         expect(await readFile(path, 'utf8')).toBe(value);
+        expect(await sandbox.filesystem.readFile(path)).toBe(value);
         const updated = await stat(path);
         expect({ inode: updated.ino, mode: updated.mode & 0o777 }).toEqual({ inode: original.ino, mode: 0o751 });
       }
