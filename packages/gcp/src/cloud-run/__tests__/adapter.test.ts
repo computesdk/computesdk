@@ -82,6 +82,20 @@ describe('cloudRun adapter against the local gateway', () => {
     await expect(provider.snapshot!.create(sandbox.sandboxId)).rejects.toThrow(/stateful sandbox/)
     await sandbox.destroy()
   })
+
+  it('keeps relative benchmark directories and chunked file writes in a stateful sandbox', async () => {
+    const sandbox = await provider.sandbox.create({ executionMode: 'stateful' })
+    const path = 'bench/fs-cloud-run/.probe'
+    const content = 'x'.repeat(40 * 1024)
+    try {
+      expect((await sandbox.runCommand('mkdir -p bench/fs-cloud-run')).exitCode).toBe(0)
+      await sandbox.filesystem.writeFile(path, content)
+      expect(await sandbox.filesystem.readFile(path)).toBe(content)
+      expect((await sandbox.runCommand('test -f bench/fs-cloud-run/.probe')).exitCode).toBe(0)
+    } finally {
+      await sandbox.destroy()
+    }
+  })
 })
 
 /** Mimics gateways deployed before feature flags: no-op lifecycle, every call a fresh `sandbox do`. */
