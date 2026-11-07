@@ -29,27 +29,13 @@ export interface TangleConfig {
 const env = (name: string): string | undefined =>
   typeof process !== 'undefined' ? process.env?.[name] : undefined;
 
-const clients = new Map<string, Sandbox>();
-
-/** One SDK client per key and endpoint; credentials are checked when a call needs them. */
+/** Credentials are checked when a call needs them; constructing the SDK client does no I/O. */
 function client(config: TangleConfig): Sandbox {
   const apiKey = (config.apiKey ?? env('TANGLE_API_KEY'))?.trim();
   if (!apiKey) {
-    throw new Error(
-      'Missing Tangle API key.\n\n' +
-      'Create a key at https://sandbox.tangle.tools\n' +
-      'Then pass it: tangle({ apiKey: "sk-tan-..." })\n' +
-      'Or set TANGLE_API_KEY in your environment.',
-    );
+    throw new Error('Missing Tangle API key: pass tangle({ apiKey }) or set TANGLE_API_KEY. Create one at https://sandbox.tangle.tools.');
   }
-  const baseUrl = config.baseUrl ?? env('TANGLE_SANDBOX_BASE_URL') ?? DEFAULT_BASE_URL;
-  const cacheKey = `${baseUrl}\n${apiKey}`;
-  let sdk = clients.get(cacheKey);
-  if (!sdk) {
-    sdk = new Sandbox({ apiKey, baseUrl });
-    clients.set(cacheKey, sdk);
-  }
-  return sdk;
+  return new Sandbox({ apiKey, baseUrl: config.baseUrl ?? env('TANGLE_SANDBOX_BASE_URL') ?? DEFAULT_BASE_URL });
 }
 
 function createOptions(config: TangleConfig, options: CreateInstanceOptions): CreateSandboxOptions {
@@ -90,7 +76,17 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
     instances: {
       create: async (config, options = {}) => {
         const sandbox = await client(config).create(createOptions(config, options), { signal: options.signal });
-        if (sandbox.status !== 'running') await sandbox.waitFor('running');
+        if (sandbox.status !== 'running') {
+          try {
+            await sandbox.waitFor('running', { signal: options.signal });
+          } catch (error) {
+            // A rejected create returns no id, so the caller could never delete this sandbox.
+            await sandbox.delete().catch((cleanup: unknown) => {
+              throw new AggregateError([error, cleanup], `Tangle sandbox ${sandbox.id} did not start and was not deleted.`);
+            });
+            throw error;
+          }
+        }
         return { instance: sandbox, instanceId: sandbox.id };
       },
 
