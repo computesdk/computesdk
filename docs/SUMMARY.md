@@ -17,6 +17,7 @@
   * [Beam](providers/beam.md)
   * [Blaxel](providers/blaxel.md)
   * [Brezel](providers/brezel.md)
+  * [Briq](providers/briq.md)
   * [Buddy](providers/buddy.md)
   * [Cloud Run (GCP)](providers/cloud-run.md)
   * [Cloudflare](providers/cloudflare.md)
