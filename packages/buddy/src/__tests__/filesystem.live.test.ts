@@ -42,10 +42,10 @@ describe.skipIf(!live)('native filesystem comparison', () => {
         await source.filesystem.remove(path);
       }
       const command = `true #${'x'.repeat(16_384)}`;
-      const nativeLimit = await handle.client.execCommand({
+      const nativeLimit = await handle.client.executeCommand({
         path: { sandbox_id: handle.sandboxId }, body: { command, runtime: 'BASH' },
       }).then(() => undefined, error => ({ status: statusOf(error), message: String(error) }));
-      const adapterLimit = await source.runCommand(command).then(
+      const adapterLimit = await source.runCommand(command, { timeout: 10_000 }).then(
         () => undefined, error => ({ status: statusOf(error), message: String(error) }),
       );
       console.log('BUDDY_FS_EXEC_LIMIT', JSON.stringify({ id: handle.sandboxId, bytes: command.length, nativeLimit, adapterLimit }));
