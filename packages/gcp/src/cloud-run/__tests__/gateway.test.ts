@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
@@ -109,24 +109,30 @@ describe('Cloud Run gateway', () => {
   })
 
   it('cleans up a failed native create without hiding the original error', async () => {
-    const res = await call('/v1/sandbox/create', stateful('failed-create', { env: { FAKE_CREATE_FAILURE: '1' } }))
+    const res = await call('/v1/sandbox/create', { executionMode: 'stateful', env: { FAKE_CREATE_FAILURE: '1' } })
     expect(res).toEqual({ status: 500, data: { error: 'Error: create failed after allocation' } })
-    expect(cli.calls().at(-1)).toEqual(['delete', '--force', 'failed-create'])
-    expect((await call('/v1/sandbox/info', { sandboxId: 'failed-create' })).status).toBe(404)
-    expect(existsSync(join(cli.state, 'sb', 'failed-create'))).toBe(false)
+    const cleanupCall = cli.calls().at(-1)!
+    expect(cleanupCall.slice(0, 2)).toEqual(['delete', '--force'])
+    const sandboxId = cleanupCall[2]
+    expect(sandboxId).toMatch(/^cloud-run-/)
+    expect((await call('/v1/sandbox/info', { sandboxId })).status).toBe(404)
+    expect(existsSync(join(cli.state, 'sb', sandboxId))).toBe(false)
   })
 
   it('cleans up a timed-out restore and releases its ID for retry', async () => {
     await call('/v1/sandbox/create', stateful('timeout-source'))
     await call('/v1/sandbox/snapshot', { sandboxId: 'timeout-source', snapshotId: 'timeout-snapshot' })
-    const res = await call('/v1/sandbox/create', stateful('timeout-restore', {
+    const res = await call('/v1/sandbox/create', {
+      executionMode: 'stateful',
       snapshotId: 'timeout-snapshot', env: { FAKE_CREATE_DELAY_MS: '3000' }, timeout: 500,
-    }))
+    })
     expect(res).toEqual({ status: 500, data: { error: 'Command timed out after 500ms' } })
-    expect(cli.calls().at(-1)).toEqual(['delete', '--force', 'timeout-restore'])
-    expect(existsSync(join(cli.state, 'sb', 'timeout-restore'))).toBe(false)
-    expect((await call('/v1/sandbox/info', { sandboxId: 'timeout-restore' })).status).toBe(404)
-    expect((await call('/v1/sandbox/create', stateful('timeout-restore', { snapshotId: 'timeout-snapshot' }))).status).toBe(200)
+    const cleanupCall = cli.calls().at(-1)!
+    expect(cleanupCall.slice(0, 2)).toEqual(['delete', '--force'])
+    const sandboxId = cleanupCall[2]
+    expect(existsSync(join(cli.state, 'sb', sandboxId))).toBe(false)
+    expect((await call('/v1/sandbox/info', { sandboxId })).status).toBe(404)
+    expect((await call('/v1/sandbox/create', stateful(sandboxId, { snapshotId: 'timeout-snapshot' }))).status).toBe(200)
   })
 
   it('never deletes an existing same-name native sandbox on failed create', async () => {
@@ -135,6 +141,19 @@ describe('Cloud Run gateway', () => {
     expect(res).toEqual({ status: 409, data: { error: 'Sandbox already-native already exists' } })
     expect(cli.calls().filter(args => args[0] === 'delete' && args.includes('already-native'))).toEqual([])
     expect((await call('/v1/sandbox/exec', stateful('already-native', { command: 'true' }))).data.exitCode).toBe(0)
+  })
+
+  it('never cleans up an existing stopped ID when exec reports not running and create fails', async () => {
+    const sandboxId = 'existing-stopped'
+    execFileSync(cli.binary, ['run', '--write', '--detach', sandboxId])
+    const root = join(cli.state, 'sb', sandboxId)
+    writeFileSync(join(root, '.stopped'), '')
+    writeFileSync(join(root, 'owner.txt'), 'belongs to a different caller')
+    const res = await call('/v1/sandbox/create', stateful(sandboxId, { env: { FAKE_CREATE_FAILURE_BEFORE_ALLOCATION: '1' } }))
+    expect(res).toEqual({ status: 500, data: { error: 'Error: launcher unavailable' } })
+    expect(cli.calls().filter(args => args[0] === 'delete' && args.includes(sandboxId))).toEqual([])
+    expect(readFileSync(join(root, 'owner.txt'), 'utf8')).toBe('belongs to a different caller')
+    expect(existsSync(join(root, '.stopped'))).toBe(true)
   })
 
   it('rejects overlapping creates of the same ID without cleaning up the first', async () => {

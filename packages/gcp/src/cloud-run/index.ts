@@ -548,7 +548,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
           if (getExecutionMode(sandboxConfig) === 'stateful') {
             const session: GatewaySession = {}
             const response = await gatewayRequest(sandboxConfig, '/v1/sandbox/create', sandboxRequestBody(sandboxConfig, {
-              sandboxId,
+              ...(options?.name != null ? { sandboxId } : {}),
               env: sandboxConfig.env,
               workdir: sandboxConfig.workdir,
               timeout: options?.timeout,
