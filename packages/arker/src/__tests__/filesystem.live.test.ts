@@ -37,6 +37,9 @@ describe.skipIf(!process.env.ARKER_API_KEY)('Arker large filesystem transfer (li
       const native = await box.runCommand(`sha256sum ${dir}/native; wc -c < ${dir}/native`);
       console.log('arker native large result', vm.id, JSON.stringify(native));
       expect(native.stdout).toBe(`${digest}  ${dir}/native\n${bytes.length}\n`);
+      await box.filesystem.remove(`${dir}/native`);
+      expect(await box.filesystem.exists(`${dir}/native`)).toBe(false);
+      console.log('arker native control removed', vm.id, `${dir}/native`);
 
       await box.runCommand(`cd ${dir}`);
       await box.filesystem.writeFile('empty', '');
@@ -60,6 +63,8 @@ describe.skipIf(!process.env.ARKER_API_KEY)('Arker large filesystem transfer (li
       console.log('arker before adapter large read', vm.id);
       expect(await box.filesystem.readFile('adapter')).toBe(payload);
       expect(await box.filesystem.readFile(`${dir}/adapter`)).toBe(payload);
+      await box.filesystem.remove('adapter');
+      expect(await box.filesystem.exists('adapter')).toBe(false);
       console.log('arker shell memory after adapter transfers', vm.id, JSON.stringify(await box.runCommand('ps -o rss= -C bash')));
     } finally {
       console.log('arker before filesystem cleanup', vm.id);
