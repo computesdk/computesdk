@@ -1,5 +1,11 @@
 # @computesdk/buddy
 
+## 1.0.22
+
+### Patch Changes
+
+- e6d322d: Make directory creation idempotent only for verified existing directories, preserve parent-directory errors when writing files, and resolve symlinks before native downloads so reads return the target contents before and after snapshots.
+
 ## 1.0.21
 
 ### Patch Changes
