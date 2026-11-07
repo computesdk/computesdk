@@ -86,6 +86,9 @@ compute agents steer <sessionId> "Use the test database instead"
 `compute agents stop` still ends the session and releases compute; interrupt
 active work first. Legacy live sessions must be ended/resumed to enable these
 controls. OpenCode does not support Pi controls.
+Interrupting an already stopped or sleeping session is a no-op and prints
+`unchanged` rather than `interrupted`; it never wakes the session. Raw `--json`
+output remains the API response (`{"events":[]}` for this no-op).
 
 Durable Pi sessions automatically sleep after the platform's idle timeout
 (60 seconds by default, checked every minute, so normally within 1–2 minutes). `compute agents send <sessionId> "Continue"` wakes

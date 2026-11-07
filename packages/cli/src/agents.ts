@@ -421,7 +421,9 @@ export function registerAgentsCommands(program: Command): void {
       );
       output(opts, res, (r) => {
         for (const e of r.events) printEvent(e);
-        console.log(`interrupted ${sessionId} — conversation preserved`);
+        console.log(r.events.length
+          ? `interrupted ${sessionId} — conversation preserved`
+          : `unchanged ${sessionId} — no active turn to interrupt`);
       });
     } catch (e) {
       fail(e, opts);
