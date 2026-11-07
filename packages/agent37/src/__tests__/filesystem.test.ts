@@ -99,7 +99,7 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
       expect(await sb.filesystem.readFile(join(directory, name))).toBe(content);
     }
     expect(Math.max(...bodies.map((body) => Buffer.byteLength(body)))).toBeLessThan(128_000);
-    expect(bodies.filter((body) => JSON.parse(body).command.includes('base64 -d >>'))).toHaveLength(9);
+    expect(bodies.filter((body) => JSON.parse(body).command.includes('base64 -d >>'))).toHaveLength(6);
     await expectNoStagingFiles();
   });
 
@@ -121,7 +121,7 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
     expect(await readdir(stagingDirectory)).toEqual([]);
   });
 
-  it.each([1, 48 * 1024 - 1, 48 * 1024, 48 * 1024 + 1, 96 * 1024])('writes %i bytes across chunk boundaries', async (length) => {
+  it.each([1, 90 * 1024 - 1, 90 * 1024, 90 * 1024 + 1, 180 * 1024])('writes %i bytes across chunk boundaries', async (length) => {
     const sb = await sandbox();
     const content = 'a'.repeat(length);
     const path = join(directory, 'boundary');
@@ -131,11 +131,27 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
 
   it('preserves UTF-8 split across chunks, NUL bytes, and shell metacharacters in content', async () => {
     const sb = await sandbox();
-    const content = 'a'.repeat(48 * 1024 - 1) + '😀漢字é\0\n$HOME `id` "quotes" \'single\'\\'.repeat(3000);
+    const content = 'a'.repeat(90 * 1024 - 1) + '😀漢字é\0\n$HOME `id` "quotes" \'single\'\\'.repeat(3000);
     const path = join(directory, 'unicode');
     await sb.filesystem.writeFile(path, content);
     expect(await readFile(path)).toEqual(Buffer.from(content, 'utf8'));
     expect(await sb.filesystem.readFile(path)).toBe(content);
+  });
+
+  it.each([false, true])('uses request headroom without exceeding the API cap, runAsRoot=%s', async (runAsRoot) => {
+    const sb = await agent37({ apiKey: 'test', runAsRoot }).sandbox.create();
+    const content = 'x'.repeat(270 * 1024 + 1);
+    const path = join(directory, 'request-headroom');
+    await sb.filesystem.writeFile(path, content);
+    const uploads = bodies.filter((body) => JSON.parse(body).command.includes('base64 -d >>'));
+    expect(uploads).toHaveLength(4);
+    for (const body of uploads.slice(0, -1)) {
+      expect(Buffer.byteLength(body)).toBeGreaterThan(122_880);
+      expect(Buffer.byteLength(body)).toBeLessThan(124_000);
+    }
+    expect(Math.max(...bodies.map((body) => Buffer.byteLength(body)))).toBeLessThan(128_000);
+    expect(await readFile(path, 'utf8')).toBe(content);
+    await expectNoStagingFiles();
   });
 
   it('creates parents, overwrites without trailing bytes, and creates or truncates empty files', async () => {
