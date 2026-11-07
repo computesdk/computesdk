@@ -72,6 +72,28 @@ Only one session per agent can be active at a time. Legacy sessions without
 persistent state cannot be recovered retroactively. Requires the platform's
 managed-volume/resume API; no account storage credentials are needed in the CLI.
 
+### Live Pi controls and automatic sleep
+
+On platforms with persistent Pi RPC, interrupting a turn keeps the sandbox
+and conversation alive; steering changes the next step without aborting the
+current tool:
+
+```sh
+compute agents interrupt <sessionId>
+compute agents steer <sessionId> "Use the test database instead"
+```
+
+`compute agents stop` still ends the session and releases compute; interrupt
+active work first. Legacy live sessions must be ended/resumed to enable these
+controls. OpenCode does not support Pi controls.
+
+Durable Pi sessions automatically sleep after the platform's idle timeout
+(60 seconds by default, checked every minute). `compute agents send <sessionId> "Continue"` wakes
+a `suspended` session on replacement compute, preserving its ID, Pi history
+and workspace. Sleep preserves files, not running processes or memory.
+Explicitly stopped sessions require `run --resume`. One live session per agent
+remains the limit, including automatically resumed sessions.
+
 ## Migrating from @computesdk/cli 1.x
 
 v2 removes the legacy console authentication and its commands:
