@@ -59,6 +59,24 @@ Execution mode controls how SDK methods map to the Cloud Run sandbox CLI:
 | `snapshot.create(id)` | — | Calls `sandbox tar --file=<snapshot> <id>` |
 | `filesystem` | Runs each operation with `sandbox do` | Runs each operation with `sandbox exec <id>` |
 
+### Large remote file writes
+
+Cloud Run limits HTTP/1 requests to 32 MiB. The adapter keeps file-write JSON
+requests below 24 MiB, accounting for UTF-8, JSON escaping, paths and options.
+Larger stateful writes use isolated, bounded upload parts and existing v2 gateway
+routes; no gateway upgrade is required. Up to four parts upload concurrently,
+then the adapter assembles and renames the completed file in the destination's
+directory. In-flight requests settle before owned staging is removed.
+
+Like the v2 gateway, replacement creates a new file with the sandbox's default
+permissions: existing modes are not retained, hardlinks to the old inode remain
+unchanged, and a symlink to a file is replaced rather than followed. Multipart
+directory targets are rejected. Small and empty writes keep the existing gateway route.
+Oversized ephemeral writes fail explicitly: separate ephemeral requests cannot
+assemble a persistent file. Use `executionMode: 'stateful'` for these uploads.
+An upload retains the 300-second operation limit; connection loss or expiry can
+leave cleanup unconfirmed, which is reported rather than hidden.
+
 Add the printed values to your app environment:
 
 ```bash
