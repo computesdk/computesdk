@@ -5,8 +5,9 @@ import { arker } from '../index';
 const chunkBytes = 3 * 256 * 1024;
 
 async function fixture(streamMissing = false) {
-  const sync = vi.fn(async () => {
+  const sync = vi.fn(async (): Promise<Uint8Array | undefined> => {
     if (streamMissing) throw new ArkerError('not_found', 'The route was not found.', 404);
+    return undefined;
   });
   const request = vi.fn(async (_method: string, _path: string, body: { op: 'write'; writes: SyncChunkWrite[] }, _baseUrl: string) => ({
     ok: true,
@@ -106,5 +107,75 @@ describe('Arker native filesystem writes', () => {
     await expect(box.filesystem.writeFile('relative', 'data')).rejects.toThrow('no cwd');
     expect(sync).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
+  });
+});
+
+describe('Arker native filesystem reads', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it.each([['empty', ''], ['unicode', 'hello\n世界\u0000'], ['multi-chunk', 'x'.repeat(chunkBytes + 3)]])('reads absolute and relative paths through native sync: %s', async (_name, content) => {
+    const { box, sync, run } = await fixture();
+    sync.mockResolvedValue(Buffer.from(content));
+    expect(await box.filesystem.readFile('/root/file')).toBe(content);
+    expect(sync).toHaveBeenLastCalledWith('/root/file');
+    expect(run).not.toHaveBeenCalled();
+    expect(await box.filesystem.readFile("file ' $(touch bad)\n.txt")).toBe(content);
+    expect(sync).toHaveBeenLastCalledWith("/home/user/project/file ' $(touch bad)\n.txt");
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][0]).toContain('pwd -P');
+  });
+
+  it('preserves cwd newlines for reads', async () => {
+    const { box, sync, run } = await fixture();
+    sync.mockResolvedValue(Buffer.from('data'));
+    run.mockResolvedValue({ stdout: '/root/newline\n\n', stderr: '', exitCode: 0, state: 'completed' });
+    expect(await box.filesystem.readFile('file')).toBe('data');
+    expect(sync).toHaveBeenCalledWith('/root/newline\n/file');
+  });
+
+  it.each([
+    { stdout: '', stderr: 'no cwd', exitCode: 1, state: 'failed' },
+    { stdout: 'relative\n', stderr: '', exitCode: 0, state: 'completed' },
+  ])('rejects failed or invalid cwd resolution: %j', async (cwd) => {
+    const { box, sync, run } = await fixture();
+    run.mockResolvedValue(cwd);
+    await expect(box.filesystem.readFile('file')).rejects.toThrow('Arker readFile failed for file');
+    expect(sync).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([new ArkerError('not_found', 'missing file', 404), new Error('transport unavailable')])('preserves terminal native errors: %s', async (error) => {
+    const { box, sync, run } = await fixture();
+    sync.mockRejectedValue(error);
+    await expect(box.filesystem.readFile('missing')).rejects.toThrow(error.message);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][0]).toContain('pwd -P');
+  });
+
+  it('preserves the legacy presigned-read fallback with complete multibyte chunks', async () => {
+    const { box, sync, run } = await fixture();
+    const content = 'x'.repeat(chunkBytes - 1) + '世界';
+    const bytes = Buffer.from(content);
+    sync.mockRejectedValue(new ArkerError('sync_read_failed', 'presigned read failed', 502));
+    run.mockResolvedValueOnce({ stdout: `${bytes.length}\n`, stderr: '', exitCode: 0, state: 'completed' });
+    for (let start = 0; start < bytes.length; start += chunkBytes) {
+      run.mockResolvedValueOnce({ stdout: bytes.subarray(start, start + chunkBytes).toString('base64'), stderr: '', exitCode: 0, state: 'completed' });
+    }
+    expect(await box.filesystem.readFile('/root/file')).toBe(content);
+  });
+
+  it.each(['', Buffer.from('short').toString('base64')])('rejects truncated fallback chunks: %j', async (stdout) => {
+    const { box, sync, run } = await fixture();
+    sync.mockRejectedValue(new ArkerError('sync_read_failed', 'presigned read failed', 502));
+    run.mockResolvedValueOnce({ stdout: '10\n', stderr: '', exitCode: 0, state: 'completed' });
+    run.mockResolvedValueOnce({ stdout, stderr: '', exitCode: 0, state: 'completed' });
+    await expect(box.filesystem.readFile('/root/file')).rejects.toThrow('incomplete read');
+  });
+
+  it.each(['', 'unknown', '-1', '9007199254740992'])('rejects invalid fallback file sizes: %j', async (stdout) => {
+    const { box, sync, run } = await fixture();
+    sync.mockRejectedValue(new ArkerError('sync_read_failed', 'presigned read failed', 502));
+    run.mockResolvedValueOnce({ stdout, stderr: '', exitCode: 0, state: 'completed' });
+    await expect(box.filesystem.readFile('/root/file')).rejects.toThrow('invalid file size');
   });
 });

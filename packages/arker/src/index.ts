@@ -359,19 +359,27 @@ export const arker = defineProvider<VM, ArkerConfig>({
         // to base64 chunks over runCommand.
         readFile: async (sandbox, path, runCommand): Promise<string> => {
           const fail = (detail: string) => new Error(`Arker readFile failed for ${path}: ${detail}`);
-          if (path.startsWith('/')) {
-            try {
-              return new TextDecoder().decode(await sandbox.sync(path));
-            } catch (err) {
-              if (!(err instanceof ArkerError) || err.status === 404) {
-                throw fail(err instanceof Error ? err.message : String(err));
-              }
+          let absolutePath = path;
+          if (!absolutePath.startsWith('/')) {
+            const cwd = await runCommand(sandbox, 'pwd -P');
+            if (cwd.exitCode !== 0) throw fail(cwd.stderr || `pwd exited ${cwd.exitCode}`);
+            const dir = cwd.stdout.replace(/\n$/, '');
+            if (!dir.startsWith('/')) throw fail('pwd did not return an absolute working directory');
+            absolutePath = `${dir}/${path}`;
+          }
+          try {
+            return new TextDecoder().decode(await sandbox.sync(absolutePath));
+          } catch (err) {
+            if (!(err instanceof ArkerError) || err.status === 404) {
+              throw fail(err instanceof Error ? err.message : String(err));
             }
           }
-          const target = singleQuote(path);
+          const target = singleQuote(absolutePath);
           const stat = await runCommand(sandbox, `wc -c < ${target}`);
           if (stat.exitCode !== 0) throw fail(stat.stderr || `exit ${stat.exitCode}`);
-          const size = Number(stat.stdout.trim());
+          const sizeText = stat.stdout.trim();
+          const size = Number(sizeText);
+          if (!/^\d+$/.test(sizeText) || !Number.isSafeInteger(size)) throw fail('invalid file size');
           const chunks: Buffer[] = [];
           for (let start = 0; start < size; start += WRITE_CHUNK_BYTES) {
             const result = await runCommand(
@@ -379,7 +387,11 @@ export const arker = defineProvider<VM, ArkerConfig>({
               `tail -c +${start + 1} ${target} | head -c ${WRITE_CHUNK_BYTES} | base64 | tr -d '\\n'`
             );
             if (result.exitCode !== 0) throw fail(result.stderr || `exit ${result.exitCode}`);
-            chunks.push(Buffer.from(result.stdout.trim(), 'base64'));
+            const chunk = Buffer.from(result.stdout.trim(), 'base64');
+            if (chunk.length !== Math.min(WRITE_CHUNK_BYTES, size - start)) {
+              throw fail(`incomplete read at byte ${start}`);
+            }
+            chunks.push(chunk);
           }
           return Buffer.concat(chunks).toString('utf8');
         },
