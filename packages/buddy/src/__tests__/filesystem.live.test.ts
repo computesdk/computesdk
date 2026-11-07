@@ -37,7 +37,8 @@ describe.skipIf(!live)('native filesystem comparison', () => {
         const readback = await source.filesystem.readFile(path);
         const digest = (text: string) => createHash('sha256').update(text).digest('hex');
         console.log('BUDDY_FS_READBACK', JSON.stringify({ id: handle.sandboxId, bytes, length: readback.length, expectedHash: digest(data), actualHash: digest(readback) }));
-        expect(readback).toBe(data);
+        expect(readback.length).toBe(data.length);
+        expect(digest(readback)).toBe(digest(data));
         await source.filesystem.remove(path);
       }
       const command = `true #${'x'.repeat(16_384)}`;
@@ -50,6 +51,8 @@ describe.skipIf(!live)('native filesystem comparison', () => {
       console.log('BUDDY_FS_EXEC_LIMIT', JSON.stringify({ id: handle.sandboxId, bytes: command.length, nativeLimit, adapterLimit }));
       expect(nativeLimit?.status).toBe(400);
       expect(adapterLimit?.status).toBe(400);
+      await source.filesystem.writeFile(`${base}/not-a-directory`, 'file');
+      await expect(source.filesystem.mkdir(`${base}/not-a-directory`)).rejects.toMatchObject({ statusCode: 409 });
       await source.filesystem.writeFile(`${base}/payload.txt`, payload);
       const quote = (path: string) => `"${escapeShellArg(path)}"`;
       const quotedFile = `payload "with' quotes" $.txt`;
