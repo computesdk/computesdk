@@ -25,7 +25,10 @@ describe.runIf(credentialed)('Cloud Run focused persistence regressions', () => 
     vi.stubGlobal('fetch', async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const response = await realFetch(input, init)
       if (String(input).startsWith(`${sandboxUrl}/`) && typeof init?.body === 'string') {
-        const { sandboxId } = JSON.parse(init.body)
+        let { sandboxId } = JSON.parse(init.body)
+        if (!sandboxId && String(input).endsWith('/v1/sandbox/create') && response.ok) {
+          sandboxId = (await response.clone().json()).sandboxId
+        }
         const cookies = response.headers.getSetCookie().map(cookie => cookie.split(';')[0]).join('; ')
         if (sandboxId && cookies) affinity.set(sandboxId, cookies)
       }
@@ -52,11 +55,30 @@ describe.runIf(credentialed)('Cloud Run focused persistence regressions', () => 
   }
 
   async function cleanup(sandboxId: string) {
+    expect(affinity.has(sandboxId), 'Cleanup must target the creator instance via affinity').toBe(true)
     expect((await raw(sandboxId, '/v1/sandbox/destroy')).status).toBe(200)
     const status = (await raw(sandboxId, '/v1/sandbox/info')).status
     console.log('EXACT ID AFTER CLEANUP', sandboxId, status)
     expect(status).toBe(404)
   }
+
+  it('adopts the gateway-generated default ID and destroys that exact native sandbox', async () => {
+    console.log('SDK AUTO-ID CREATE BEFORE REQUEST', 'allowEgress=true executionMode=stateful')
+    const sandbox = await provider.sandbox.create({ timeout: 30_000 })
+    const id = sandbox.sandboxId
+    console.log('GATEWAY ALLOCATED SDK ID', id)
+    try {
+      expect(id).toMatch(/^cloud-run-/)
+      expect(affinity.has(id), 'Default-ID sandbox must retain creator affinity').toBe(true)
+      expect((await raw(id, '/v1/sandbox/info')).status).toBe(200)
+    } finally {
+      console.log('EXACT ID BEFORE SDK DESTROY', id)
+      await sandbox.destroy()
+      const status = (await raw(id, '/v1/sandbox/info')).status
+      console.log('EXACT DEFAULT ID AFTER SDK CLEANUP', id, status)
+      expect(status).toBe(404)
+    }
+  }, 120_000)
 
   it('persists separate mkdir/write calls, chunked files, rootfs writes and pause markers with egress enabled', async () => {
     const id = `${prefix}-fs`

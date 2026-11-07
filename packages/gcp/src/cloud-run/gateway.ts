@@ -327,16 +327,19 @@ async function startSandbox(sandboxId: string, body: Json, importTar?: string): 
   pushRunArgs(args, { ...body, write: body.write ?? true })
   if (importTar) args.push('--import-tar', importTar)
   args.push('--detach', sandboxId)
+  const ownsId = !body.sandboxId
   startingSandboxes.add(sandboxId)
   try {
-    // A previous gateway process may have left a native session with this ID.
-    // Never delete it as cleanup for a failed create by a different caller.
-    const probe = await runSandbox(['exec', sandboxId, ...commandArgs('true')], DELETE_TIMEOUT_MS)
-    if (probe.exitCode === 0) throw new HttpError(409, `Sandbox ${sandboxId} already exists`)
-    if (!/not running|does not exist|not found/i.test(probe.stderr)) throw cliError(probe, `Cannot check sandbox ${sandboxId}`)
+    if (!ownsId) {
+      const probe = await runSandbox(['exec', sandboxId, ...commandArgs('true')], DELETE_TIMEOUT_MS)
+      if (probe.exitCode === 0) throw new HttpError(409, `Sandbox ${sandboxId} already exists`)
+      // Exec cannot distinguish an absent ID from an existing stopped session.
+      // Let run enforce uniqueness, but never clean up a caller-supplied ID.
+      if (!/not running|does not exist|not found/i.test(probe.stderr)) throw cliError(probe, `Cannot check sandbox ${sandboxId}`)
+    }
     const result = await runSandbox(args, body.timeout)
     if (result.exitCode !== 0) {
-      if (!/already exists|already running|already in use/i.test(result.stderr)) {
+      if (ownsId && !/already exists|already running|already in use/i.test(result.stderr)) {
         // Killing the CLI on timeout can leave a partially-started native
         // session. Delete that exact ID, with a separate bounded deadline.
         await deleteSandbox(sandboxId).catch(() => {})

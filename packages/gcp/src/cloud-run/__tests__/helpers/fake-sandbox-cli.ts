@@ -58,6 +58,7 @@ const run = (id, extraEnv) => {
 }
 ;(async () => {
   if (sub === 'run') {
+    if (env.FAKE_CREATE_FAILURE_BEFORE_ALLOCATION) fail('launcher unavailable')
     start(positional[0], flags['--import-tar'])
     if (env.FAKE_CREATE_FAILURE) fail('create failed after allocation')
     if (env.FAKE_CREATE_DELAY_MS) await new Promise(resolve => setTimeout(resolve, Number(env.FAKE_CREATE_DELAY_MS)))
@@ -65,7 +66,7 @@ const run = (id, extraEnv) => {
   }
   if (sub === 'exec') {
     const id = positional[0]
-    if (!fs.existsSync(root(id))) fail('sandbox ' + id + ' is not running')
+    if (!fs.existsSync(root(id)) || fs.existsSync(path.join(root(id), '.stopped'))) fail('sandbox ' + id + ' is not running')
     process.exit(await run(id, env))
   }
   if (sub === 'do') {

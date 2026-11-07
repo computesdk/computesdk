@@ -127,7 +127,11 @@ processes or memory, and exclude `/tmp` and mounted paths. Restoring with
 `allowEgress: true` can fail in the native Cloud Run launcher even when the same
 GCS snapshot restores without egress. A timeout does not prove that native
 creation stopped; updated gateways attempt bounded deletion of the failed
-create's exact ID. The original create error is still returned.
+create's exact ID only when the gateway allocated that ID. Caller-supplied IDs
+are never automatically deleted after a failed create: `sandbox exec` reporting
+"not running" does not prove that a native ID is absent. SDK creates without a
+`name` let the gateway allocate the ID. The original create error is still
+returned.
 
 ```typescript
 import { cloudRun } from '@computesdk/gcp/cloud-run'

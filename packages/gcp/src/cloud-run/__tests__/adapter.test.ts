@@ -83,6 +83,19 @@ describe('cloudRun adapter against the local gateway', () => {
     await sandbox.destroy()
   })
 
+  it('lets the gateway allocate auto-created IDs so failed-create cleanup has ownership', async () => {
+    const before = cli.calls().length
+    const failing = cloudRun({
+      sandboxUrl: gatewayUrl, sandboxSecret: SECRET, executionMode: 'stateful', env: { FAKE_CREATE_FAILURE: '1' },
+    })
+    await expect(failing.sandbox.create()).rejects.toThrow('create failed after allocation')
+    const calls = cli.calls().slice(before)
+    const run = calls.find(args => args[0] === 'run')!
+    const sandboxId = run.at(-1)!
+    expect(calls).toContainEqual(['delete', '--force', sandboxId])
+    expect(calls.some(args => args[0] === 'exec')).toBe(false)
+  })
+
   it('keeps relative benchmark directories and chunked file writes in a stateful sandbox', async () => {
     const sandbox = await provider.sandbox.create({ executionMode: 'stateful' })
     const path = 'bench/fs-cloud-run/.probe'
