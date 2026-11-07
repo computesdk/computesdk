@@ -10,6 +10,11 @@ on:
         description: Package directory under packages/ (e.g. namespace, e2b)
         required: true
         type: string
+      test_file:
+        description: Optional package-relative Vitest file (src/...test.ts); empty runs the full suite
+        required: false
+        default: ''
+        type: string
 
 jobs:
   provider-test:
@@ -18,6 +23,7 @@ jobs:
       contents: read
     env:
       PROVIDER: ${{ inputs.provider }}
+      TEST_FILE: ${{ inputs.test_file }}
 
     steps:
     - uses: actions/checkout@v4
@@ -27,6 +33,12 @@ jobs:
         if ! printf '%s' "$PROVIDER" | grep -Eq '^[a-z0-9-]+$' || [ ! -f "packages/$PROVIDER/package.json" ]; then
           echo "Unknown provider: $PROVIDER"
           exit 1
+        fi
+        if [ -n "$TEST_FILE" ]; then
+          if ! printf '%s' "$TEST_FILE" | grep -Eq '^src/([a-zA-Z0-9_-]+/)*[a-zA-Z0-9_.-]+\.(test|spec)\.(ts|tsx|js|mjs)$' || [ ! -f "packages/$PROVIDER/$TEST_FILE" ]; then
+            echo "Unknown package test file: $TEST_FILE"
+            exit 1
+          fi
         fi
 
     - name: Install pnpm
@@ -105,4 +117,8 @@ jobs:
         fi
         rm -f "$envdef"
 
-        pnpm --filter "./packages/$PROVIDER" test
+        if [ -n "$TEST_FILE" ]; then
+          pnpm --filter "./packages/$PROVIDER" test "$TEST_FILE"
+        else
+          pnpm --filter "./packages/$PROVIDER" test
+        fi
