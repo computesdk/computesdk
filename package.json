@@ -14,6 +14,7 @@
     "typecheck": "pnpm --filter '@computesdk/cmd' --filter '@computesdk/provider' --filter 'computesdk' --filter '@computesdk/events' --filter '@computesdk/workbench' --filter '@computesdk/docker' --filter '@computesdk/microsandbox' --filter '@computesdk/novita' --filter '@computesdk/boat' --filter '@computesdk/aws' --filter '@computesdk/gcp' --filter 'daemond' run typecheck",
     "changeset": "changeset",
     "version": "changeset version && pnpm install --no-frozen-lockfile",
+    "version-packages": "changeset version && pnpm --filter @computesdk/cli run manifest",
     "release": "pnpm run build && changeset publish",
     "prepare": "husky",
     "workbench": "node packages/workbench/dist/bin/workbench.js",
