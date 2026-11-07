@@ -9,6 +9,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { access } from 'node:fs/promises'
+import { dirname } from 'node:path/posix'
 import { performance } from 'node:perf_hooks'
 import { INSTANCE_SIZE_PROFILES, InstanceSizeError, defineProvider, escapeShellArg } from '@computesdk/provider'
 import type {
@@ -22,6 +23,10 @@ import type {
 const PROVIDER = 'cloud-run' as const
 const DEFAULT_SANDBOX_BINARY = '/usr/local/gcp/bin/sandbox'
 const DEFAULT_TIMEOUT_MS = 300_000
+// Leave headroom below Cloud Run's 32 MiB HTTP/1 ingress limit.
+const GATEWAY_WRITE_BYTES = 24 * 1024 * 1024
+const UPLOAD_PART_BYTES = 8 * 1024 * 1024
+const UPLOAD_CONCURRENCY = 4
 
 export interface CloudRunMount {
   type?: 'bind'
@@ -148,7 +153,7 @@ function captureAffinity(response: Response, session?: GatewaySession): void {
   if (pairs.length > 0) session.affinity = pairs.join('; ')
 }
 
-async function gatewayFetch(config: CloudRunConfig, path: string, body: Record<string, unknown>, session?: GatewaySession, signal?: AbortSignal): Promise<Response> {
+async function gatewayFetch(config: CloudRunConfig, path: string, body: Record<string, unknown> | string, session?: GatewaySession, signal?: AbortSignal): Promise<Response> {
   if (!config.sandboxUrl || !config.sandboxSecret) {
     throw new Error('Missing Cloud Run remote config. Set CLOUD_RUN_SANDBOX_URL and CLOUD_RUN_SANDBOX_SECRET.')
   }
@@ -161,21 +166,20 @@ async function gatewayFetch(config: CloudRunConfig, path: string, body: Record<s
       ...gatewayAuthHeaders(config),
       ...(session?.affinity ? { 'Cookie': session.affinity } : {}),
     },
-    body: JSON.stringify(body),
+    body: typeof body === 'string' ? body : JSON.stringify(body),
     signal,
   })
   captureAffinity(response, session)
   return response
 }
 
-async function gatewayRequest(config: CloudRunConfig, path: string, body: Record<string, unknown> = {}, session?: GatewaySession): Promise<any> {
-  const response = await gatewayFetch(config, path, body, session)
-
+async function gatewayRequest(config: CloudRunConfig, path: string, body: Record<string, unknown> | string = {}, session?: GatewaySession, signal?: AbortSignal): Promise<any> {
+  const response = await gatewayFetch(config, path, body, session, signal)
+  const text = await response.text()
   let data: any
   try {
-    data = await response.json()
+    data = JSON.parse(text)
   } catch {
-    const text = await response.text().catch(() => '(unreadable)')
     throw new Error(`Cloud Run gateway request failed: ${response.status} - ${text.slice(0, 200)}`)
   }
 
@@ -336,6 +340,108 @@ function sandboxRequestBody(config: CloudRunConfig, body: Record<string, unknown
     runArgs: config.runArgs,
     execArgs: config.execArgs,
   }
+}
+
+function jsonBytes(body: Record<string, unknown>): number {
+  return Buffer.byteLength(JSON.stringify(body), 'utf8')
+}
+
+function boundedJson(body: Record<string, unknown>, limit: number): string | undefined {
+  const json = JSON.stringify(body)
+  return Buffer.byteLength(json, 'utf8') <= limit ? json : undefined
+}
+
+function* uploadParts(sandbox: CloudRunSandbox, staging: string, content: string): Generator<Record<string, unknown>> {
+  let offset = 0
+  let index = 0
+  while (offset < content.length) {
+    const body = sandboxRequestBody(sandbox.config, {
+      sandboxId: sandbox.id, cwd: sandbox.config.workdir,
+      path: `${staging}/part-${String(index++).padStart(12, '0')}`, content: '',
+    })
+    const overhead = jsonBytes(body)
+    const available = UPLOAD_PART_BYTES - overhead
+    let end = offset + Math.min(content.length - offset, available)
+    for (;;) {
+      // JSON accepts lone surrogates, but encoding split pairs in separate
+      // gateway requests would turn one UTF-8 code point into two replacements.
+      if (end < content.length && /[\uD800-\uDBFF]/.test(content[end - 1]) && /[\uDC00-\uDFFF]/.test(content[end])) end--
+      if (end <= offset) throw new Error('Cloud Run upload options leave no room for file content')
+      body.content = content.slice(offset, end)
+      const bytes = jsonBytes(body)
+      if (bytes <= UPLOAD_PART_BYTES) break
+      end = offset + Math.min(end - offset - 1, Math.floor((end - offset) * available / (bytes - overhead)))
+    }
+    offset = end
+    yield body
+  }
+}
+
+async function writeRemoteFile(sandbox: CloudRunSandbox, path: string, content: string): Promise<void> {
+  const deadline = performance.now() + DEFAULT_TIMEOUT_MS
+  const direct = boundedJson(sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path, content }), GATEWAY_WRITE_BYTES)
+  if (direct !== undefined) {
+    await gatewayRequest(sandbox.config, '/v1/sandbox/writeFile', direct, sandbox)
+    return
+  }
+  if (getExecutionMode(sandbox.config) !== 'stateful') {
+    throw new Error('Cloud Run oversized file writes require executionMode: "stateful"; ephemeral calls cannot assemble persistent upload parts')
+  }
+  const signal = AbortSignal.timeout(Math.max(1, Math.ceil(deadline - performance.now())))
+  const checkDeadline = () => {
+    if (performance.now() >= deadline) throw new Error('Cloud Run file upload timed out after 300000ms')
+    signal.throwIfAborted()
+  }
+  const request = async (route: string, body: Record<string, unknown>) => {
+    checkDeadline()
+    const json = boundedJson(body, GATEWAY_WRITE_BYTES)
+    if (json === undefined) throw new Error('Cloud Run upload request options exceed the serialized JSON byte budget')
+    checkDeadline()
+    return gatewayRequest(sandbox.config, route, json, sandbox, signal)
+  }
+  const command = async (command: string) => {
+    const result = await request('/v1/sandbox/exec', sandboxRequestBody(sandbox.config, {
+      sandboxId: sandbox.id, command, cwd: sandbox.config.workdir, env: sandbox.config.env,
+      timeout: DEFAULT_TIMEOUT_MS,
+    }))
+    if (result.exitCode !== 0) throw new Error(result.stderr || `Cloud Run file upload command exited ${result.exitCode}`)
+  }
+  const quote = (value: string) => `"${escapeShellArg(value)}"`
+  const staging = `${dirname(path)}/.computesdk-upload-${randomUUID()}`
+  const destination = quote(path)
+  if (path.endsWith('/')) throw new Error(`Cannot write a file to a directory path: ${path}`)
+  await command(`[ ! -d ${destination} ] || { echo 'File destination is a directory' >&2; exit 1; }; mkdir -p -- ${quote(dirname(path))} && mkdir -m 700 -- ${quote(staging)}`)
+  let failure: unknown
+  try {
+    const parts = uploadParts(sandbox, staging, content)
+    let uploadFailure: unknown
+    const upload = async () => {
+      while (!uploadFailure) {
+        try {
+          checkDeadline()
+          const next = parts.next()
+          if (next.done) return
+          const result = await request('/v1/sandbox/writeFile', next.value)
+          if (result.success !== true) throw new Error('Cloud Run gateway did not confirm the upload part')
+        } catch (error) {
+          uploadFailure ??= error
+        }
+      }
+    }
+    // Drain every in-flight part before cleanup, including after a failure.
+    await Promise.all(Array.from({ length: UPLOAD_CONCURRENCY }, upload))
+    if (uploadFailure) throw uploadFailure
+    // Match v2's new-inode replacement semantics, but never mv into a directory.
+    await command(`cat -- ${quote(staging)}/part-* > ${quote(`${staging}/complete`)} && { [ "$(wc -c < ${quote(`${staging}/complete`)})" -eq ${Buffer.byteLength(content, 'utf8')} ] || { echo 'Cloud Run upload byte count mismatch' >&2; exit 1; }; } && mv -fT -- ${quote(`${staging}/complete`)} ${destination}`)
+  } catch (error) {
+    failure = error
+  }
+  try {
+    await command(`rm -rf -- ${quote(staging)}`)
+  } catch (error) {
+    throw new Error(`${failure instanceof Error ? `${failure.message}; ` : ''}Cloud Run upload cleanup failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (failure) throw failure
 }
 
 function buildBaseArgs(config: CloudRunConfig): string[] {
@@ -657,7 +763,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
         },
         writeFile: async (sandbox: CloudRunSandbox, path: string, content: string, runCommand: FsRunCommand): Promise<void> => {
           if (sandbox.remote) {
-            await gatewayRequest(sandbox.config, '/v1/sandbox/writeFile', sandboxRequestBody(sandbox.config, { sandboxId: sandbox.id, path, content }), sandbox)
+            await writeRemoteFile(sandbox, path, content)
             return
           }
           const escapedPath = escapeShellArg(path)
