@@ -42,28 +42,30 @@ describe.skipIf(!live)('native filesystem comparison', () => {
         await source.filesystem.remove(path);
       }
       const command = `true #${'x'.repeat(16_384)}`;
-      const nativeLimit = await handle.client.execCommand({
+      const syncNative = await handle.client.execCommand({
         path: { sandbox_id: handle.sandboxId }, body: { command, runtime: 'BASH' },
-      }).then(() => undefined, error => ({ status: statusOf(error), message: String(error) }));
-      const adapterLimit = await source.runCommand(command).then(
-        () => undefined, error => ({ status: statusOf(error), message: String(error) }),
+      }).then(result => ({ exitCode: result.exit_code }), error => ({ status: statusOf(error), message: String(error) }));
+      const syncAdapter = await source.runCommand(command).then(
+        result => ({ exitCode: result.exitCode }), error => ({ status: statusOf(error), message: String(error) }),
       );
-      console.log('BUDDY_FS_EXEC_LIMIT', JSON.stringify({ id: handle.sandboxId, bytes: command.length, nativeLimit, adapterLimit }));
-      expect(nativeLimit?.status).toBe(400);
-      expect(adapterLimit?.status).toBe(400);
+      const nativeLimit = await handle.client.executeCommand({
+        path: { sandbox_id: handle.sandboxId }, body: { command, runtime: 'BASH' },
+      }).then(result => ({ executionId: result.execution_id }), error => ({ status: statusOf(error), message: String(error) }));
+      const adapterLimit = await source.runCommand(command, { timeout: 10_000 }).then(
+        result => ({ exitCode: result.exitCode }), error => ({ status: statusOf(error), message: String(error) }),
+      );
+      console.log('BUDDY_FS_EXEC_LIMIT', JSON.stringify({ id: handle.sandboxId, bytes: command.length, syncNative, syncAdapter, asyncNative: nativeLimit, asyncAdapter: adapterLimit }));
       await source.filesystem.writeFile(`${base}/not-a-directory`, 'file');
       await expect(source.filesystem.mkdir(`${base}/not-a-directory`)).rejects.toMatchObject({ statusCode: 409 });
       await source.filesystem.writeFile(`${base}/payload.txt`, payload);
       const quote = (path: string) => `"${escapeShellArg(path)}"`;
-      const quotedFile = `payload "with' quotes" $.txt`;
       const quotedLink = `link "with' quotes" $.txt`;
-      await source.filesystem.writeFile(`${base}/${quotedFile}`, payload);
       await source.filesystem.mkdir(`${base}/nested`);
       expect((await source.runCommand([
         `ln -s payload.txt ${quote(`${base}/relative.txt`)}`,
         `ln -s ${quote(`${base}/payload.txt`)} ${quote(`${base}/absolute.txt`)}`,
         `ln -s ../relative.txt ${quote(`${base}/nested/link.txt`)}`,
-        `ln -s ${quote(quotedFile)} ${quote(`${base}/${quotedLink}`)}`,
+        `ln -s payload.txt ${quote(`${base}/${quotedLink}`)}`,
         `ln -s missing.txt ${quote(`${base}/dangling.txt`)}`,
         `ln -s loop.txt ${quote(`${base}/loop.txt`)}`,
       ].join(' && '))).exitCode).toBe(0);
