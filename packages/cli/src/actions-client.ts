@@ -194,6 +194,8 @@ export interface CiRun {
   cancellationReason: string | null;
   /** `provider[:region]` the dispatch pinned this run to, else null. */
   providerOverride?: string | null;
+  /** When the run was archived (hidden from the default lists), else null. */
+  archivedAt?: string | null;
   jobs: CiJob[];
   logTail: string[];
   /**
@@ -202,6 +204,30 @@ export interface CiRun {
    * with `providers: []` until its summary is uploaded.
    */
   benchmarks?: CiRunBenchmarkResult[];
+}
+
+/** The `(startedAt, id)` position after a day page's last row. */
+export interface CiRunsCursor {
+  startedAt: string;
+  id: string;
+}
+
+/** `GET /api/v1/actions/runs/day/{day}`: one page; `nextCursor` is null on the last. */
+export interface CiRunsPage {
+  runs: CiRun[];
+  nextCursor?: CiRunsCursor | null;
+}
+
+/** One row of `GET /api/v1/actions/run-days`. */
+export interface CiRunDay {
+  day: string;
+  count: number;
+}
+
+/** `POST /api/v1/actions/runs/archive`: how many runs changed, and the stamp (null when unarchiving). */
+export interface CiRunArchiveResponse {
+  archived: number;
+  archivedAt: string | null;
 }
 
 /** One benchmark run linked to an Actions run, from `GET /api/v1/actions/runs/{id}`. */

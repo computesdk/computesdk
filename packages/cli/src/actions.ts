@@ -24,6 +24,7 @@ import pc from 'picocolors';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { spawnSync } from 'child_process';
 import { registerSettingsCommands } from './settings.js';
+import { registerRunsCommands } from './actions-runs.js';
 import { basename, join } from 'path';
 import {
   ActionsApiError,
@@ -306,6 +307,7 @@ export function formatRunRow(run: CiRun): string {
     shortSha(run.headSha),
     formatDuration(run.durationMs),
     run.startedAt,
+    ...(run.archivedAt ? [pc.dim('archived')] : []),
   ].join('  ');
 }
 
@@ -1103,30 +1105,7 @@ export function registerActionsCommands(program: Command): void {
     }
   });
 
-  common(
-    actions
-      .command('runs')
-      .description('List recent runs for a repo')
-      .argument('<repo>', 'repository in owner/repo format')
-      .option('--status <status...>', 'filter by conclusion: passed, failed, running, cancelled, none')
-      .option('--branch <branch...>', 'filter by branch/ref'),
-  ).action(async (repo: string, opts: CommonOpts & { status?: string[]; branch?: string[] }) => {
-    try {
-      const { runs } = await (await client(opts)).get<{ runs: CiRun[] }>(
-        '/api/v1/actions/runs',
-        { repo, status: opts.status, branch: opts.branch },
-      );
-      output(opts, runs, (rs) => {
-        if (rs.length === 0) {
-          console.log('No runs found.');
-          return;
-        }
-        for (const run of rs) console.log(formatRunRow(run));
-      });
-    } catch (e) {
-      fail(e, opts);
-    }
-  });
+  registerRunsCommands(actions, common, { client, fail, output, formatRunRow });
 
   common(
     actions

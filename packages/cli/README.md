@@ -24,7 +24,7 @@ tokens renew automatically.
 ## Commands
 
 ```
-compute actions …               # Actions API — repos, dispatch, runs, schedule, logs, vault
+compute actions …               # Actions API — repos, dispatch, runs, schedule, logs, vault (see below)
 compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
 compute bench …                 # benchmarks CLI (run, auth, org, results, …)
@@ -54,6 +54,38 @@ a bare `--` before the command is optional but supported.
 compute sandboxes exec sb1 uname -a
 compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
 ```
+
+## compute actions runs
+
+`compute actions runs` lists the newest 100 runs across every repo, or one
+repo with `compute actions runs <owner/repo>`. Archived and reliability runs
+are hidden unless asked for. The filters map onto the
+`/api/v1/actions/runs` query and work on every view below:
+
+| Flag | Query |
+|---|---|
+| `--status <s...>` | `status` (passed, failed, running, cancelled, none) |
+| `--branch <b...>` | `branch` |
+| `--event <e...>` | `event` (push, pull_request, schedule, workflow_dispatch) |
+| `--workflow <path\|name...>` | `workflow`; names and file names (`ci.yml`) resolve to paths through the workflow catalog |
+| `--search <text>` | `q` (title, ref, SHA prefix, workflow, `#run` or `#PR` number) |
+| `--archived` | `archived=only` |
+| `--reliability` | `reliability=1` |
+
+```bash
+compute actions runs --event pull_request --archived --json
+compute actions runs days --status failed                 # 2026-09-21  3 runs, newest day first
+compute actions runs --day 2026-09-21 --time-zone UTC     # one page; prints the --cursor for the next
+compute actions runs --day 2026-09-21 --all --json        # every page: {runs, nextCursor: null}
+compute actions runs archive <run-id> <run-id> -y         # owner/admin; all or nothing
+compute actions runs unarchive <run-id> -y
+```
+
+`--json` prints the run array, `{runs, nextCursor}` with `--day`, `{days}`
+for `runs days`, and `{archived, archivedAt}` for archive and unarchive.
+Archive and unarchive ask for confirmation on a terminal; elsewhere they need
+`-y` and exit 1 without it. When an id is unknown or another org's, nothing
+changes and the command prints the ids it could not find and exits 1.
 
 ## Actions schedule
 

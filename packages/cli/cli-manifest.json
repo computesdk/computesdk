@@ -175,11 +175,20 @@
         ]
       ],
       "args": [
-        "<repo>"
+        "[repo]"
       ],
       "flags": [
         "--status",
         "--branch",
+        "--event",
+        "--workflow",
+        "--search",
+        "--archived",
+        "--reliability",
+        "--day",
+        "--time-zone",
+        "--cursor",
+        "--all",
         "--api-key",
         "--base-url",
         "--org",
@@ -187,7 +196,95 @@
         "--json",
         "--help"
       ],
-      "summary": "List recent runs for a repo"
+      "summary": "List recent runs (every repo, or one), or one day's runs with --day"
+    },
+    {
+      "path": [
+        "actions",
+        "runs",
+        "days"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "runs",
+          "days"
+        ]
+      ],
+      "args": [
+        "[repo]"
+      ],
+      "flags": [
+        "--status",
+        "--branch",
+        "--event",
+        "--workflow",
+        "--search",
+        "--archived",
+        "--reliability",
+        "--time-zone",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "How many runs each day holds, newest first (same filters as runs)"
+    },
+    {
+      "path": [
+        "actions",
+        "runs",
+        "archive"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "runs",
+          "archive"
+        ]
+      ],
+      "args": [
+        "<run-id...>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Archive runs: hide them from run lists and counts, still reachable by id (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "runs",
+        "unarchive"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "runs",
+          "unarchive"
+        ]
+      ],
+      "args": [
+        "<run-id...>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Restore archived runs to the run lists (owner/admin)"
     },
     {
       "path": [
