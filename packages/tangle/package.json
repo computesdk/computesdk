@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/tangle",
   "version": "1.0.0",
-  "description": "Tangle Sandbox provider for ComputeSDK",
+  "description": "Tangle Sandbox provider for ComputeSDK - isolated Linux sandboxes with command execution and filesystem access",
   "author": "Tangle",
   "license": "MIT",
   "engines": {
@@ -22,8 +22,6 @@
   ],
   "scripts": {
     "build": "tsup",
-    "bench:client": "node scripts/client-latency.mjs",
-    "test:transport": "node scripts/transport.integration.mjs && node scripts/api.integration.mjs",
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "test": "vitest run",
@@ -34,10 +32,11 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@tangle-network/sandbox": "0.60.78",
+    "@tangle-network/sandbox": "1.0.264",
     "computesdk": "workspace:*"
   },
   "devDependencies": {
+    "@computesdk/test-utils": "workspace:*",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.37.0",
