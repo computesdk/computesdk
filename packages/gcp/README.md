@@ -114,6 +114,21 @@ await sandbox.destroy()
 
 ### Stateful Execution
 
+Remote sandboxes default to `ephemeral`: every command and filesystem operation
+uses a fresh sandbox. Use `executionMode: 'stateful'` on the provider or on
+`sandbox.create()` whenever files must persist between calls (including a
+separate `mkdir` followed by `writeFile`). Working-directory changes made by a
+shell's `cd` do not change the starting directory of subsequent commands; set
+`workdir` or pass a command's `cwd` explicitly.
+
+Stateful sandboxes are local to a gateway instance, routed by session affinity,
+and are lost if that instance restarts. Snapshots preserve rootfs state, not
+processes or memory, and exclude `/tmp` and mounted paths. Restoring with
+`allowEgress: true` can fail in the native Cloud Run launcher even when the same
+GCS snapshot restores without egress. A timeout does not prove that native
+creation stopped; updated gateways attempt bounded deletion of the failed
+create's exact ID. The original create error is still returned.
+
 ```typescript
 import { cloudRun } from '@computesdk/gcp/cloud-run'
 
