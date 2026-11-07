@@ -411,7 +411,7 @@ export function registerAgentsCommands(program: Command): void {
   );
 
   authOpts(
-    cmd.command('interrupt <sessionId>').description('Interrupt the current Pi turn without ending the session'),
+    cmd.command('interrupt <sessionId>').description('Interrupt the current Pi turn; stopped or sleeping sessions stay unchanged'),
   ).action(async (sessionId: string, opts: CommonOpts) => {
     try {
       const c = await client(opts);
@@ -421,7 +421,7 @@ export function registerAgentsCommands(program: Command): void {
       );
       output(opts, res, (r) => {
         for (const e of r.events) printEvent(e);
-        console.log(`interrupted ${sessionId} — session remains active`);
+        console.log(`interrupted ${sessionId} — conversation preserved`);
       });
     } catch (e) {
       fail(e, opts);

@@ -88,7 +88,7 @@ active work first. Legacy live sessions must be ended/resumed to enable these
 controls. OpenCode does not support Pi controls.
 
 Durable Pi sessions automatically sleep after the platform's idle timeout
-(60 seconds by default, checked every minute). `compute agents send <sessionId> "Continue"` wakes
+(60 seconds by default, checked every minute, so normally within 1–2 minutes). `compute agents send <sessionId> "Continue"` wakes
 a `suspended` session on replacement compute, preserving its ID, Pi history
 and workspace. Sleep preserves files, not running processes or memory.
 Explicitly stopped sessions require `run --resume`. One live session per agent
