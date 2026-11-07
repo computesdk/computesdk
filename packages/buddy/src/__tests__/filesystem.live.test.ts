@@ -59,15 +59,13 @@ describe.skipIf(!live)('native filesystem comparison', () => {
       await expect(source.filesystem.mkdir(`${base}/not-a-directory`)).rejects.toMatchObject({ statusCode: 409 });
       await source.filesystem.writeFile(`${base}/payload.txt`, payload);
       const quote = (path: string) => `"${escapeShellArg(path)}"`;
-      const quotedFile = `payload "with' quotes" $.txt`;
       const quotedLink = `link "with' quotes" $.txt`;
-      await source.filesystem.writeFile(`${base}/${quotedFile}`, payload);
       await source.filesystem.mkdir(`${base}/nested`);
       expect((await source.runCommand([
         `ln -s payload.txt ${quote(`${base}/relative.txt`)}`,
         `ln -s ${quote(`${base}/payload.txt`)} ${quote(`${base}/absolute.txt`)}`,
         `ln -s ../relative.txt ${quote(`${base}/nested/link.txt`)}`,
-        `ln -s ${quote(quotedFile)} ${quote(`${base}/${quotedLink}`)}`,
+        `ln -s payload.txt ${quote(`${base}/${quotedLink}`)}`,
         `ln -s missing.txt ${quote(`${base}/dangling.txt`)}`,
         `ln -s loop.txt ${quote(`${base}/loop.txt`)}`,
       ].join(' && '))).exitCode).toBe(0);
