@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { NotFoundError, Sandbox, type CreateSandboxOptions, type SandboxInstance } from '@tangle-network/sandbox';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
 
 const DEFAULT_BASE_URL = 'https://sandbox.tangle.tools';
@@ -120,11 +120,13 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
 
       runCommand: async (sandbox, command, options: RunCommandOptions = {}): Promise<CommandResult> => {
         const start = Date.now();
+        // The runtime's cwd field only accepts paths inside the workspace, so change directory in the shell.
+        const script = options.cwd ? `cd "${escapeShellArg(options.cwd)}" || exit $?\n${command}` : command;
         if (options.background) {
-          await sandbox.process.spawn(command, { cwd: options.cwd, env: options.env });
+          await sandbox.process.spawn(script, { env: options.env });
           return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - start };
         }
-        const result = await sandbox.exec(command, { cwd: options.cwd, env: options.env, timeoutMs: options.timeout });
+        const result = await sandbox.exec(script, { env: options.env, timeoutMs: options.timeout });
         return { ...result, durationMs: Date.now() - start };
       },
 

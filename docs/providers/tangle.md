@@ -1,7 +1,7 @@
 ---
 description: >-
-  Tangle Sandbox provider for ComputeSDK, with isolated ephemeral instances and
-  native command execution.
+  Tangle Sandbox provider for ComputeSDK - isolated Linux sandboxes with command
+  execution, filesystem access and port URLs.
 layout:
   width: default
   title:
@@ -24,70 +24,83 @@ layout:
 
 # Tangle Sandbox
 
-[Tangle Sandbox](https://sandbox.tangle.tools) runs isolated ephemeral instances
-through its published TypeScript SDK.
+[Tangle Sandbox](https://sandbox.tangle.tools) provider for ComputeSDK - isolated Linux sandboxes with command execution, filesystem access and port URLs, built on the `@tangle-network/sandbox` SDK.
 
 ## Installation & Setup
 
 Requires Node.js 20.19 or newer.
 
 ```bash
-npm install computesdk @computesdk/tangle
+npm install @computesdk/tangle
 ```
 
-Create a key in the Tangle dashboard and set `TANGLE_API_KEY`, or pass `apiKey`
-directly. The default endpoint is `https://sandbox.tangle.tools`;
-`TANGLE_SANDBOX_BASE_URL` selects another deployment.
+Add your Tangle credentials to a `.env` file:
+
+```bash
+TANGLE_API_KEY=your_tangle_api_key
+# Optional; defaults to https://sandbox.tangle.tools
+TANGLE_SANDBOX_BASE_URL=https://sandbox.tangle.tools
+```
 
 ## Usage
 
 ```typescript
-import { compute } from 'computesdk';
 import { tangle } from '@computesdk/tangle';
 
-compute.setConfig({ provider: tangle() });
+const compute = tangle({
+  apiKey: process.env.TANGLE_API_KEY,
+});
 
-const instance = await compute.instances.create();
-try {
-  const result = await instance.runCommand('echo "Hello from Tangle"');
-  console.log(result.stdout);
-} finally {
-  await instance.destroy();
+// Create sandbox
+const sandbox = await compute.instances.create({ image: 'node:22' });
+
+// Run a command
+const result = await sandbox.runCommand('node --version');
+console.log(result.stdout);
+
+// Files
+await sandbox.filesystem.writeFile('/tmp/hello.txt', 'Hello from Tangle');
+console.log(await sandbox.filesystem.readFile('/tmp/hello.txt'));
+
+// Public URL for a port
+console.log(await sandbox.getUrl({ port: 3000 }));
+
+// Clean up
+await sandbox.destroy();
+```
+
+### Configuration Options
+
+```typescript
+interface TangleConfig {
+  /** API key - if not provided, will use TANGLE_API_KEY env var */
+  apiKey?: string;
+  /** API endpoint - if not provided, will use TANGLE_SANDBOX_BASE_URL, then https://sandbox.tangle.tools */
+  baseUrl?: string;
+  /** Default environment ID or OCI image reference, e.g. "node:22" */
+  image?: string;
+  /** Default CPU cores */
+  cpu?: number;
+  /** Default memory in MB */
+  memory?: number;
+  /** Default disk in GB */
+  disk?: number;
+  /** Default maximum sandbox lifetime in milliseconds */
+  timeout?: number;
 }
 ```
 
-## Configuration
+Per-create `image` (or `templateId`), `cpu`, `memory`, `disk`, `timeout`, `name`, `envs`, `metadata`, `ephemeral` and `idempotencyKey` override the defaults.
 
-`image` chooses a Tangle environment identifier or OCI reference. `cpu`,
-`memory` and `disk` map directly to the SDK's `cpuCores`, `memoryMB` and
-`diskGB` fields; account shape limits and unit interpretation come from Tangle.
-`timeout` controls maximum running lifetime in milliseconds, while
-`createTimeout` sets the create request budget.
+## Supported Operations
 
-Create options support `image` or `templateId`, resources, `name`, `metadata`,
-`envs`, `timeout`, `signal` and `idempotencyKey`. Command options support
-`cwd`, `env`, `timeout` and `background`.
+| Operation | Support |
+|---|---|
+| `instances.create` / `getById` / `list` / `destroy` | Yes |
+| `runCommand` with `cwd`, `env`, `timeout`, `background` | Yes |
+| `filesystem` (read, write, mkdir, readdir, exists, remove) | Yes |
+| `getUrl` | Yes, through the SDK's port exposure |
+| Snapshot restore (`snapshotId`) | Not supported; throws |
+| `runtime` names | Not supported; throws. Use an image such as `python:3.12-slim` |
 
-Instances use isolated owner context, disable agent/model provisioning and request
-open egress explicitly. No VM/container or concurrency guarantee is inferred.
-Destroy sends one DELETE and accepts retirement acknowledgement or an already
-absent allocation; physical teardown can finish later. Cleanup errors remain errors.
-Failed-create cleanup requires an exact allocation/key and a native receipt
-confirming a newly created allocation with its idempotency key applied.
-Replayed, unknown or incomplete receipts do not authorize deletion. Cleanup
-failure retains both the creation and cleanup errors.
-The pinned SDK retains allocation context on readiness failure. Real lifecycle
-and cleanup qualification still require production capacity authorization. See
-the package README for recovery limits.
-
-The SDK loads at module scope. Four HTTP/2 sessions per API origin carry mapped
-operations. Import opens connections without sending requests or credentials;
-idle connections do not keep Node alive. Configured endpoints must support HTTP/2.
-Create retains the native handle's validated connection details. Direct runtime
-routing and its server-side audit/activity validation are separate work.
-
-Filesystem helpers, preview URLs, template management, snapshot restore and
-persistent instances are not exposed. `runtime` names are not translated; use an
-explicit environment instead. Native SDK features remain available through
-`instance.getInstance()`. See the [package README](https://github.com/computesdk/computesdk/tree/main/packages/tangle)
-for complete behavior and verification details.
+`instance.getInstance()` returns the native `SandboxInstance` for SDK features beyond this mapping.
