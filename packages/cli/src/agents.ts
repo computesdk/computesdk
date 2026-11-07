@@ -17,8 +17,8 @@ import { client, fail, output, safeTerm, usageErrorOutput, type CommonOpts } fro
 // ─── Wire types (mirror benchmarks-platform lib/agents/types.ts) ────────────
 
 export type AgentHarness = 'pi' | 'opencode';
-export type AgentSessionStatus = 'starting' | 'running' | 'stopped' | 'failed';
-export type AgentEventKind = 'user' | 'turn' | 'status' | 'error';
+export type AgentSessionStatus = 'starting' | 'running' | 'suspended' | 'stopped' | 'failed';
+export type AgentEventKind = 'user' | 'turn' | 'status' | 'error' | 'catalog';
 
 export interface AgentVolume {
   diskId?: string;
@@ -349,7 +349,7 @@ export function registerAgentsCommands(program: Command): void {
   );
 
   authOpts(
-    cmd.command('send <sessionId> <message>').description('Send a message; the agent runs a turn'),
+    cmd.command('send <sessionId> <message>').description('Send a message; wakes idle-suspended durable sessions automatically'),
   ).action(async (sessionId: string, message: string, opts: CommonOpts) => {
     try {
       const c = await client(opts);
@@ -386,7 +386,7 @@ export function registerAgentsCommands(program: Command): void {
           } else {
             for (const e of res.events) printEvent(e);
           }
-          after = res.latestSeq;
+          after = res.events.at(-1)?.seq ?? after;
           return res.events.length;
         };
         if (!opts.follow) {
@@ -409,6 +409,41 @@ export function registerAgentsCommands(program: Command): void {
       }
     },
   );
+
+  authOpts(
+    cmd.command('interrupt <sessionId>').description('Interrupt the current Pi turn; stopped or sleeping sessions stay unchanged'),
+  ).action(async (sessionId: string, opts: CommonOpts) => {
+    try {
+      const c = await client(opts);
+      const res = await c.post<{ events: AgentEventView[] }>(
+        `/api/v1/agent-sessions/${encodeURIComponent(sessionId)}/controls`,
+        { action: 'interrupt' },
+      );
+      output(opts, res, (r) => {
+        for (const e of r.events) printEvent(e);
+        console.log(r.events.length
+          ? `interrupted ${sessionId} — conversation preserved`
+          : `unchanged ${sessionId} — no active turn to interrupt`);
+      });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  authOpts(
+    cmd.command('steer <sessionId> <message>').description('Steer an active Pi turn at its next tool boundary'),
+  ).action(async (sessionId: string, message: string, opts: CommonOpts) => {
+    try {
+      const c = await client(opts);
+      const res = await c.post<{ events: AgentEventView[] }>(
+        `/api/v1/agent-sessions/${encodeURIComponent(sessionId)}/controls`,
+        { action: 'steer', message },
+      );
+      output(opts, res, (r) => { for (const e of r.events) printEvent(e); });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
 
   authOpts(
     cmd.command('stop <sessionId>').description('Stop a session and release its sandbox'),
