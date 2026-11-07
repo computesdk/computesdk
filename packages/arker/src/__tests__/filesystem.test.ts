@@ -113,7 +113,7 @@ describe('Arker native filesystem writes', () => {
 describe('Arker native filesystem reads', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it.each([['empty', ''], ['unicode', 'hello\n世界\u0000'], ['multi-chunk', 'x'.repeat(chunkBytes + 3)]])('reads absolute and relative paths through native sync: %s', async (_name, content) => {
+  it.each([['empty', ''], ['unicode', 'hello\n世界\u0000'], ['BOM', '\ufeffhello\n世界\u0000'], ['multi-chunk', 'x'.repeat(chunkBytes + 3)]])('reads absolute and relative paths through native sync: %s', async (_name, content) => {
     const { box, sync, run } = await fixture();
     sync.mockResolvedValue(Buffer.from(content));
     expect(await box.filesystem.readFile('/root/file')).toBe(content);
@@ -170,6 +170,14 @@ describe('Arker native filesystem reads', () => {
     run.mockResolvedValueOnce({ stdout: '10\n', stderr: '', exitCode: 0, state: 'completed' });
     run.mockResolvedValueOnce({ stdout, stderr: '', exitCode: 0, state: 'completed' });
     await expect(box.filesystem.readFile('/root/file')).rejects.toThrow('incomplete read');
+  });
+
+  it.each(['aGVsbG8=!!!', 'Zh==', 'aGVsbG8'])('rejects malformed or noncanonical full-length fallback payloads: %j', async (stdout) => {
+    const { box, sync, run } = await fixture();
+    sync.mockRejectedValue(new ArkerError('sync_read_failed', 'presigned read failed', 502));
+    run.mockResolvedValueOnce({ stdout: `${Buffer.from(stdout, 'base64').length}\n`, stderr: '', exitCode: 0, state: 'completed' });
+    run.mockResolvedValueOnce({ stdout, stderr: '', exitCode: 0, state: 'completed' });
+    await expect(box.filesystem.readFile('/root/file')).rejects.toThrow('invalid base64');
   });
 
   it.each(['', 'unknown', '-1', '9007199254740992'])('rejects invalid fallback file sizes: %j', async (stdout) => {

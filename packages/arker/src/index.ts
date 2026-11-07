@@ -368,7 +368,7 @@ export const arker = defineProvider<VM, ArkerConfig>({
             absolutePath = `${dir}/${path}`;
           }
           try {
-            return new TextDecoder().decode(await sandbox.sync(absolutePath));
+            return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await sandbox.sync(absolutePath));
           } catch (err) {
             if (!(err instanceof ArkerError) || err.status === 404) {
               throw fail(err instanceof Error ? err.message : String(err));
@@ -387,7 +387,9 @@ export const arker = defineProvider<VM, ArkerConfig>({
               `tail -c +${start + 1} ${target} | head -c ${WRITE_CHUNK_BYTES} | base64 | tr -d '\\n'`
             );
             if (result.exitCode !== 0) throw fail(result.stderr || `exit ${result.exitCode}`);
-            const chunk = Buffer.from(result.stdout.trim(), 'base64');
+            const encoded = result.stdout.trim();
+            const chunk = Buffer.from(encoded, 'base64');
+            if (chunk.toString('base64') !== encoded) throw fail(`invalid base64 at byte ${start}`);
             if (chunk.length !== Math.min(WRITE_CHUNK_BYTES, size - start)) {
               throw fail(`incomplete read at byte ${start}`);
             }
