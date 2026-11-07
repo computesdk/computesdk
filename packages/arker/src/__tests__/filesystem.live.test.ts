@@ -38,18 +38,29 @@ describe.skipIf(!process.env.ARKER_API_KEY)('Arker large filesystem transfer (li
       console.log('arker native large result', vm.id, JSON.stringify(native));
       expect(native.stdout).toBe(`${digest}  ${dir}/native\n${bytes.length}\n`);
 
+      await box.runCommand(`cd ${dir}`);
+      await box.filesystem.writeFile('empty', '');
+      expect(await box.filesystem.readFile('empty')).toBe('');
+      const special = "unicode ' $(literal).txt";
+      await box.filesystem.writeFile(special, '世界\n\u0000');
+      expect(await box.filesystem.readFile(special)).toBe('世界\n\u0000');
+      console.log('arker shell memory before adapter transfers', vm.id, JSON.stringify(await box.runCommand('ps -o rss= -C bash')));
       for (const size of [40 * 1024, 1024 * 1024, 16 * 1024 * 1024, 64 * 1024 * 1024]) {
         console.log('arker before accumulated write', vm.id, size);
-        await box.filesystem.writeFile(`${dir}/previous`, randomBytes(size).toString('base64'));
-        await box.filesystem.remove(`${dir}/previous`);
+        const previous = randomBytes(size).toString('base64');
+        await box.filesystem.writeFile('previous', previous);
+        expect(await box.filesystem.readFile('previous')).toBe(previous);
+        await box.filesystem.remove('previous');
       }
       console.log('arker before adapter large write', vm.id, payload.length, digest);
-      await box.filesystem.writeFile(`${dir}/adapter`, payload);
+      await box.filesystem.writeFile('adapter', payload);
       const adapter = await box.runCommand(`sha256sum ${dir}/adapter; wc -c < ${dir}/adapter; awk '/MemAvailable/{print}' /proc/meminfo`);
       console.log('arker adapter large result', vm.id, JSON.stringify(adapter));
       expect(adapter.stdout).toContain(`${digest}  ${dir}/adapter\n${bytes.length}\n`);
       console.log('arker before adapter large read', vm.id);
+      expect(await box.filesystem.readFile('adapter')).toBe(payload);
       expect(await box.filesystem.readFile(`${dir}/adapter`)).toBe(payload);
+      console.log('arker shell memory after adapter transfers', vm.id, JSON.stringify(await box.runCommand('ps -o rss= -C bash')));
     } finally {
       console.log('arker before filesystem cleanup', vm.id);
       await box.destroy();

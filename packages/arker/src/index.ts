@@ -5,10 +5,11 @@
  * filesystems.
  */
 
+import { randomUUID } from 'node:crypto';
 import { Arker, ArkerError, VM } from '@arker-ai/sdk';
 import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 
-import type { PatchVmRequest, PolicyDoc, PolicyEntry, ResourcesInput, RunOptions } from '@arker-ai/sdk';
+import type { PatchVmRequest, PolicyDoc, PolicyEntry, ResourcesInput, RunOptions, SyncWriteResponse } from '@arker-ai/sdk';
 import type {
   CommandResult,
   InstanceInfo,
@@ -382,32 +383,46 @@ export const arker = defineProvider<VM, ArkerConfig>({
           }
           return Buffer.concat(chunks).toString('utf8');
         },
-        // Arker's sync write op answers `not_found` for every write, so file
-        // bodies go over runCommand: base64 chunks appended to a temp file,
-        // then moved into place. Chunks are a multiple of 3 bytes so each
-        // decodes on its own.
         writeFile: async (sandbox, path, content, runCommand): Promise<void> => {
           const bytes = Buffer.from(content, 'utf8');
-          const target = singleQuote(path);
-          const tmp = singleQuote(`${path}.csdk-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`);
-          const fail = (stderr: string, exitCode: number) =>
-            new Error(`Arker writeFile failed for ${path}: ${stderr || `exit ${exitCode}`}`);
-          if (bytes.length <= WRITE_CHUNK_BYTES) {
-            const result = await runCommand(sandbox, `printf '%s' '${bytes.toString('base64')}' | base64 -d > ${target}`);
-            if (result.exitCode !== 0) throw fail(result.stderr, result.exitCode);
-            return;
-          }
           try {
-            for (let start = 0; start < bytes.length; start += WRITE_CHUNK_BYTES) {
-              const chunk = bytes.subarray(start, start + WRITE_CHUNK_BYTES).toString('base64');
-              const result = await runCommand(sandbox, `printf '%s' '${chunk}' | base64 -d ${start === 0 ? '>' : '>>'} ${tmp}`);
-              if (result.exitCode !== 0) throw fail(result.stderr, result.exitCode);
+            let target = path;
+            if (!target.startsWith('/')) {
+              const cwd = await runCommand(sandbox, 'pwd -P');
+              if (cwd.exitCode !== 0) throw new Error(cwd.stderr || `pwd exited ${cwd.exitCode}`);
+              const dir = cwd.stdout.replace(/\n$/, '');
+              if (!dir.startsWith('/')) throw new Error('pwd did not return an absolute working directory');
+              target = `${dir}/${path}`;
             }
-            const result = await runCommand(sandbox, `mv -f ${tmp} ${target}`);
-            if (result.exitCode !== 0) throw fail(result.stderr, result.exitCode);
+            try {
+              await sandbox.sync(target, bytes);
+              return;
+            } catch (err) {
+              if (!isNotFound(err)) throw err;
+            }
+
+            // Older regions lack /sync-stream. Use the documented chunk API,
+            // not the persistent shell, whose history retains every payload.
+            const uploadId = randomUUID();
+            let start = 0;
+            do {
+              const end = Math.min(start + WRITE_CHUNK_BYTES, bytes.length);
+              const response = await sandbox._client._request<SyncWriteResponse>(
+                'POST', `/v1/vms/${encodeURIComponent(sandbox.id)}/sync`,
+                { op: 'write', writes: [{ path: target, size: bytes.length, upload_id: uploadId, start, end, content: bytes.subarray(start, end).toString('base64') }] },
+                sandbox.baseUrl,
+              );
+              const result = response.results?.[0];
+              if (!response.ok || !result || result.error) {
+                throw new Error(result?.error?.message ?? 'sync write returned no successful result');
+              }
+              if (end === bytes.length && (!result.complete || !result.written)) {
+                throw new Error('sync write did not commit the complete file');
+              }
+              start = end;
+            } while (start < bytes.length);
           } catch (err) {
-            await runCommand(sandbox, `rm -f ${tmp}`).catch(() => {});
-            throw err;
+            throw new Error(`Arker writeFile failed for ${path}: ${err instanceof Error ? err.message : String(err)}`);
           }
         },
         mkdir: async (sandbox, path, runCommand): Promise<void> => {
