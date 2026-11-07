@@ -156,8 +156,10 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
     const path = join(directory, 'dir "\'\\$HOME`touch injected`\n', 'file $(touch injected)');
     await sb.filesystem.writeFile(path, 'safe');
     expect(await readFile(path, 'utf8')).toBe('safe');
+    expect(await sb.filesystem.readFile(path)).toBe('safe');
     await sb.filesystem.writeFile('-leading-dash', 'relative');
     expect(await readFile(join(directory, '-leading-dash'), 'utf8')).toBe('relative');
+    expect(await sb.filesystem.readFile('-leading-dash')).toBe('relative');
     expect(await readdir(directory)).not.toContain('injected');
   });
 
@@ -271,10 +273,95 @@ describe('Agent37 filesystem exec transfers (local shell, mocked transport)', ()
     await expectNoStagingFiles();
   });
 
+  it('reads more than 1 MiB exactly, including UTF-8 split across output chunks', async () => {
+    const sb = await sandbox();
+    const path = join(directory, 'large-read');
+    const content = 'a'.repeat(256 * 1024 - 1) + '😀漢字é\0\n'.repeat(70_000);
+    await writeFile(path, content);
+    expect(Buffer.byteLength(content)).toBeGreaterThan(1024 * 1024);
+    expect(await sb.filesystem.readFile(path)).toBe(content);
+    expect(Math.max(...bodies.map((body) => Buffer.byteLength(body)))).toBeLessThan(128_000);
+  });
+
+  it.each([0, 1, 256 * 1024 - 1, 256 * 1024, 256 * 1024 + 1, 512 * 1024])('reads exactly %i bytes at output boundaries', async (length) => {
+    const sb = await sandbox();
+    const path = join(directory, 'read-boundary');
+    const content = 'x'.repeat(length);
+    await writeFile(path, content);
+    expect(await sb.filesystem.readFile(path)).toBe(content);
+  });
+
+  it.each(['short', 'invalid base64', 'missing status', 'dd failure', 'shell failure', 'transport failure', 'oversized'] as const)('rejects a later chunk with %s instead of returning partial content', async (failure) => {
+    const sb = await sandbox();
+    const path = join(directory, 'read-failure');
+    await writeFile(path, 'x'.repeat(256 * 1024 + 3));
+    let chunks = 0;
+    intercept = (command) => {
+      if (!command.includes('dd if=') || ++chunks !== 2) return undefined;
+      if (failure === 'transport failure') return new Response('injected read transport failure', { status: 503 });
+      const stdout = failure === 'invalid base64' ? '!!!!'
+        : failure === 'short' ? Buffer.from('x\n000').toString('base64')
+        : failure === 'missing status' ? Buffer.from('xxx').toString('base64')
+        : failure === 'dd failure' ? Buffer.from('xxx\n073').toString('base64')
+        : 'A'.repeat(400_000);
+      return new Response(JSON.stringify({ exit_code: failure === 'shell failure' ? 74 : 0, stdout, stderr: failure.endsWith('failure') ? 'injected read error' : '' }));
+    };
+    await expect(sb.filesystem.readFile(path)).rejects.toThrow(failure === 'transport failure' ? 'injected read transport failure'
+      : failure.endsWith('failure') ? 'injected read error' : failure === 'short' ? 'unexpected read length'
+      : failure === 'oversized' ? 'oversized read chunk' : 'invalid read chunk');
+  });
+
+  it('propagates a real dd read error even though the base64 pipeline succeeds', async () => {
+    const sb = await sandbox();
+    const path = join(directory, 'removed-during-read');
+    await writeFile(path, 'original');
+    intercept = async (command) => {
+      if (command.includes('dd if=')) await rm(path);
+      return undefined;
+    };
+    await expect(sb.filesystem.readFile(path)).rejects.toThrow('No such file');
+  });
+
+  it('rejects an unreadable empty file as a non-root guest', async () => {
+    if (process.getuid?.() === 0) guest = { uid: 65534, gid: 65534 };
+    await chmod(directory, 0o755);
+    const path = join(directory, 'unreadable');
+    await writeFile(path, '', { mode: 0o000 });
+    const sb = await sandbox();
+    await expect(sb.filesystem.readFile(path)).rejects.toThrow('Permission denied');
+  });
+
+  it('rejects a file whose metadata changes after all chunks are read', async () => {
+    const sb = await sandbox();
+    const path = join(directory, 'changed');
+    await writeFile(path, 'original');
+    let stats = 0;
+    intercept = async (command) => {
+      if (command.includes('stat -Lc') && ++stats === 2) await writeFile(path, 'modified');
+      return undefined;
+    };
+    await expect(sb.filesystem.readFile(path)).rejects.toThrow('file changed during read');
+  });
+
+  it.each(['nonnumeric', '-1', '9007199254740992'])('rejects invalid file size %s', async (size) => {
+    const sb = await sandbox();
+    intercept = () => new Response(JSON.stringify({ exit_code: 0, stdout: `${size}:metadata`, stderr: '' }));
+    await expect(sb.filesystem.readFile('file')).rejects.toThrow('invalid file size');
+  });
+
+  it('rejects missing files and directories', async () => {
+    const sb = await sandbox();
+    await expect(sb.filesystem.readFile(join(directory, 'missing'))).rejects.toThrow('Failed to read');
+    await expect(sb.filesystem.readFile(directory)).rejects.toThrow('Failed to read');
+  });
+
   it('rejects truncated read output rather than returning corrupted text', async () => {
     const sb = await sandbox();
     const path = join(directory, 'too-large');
-    await sb.filesystem.writeFile(path, 'x'.repeat(400 * 1024));
-    await expect(sb.filesystem.readFile(path)).rejects.toThrow('larger than one command\'s output limit');
+    await writeFile(path, 'content');
+    intercept = (command) => command.includes('base64 -w0')
+      ? new Response(JSON.stringify({ exit_code: 0, stdout: 'YQ==', stderr: '', truncated: true }))
+      : undefined;
+    await expect(sb.filesystem.readFile(path)).rejects.toThrow('truncated');
   });
 });

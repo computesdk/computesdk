@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { escapeShellArg } from '@computesdk/provider';
-import { agent37 } from '../index';
+
+const packageEntry = resolve(__dirname, '../../dist/index.js');
+const { agent37 } = createRequire(__filename)(packageEntry) as typeof import('../index');
 
 const provider = agent37({});
 
@@ -18,8 +23,15 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
   let hasFlock = false;
   const requestSizes: number[] = [];
   const originalFetch = globalThis.fetch;
+  let createdId: string | undefined;
+  let creates = 0;
+  let deleteStatus: number | undefined;
+  let lookupStatus: number | undefined;
+  let readResponses = 0;
+  let largestReadOutput = 0;
 
   beforeAll(async () => {
+    console.log(JSON.stringify({ event: 'built-package', entry: packageEntry, sha256: createHash('sha256').update(await readFile(packageEntry)).digest('hex'), revision: process.env.GITHUB_SHA }));
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).endsWith('/exec') && typeof init?.body === 'string') {
         const body = JSON.parse(init.body) as { command: string };
@@ -30,7 +42,22 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
         init = { ...init, body: encoded };
         requestSizes.push(Buffer.byteLength(encoded));
       }
-      return originalFetch(input, init);
+      const response = await originalFetch(input, init);
+      if (String(input).endsWith('/v1/instances') && init?.method === 'POST' && response.ok) {
+        creates++;
+        createdId = (await response.clone().json() as { id: string }).id;
+        console.log(JSON.stringify({ event: 'sandbox-created', id: createdId, httpStatus: response.status }));
+      }
+      if (createdId && String(input).endsWith(`/v1/instances/${encodeURIComponent(createdId)}`)) {
+        if (init?.method === 'DELETE') deleteStatus = response.status;
+        if (init?.method === 'GET') lookupStatus = response.status;
+      }
+      if (typeof init?.body === 'string' && init.body.includes('dd if=')) {
+        const data = await response.clone().json() as { stdout?: string };
+        readResponses++;
+        largestReadOutput = Math.max(largestReadOutput, Buffer.byteLength(data.stdout ?? ''));
+      }
+      return response;
     });
     sandbox = await provider.sandbox.create({ templateId: 'agent37-base' });
     expect((await sandbox.runCommand(`mkdir -p ${quoteShellArg(stagingDirectory)}`)).exitCode).toBe(0);
@@ -39,7 +66,16 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
 
   afterAll(async () => {
     try {
-      if (sandbox) await sandbox.destroy();
+      if (createdId) {
+        console.log(JSON.stringify({ event: 'sandbox-destroying', id: createdId }));
+        await provider.sandbox.destroy(createdId);
+        expect(await provider.sandbox.getById(createdId)).toBeNull();
+        expect(deleteStatus).toBeGreaterThanOrEqual(200);
+        expect(deleteStatus).toBeLessThan(300);
+        expect(lookupStatus).toBe(404);
+        expect(creates).toBe(1);
+        console.log(JSON.stringify({ event: 'cleanup-confirmed', id: createdId, deleteStatus, lookupStatus, creates }));
+      }
     } finally {
       vi.restoreAllMocks();
     }
@@ -114,7 +150,7 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
   it('writes without flock and propagates real lock failures instead of falling back', async () => {
     const bin = `${directory}/without-flock-bin`;
     const path = `${directory}/without-flock-target`;
-    const setup = await sandbox.runCommand(`mkdir -p ${bin} && for tool in mkdir base64 cat rm; do source=$(command -v "$tool") && ln -s "$source" ${bin}/"$tool" || exit 1; done`);
+    const setup = await sandbox.runCommand(`mkdir -p ${bin} && for tool in mkdir base64 cat rm stat dd; do source=$(command -v "$tool") && ln -s "$source" ${bin}/"$tool" || exit 1; done`);
     expect(setup.exitCode).toBe(0);
     pathOverride = bin;
     try {
@@ -185,10 +221,48 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 filesystem transfers (liv
     console.log('Agent37 concurrent alias writes: one complete payload, original inode and symlink preserved, no staging leftovers');
   }, 120_000);
 
-  it('rejects actual output-limit truncation instead of returning partial content', async () => {
-    const path = `${directory}/over-read-limit`;
-    await sandbox.filesystem.writeFile(path, 'x'.repeat(400 * 1024));
-    await expect(sandbox.filesystem.readFile(path)).rejects.toThrow('larger than one command\'s output limit');
+  it('reads 16 MiB exactly from the built package while native whole-file exec truncates', async () => {
+    const path = `${directory}/large read "quotes" $dollar 'single'`;
+    const size = 16 * 1024 * 1024;
+    const unit = '😀漢字é\0\n';
+    const block = unit.repeat(4096);
+    const blocks = Math.floor(size / Buffer.byteLength(block));
+    const remainder = size % Buffer.byteLength(block);
+    const tail = unit.repeat(Math.floor(remainder / Buffer.byteLength(unit))) + 'x'.repeat(remainder % Buffer.byteLength(unit));
+    const script = `const fs = require('node:fs'); const unit = ${JSON.stringify(unit)}; const data = Buffer.from(unit.repeat(4096)); const fd = fs.openSync(${JSON.stringify(path)}, 'w'); for (let i = 0; i < ${blocks}; i++) fs.writeSync(fd, data); fs.writeSync(fd, unit.repeat(${Math.floor(remainder / Buffer.byteLength(unit))}) + 'x'.repeat(${remainder % Buffer.byteLength(unit)})); fs.closeSync(fd);`;
+    console.log(JSON.stringify({ event: 'large-read-starting', id: createdId, utf8Bytes: size }));
+    const seed = await sandbox.runCommand(`node -e ${quoteShellArg(script)} && sha256sum ${quoteShellArg(path)} && wc -c < ${quoteShellArg(path)}`);
+    expect(seed.exitCode).toBe(0);
+    const remoteHash = seed.stdout.trim().split(/\s+/)[0];
+    expect(seed.stdout.trim().split('\n').at(-1)).toBe(String(size));
+    const native = sandbox.getInstance();
+    const response = await originalFetch(`${native.execUrl}/v1/instances/${encodeURIComponent(native.id)}/exec`, {
+      method: 'POST',
+      headers: { 'X-Agent37-Key': native.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: `base64 -w0 ${quoteShellArg(path)}`, ...(native.runAsRoot ? { user: 'root' } : {}) }),
+    });
+    expect(response.status).toBe(200);
+    const wholeFile = await response.json() as { exit_code: number; stdout: string; truncated: boolean };
+    expect(wholeFile.exit_code).toBe(0);
+    expect(wholeFile.truncated).toBe(true);
+    const initialResponses = readResponses;
+    const started = Date.now();
+    const actual = await sandbox.filesystem.readFile(path);
+    const durationMs = Date.now() - started;
+    expect(Buffer.byteLength(actual)).toBe(size);
+    const expectedHash = createHash('sha256');
+    for (let index = 0; index < blocks; index++) {
+      expect(actual.slice(index * block.length, (index + 1) * block.length) === block).toBe(true);
+      expectedHash.update(block);
+    }
+    expect(actual.slice(blocks * block.length)).toBe(tail);
+    expectedHash.update(tail);
+    const hash = createHash('sha256').update(actual).digest('hex');
+    expect(hash).toBe(expectedHash.digest('hex'));
+    expect(hash).toBe(remoteHash);
+    expect(readResponses - initialResponses).toBe(64);
+    expect(largestReadOutput).toBeLessThan(512_000);
     expect(Math.max(...requestSizes)).toBeLessThan(128_000);
+    console.log(JSON.stringify({ event: 'large-read-exact', id: createdId, utf8Bytes: size, sha256: hash, exactBlockEquality: true, nativeWholeFileTruncated: wholeFile.truncated, readChunks: readResponses - initialResponses, largestReadOutput, largestExecRequest: Math.max(...requestSizes), durationMs }));
   }, 120_000);
 });
