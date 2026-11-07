@@ -114,7 +114,7 @@ describe('cloudRun adapter against the local gateway', () => {
 /** Mimics gateways deployed before feature flags: no-op lifecycle, every call a fresh `sandbox do`. */
 type StaleRequest = { path: string; cookie?: string; body: Record<string, any> }
 
-function startStaleGateway(health: Record<string, unknown> = {}): Promise<{ server: Server; url: string; requests: StaleRequest[] }> {
+function startStaleGateway(health: Record<string, unknown> = {}, createResponse?: Record<string, unknown>): Promise<{ server: Server; url: string; requests: StaleRequest[] }> {
   const requests: StaleRequest[] = []
   const run = promisify(execFile)
   const server = createServer(async (req: IncomingMessage, res) => {
@@ -128,7 +128,7 @@ function startStaleGateway(health: Record<string, unknown> = {}): Promise<{ serv
     for await (const chunk of req) raw += chunk
     const body = raw ? JSON.parse(raw) : {}
     requests.push({ path: url, cookie: req.headers.cookie, body })
-    if (url === '/v1/sandbox/create') return reply(200, { sandboxId: body.sandboxId, status: 'running' })
+    if (url === '/v1/sandbox/create') return reply(200, createResponse ?? { sandboxId: body.sandboxId ?? 'gateway-generated', status: 'running' })
     if (url === '/v1/sandbox/destroy') return reply(200, { success: true })
     if (url === '/v1/sandbox/exec' || url === '/v1/sandbox/do') {
       const result = await run('/bin/sh', ['-c', body.command]).then(
@@ -144,6 +144,39 @@ function startStaleGateway(health: Record<string, unknown> = {}): Promise<{ serv
   }))
 }
 
+describe('cloudRun create response IDs', () => {
+  it.each([{}, { sandboxId: '' }, { sandboxId: ' ' }, { sandboxId: null }, { sandboxId: 123 }, { sandboxId: 'bad/id' }])('rejects an unnamed create response with an invalid ID: %j', async response => {
+    const mock = await startStaleGateway({}, response)
+    const provider = cloudRun({ sandboxUrl: mock.url, sandboxSecret: 'x', executionMode: 'stateful' })
+    try {
+      const before = await provider.sandbox.list()
+      await expect(provider.sandbox.create()).rejects.toThrow('Cloud Run gateway create response did not include a valid sandboxId')
+      expect(await provider.sandbox.list()).toEqual(before)
+      expect(mock.requests).toHaveLength(1)
+      expect(mock.requests[0].body).not.toHaveProperty('sandboxId')
+    } finally {
+      mock.server.close()
+    }
+  })
+
+  it.each([{}, { sandboxId: null }])('falls back to an explicitly sent name when the response omits the ID: %j', async response => {
+    const mock = await startStaleGateway({}, response)
+    const provider = cloudRun({ sandboxUrl: mock.url, sandboxSecret: 'x', executionMode: 'stateful' })
+    try {
+      const sandbox = await provider.sandbox.create({ name: 'explicit-name' })
+      try {
+        expect(sandbox.sandboxId).toBe('explicit-name')
+        expect(mock.requests[0].body.sandboxId).toBe('explicit-name')
+      } finally {
+        await sandbox.destroy()
+      }
+      expect(mock.requests[1]).toMatchObject({ path: '/v1/sandbox/destroy', body: { sandboxId: 'explicit-name' } })
+    } finally {
+      mock.server.close()
+    }
+  })
+})
+
 describe('cloudRun adapter against a gateway without feature flags', () => {
   let stale: Awaited<ReturnType<typeof startStaleGateway>>
   beforeAll(async () => { stale = await startStaleGateway() })
@@ -152,6 +185,7 @@ describe('cloudRun adapter against a gateway without feature flags', () => {
   it('runs commands, replays the affinity cookie, and buffers streamed output', async () => {
     const provider = cloudRun({ sandboxUrl: stale.url, sandboxSecret: 'x', executionMode: 'stateful' })
     const sandbox = await provider.sandbox.create()
+    expect(sandbox.sandboxId).toBe('gateway-generated')
     const chunks: string[] = []
     const result = await sandbox.runCommand('echo hi', { onStdout: data => chunks.push(data) })
     expect(result).toMatchObject({ stdout: 'hi\n', exitCode: 0 })
