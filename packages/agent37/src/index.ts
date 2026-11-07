@@ -10,6 +10,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 
 import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
@@ -58,6 +59,8 @@ type FsRunCommand = (sandbox: Agent37Sandbox, command: string, options?: RunComm
 
 // 48 KiB becomes 64 KiB of base64, leaving room for JSON and paths under exec's 128 KB request cap.
 const WRITE_CHUNK_BYTES = 48 * 1024;
+// Base64 plus the read-status trailer stays below exec's 512 KB output cap.
+const READ_CHUNK_BYTES = 256 * 1024;
 
 function resolveConfig(config: Agent37Config) {
   const env = typeof process !== 'undefined' ? process.env : undefined;
@@ -264,10 +267,35 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
 
       filesystem: {
         readFile: async (sandbox: Agent37Sandbox, path: string): Promise<string> => {
-          const result = await exec(sandbox, `base64 -w0 ${shellPath(path)}`);
-          if (result.exit_code !== 0) throw new Error(`Failed to read ${path}: ${result.stderr.trim() || `exit code ${result.exit_code}`}`);
-          if (result.truncated) throw new Error(`Failed to read ${path}: the file is larger than one command's output limit`);
-          return Buffer.from(result.stdout, 'base64').toString('utf8');
+          const target = shellPath(path);
+          const read = async (command: string) => {
+            const result = await exec(sandbox, command);
+            if (result.exit_code !== 0) throw new Error(`Failed to read ${path}: ${result.stderr.trim() || `exit code ${result.exit_code}`}`);
+            if (result.truncated) throw new Error(`Failed to read ${path}: truncated exec output`);
+            return result;
+          };
+          const metadataCommand = `test -f ${target} && stat -Lc '%s:%d:%i:%y:%z' -- ${target}`;
+          const metadata = (await read(metadataCommand)).stdout;
+          const size = Number(metadata.split(':', 1)[0]);
+          if (!/^\d+:/.test(metadata) || !Number.isSafeInteger(size)) throw new Error(`Failed to read ${path}: invalid file size`);
+          const decoder = new StringDecoder('utf8');
+          const parts: string[] = [];
+          for (let index = 0; index < Math.max(1, Math.ceil(size / READ_CHUNK_BYTES)); index++) {
+            // Carry dd's exit status through base64: sh pipelines otherwise hide producer failures.
+            const result = await read(`{ dd if=${target} bs=${READ_CHUNK_BYTES} skip=${index} count=1 iflag=fullblock status=none; printf '\\n%03d' "$?"; } | base64 -w0`);
+            if (result.stdout.length > 4 * Math.ceil((READ_CHUNK_BYTES + 4) / 3)) throw new Error(`Failed to read ${path}: oversized read chunk`);
+            const bytes = Buffer.from(result.stdout, 'base64');
+            if (bytes.toString('base64') !== result.stdout || !/^\n\d{3}$/.test(bytes.subarray(-4).toString('utf8'))) {
+              throw new Error(`Failed to read ${path}: invalid read chunk`);
+            }
+            const status = bytes.subarray(-3).toString('utf8');
+            if (status !== '000') throw new Error(`Failed to read ${path}: ${result.stderr.trim() || `exit code ${Number(status)}`}`);
+            const expected = Math.min(READ_CHUNK_BYTES, size - index * READ_CHUNK_BYTES);
+            if (bytes.length !== expected + 4) throw new Error(`Failed to read ${path}: unexpected read length (expected ${expected}, received ${bytes.length - 4})`);
+            parts.push(decoder.write(bytes.subarray(0, -4)));
+          }
+          if ((await read(metadataCommand)).stdout !== metadata) throw new Error(`Failed to read ${path}: file changed during read`);
+          return parts.join('') + decoder.end();
         },
         writeFile: async (sandbox: Agent37Sandbox, path: string, content: string, run: FsRunCommand): Promise<void> => {
           const bytes = Buffer.from(content, 'utf8');

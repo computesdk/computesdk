@@ -248,7 +248,15 @@ offered.
 | `getUrl` (a public HTTPS URL for a port) | yes - see below |
 | streaming stdout/stderr | not natively; the SDK's bridge applies |
 
-## Two behaviours worth knowing about
+## Three behaviours worth knowing about
+
+**Reads are bounded below the exec output cap.** Files are read in 512 KiB
+byte chunks over base64, then decoded as UTF-8 once. This preserves
+multibyte characters, a leading BOM, and trailing newlines even across
+chunk boundaries. Truncated responses, failed reads, short chunks and size
+changes reject rather than return a prefix. Symlinks are followed and
+the guest's file permissions still apply. A file changing in place is not
+an atomic snapshot: stop writers before reading if you need one.
 
 **Writes go through base64, not a heredoc.** A heredoc's body is every line
 up to its marker, so it can only ever produce a file *ending in a
@@ -260,7 +268,9 @@ arbitrary bytes. The exec channel drops a command much over ~100 KB
 base64 exceeds 32 KiB is appended to a `<path>.gmn-part` file in slices
 and renamed over the target by the last one - a reader never sees a
 half-written file, and a large write costs one exec per slice. Every
-givemeanode image ships coreutils, so `base64` is present.
+givemeanode image ships coreutils, so `base64` is present. Encoding and
+command generation happen one slice at a time, not as a complete list of
+base64 commands held in memory.
 
 **A command is retried once, and only for one error.** The connection to a
 sandbox is re-established on demand, so the first command after a quiet
