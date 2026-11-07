@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import { join } from 'node:path'
@@ -107,6 +108,63 @@ describe('Cloud Run gateway', () => {
     expect((await call('/v1/sandbox/exec', stateful('iso-b', { command: 'test -e only-a' }))).data.exitCode).toBe(1)
   })
 
+  it('cleans up a failed native create without hiding the original error', async () => {
+    const res = await call('/v1/sandbox/create', { executionMode: 'stateful', env: { FAKE_CREATE_FAILURE: '1' } })
+    expect(res).toEqual({ status: 500, data: { error: 'Error: create failed after allocation' } })
+    const cleanupCall = cli.calls().at(-1)!
+    expect(cleanupCall.slice(0, 2)).toEqual(['delete', '--force'])
+    const sandboxId = cleanupCall[2]
+    expect(sandboxId).toMatch(/^cloud-run-/)
+    expect((await call('/v1/sandbox/info', { sandboxId })).status).toBe(404)
+    expect(existsSync(join(cli.state, 'sb', sandboxId))).toBe(false)
+  })
+
+  it('cleans up a timed-out restore and releases its ID for retry', async () => {
+    await call('/v1/sandbox/create', stateful('timeout-source'))
+    await call('/v1/sandbox/snapshot', { sandboxId: 'timeout-source', snapshotId: 'timeout-snapshot' })
+    const res = await call('/v1/sandbox/create', {
+      executionMode: 'stateful',
+      snapshotId: 'timeout-snapshot', env: { FAKE_CREATE_DELAY_MS: '3000' }, timeout: 500,
+    })
+    expect(res).toEqual({ status: 500, data: { error: 'Command timed out after 500ms' } })
+    const cleanupCall = cli.calls().at(-1)!
+    expect(cleanupCall.slice(0, 2)).toEqual(['delete', '--force'])
+    const sandboxId = cleanupCall[2]
+    expect(existsSync(join(cli.state, 'sb', sandboxId))).toBe(false)
+    expect((await call('/v1/sandbox/info', { sandboxId })).status).toBe(404)
+    expect((await call('/v1/sandbox/create', stateful(sandboxId, { snapshotId: 'timeout-snapshot' }))).status).toBe(200)
+  })
+
+  it('never deletes an existing same-name native sandbox on failed create', async () => {
+    execFileSync(cli.binary, ['run', '--write', '--detach', 'already-native'])
+    const res = await call('/v1/sandbox/create', stateful('already-native', { env: { FAKE_CREATE_FAILURE: '1' } }))
+    expect(res).toEqual({ status: 409, data: { error: 'Sandbox already-native already exists' } })
+    expect(cli.calls().filter(args => args[0] === 'delete' && args.includes('already-native'))).toEqual([])
+    expect((await call('/v1/sandbox/exec', stateful('already-native', { command: 'true' }))).data.exitCode).toBe(0)
+  })
+
+  it('never cleans up an existing stopped ID when exec reports not running and create fails', async () => {
+    const sandboxId = 'existing-stopped'
+    execFileSync(cli.binary, ['run', '--write', '--detach', sandboxId])
+    const root = join(cli.state, 'sb', sandboxId)
+    writeFileSync(join(root, '.stopped'), '')
+    writeFileSync(join(root, 'owner.txt'), 'belongs to a different caller')
+    const res = await call('/v1/sandbox/create', stateful(sandboxId, { env: { FAKE_CREATE_FAILURE_BEFORE_ALLOCATION: '1' } }))
+    expect(res).toEqual({ status: 500, data: { error: 'Error: launcher unavailable' } })
+    expect(cli.calls().filter(args => args[0] === 'delete' && args.includes(sandboxId))).toEqual([])
+    expect(readFileSync(join(root, 'owner.txt'), 'utf8')).toBe('belongs to a different caller')
+    expect(existsSync(join(root, '.stopped'))).toBe(true)
+  })
+
+  it('rejects overlapping creates of the same ID without cleaning up the first', async () => {
+    const first = call('/v1/sandbox/create', stateful('create-in-flight', { env: { FAKE_CREATE_DELAY_MS: '500' } }))
+    await vi.waitFor(() => expect(cli.calls().some(args => args[0] === 'run' && args.includes('create-in-flight'))).toBe(true))
+    expect((await call('/v1/sandbox/create', stateful('create-in-flight'))).status).toBe(409)
+    expect((await first).status).toBe(200)
+    expect((await call('/v1/sandbox/create', stateful('create-in-flight'))).status).toBe(409)
+    expect(cli.calls().filter(args => args[0] === 'delete' && args.includes('create-in-flight'))).toEqual([])
+  })
+
   it('reports the command exit status rather than the CLI status', async () => {
     await call('/v1/sandbox/create', stateful('exit-1'))
     const res = await call('/v1/sandbox/exec', stateful('exit-1', { command: 'echo out; echo err >&2; exit 3' }))
@@ -188,9 +246,15 @@ describe('Cloud Run gateway', () => {
     const gcsRoot = join(cli.state, 'gcs', 'snap-bucket')
     const realFetch = globalThis.fetch
     const seen: string[] = []
+    const metadataRequests: string[] = []
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
       const url = new URL(String(input))
       if (url.hostname === 'metadata.google.internal') {
+        metadataRequests.push(url.pathname)
+        if (url.pathname !== '/computeMetadata/v1/instance/service-accounts/default/token'
+          || new Headers(init?.headers).get('Metadata-Flavor') !== 'Google') {
+          return new Response(null, { status: 404 })
+        }
         return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }))
       }
       if (url.hostname === 'storage.googleapis.com') {
@@ -224,6 +288,7 @@ describe('Cloud Run gateway', () => {
       expect(list.data).toEqual([expect.objectContaining({ snapshotId: 'named-snap', store: 'gcs', size: expect.any(Number) })])
       await call('/v1/snapshot/delete', { snapshotId: 'named-snap' })
       expect((await call('/v1/snapshot/list')).data).toEqual([])
+      expect(metadataRequests).toEqual(['/computeMetadata/v1/instance/service-accounts/default/token'])
       expect(seen[0]).toBe('GET /storage/v1/b/snap-bucket/o Bearer tok')
       expect(seen).toContain('DELETE /storage/v1/b/snap-bucket/o/computesdk-snapshots%2Fnamed-snap.tar Bearer tok')
     } finally {

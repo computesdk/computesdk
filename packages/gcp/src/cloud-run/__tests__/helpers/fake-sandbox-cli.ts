@@ -57,10 +57,16 @@ const run = (id, extraEnv) => {
   return new Promise((resolve) => child.on('close', (code) => resolve(code === 0 ? 0 : 1)))
 }
 ;(async () => {
-  if (sub === 'run') { start(positional[0], flags['--import-tar']); return }
+  if (sub === 'run') {
+    if (env.FAKE_CREATE_FAILURE_BEFORE_ALLOCATION) fail('launcher unavailable')
+    start(positional[0], flags['--import-tar'])
+    if (env.FAKE_CREATE_FAILURE) fail('create failed after allocation')
+    if (env.FAKE_CREATE_DELAY_MS) await new Promise(resolve => setTimeout(resolve, Number(env.FAKE_CREATE_DELAY_MS)))
+    return
+  }
   if (sub === 'exec') {
     const id = positional[0]
-    if (!fs.existsSync(root(id))) fail('sandbox ' + id + ' is not running')
+    if (!fs.existsSync(root(id)) || fs.existsSync(path.join(root(id), '.stopped'))) fail('sandbox ' + id + ' is not running')
     process.exit(await run(id, env))
   }
   if (sub === 'do') {

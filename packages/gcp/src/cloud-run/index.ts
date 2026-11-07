@@ -548,13 +548,17 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
           if (getExecutionMode(sandboxConfig) === 'stateful') {
             const session: GatewaySession = {}
             const response = await gatewayRequest(sandboxConfig, '/v1/sandbox/create', sandboxRequestBody(sandboxConfig, {
-              sandboxId,
+              ...(options?.name != null ? { sandboxId } : {}),
               env: sandboxConfig.env,
               workdir: sandboxConfig.workdir,
               timeout: options?.timeout,
               ...(snapshotId ? { snapshotId } : {}),
             }), session)
-            const sandbox = { id: response.sandboxId ?? sandboxId, createdAt: new Date(), config: sandboxConfig, remote: true, affinity: session.affinity, size }
+            const createdId = response?.sandboxId ?? options?.name
+            if (typeof createdId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9-]{0,127}$/.test(createdId)) {
+              throw new Error('Cloud Run gateway create response did not include a valid sandboxId')
+            }
+            const sandbox = { id: createdId, createdAt: new Date(), config: sandboxConfig, remote: true, affinity: session.affinity, size }
             activeSandboxes.set(sandbox.id, sandbox)
             return { instance: sandbox, instanceId: sandbox.id }
           }

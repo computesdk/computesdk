@@ -67,6 +67,7 @@ const idleTimeoutMs = () => Number(process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS
 
 /** Stateful sandboxes this instance started, keyed by id. */
 const sandboxes = new Map<string, { createdAt: number; lastUsed: number; busy: number }>()
+const startingSandboxes = new Set<string>()
 
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message) }
@@ -256,7 +257,7 @@ function snapshotUri(snapshotId: string): string {
 let cachedToken: { value: string; expiresAt: number } | undefined
 async function gcsToken(): Promise<string> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value
-  const res = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-account/token', {
+  const res = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', {
     headers: { 'Metadata-Flavor': 'Google' },
   })
   if (!res.ok) throw new HttpError(502, `Failed to get a service account token: ${res.status}`)
@@ -319,16 +320,37 @@ function cliError(result: Result, fallback: string): HttpError {
 }
 
 async function startSandbox(sandboxId: string, body: Json, importTar?: string): Promise<Json> {
+  if (sandboxes.has(sandboxId) || startingSandboxes.has(sandboxId)) throw new HttpError(409, `Sandbox ${sandboxId} already exists`)
   const args = ['run']
   // Stateful sessions get a writable rootfs unless explicitly disabled: it is
   // what makes writes outside /tmp stick and what tar/fork export.
   pushRunArgs(args, { ...body, write: body.write ?? true })
   if (importTar) args.push('--import-tar', importTar)
   args.push('--detach', sandboxId)
-  const result = await runSandbox(args, body.timeout)
-  if (result.exitCode !== 0) throw new HttpError(500, result.stderr.trim() || `Failed to create Cloud Run sandbox ${sandboxId}`)
-  sandboxes.set(sandboxId, { createdAt: Date.now(), lastUsed: Date.now(), busy: 0 })
-  return { sandboxId, status: 'running', ...(body.snapshotId ? { snapshotId: body.snapshotId } : {}) }
+  const ownsId = !body.sandboxId
+  startingSandboxes.add(sandboxId)
+  try {
+    if (!ownsId) {
+      const probe = await runSandbox(['exec', sandboxId, ...commandArgs('true')], DELETE_TIMEOUT_MS)
+      if (probe.exitCode === 0) throw new HttpError(409, `Sandbox ${sandboxId} already exists`)
+      // Exec cannot distinguish an absent ID from an existing stopped session.
+      // Let run enforce uniqueness, but never clean up a caller-supplied ID.
+      if (!/not running|does not exist|not found/i.test(probe.stderr)) throw cliError(probe, `Cannot check sandbox ${sandboxId}`)
+    }
+    const result = await runSandbox(args, body.timeout)
+    if (result.exitCode !== 0) {
+      if (ownsId && !/already exists|already running|already in use/i.test(result.stderr)) {
+        // Killing the CLI on timeout can leave a partially-started native
+        // session. Delete that exact ID, with a separate bounded deadline.
+        await deleteSandbox(sandboxId).catch(() => {})
+      }
+      throw new HttpError(500, result.stderr.trim() || `Failed to create Cloud Run sandbox ${sandboxId}`)
+    }
+    sandboxes.set(sandboxId, { createdAt: Date.now(), lastUsed: Date.now(), busy: 0 })
+    return { sandboxId, status: 'running', ...(body.snapshotId ? { snapshotId: body.snapshotId } : {}) }
+  } finally {
+    startingSandboxes.delete(sandboxId)
+  }
 }
 
 export async function handle(pathname: string, body: Json, onChunk?: Chunk): Promise<unknown> {
