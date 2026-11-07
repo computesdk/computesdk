@@ -6,6 +6,10 @@ import { performance } from 'node:perf_hooks';
 import { escapeShellArg } from '@computesdk/provider';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+if (process.env.COMPUTESDK_REQUIRE_INTEGRATION === '1' && !process.env.AGENT37_API_KEY) {
+  throw new Error('AGENT37_API_KEY is required when COMPUTESDK_REQUIRE_INTEGRATION=1');
+}
+
 const packageEntry = resolve(__dirname, '../../dist/index.js');
 const { agent37 } = createRequire(__filename)(packageEntry) as typeof import('../index');
 const provider = agent37({});
@@ -78,8 +82,11 @@ describe.skipIf(!process.env.AGENT37_API_KEY)('Agent37 large-write throughput (l
     try {
       if (createdId) {
         log('sandbox-destroying');
-        await provider.sandbox.destroy(createdId);
-        expect(await provider.sandbox.getById(createdId)).toBeNull();
+        const id = createdId;
+        await bounded('cleanup', 30_000, async () => {
+          await provider.sandbox.destroy(id);
+          expect(await provider.sandbox.getById(id)).toBeNull();
+        });
         expect(deleteStatus).toBeGreaterThanOrEqual(200);
         expect(deleteStatus).toBeLessThan(300);
         expect(lookupStatus).toBe(404);
