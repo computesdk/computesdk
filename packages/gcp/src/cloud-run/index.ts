@@ -173,14 +173,23 @@ async function gatewayFetch(config: CloudRunConfig, path: string, body: Record<s
   return response
 }
 
+class GatewayTransportError extends Error {}
+
 async function gatewayRequest(config: CloudRunConfig, path: string, body: Record<string, unknown> | string = {}, session?: GatewaySession, signal?: AbortSignal): Promise<any> {
-  const response = await gatewayFetch(config, path, body, session, signal)
-  const text = await response.text()
+  let response: Response
+  let text: string
+  try {
+    response = await gatewayFetch(config, path, body, session, signal)
+    text = await response.text()
+  } catch (error) {
+    throw new GatewayTransportError(error instanceof Error ? error.message : String(error))
+  }
   let data: any
   try {
     data = JSON.parse(text)
   } catch {
-    throw new Error(`Cloud Run gateway request failed: ${response.status} - ${text.slice(0, 200)}`)
+    const ErrorType = response.ok || response.status >= 500 ? GatewayTransportError : Error
+    throw new ErrorType(`Cloud Run gateway request failed: ${response.status} - ${text.slice(0, 200)}`)
   }
 
   if (!response.ok) throw new Error(data.error || `Cloud Run gateway request failed: ${response.status}`)
@@ -388,31 +397,41 @@ async function writeRemoteFile(sandbox: CloudRunSandbox, path: string, content: 
     throw new Error('Cloud Run oversized file writes require executionMode: "stateful"; ephemeral calls cannot assemble persistent upload parts')
   }
   const signal = AbortSignal.timeout(Math.max(1, Math.ceil(deadline - performance.now())))
+  let uncertainOperation: string | undefined
+  let uncertainCommit = false
   const checkDeadline = () => {
     if (performance.now() >= deadline) throw new Error('Cloud Run file upload timed out after 300000ms')
     signal.throwIfAborted()
   }
-  const request = async (route: string, body: Record<string, unknown>) => {
+  const request = async (route: string, body: Record<string, unknown>, operation: 'setup' | 'part' | 'commit' | 'cleanup') => {
     checkDeadline()
     const json = boundedJson(body, GATEWAY_WRITE_BYTES)
     if (json === undefined) throw new Error('Cloud Run upload request options exceed the serialized JSON byte budget')
     checkDeadline()
-    return gatewayRequest(sandbox.config, route, json, sandbox, signal)
+    try {
+      return await gatewayRequest(sandbox.config, route, json, sandbox, signal)
+    } catch (error) {
+      if (error instanceof GatewayTransportError) {
+        uncertainOperation ??= operation
+        uncertainCommit ||= operation === 'commit'
+      }
+      throw error
+    }
   }
-  const command = async (command: string) => {
+  const command = async (command: string, operation: 'setup' | 'commit' | 'cleanup') => {
     const result = await request('/v1/sandbox/exec', sandboxRequestBody(sandbox.config, {
       sandboxId: sandbox.id, command, cwd: sandbox.config.workdir, env: sandbox.config.env,
-      timeout: DEFAULT_TIMEOUT_MS,
-    }))
+      timeout: Math.max(1, Math.floor(deadline - performance.now())),
+    }), operation)
     if (result.exitCode !== 0) throw new Error(result.stderr || `Cloud Run file upload command exited ${result.exitCode}`)
   }
   const quote = (value: string) => `"${escapeShellArg(value)}"`
   const staging = `${dirname(path)}/.computesdk-upload-${randomUUID()}`
   const destination = quote(path)
   if (path.endsWith('/')) throw new Error(`Cannot write a file to a directory path: ${path}`)
-  await command(`[ ! -d ${destination} ] || { echo 'File destination is a directory' >&2; exit 1; }; mkdir -p -- ${quote(dirname(path))} && mkdir -m 700 -- ${quote(staging)}`)
   let failure: unknown
   try {
+    await command(`[ ! -d ${destination} ] || { echo 'File destination is a directory' >&2; exit 1; }; mkdir -p -- ${quote(dirname(path))} && mkdir -m 700 -- ${quote(staging)}`, 'setup')
     const parts = uploadParts(sandbox, staging, content)
     let uploadFailure: unknown
     const upload = async () => {
@@ -421,25 +440,35 @@ async function writeRemoteFile(sandbox: CloudRunSandbox, path: string, content: 
           checkDeadline()
           const next = parts.next()
           if (next.done) return
-          const result = await request('/v1/sandbox/writeFile', next.value)
+          const result = await request('/v1/sandbox/writeFile', next.value, 'part')
           if (result.success !== true) throw new Error('Cloud Run gateway did not confirm the upload part')
         } catch (error) {
           uploadFailure ??= error
         }
       }
     }
-    // Drain every in-flight part before cleanup, including after a failure.
+    // Drain client requests; a lost response cannot prove native termination.
     await Promise.all(Array.from({ length: UPLOAD_CONCURRENCY }, upload))
     if (uploadFailure) throw uploadFailure
     // Match v2's new-inode replacement semantics, but never mv into a directory.
-    await command(`cat -- ${quote(staging)}/part-* > ${quote(`${staging}/complete`)} && { [ "$(wc -c < ${quote(`${staging}/complete`)})" -eq ${Buffer.byteLength(content, 'utf8')} ] || { echo 'Cloud Run upload byte count mismatch' >&2; exit 1; }; } && mv -fT -- ${quote(`${staging}/complete`)} ${destination}`)
+    await command(`cat -- ${quote(staging)}/part-* > ${quote(`${staging}/complete`)} && { [ "$(wc -c < ${quote(`${staging}/complete`)})" -eq ${Buffer.byteLength(content, 'utf8')} ] || { echo 'Cloud Run upload byte count mismatch' >&2; exit 1; }; } && mv -fT -- ${quote(`${staging}/complete`)} ${destination}`, 'commit')
   } catch (error) {
     failure = error
   }
+  let cleanupFailure: unknown
   try {
-    await command(`rm -rf -- ${quote(staging)}`)
+    await command(`rm -rf -- ${quote(staging)}`, 'cleanup')
   } catch (error) {
-    throw new Error(`${failure instanceof Error ? `${failure.message}; ` : ''}Cloud Run upload cleanup failed: ${error instanceof Error ? error.message : String(error)}`)
+    cleanupFailure = error
+  }
+  if (cleanupFailure || uncertainOperation) {
+    const message = (error: unknown) => error instanceof Error ? error.message : String(error)
+    throw new Error([
+      ...(failure ? [message(failure)] : []),
+      ...(cleanupFailure ? [`Cloud Run upload cleanup failed: ${message(cleanupFailure)}`] : []),
+      ...(uncertainCommit ? ['Cloud Run upload publication UNCONFIRMED: the dispatched commit may already have replaced the destination or may still do so'] : []),
+      `Cloud Run upload cleanup UNCONFIRMED for ${staging}: ${uncertainOperation ? `the ${uncertainOperation} request lost confirmation; native work may still run and recreate staging` : 'cleanup did not complete'}`,
+    ].join('; '))
   }
   if (failure) throw failure
 }

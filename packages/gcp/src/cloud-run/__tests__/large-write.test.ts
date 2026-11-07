@@ -13,7 +13,7 @@ const exec = promisify(execFile)
 const MiB = 1024 * 1024
 const digest = (content: string | Buffer) => createHash('sha256').update(content).digest('hex')
 
-async function fixture(options: { failPart?: boolean; failCommit?: boolean; failInit?: boolean; plainError?: boolean; directoryAtCommit?: boolean; missingPart?: boolean } = {}) {
+async function fixture(options: { failPart?: boolean; failCommit?: boolean; failInit?: boolean; plainError?: boolean; directoryAtCommit?: boolean; missingPart?: boolean; dropSetup?: boolean; dropPart?: boolean; dropCommit?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'gcp-upload-'))
   const cwd = join(directory, 'cwd "漢')
   await mkdir(cwd)
@@ -22,6 +22,8 @@ async function fixture(options: { failPart?: boolean; failCommit?: boolean; fail
   let activeHandlers = 0
   let drained: (() => void) | undefined
   let cleanupBeforeDrain = false
+  let cleanupCompleted!: () => void
+  const afterCleanup = new Promise<void>(resolve => { cleanupCompleted = resolve })
   const stages = new Set<string>()
   const server = createServer(async (req, res) => {
     activeHandlers++
@@ -50,6 +52,11 @@ async function fixture(options: { failPart?: boolean; failCommit?: boolean; fail
           result => ({ ...result, exitCode: 0 }),
           error => ({ stdout: error.stdout ?? '', stderr: error.stderr ?? '', exitCode: error.code ?? 1 }),
         )
+        if (body.command.includes('rm -rf')) cleanupCompleted()
+        if ((options.dropSetup && body.command.includes('mkdir -m 700')) || (options.dropCommit && body.command.includes('mv -fT'))) {
+          res.destroy()
+          return
+        }
         return reply(200, result)
       }
       if (route === '/v1/sandbox/writeFile') {
@@ -60,6 +67,10 @@ async function fixture(options: { failPart?: boolean; failCommit?: boolean; fail
           activeParts++
         }
         try {
+          if (part && options.dropPart && body.path.endsWith('000000000000')) {
+            res.destroy()
+            await afterCleanup
+          }
           if (part && options.missingPart && body.path.endsWith('000000000000')) return reply(200, { success: true })
           if (part && options.failPart) {
             if (body.path.endsWith('000000000000')) {
@@ -99,7 +110,11 @@ async function fixture(options: { failPart?: boolean; failCommit?: boolean; fail
   return {
     cwd, directory, requests, stages, sandbox, provider,
     cleanupBeforeDrain: () => cleanupBeforeDrain,
+    drainNative: async () => {
+      if (activeHandlers) await new Promise<void>(resolve => { drained = resolve })
+    },
     close: async () => {
+      cleanupCompleted()
       await sandbox.destroy()
       server.closeAllConnections()
       await new Promise<void>(resolve => server.close(() => resolve()))
@@ -115,6 +130,42 @@ async function noStages(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe('Cloud Run bounded v2 file uploads', () => {
+  it('attempts owned cleanup and reports uncertainty after the setup socket drops', async () => {
+    const f = await fixture({ dropSetup: true })
+    try {
+      await writeFile(join(f.cwd, 'target'), 'original')
+      await expect(f.sandbox.filesystem.writeFile('target', 's'.repeat(25 * MiB))).rejects.toThrow(/cleanup UNCONFIRMED/)
+      expect(f.requests.filter(r => String(r.body.command).includes('rm -rf'))).toHaveLength(1)
+      expect(await readFile(join(f.cwd, 'target'), 'utf8')).toBe('original')
+      await noStages(f)
+    } finally { await f.close() }
+  }, 60_000)
+
+  it('does not mistake a successful cleanup for termination of a socket-dropped native part', async () => {
+    const f = await fixture({ dropPart: true })
+    try {
+      await writeFile(join(f.cwd, 'target'), 'original')
+      await expect(f.sandbox.filesystem.writeFile('target', 's'.repeat(25 * MiB))).rejects.toThrow(/cleanup UNCONFIRMED/)
+      await f.drainNative()
+      expect(f.requests.filter(r => String(r.body.command).includes('rm -rf'))).toHaveLength(1)
+      expect(f.cleanupBeforeDrain()).toBe(true)
+      expect((await readdir(f.cwd)).filter(name => name.startsWith('.computesdk-upload-'))).toHaveLength(1)
+      expect(await readFile(join(f.cwd, 'target'), 'utf8')).toBe('original')
+      expect(f.requests.some(r => String(r.body.command).includes('mv -fT'))).toBe(false)
+    } finally { await f.close() }
+  }, 60_000)
+
+  it('reports publication ambiguity when the final commit socket drops after replacing the target', async () => {
+    const f = await fixture({ dropCommit: true })
+    const content = 's'.repeat(25 * MiB)
+    try {
+      await writeFile(join(f.cwd, 'target'), 'original')
+      await expect(f.sandbox.filesystem.writeFile('target', content)).rejects.toThrow(/publication UNCONFIRMED.*cleanup UNCONFIRMED/)
+      expect(digest(await readFile(join(f.cwd, 'target')))).toBe(digest(content))
+      await noStages(f)
+    } finally { await f.close() }
+  }, 60_000)
+
   it('avoids the HTTP/1 limit, preserves bytes, cwd and creator affinity on every request', async () => {
     const f = await fixture()
     const content = 'a'.repeat(34 * MiB)
@@ -132,6 +183,9 @@ describe('Cloud Run bounded v2 file uploads', () => {
       expect(f.requests.filter(r => r.route === '/v1/sandbox/writeFile').every(r => r.bytes <= 8 * MiB)).toBe(true)
       expect(f.requests.filter(r => r.route !== '/v1/sandbox/create' && r.route !== '/v1/health').every(r => r.cookie === 'GAESA=creator')).toBe(true)
       expect(uploads.every(r => r.body.cwd === f.cwd && r.body.executionMode === 'stateful')).toBe(true)
+      const commandTimeouts = f.requests.filter(r => r.route === '/v1/sandbox/exec').map(r => Number(r.body.timeout))
+      expect(commandTimeouts.every(timeout => timeout > 0 && timeout <= 300_000)).toBe(true)
+      expect(commandTimeouts[1]).toBeLessThan(commandTimeouts[0])
       await expect(stat(join(f.cwd, 'injected'))).rejects.toMatchObject({ code: 'ENOENT' })
       await noStages(f)
     } finally { await f.close() }
