@@ -82,7 +82,7 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
           } catch (error) {
             // A rejected create returns no id, so the caller could never delete this sandbox.
             await sandbox.delete().catch((cleanup: unknown) => {
-              throw new AggregateError([error, cleanup], `Tangle sandbox ${sandbox.id} did not start and was not deleted.`);
+              throw new Error(`Tangle sandbox ${sandbox.id} did not start (${String(error)}) and was not deleted (${String(cleanup)}).`);
             });
             throw error;
           }
