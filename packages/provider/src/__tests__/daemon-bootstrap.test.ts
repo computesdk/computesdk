@@ -270,7 +270,7 @@ describe('factory daemon bootstrap failure', () => {
       }
       return { stdout: 'plain output', stderr: '', exitCode: 0, durationMs: 5 }
     })
-    const provider = defineProvider({ name: 'mock', methods: { sandbox: methods } })({})
+    const provider = defineProvider({ name: 'mock', methods: { sandbox: methods } })({ processRuntime: 'daemond' })
     const sandbox = await provider.sandbox.create()
 
     await expect(

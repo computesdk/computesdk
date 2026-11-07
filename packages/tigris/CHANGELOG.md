@@ -1,5 +1,69 @@
 # @computesdk/tigris
 
+## 1.1.29
+
+### Patch Changes
+
+- 1904e82: Fix `list()` returning no objects (map the SDK's `items`/`hasMore`/`paginationToken` and pass `continuationToken` through), report UTF-8 byte size for string uploads, and pass credentials and bucket to the Tigris SDK per call instead of through `process.env`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+
+## 1.1.28
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - @computesdk/provider@2.1.21
+
+## 1.1.27
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+  - @computesdk/provider@2.1.20
+
+## 1.1.26
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 1.1.25
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 1.1.24
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 1.1.23
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 1.1.22
+
+### Patch Changes
+
+- Updated dependencies [1b639da]
+  - @computesdk/provider@2.1.15
+
 ## 1.1.21
 
 ### Patch Changes

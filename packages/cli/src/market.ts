@@ -1,10 +1,13 @@
 /**
- * `compute market` — the sell side of the compute market: post listings,
- * reprice/pause/resume/withdraw them, read the book, and read payouts.
+ * `compute market` — both sides of the compute market. Sellers post listings,
+ * reprice/pause/resume/withdraw them, and read payouts; buyers set the org
+ * market cap, post standing bids, and manage prepaid credits. Everyone reads
+ * the book.
  *
  * Auth: identical to `compute actions` — --api-key / COMPUTE_API_KEY / the
- * stored `compute login` (or `compute bench auth login`) session. The key must belong to an org
- * the platform flags `market_provider`; the seller principal (which
+ * stored `compute login` (or `compute bench auth login`) session. Seller
+ * commands need an org the platform flags `market_provider`; buyer commands
+ * need a `market` buyer lane. The seller principal (which
  * executor provider these listings sell) is resolved server-side from the
  * key. Types mirror the wire shapes in benchmarks-platform `lib/market/*`
  * describe functions — keep them in sync by hand; the API is the contract.
@@ -169,6 +172,64 @@ export interface MarketSettlement {
   invoiceRef: string | null;
   paidAt: string | null;
   createdAt: string;
+}
+
+/** `describeBid` — one row of GET /api/v1/market/bids. */
+export interface MarketBid {
+  id: string;
+  size: string;
+  region: string | null;
+  useCase?: 'actions' | 'sandbox';
+  maxUsd: number;
+  per: MarketRatePer;
+  status: 'open' | 'filled' | 'cancelled';
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+/** `describeCap` — the org market cap, or null when none is set. */
+export interface MarketCap {
+  usd: number;
+  per: MarketRatePer;
+}
+
+/** GET /api/v1/billing/balance. */
+export interface MarketCreditBalance {
+  balanceMicroUsd: number;
+  heldMicroUsd: number;
+  holds: { id: string; microUsd: number; runId: string | null; jobId: string | null; createdAt: string }[];
+}
+
+/** `describeLedgerEntry` — one row of GET /api/v1/billing/ledger. */
+export interface MarketLedgerEntry {
+  id: string;
+  kind: string;
+  label: string;
+  microUsd: number;
+  runId: string | null;
+  jobId: string | null;
+  createdAt: string;
+}
+
+/** `describePurchase` — one row of GET /api/v1/market/purchases. */
+export interface MarketPurchase {
+  id: string;
+  provider: string;
+  sellerName: string;
+  size: string;
+  region: string | null;
+  useCase: string;
+  usd: number;
+  per: MarketRatePer;
+  status: 'live' | 'closed' | 'replaced';
+  startedAt: string;
+  endedAt: string | null;
+  secondsBilled: number | null;
+  /** Null while the fill is still running. */
+  costMicroUsd: number | null;
+  runId: string | null;
+  jobId: string | null;
+  sandboxId: string | null;
 }
 
 // ─── Parsing helpers (pure, exported for tests) ─────────────────────────────
@@ -582,12 +643,117 @@ export function formatSettlementRow(s: MarketSettlement): string {
   ].join('  ');
 }
 
+const MICRO_USD = 1_000_000;
+
+/**
+ * The `POST /api/v1/market/bids` body for `bid`: `{size, region?, maxUsd,
+ * per, expiresInHours?, useCase}`. Same `--price <usd>/<unit>` rule as
+ * `sell` — the unit is never implied.
+ */
+export function bidBody(opts: {
+  size: string;
+  price: string;
+  per?: string;
+  region?: string;
+  expiresIn?: string;
+  useCase?: string;
+}): Record<string, unknown> {
+  const rate = parseRate(opts.price, opts.per);
+  const expiresInHours = parseExpiresIn(opts.expiresIn);
+  return {
+    size: opts.size,
+    ...(opts.region !== undefined && { region: opts.region }),
+    maxUsd: rate.usd,
+    per: rate.per,
+    ...(expiresInHours !== undefined && { expiresInHours }),
+    useCase: parseMarketLane(opts.useCase),
+  };
+}
+
+/** `topup <usd>` → `amountUsd`: a positive dollar amount. */
+export function parseTopupAmount(value: string): number {
+  const usd = Number(value.replace(/^\$/, ''));
+  if (!USD_RE.test(value.replace(/^\$/, '')) || !Number.isFinite(usd) || usd <= 0) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Invalid amount "${value}". Expected a positive dollar amount (e.g. 50).`,
+    );
+  }
+  return usd;
+}
+
+export function formatCap(cap: MarketCap | null): string {
+  return cap === null
+    ? 'No market cap — market-placed jobs need their own bid to fill.'
+    : `market cap  ${formatRate(cap.usd, cap.per)}`;
+}
+
+export function formatBidRow(bid: MarketBid): string {
+  const status =
+    bid.status === 'open'
+      ? pc.green('open')
+      : bid.status === 'filled'
+        ? pc.cyan('filled')
+        : pc.gray('cancelled');
+  return [
+    bid.id,
+    status,
+    pc.dim(bid.useCase === 'sandbox' ? 'sandbox' : 'actions'),
+    safeTerm(bid.size),
+    safeTerm(bid.region ?? 'any region'),
+    `≤ ${formatRate(bid.maxUsd, bid.per)}`,
+    pc.dim(bid.expiresAt ? `expires ${bid.expiresAt}` : 'standing'),
+  ].join('  ');
+}
+
+export function formatCredits(b: MarketCreditBalance): string {
+  const lines = [`available  ${formatMoney(b.balanceMicroUsd / MICRO_USD)}`];
+  if (b.holds.length > 0) {
+    lines.push(
+      pc.dim(`reserved   ${formatMoney(b.heldMicroUsd / MICRO_USD)} across ${b.holds.length} running job${b.holds.length === 1 ? '' : 's'}`),
+    );
+  }
+  return lines.join('\n');
+}
+
+export function formatLedgerRow(e: MarketLedgerEntry): string {
+  const usd = e.microUsd / MICRO_USD;
+  const amount = usd < 0 ? `-${formatMoney(-usd)}` : `+${formatMoney(usd)}`;
+  return [
+    pc.dim(e.createdAt.slice(0, 19).replace('T', ' ')),
+    (usd < 0 ? pc.red : pc.green)(amount.padStart(10)),
+    safeTerm(e.label),
+    pc.dim(e.jobId ? `job ${e.jobId}` : ''),
+  ].join('  ').trimEnd();
+}
+
+export function formatPurchaseRow(p: MarketPurchase): string {
+  const cost =
+    p.costMicroUsd !== null
+      ? formatMoney(p.costMicroUsd / MICRO_USD)
+      : p.status === 'live'
+        ? pc.yellow('running')
+        : '-';
+  return [
+    pc.dim(p.startedAt.slice(0, 19).replace('T', ' ')),
+    cost.padStart(10),
+    pc.cyan(safeTerm(p.sellerName)),
+    pc.dim(`${safeTerm(p.provider)}/${safeTerm(p.region ?? 'any')}`),
+    formatRate(p.usd, p.per),
+    p.secondsBilled !== null ? pc.dim(`${p.secondsBilled}s`) : '',
+    p.status === 'replaced' ? pc.yellow('replaced') : '',
+    pc.dim(p.runId ? `run ${p.runId}` : p.sandboxId ? `sandbox ${p.sandboxId}` : ''),
+  ]
+    .filter((part) => part !== '')
+    .join('  ');
+}
+
 // ─── Commands ───────────────────────────────────────────────────────────────
 
 export function registerMarketCommands(program: Command): void {
   const market = program
     .command('market')
-    .description('Sell compute capacity on the compute market')
+    .description('Buy and sell compute capacity on the compute market')
     .configureOutput({ outputError: usageErrorOutput });
 
   const common = (cmd: Command) =>
@@ -841,6 +1007,209 @@ export function registerMarketCommands(program: Command): void {
       fail(e, opts);
     }
   });
+
+  // ── Buyer side ──────────────────────────────────────────────────────────
+
+  const cap = market
+    .command('cap')
+    .description('The org market cap: the most a market-placed job pays without its own bid');
+
+  common(cap.command('show', { isDefault: true }).description('Show the current cap')).action(
+    async (opts: CommonOpts) => {
+      try {
+        const { marketCap } = await (await client(opts)).get<{ marketCap: MarketCap | null }>(
+          '/api/v1/market/bids',
+        );
+        output(opts, marketCap, (c) => console.log(formatCap(c)));
+      } catch (e) {
+        fail(e, opts);
+      }
+    },
+  );
+
+  common(
+    cap
+      .command('set')
+      .description('Set the cap')
+      .requiredOption('--price <usd/unit>', 'max price per unit of time (e.g. 0.40/hour)')
+      .option('--per <unit>', 'unit for a bare --price usd (second, minute, or hour)'),
+  ).action(async (opts: CommonOpts & { price: string; per?: string }) => {
+    try {
+      const rate = parseRate(opts.price, opts.per);
+      const { marketCap } = await (await client(opts)).post<{ marketCap: MarketCap | null }>(
+        '/api/v1/market/bids',
+        { marketCap: rate },
+      );
+      output(opts, marketCap, (c) => console.log(formatCap(c)));
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    cap
+      .command('clear')
+      .description('Remove the cap (refused while your placement order still names market)'),
+  ).action(async (opts: CommonOpts) => {
+    try {
+      const { marketCap } = await (await client(opts)).post<{ marketCap: MarketCap | null }>(
+        '/api/v1/market/bids',
+        { marketCap: null },
+      );
+      output(opts, marketCap, (c) => console.log(formatCap(c)));
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    market
+      .command('bids')
+      .description("Your org's standing bids — open, filled, and cancelled"),
+  ).action(async (opts: CommonOpts) => {
+    try {
+      const { bids } = await (await client(opts)).get<{ bids: MarketBid[] }>(
+        '/api/v1/market/bids',
+      );
+      output(opts, bids, (rows) => {
+        if (rows.length === 0) {
+          console.log('No bids yet — post one with `compute market bid`.');
+          return;
+        }
+        for (const bid of rows) console.log(formatBidRow(bid));
+      });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    market
+      .command('bid')
+      .description('Post a standing bid: the most you will pay for a size tier')
+      .requiredOption('--size <tier>', 'size tier to buy (e.g. xlarge)')
+      .requiredOption('--price <usd/unit>', 'max price per unit of time (e.g. 0.40/hour)')
+      .option('--per <unit>', 'unit for a bare --price usd (second, minute, or hour)')
+      .option('--region <region>', 'only fill in this region (default: any)')
+      .option('--use-case <lane>', 'lane to buy on: actions or sandbox (default: actions)')
+      .option('--expires-in <hours>', 'cancel after this many hours (default: standing)'),
+  ).action(async (opts: CommonOpts & { size: string; price: string; per?: string; region?: string; useCase?: string; expiresIn?: string }) => {
+    try {
+      const result = await (await client(opts)).post<{ bid: MarketBid }>(
+        '/api/v1/market/bids',
+        bidBody(opts),
+      );
+      output(opts, result, (r) => {
+        console.log(`bid placed  ${pc.cyan(r.bid.id)}`);
+        console.log(formatBidRow(r.bid));
+      });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    market
+      .command('cancel-bid')
+      .description('Cancel an open standing bid')
+      .argument('<bid-id>', 'bid ID'),
+  ).action(async (bidId: string, opts: CommonOpts) => {
+    try {
+      const result = await (await client(opts)).del<{ bid: MarketBid }>(
+        `/api/v1/market/bids?id=${encodeURIComponent(bidId)}`,
+      );
+      output(opts, result, (r) => console.log(`cancelled  ${pc.cyan(r.bid.id)}`));
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    market
+      .command('purchases')
+      .description('What the market ran for you: seller, price, duration, and cost, newest first')
+      .option('--limit <n>', 'purchases per page (max 200, default 50)')
+      .option('--cursor <cursor>', 'continue from a previous page'),
+  ).action(async (opts: CommonOpts & { limit?: string; cursor?: string }) => {
+    try {
+      const page = await (await client(opts)).get<{
+        purchases: MarketPurchase[];
+        nextCursor: string | null;
+      }>('/api/v1/market/purchases', { limit: opts.limit, cursor: opts.cursor });
+      output(opts, page, (p) => {
+        if (p.purchases.length === 0) {
+          console.log('No market purchases yet.');
+          return;
+        }
+        for (const row of p.purchases) console.log(formatPurchaseRow(row));
+        if (p.nextCursor) console.log(pc.dim(`more: --cursor ${p.nextCursor}`));
+      });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    market
+      .command('credits')
+      .description('Prepaid market credits: available balance and reserved holds'),
+  ).action(async (opts: CommonOpts) => {
+    try {
+      const balance = await (await client(opts)).get<MarketCreditBalance>(
+        '/api/v1/billing/balance',
+      );
+      output(opts, balance, (b) => console.log(formatCredits(b)));
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    market
+      .command('ledger')
+      .description('Credit history, newest first: top-ups, charges, holds, refunds')
+      .option('--limit <n>', 'entries per page (max 200, default 50)')
+      .option('--cursor <cursor>', 'continue from a previous page'),
+  ).action(async (opts: CommonOpts & { limit?: string; cursor?: string }) => {
+    try {
+      const page = await (await client(opts)).get<{
+        entries: MarketLedgerEntry[];
+        nextCursor: string | null;
+      }>('/api/v1/billing/ledger', { limit: opts.limit, cursor: opts.cursor });
+      output(opts, page, (p) => {
+        if (p.entries.length === 0) {
+          console.log('No credit activity yet — add credits with `compute market topup`.');
+          return;
+        }
+        for (const entry of p.entries) console.log(formatLedgerRow(entry));
+        if (p.nextCursor) console.log(pc.dim(`more: --cursor ${p.nextCursor}`));
+      });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    market
+      .command('topup')
+      .description('Buy prepaid credits — prints a Stripe checkout link to pay in your browser')
+      .argument('<usd>', 'amount in USD (e.g. 50)'),
+  ).action(async (amount: string, opts: CommonOpts) => {
+    try {
+      const result = await (await client(opts)).post<{ url: string; amountMicroUsd: number }>(
+        '/api/v1/billing/topups',
+        { amountUsd: parseTopupAmount(amount) },
+      );
+      output(opts, result, (r) => {
+        console.log(`Pay ${formatMoney(r.amountMicroUsd / MICRO_USD)} at:`);
+        console.log(r.url);
+      });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  // ── Seller credential ───────────────────────────────────────────────────
 
   const credential = market
     .command('credential')

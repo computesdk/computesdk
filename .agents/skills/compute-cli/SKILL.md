@@ -20,7 +20,7 @@ npm i -g @computesdk/cli                # or install once
 - `compute login` / `compute logout` — OAuth device flow (the approval screen shows an org picker); one stored session covers every group below (`sandboxes`, `actions`, `market`, `bench`).
 - `compute org list` / `compute org use <slug>` / `compute org current` / `compute whoami` — manage the persisted active org (2.1+). `--org <slug>` or `COMPUTE_ORG` overrides per command; org API keys are tied to one org, so `--org` doesn't apply to them.
 - `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only. (The gateway `compute run` command and `COMPUTESDK_API_KEY` were removed in @computesdk/cli 2.0.)
-- `compute sandboxes|sbx <sub>` — hosted platform sandboxes over `/api/v1/sandboxes` (create/list/get/destroy, exec, spawn/ps/logs/wait/kill/stdin/close-stdin, ls/cat/write/mkdir/rm, url, snapshots/snapshot/snapshot-delete). exec|spawn pass command flags through to the sandbox: everything after the command's first word goes through untouched (`uname -a`, `node -e …` are not CLI flags); CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`, `--api-key`, `--base-url`) go before the command; a bare `--` separator is optional but supported, e.g. `spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev`.
+- `compute sandboxes|sbx <sub>` — hosted platform sandboxes over `/api/v1/sandboxes` (create/list/get/destroy, use, run, serve, cp, exec, spawn/ps/logs/wait/kill/stdin/close-stdin, ls/cat/write/mkdir/rm, url, snapshots/snapshot/snapshot-delete). `[id]` is optional everywhere a sandbox id is taken — resolution: explicit arg → `COMPUTE_INSTANCE` → per-dir pick (`use`/`create` set it). `-q` prints only the identifier (id / job id / URL); `--verbose` prints full details. exec|spawn pass command flags through to the sandbox: everything after the command's first word goes through untouched (`uname -a`, `node -e …` are not CLI flags); CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`, `--api-key`, `--base-url`) go before the command; a bare `--` separator is optional but supported, e.g. `spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev`.
 - `compute actions|ci <sub>` — benchmarks-platform Actions API (dispatch/runs/history/run/summary/inspect/logs/cancel/rerun/artifacts, providers, repos, vault).
 - `compute market <sub>` — sell side of the compute market (asks/bids/fills, provider credential, settlements). `sell --use-case actions|sandbox` (default `actions`) posts into one lane — the principal must be approved for it or the API returns `market_lane_not_approved` (403); sandbox listings take a platform size (`small`–`xlarge`) as `--size`. `sell --price` needs a unit — `--price 0.12/hour` or `--price 0.12 --per hour` (same rule as `--max-price`). `book --use-case` filters the book to one lane (default: both); `listings` prints each listing's lane column. `status` shows the principal's approved lanes (`useCases`).
 - `compute bench <args>` — full bench CLI folded in (run/check/auth/org/benchmarks/runs/results/iterations/artifacts/logs/export); dispatched pre-commander to `@benchsdk/runner`'s `run()`.
@@ -37,7 +37,7 @@ Resolution order: `--api-key` → `COMPUTE_API_KEY` → `BENCHMARKS_PLATFORM_API
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...] [--manual]
 compute actions runs <repo> [--status ...] [--branch ...]
 compute actions history <repo> --workflow <path|name> [--branch ...] [--job] [--limit n]
-compute actions run|summary|inspect <run-id>
+compute actions run|summary|inspect|benchmarks <run-id>
 compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
 compute actions cancel|rerun <run-id>
 compute actions artifacts <run-id> [--job] [--out <dir>]
@@ -51,6 +51,8 @@ compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|
 - `logs --follow` uses resumable byte-offset cursors; reconnects resume from `nextOffset`.
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
 - Run dashboard URLs: `{base}/{orgSlug}/actions/runs/{runId}`.
+
+- Run local changes without committing: `compute actions dispatch <owner/repo> --workflow <path|name> --with-changes` — diffs the working tree against `origin/<ref>` (default `--ref`: current branch), uploads it to `POST /api/v1/actions/patches`, dispatches with `patchId`; the job applies it after checkout. A dirty tree without the flag gets a hint on stderr. A workflow file that exists only in the working tree is dispatched by path (`repoFullName + workflowPath`) and the platform builds the run from the diff.
 
 ## Sandboxes quick reference
 
@@ -67,14 +69,18 @@ compute sandboxes settings set [--order market,blaxel|inherit] [--order-type lim
 compute actions settings [--json]                       # org Actions routing policy
 compute actions settings set [--order market,blaxel|default] [--order-type limit|market]
     [--general-cap <usd>/<unit>|none] [--cap <size>=<usd>/<unit>|<size>=none]…
-compute sandboxes exec <id> <command...>          # one-off, buffered (~290s max)
+compute sandboxes use <id>|use --clear                 # per-dir current instance
+compute sandboxes run [create flags] [--keep] [-d] -- <cmd...>   # create+spawn+stream, destroy at end
+compute sandboxes serve [id] --port <n> -- <cmd...>        # server → waits for port → prints URL
+compute sandboxes cp <src> <dst>                           # one side [id:]/abs/path, one side local
+compute sandboxes exec [id] <command...>          # one-off, buffered (~290s max)
 compute sandboxes spawn|ps|logs|wait|kill|stdin|close-stdin   # detached processes
-compute sandboxes ls|cat|write|mkdir|rm <id> [path]
-compute sandboxes url <id> --port <n>
+compute sandboxes ls|cat|write|mkdir|rm [id] [path]
+compute sandboxes url [id] --port <n>
 compute sandboxes snapshots|snapshot|snapshot-delete
 ```
 
-REST: `POST /api/v1/sandboxes` → `{ sandbox: { id, … } }`; provider order (`provider[:region]`, `market` bids first) resolves per-request `providerOrder` → org sandbox order → Actions order → default; `GET/PATCH /api/v1/sandboxes/settings` holds `providerOrder`/`marketCap`/`marketCaps`/`marketOrderType`/`providerResources`/`warmPool` (+ `actions*` inherit references, `referencePrices` per platform size); same shape on `/api/v1/actions/settings` for the Actions lane; rates at `/api/v1/sandboxes/rates`; pool at `/api/v1/sandboxes/pool/fill`; `GET /api/v1/sandboxes/{id}` returns the BYOK `attach: {provider, providerSandboxId, region}` descriptor (null on market fills/ambient).
+REST: `POST /api/v1/sandboxes` → `{ sandbox: { id, … } }` (from code, prefer the `@computesdk/platform` provider over raw REST — same `compute.sandbox` interface); provider order (`provider[:region]`, `market` bids first) resolves per-request `providerOrder` → org sandbox order → Actions order → default; `GET/PATCH /api/v1/sandboxes/settings` holds `providerOrder`/`marketCap`/`marketCaps`/`marketOrderType`/`providerResources`/`warmPool` (+ `actions*` inherit references, `referencePrices` per platform size); same shape on `/api/v1/actions/settings` for the Actions lane; rates at `/api/v1/sandboxes/rates`; pool at `/api/v1/sandboxes/pool/fill`; `GET /api/v1/sandboxes/{id}` returns the BYOK `attach: {provider, providerSandboxId, region}` descriptor (null on market fills/ambient).
 
 Buyer-side platform sizes: `small` 1 vCPU/2 GB, `medium` 2/4 GB, `large` 4/8 GB, `xlarge` 8/16 GB — `--size` is the normal way to say how big a box should be (default `medium`); raw `--cpus`/`--memory-mb`/`--disk-mb` stay for advanced use and are mutually exclusive with `--size`. Market fills report the requested `size` plus the seller's `box` (provider, the ask's `sizeName`, resources) in `placement`.
 
@@ -107,6 +113,21 @@ compute actions dispatch computesdk/ci-test --workflow Smoke --ref main
 compute actions logs <run-id> --follow
 compute actions run <run-id>
 ```
+
+## Benchmark results on a run
+
+A run that executed a benchmark (`@benchsdk/runner` reports `COMPUTESDK_RUN_ID`) carries the
+numbers; agents read them instead of parsing logs:
+
+```bash
+compute actions benchmarks <run-id>          # per-provider score / success table (overall rows)
+compute actions benchmarks <run-id> --json   # { runId, conclusion, benchmarks: [{ benchmarkSlug, status, dashboardUrl, providers: [...] }] }
+```
+
+`benchmarks: []` means the workflow ran no benchmark (Actions is general CI — `results` is not used for this); a benchmark still running is listed with
+`providers: []` until its summary uploads. `--json` includes every dimension row (e.g. `phase`);
+the table shows each provider's overall row. The Actions conclusion is the job exit code — a
+provider failing tasks shows as `successRate < 1` here, not as a failed run.
 
 ## Repo conventions
 

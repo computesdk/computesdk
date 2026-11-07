@@ -32,6 +32,10 @@ tags:
 
 Beam provider for ComputeSDK
 
+## Lifecycle
+
+Snapshots declare rootfs and memory preservation with the source kept; the declared path is `/root`. Restore with `snapshotId`; see [snapshot semantics and cleanup](../reference/compute.md#snapshot-capabilities).
+
 ## Installation & Setup
 
 ```bash

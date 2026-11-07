@@ -47,7 +47,7 @@ describe('namespace create passthrough', () => {
     expect(calls[0].body.shape.virtual_cpu).toBe(2);
   });
 
-  it('keeps provider-set fields authoritative over passthrough', async () => {
+  it('keeps container fields authoritative while allowing per-create shape overrides', async () => {
     const calls = mockFetch();
     const provider = namespace({ token: 'ns_test' });
     await provider.sandbox.create({
@@ -62,7 +62,9 @@ describe('namespace create passthrough', () => {
       instanceOptions: { shape: { virtual_cpu: 64 }, containers: [] },
     } as any);
     const body = calls[0].body;
-    expect(body.shape.virtual_cpu).toBe(2);
+    // This override already wins in the legacy adapter; only container fields
+    // below are provider-authoritative. No standard-size API is involved.
+    expect(body.shape.virtual_cpu).toBe(64);
     expect(body.containers).toHaveLength(1);
     expect(body.containers[0].name).toBe('main-container');
     expect(body.containers[0].image_ref).toBe('node:22');

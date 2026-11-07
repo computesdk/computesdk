@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { calculateBackoff } from '../utils';
+import { calculateBackoff, isUnifiedVolumeMounts } from '../utils';
 
 describe('calculateBackoff', () => {
   it('should calculate exponential backoff for attempt 0', () => {
@@ -66,5 +66,29 @@ describe('calculateBackoff', () => {
 
     expect(delay1).toBe(delay0 * 2);
     expect(delay2).toBe(delay1 * 2);
+  });
+});
+
+describe('isUnifiedVolumeMounts', () => {
+  it('accepts unified VolumeMount entries', () => {
+    expect(isUnifiedVolumeMounts([
+      { volume: 'my-vol', mountPath: '/data' },
+      { volume: { name: 'v2' }, mountPath: '/x', readOnly: true },
+    ])).toBe(true);
+  });
+
+  it('rejects provider-native volume specs (no volume key)', () => {
+    // e.g. blaxel's native {name, type, sizeMb, mountPath} create spec.
+    expect(isUnifiedVolumeMounts([{ name: 'dax-root', type: 'ephemeral', sizeMb: 16384, mountPath: '/' }])).toBe(false);
+  });
+
+  it('rejects mixed arrays', () => {
+    expect(isUnifiedVolumeMounts([{ volume: 'x', mountPath: '/' }, { name: 'native' }])).toBe(false);
+  });
+
+  it('rejects non-array values, empty arrays, and undefined', () => {
+    expect(isUnifiedVolumeMounts({ '/data': {} })).toBe(false);
+    expect(isUnifiedVolumeMounts([])).toBe(false);
+    expect(isUnifiedVolumeMounts(undefined)).toBe(false);
   });
 });

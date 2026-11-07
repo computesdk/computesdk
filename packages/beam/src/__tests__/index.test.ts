@@ -24,6 +24,7 @@ runProviderTestSuite({
   provider: beam({}),
   // Beam supports filesystem operations via shell commands + native listFiles
   supportsFilesystem: true,
+  supportsSnapshots: true,
   // Skip integration tests if required environment variables are not set
   skipIntegration: !process.env.BEAM_TOKEN || !process.env.BEAM_WORKSPACE_ID,
 });
@@ -43,6 +44,8 @@ function mockSandbox() {
       listFiles: vi.fn().mockResolvedValue([]),
       writeText: vi.fn().mockResolvedValue(undefined),
       readText: vi.fn().mockResolvedValue(''),
+      statFile: vi.fn().mockRejectedValue(new Error('no such file')),
+      readBytes: vi.fn(),
     },
   } as unknown as SandboxInstance;
   vi.spyOn(Sandbox.prototype, 'create').mockResolvedValue(instance);
@@ -114,6 +117,18 @@ describe('lazy sandbox readiness', () => {
     expect(process.wait).toHaveBeenCalledOnce();
   });
 
+  test('fills HOME for commands because the exec gateway starts without it', async () => {
+    const instance = mockSandbox();
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+
+    await sandbox.runCommand('echo "$HOME"', { env: { FOO: 'bar' }, background: true });
+
+    const [argv] = vi.mocked(instance.exec).mock.calls[0];
+    const script = (argv as string[])[2];
+    expect(script).toMatch(/^\[ -n "\$HOME" \] \|\| HOME=.*\/etc\/passwd.*export HOME=/);
+    expect(script).toMatch(/; nohup sh -c '.*export FOO="bar"\necho "\$HOME"' > \/dev\/null 2>&1 &$/s);
+  });
+
   test('writes and reads files through the native fs API instead of shell arguments', async () => {
     const instance = mockSandbox();
     vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
@@ -136,6 +151,76 @@ describe('lazy sandbox readiness', () => {
 
     const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
     await expect(sandbox.filesystem.readFile('/missing.txt')).rejects.toThrow('Failed to read file /missing.txt: no such file');
+    expect(instance.exec).not.toHaveBeenCalled();
+  });
+
+  test('resolves gateway-rejected symlinks in the guest and reads their native target', async () => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    const path = "/root/link '$(touch bad).txt";
+    const target = '/root/target with spaces.txt';
+    vi.mocked(instance.fs.readText)
+      .mockRejectedValueOnce(new Error('openat: path escapes from parent'))
+      .mockResolvedValueOnce('linked content\n');
+    const proc = await instance.exec(['true']);
+    vi.mocked(proc.stdout.read).mockResolvedValue(`${target}\n`);
+    vi.mocked(instance.exec).mockClear();
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile(path)).resolves.toBe('linked content\n');
+
+    expect(instance.exec).toHaveBeenCalledOnce();
+    expect(instance.exec).toHaveBeenCalledWith(['readlink', '-f', '--', path]);
+    expect(instance.fs.readText).toHaveBeenNthCalledWith(2, target);
+    expect(proc.wait).toHaveBeenCalledOnce();
+  });
+
+  test('retains chunked downloads for large symlink targets', async () => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    vi.mocked(instance.fs.readText)
+      .mockRejectedValueOnce(new Error('path escapes from parent'))
+      .mockRejectedValueOnce(new Error('Request failed with status code 429'));
+    vi.mocked(instance.fs.statFile).mockResolvedValue({ size: 2 * 1024 * 1024 } as Awaited<ReturnType<typeof instance.fs.statFile>>);
+    vi.mocked(instance.fs.readBytes).mockResolvedValue(Buffer.alloc(1024 * 1024, 'x'));
+    const proc = await instance.exec(['true']);
+    vi.mocked(proc.stdout.read).mockResolvedValue('/root/large.txt\n');
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile('/root/link.txt')).resolves.toBe('x'.repeat(2 * 1024 * 1024));
+
+    expect(instance.fs.statFile).toHaveBeenCalledWith('/root/large.txt');
+    expect(instance.fs.readBytes).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(instance.exec).mock.calls.some(([argv]) =>
+      (argv as string[]).some((arg) => arg.includes("split -a 6 -d -b 1048576 '/root/large.txt'")),
+    )).toBe(true);
+  });
+
+  test('does not retry symlink resolution if the gateway also rejects the resolved target', async () => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    vi.mocked(instance.fs.readText).mockRejectedValue(new Error('path escapes from parent'));
+    const proc = await instance.exec(['true']);
+    vi.mocked(proc.stdout.read).mockResolvedValue('/root/target.txt\n');
+    vi.mocked(instance.exec).mockClear();
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile('/root/link.txt')).rejects.toThrow('path escapes from parent');
+    expect(instance.exec).toHaveBeenCalledOnce();
+    expect(instance.fs.readText).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([1, 0])('keeps the native error when readlink fails or returns no target (exit %i)', async (exitCode) => {
+    const instance = mockSandbox();
+    vi.spyOn(Sandbox, 'connect').mockResolvedValue(instance);
+    vi.mocked(instance.fs.readText).mockRejectedValue(new Error('path escapes from parent'));
+    const proc = await instance.exec(['true']);
+    proc.exitCode = exitCode;
+    vi.mocked(instance.exec).mockClear();
+
+    const sandbox = await beam({ token: 'token', workspaceId: 'workspace' }).sandbox.create();
+    await expect(sandbox.filesystem.readFile('/root/link.txt')).rejects.toThrow('path escapes from parent');
+    expect(instance.fs.readText).toHaveBeenCalledOnce();
   });
 
   test('reuses the sandbox builder across equivalent provider instances', async () => {
@@ -196,4 +281,66 @@ describe('lazy sandbox readiness', () => {
     const commands: string[] = builders[0].stub.config.image.config.commands;
     expect(commands.some((c) => c.includes('docker-ce'))).toBe(true);
   });
+});
+
+describe.skipIf(!process.env.BEAM_TOKEN || !process.env.BEAM_WORKSPACE_ID)('beam live capabilities', () => {
+  const provider = beam({});
+
+  test('snapshot restores files and memory into a new sandbox', async () => {
+    const source = await provider.sandbox.create();
+    let restoredId: string | undefined;
+    try {
+      await source.filesystem.writeFile('/tmp/snap-marker.txt', 'checkpointed');
+      const snapshot = await provider.snapshot!.create(source.sandboxId, { name: 'computesdk-test' });
+      expect(snapshot.id).toBeTruthy();
+      expect(snapshot.id).not.toBe(source.sandboxId);
+
+      const restored = await provider.sandbox.create({ snapshotId: snapshot.id });
+      restoredId = restored.sandboxId;
+      expect(restored.sandboxId).not.toBe(source.sandboxId);
+      expect(await restored.filesystem.readFile('/tmp/snap-marker.txt')).toBe('checkpointed');
+    } finally {
+      await provider.sandbox.destroy(source.sandboxId).catch(() => {});
+      if (restoredId) await provider.sandbox.destroy(restoredId).catch(() => {});
+    }
+  }, 600_000);
+
+  test('round-trips files larger than the gateway message cap', async () => {
+    const sandbox = await provider.sandbox.create();
+    try {
+      const content = 'abcdefghij'.repeat(2_000_000) + 'tail';
+      await sandbox.filesystem.writeFile('/tmp/large.txt', content);
+      const size = await sandbox.runCommand('wc -c < /tmp/large.txt');
+      expect(size.stdout.trim()).toBe(String(content.length));
+      const read = await sandbox.filesystem.readFile('/tmp/large.txt');
+      expect(read.length).toBe(content.length);
+      expect(read === content).toBe(true);
+      const leftovers = await sandbox.runCommand('ls /tmp | grep -c computesdk- || true');
+      expect(leftovers.stdout.trim()).toBe('0');
+    } finally {
+      await provider.sandbox.destroy(sandbox.sandboxId).catch(() => {});
+    }
+  }, 600_000);
+
+  test('mounts a volume at the requested path and keeps data across sandboxes', async () => {
+    const volume = await provider.volume!.create({ name: `computesdk-test-${Date.now().toString(36)}` });
+    const mountPath = '/mnt/computesdk-vol';
+    const ids: string[] = [];
+    try {
+      const first = await provider.sandbox.create({ volumes: [{ volume, mountPath }] });
+      ids.push(first.sandboxId);
+      const mounts = await first.runCommand(`grep -c ' ${mountPath} ' /proc/mounts || true`);
+      expect(Number(mounts.stdout.trim())).toBeGreaterThan(0);
+      await first.runCommand(`echo persisted > ${mountPath}/marker.txt`);
+      await provider.sandbox.destroy(first.sandboxId);
+
+      const second = await provider.sandbox.create({ volumes: [{ volume, mountPath }] });
+      ids.push(second.sandboxId);
+      const read = await second.runCommand(`cat ${mountPath}/marker.txt`);
+      expect(read.stdout.trim()).toBe('persisted');
+    } finally {
+      for (const id of ids) await provider.sandbox.destroy(id).catch(() => {});
+      await provider.volume!.delete(String(volume.id)).catch(() => {});
+    }
+  }, 600_000);
 });

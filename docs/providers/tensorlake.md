@@ -31,6 +31,10 @@ tags:
 
 Tensorlake provider for ComputeSDK - Stateful MicroVM sandboxes for agentic applications and LLM-generated code execution.
 
+## Lifecycle
+
+Create with `{ ephemeral: false }` for pause/resume, which preserve memory and processes. Snapshot capabilities instead declare whole-rootfs **without** memory and keep the source. Restore with `snapshotId`; pause support does not imply memory snapshots.
+
 ## Installation & Setup
 
 ```bash

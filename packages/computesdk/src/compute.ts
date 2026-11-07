@@ -4,9 +4,14 @@
  * `compute` delegates to one or more configured provider instances directly.
  */
 
+import { assertInstanceSizeSupported, hasInstanceSizeRequest, validateInstanceSizeOptions } from './sizes';
+
 import type {
   Instance as InstanceInterface,
   CreateInstanceOptions as UniversalCreateInstanceOptions,
+  Volume,
+  CreateVolumeOptions,
+  ListVolumesOptions,
 } from './types/universal-instance';
 
 export interface CreateInstanceOptions extends UniversalCreateInstanceOptions {
@@ -26,6 +31,11 @@ export interface CreateSnapshotOptions {
   provider?: string;
 }
 
+export interface ComputeCreateVolumeOptions extends CreateVolumeOptions {
+  /** Optional provider name override (must match provider.name) */
+  provider?: string;
+}
+
 interface ProviderInstanceManager {
   create(options?: CreateInstanceOptions): Promise<InstanceInterface>;
   getById(instanceId: string): Promise<InstanceInterface | null>;
@@ -39,7 +49,16 @@ interface ProviderSnapshotManager {
   delete(snapshotId: string): Promise<void>;
 }
 
+interface ProviderVolumeManager {
+  create(options: CreateVolumeOptions): Promise<Volume>;
+  get(volumeIdOrName: string): Promise<Volume | null>;
+  list(options?: ListVolumesOptions): Promise<Volume[]>;
+  delete(volumeIdOrName: string): Promise<void>;
+}
+
 export interface DirectProvider {
+  /** Legacy providers may use this name for unrelated data; guarded before standard-size use. */
+  readonly sizes?: unknown;
   readonly name?: string;
   /** Instance lifecycle manager (canonical). */
   readonly instances?: ProviderInstanceManager;
@@ -49,6 +68,7 @@ export interface DirectProvider {
    */
   readonly sandbox?: ProviderInstanceManager;
   readonly snapshot?: ProviderSnapshotManager;
+  readonly volume?: ProviderVolumeManager;
 }
 
 /**
@@ -63,7 +83,12 @@ export interface ExplicitComputeConfig {
   providers?: DirectProvider[];
   /** Provider selection strategy when no explicit provider is passed */
   providerStrategy?: 'priority' | 'round-robin';
-  /** Retry the next provider when create fails */
+  /**
+   * Retry the next provider when create fails (legacy creates only).
+   * A defined sizeClass pins one normally selected provider: unknown capability,
+   * invalid/conflicting requests, and native auth/capacity/create errors never
+   * reroute, even when true. Native errors retain their original identity.
+   */
   fallbackOnError?: boolean;
 }
 
@@ -103,6 +128,21 @@ function getProviderErrorDetail(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+/**
+ * AggregateError-style failure for multi-provider creates: the original
+ * errors stay inspectable on `.errors` (`AggregateError` itself isn't in the
+ * es2020 lib this package targets).
+ */
+class MultiProviderError extends Error {
+  constructor(
+    public errors: unknown[],
+    message: string,
+  ) {
+    super(message);
+    this.name = 'AggregateError';
+  }
 }
 
 function resolveProviders(config: ExplicitComputeConfig): DirectProvider[] {
@@ -154,6 +194,7 @@ class ComputeManager {
   private roundRobinCursor = 0;
   private instanceProviders = new Map<string, DirectProvider>();
   private snapshotProviders = new Map<string, DirectProvider>();
+  private volumeProviders = new Map<string, DirectProvider>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
       throw new Error(
@@ -231,6 +272,7 @@ class ComputeManager {
   }
 
   private async createWithFallback(options?: CreateInstanceOptions): Promise<InstanceInterface> {
+    if (hasInstanceSizeRequest(options)) validateInstanceSizeOptions(options!);
     const preferredProviderName = options?.provider;
     // `provider` is routing metadata consumed by ComputeManager. `kind` is
     // reserved vocabulary (not yet in the type): strip it too so callers
@@ -238,11 +280,13 @@ class ComputeManager {
     // create options, where strict validators (e.g. Sail) reject it.
     const { provider: _providerName, kind: _kind, ...providerOptions } = options || {};
     const candidates = this.getCreateCandidates(preferredProviderName);
-    const canFallback = this.fallbackOnError && !preferredProviderName;
+    const canFallback = this.fallbackOnError && !preferredProviderName && providerOptions.sizeClass === undefined;
     const errors: string[] = [];
+    const providerErrors: unknown[] = [];
 
     for (const [index, provider] of candidates.entries()) {
       try {
+        assertInstanceSizeSupported(provider, providerOptions);
         const instance = await getInstanceManager(provider)!.create(providerOptions);
         if (
           providerOptions?.egress &&
@@ -267,6 +311,14 @@ class ComputeManager {
         if (error instanceof Error && (error as any).name === 'AbortError') {
           throw error;
         }
+        // `fallback: false` marks an error whose outcome is unknown — e.g.
+        // @computesdk/platform's create_outcome_unknown, where a hosted box
+        // may already exist and be billing. Trying the next provider could
+        // boot a second box, so rethrow immediately.
+        if (error instanceof Error && (error as { fallback?: boolean }).fallback === false) {
+          throw error;
+        }
+        providerErrors.push(error);
         errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         if (!canFallback) {
           throw error;
@@ -274,7 +326,10 @@ class ComputeManager {
       }
     }
 
-    throw new Error(
+    // Keep the original provider errors on `.errors` so callers can inspect
+    // each provider's error code in multi-provider mode.
+    throw new MultiProviderError(
+      providerErrors,
       `Failed to create instance across ${candidates.length} provider(s).\n` +
       errors.map((error) => `- ${error}`).join('\n')
     );
@@ -287,6 +342,7 @@ class ComputeManager {
     this.roundRobinCursor = 0;
     this.instanceProviders.clear();
     this.snapshotProviders.clear();
+    this.volumeProviders.clear();
   }
 
   instances = {
@@ -421,6 +477,120 @@ class ComputeManager {
 
       throw new Error(
         `Failed to delete snapshot "${snapshotId}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+  };
+
+  /**
+   * Persistent volumes. Only providers exposing `provider.volume` participate;
+   * `create` targets the named provider or the first configured one that
+   * supports volumes.
+   */
+  volume = {
+    create: async (options: ComputeCreateVolumeOptions): Promise<Volume> => {
+      const preferredProviderName = options?.provider;
+      const { provider: _providerName, ...providerOptions } = options || {};
+      const candidates = preferredProviderName
+        ? [this.getProviderByName(preferredProviderName)]
+        : this.getProviders().filter((p) => !!p.volume);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume) {
+          errors.push(`${getProviderLabel(provider, index)}: volumes not supported`);
+          continue;
+        }
+
+        try {
+          const volume = await provider.volume.create(providerOptions);
+          if (volume.id) this.volumeProviders.set(volume.id, provider);
+          if (volume.name && volume.name !== volume.id) this.volumeProviders.set(volume.name, provider);
+          return volume;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+          if (preferredProviderName) throw error;
+        }
+      }
+
+      throw new Error(
+        `Failed to create volume "${providerOptions.name}" across ${candidates.length} provider(s).\n` +
+        errors.map((error) => `- ${error}`).join('\n')
+      );
+    },
+
+    get: async (volumeIdOrName: string, providerName?: string): Promise<Volume | null> => {
+      const known = this.volumeProviders.get(volumeIdOrName);
+      const candidates = providerName
+        ? [this.getProviderByName(providerName)]
+        : known
+          ? [known, ...this.getProviders().filter((p) => p !== known && !!p.volume)]
+          : this.getProviders().filter((p) => !!p.volume);
+
+      for (const provider of candidates) {
+        if (!provider.volume) continue;
+        const volume = await provider.volume.get(volumeIdOrName);
+        if (volume) {
+          this.volumeProviders.set(volumeIdOrName, provider);
+          return volume;
+        }
+      }
+      return null;
+    },
+
+    list: async (options?: ListVolumesOptions & { provider?: string }): Promise<Volume[]> => {
+      const candidates = options?.provider
+        ? [this.getProviderByName(options.provider)]
+        : this.getProviders().filter((p) => !!p.volume);
+      const volumes: Volume[] = [];
+
+      for (const provider of candidates) {
+        if (!provider.volume) continue;
+        let listed: Volume[];
+        try {
+          listed = await provider.volume.list(options);
+        } catch (error) {
+          // Providers without a volume-list API (e.g. modal) throw the
+          // factory's 'does not support listing' stub — skip only those.
+          // Real failures (network, RBAC, 5xx) must surface: returning a
+          // partial inventory as success hides provider outages.
+          if (/does not support listing/i.test(getProviderErrorDetail(error))) continue;
+          throw error;
+        }
+        for (const volume of listed) {
+          if (volume.id) this.volumeProviders.set(volume.id, provider);
+          if (volume.name) this.volumeProviders.set(volume.name, provider);
+          volumes.push({ provider: provider.name, ...volume });
+        }
+      }
+      return volumes;
+    },
+
+    delete: async (volumeIdOrName: string, providerName?: string): Promise<void> => {
+      const known = this.volumeProviders.get(volumeIdOrName);
+      // When the owning provider is known, delete only there — retrying the
+      // same id/name on other providers could delete a *different* volume
+      // (or report an idempotent success while the real volume remains).
+      const candidates = providerName
+        ? [this.getProviderByName(providerName)]
+        : known
+          ? [known]
+          : this.getProviders().filter((p) => !!p.volume);
+      const errors: string[] = [];
+
+      for (const [index, provider] of candidates.entries()) {
+        if (!provider.volume) continue;
+        try {
+          await provider.volume.delete(volumeIdOrName);
+          this.volumeProviders.delete(volumeIdOrName);
+          return;
+        } catch (error) {
+          errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
+        }
+      }
+
+      throw new Error(
+        `Failed to delete volume "${volumeIdOrName}" across ${candidates.length} provider(s).\n` +
         errors.map((error) => `- ${error}`).join('\n')
       );
     },

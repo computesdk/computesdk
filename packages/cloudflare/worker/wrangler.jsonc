@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "computesdk-sandbox",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // @cloudflare/sandbox resolves Linux errno names through node:os.
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    // How long an idle container keeps running after the last request, up to 6 hours.
+    "SANDBOX_INACTIVITY_TIMEOUT_MS": "600000"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "SANDBOX", "class_name": "Sandbox" },
+      { "name": "SNAPSHOTS", "class_name": "SnapshotIndex" }
+    ]
+  },
+  "exports": {
+    "Sandbox": { "type": "durable-object", "storage": "sqlite" },
+    "SnapshotIndex": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "default": { "dockerfile": "./Dockerfile" },
+        "builder": { "dockerfile": "./images/builder/Dockerfile" }
+      }
+    }
+  ],
+  "observability": { "enabled": true }
+}

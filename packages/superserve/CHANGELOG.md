@@ -1,5 +1,77 @@
 # @computesdk/superserve
 
+## 0.2.20
+
+### Patch Changes
+
+- 1904e82: Native `instance.pause()`/`resume()` (memory and processes survive) and declared snapshot capabilities: memory+disk snapshots of the whole rootfs that leave the source running.
+- 1904e82: Run the shared process conformance tests (`startProcess` stdin, kill, parallel starts, reattach) against Superserve.
+- 1904e82: Implement `template.create` via Superserve's template builder (`from`, `vcpu`, `memoryMib`, `diskMib`, `steps`, `startCmd`, `readyCmd`), waiting until the build is ready; template metadata now includes `diskMib` and build `errorMessage`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.2.19
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.2.18
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.2.17
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 0.2.16
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 0.2.15
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 0.2.14
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 0.2.13
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
 ## 0.2.12
 
 ### Patch Changes

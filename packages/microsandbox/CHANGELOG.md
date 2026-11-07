@@ -1,5 +1,116 @@
 # @computesdk/microsandbox
 
+## 0.1.25
+
+### Patch Changes
+
+- 1904e82: Use `MSB_API_KEY` (and `MSB_API_URL`) from the environment to select the cloud backend, and refuse to snapshot running ephemeral sandboxes instead of stopping them away.
+- 1904e82: Stream large `writeFile`/`readFile` payloads so files of 1 MiB and up work on microsandbox cloud, where a single large fs call drops the channel.
+- 1904e82: Upgrade to microsandbox 0.7: restore snapshots via `Sandbox.restore`, enable disk snapshots on the cloud backend, declare snapshot capabilities, and expose local pause/resume through `instance.pause()`/`resume()`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.24
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.1.23
+
+### Patch Changes
+
+- d4424cd: runCommand: capture output via guest files instead of streamed exec output. Provider exec transports can drop a contiguous chunk mid-stream (observed across all five providers during a CPU-bound quiet stretch) while still reporting success, silently corrupting captured stdout/stderr. Commands now redirect output to files inside the sandbox and the adapter reads them back with short-lived commands, verified against byte counts the command writes alongside. Microsandbox additionally records byte counts and re-reads through the alternate transport on a mismatch.
+
+## 0.1.22
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.1.21
+
+### Patch Changes
+
+- 3b0030c: Fail fast when a detached command never starts. The status probe now distinguishes "worker never wrote its pid sentinel" (exit 3) from "still running" (exit 1): the launch-drop retry treats a persistent exit 3 as not-launched and relaunches, and the poll loop errors after ~30s of consecutive exit 3s instead of spinning until the caller's timeout — or forever when none was set — for a worker the provider reaped before its first write or a launch that never ran. The worker's pid write is now an atomic noclobber claim so a relaunch racing a slow first worker can't run the command twice; the relaunch clears the claim only when the probe proved the previous worker dead.
+
+## 0.1.20
+
+### Patch Changes
+
+- e3f821f: Run `runCommand` commands as detached workers (setsid + on-guest sentinel files) and poll status with short-lived execs. The cloud relay drops exec sessions around ~2 minutes, which killed any long-running command mid-flight; detached mode keeps every exec under the lifetime cap while preserving exit code, stdout/stderr, timeout (exit 124 + process-group kill), and a fast failure when the runtime reaps the worker.
+- e3f821f: Retry `runCommand` once when the agent's exec stream ends without an exit event — a channel-level flake that was surfacing as a hard failure and dropping all captured output.
+
+## 0.1.19
+
+### Patch Changes
+
+- d24737a: Retry `runCommand` once when the agent's exec stream ends without an exit event — a channel-level flake that was surfacing as a hard failure and dropping all captured output.
+
+## 0.1.18
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 0.1.17
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 0.1.16
+
+### Patch Changes
+
+- 4930f49: fix(volumes): soak-2 — settle-wrap attach + create-time mounts, daytona ready-wait, microsandbox named(), miosa computer-only error
+
+  - factory: `attachVolume` and `create({volumes})` run inside `withVolumeSettle` — re-attaching a volume right after `destroy()` raced the provider's async unmount (blaxel "already attached", tenki `SYNC_PENDING`); the settle window absorbs it for every provider at once.
+  - daytona: `volume.create` returns a ready handle and `volume.delete` waits out `pending_create` — both operations reject the transitional state.
+  - microsandbox: mount via `named()` — the backend rejects the `ensure-exists` inline-create option on sandbox create.
+  - miosa: `attachVolume`/`detachVolume` throw a clear "volumes attach to computers, not sandboxes" error when the record carries no `computer_id`, instead of POSTing an id that always 404s.
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 0.1.15
+
+### Patch Changes
+
+- a3de4ae: Volume soak fixes: `withVolumeSettle` retries volume delete while the provider reports it still attached (sandbox.destroy() returns before the control plane unmounts); daytona volume get/delete resolve by id or name (`volume.get` is name-keyed); miosa create defaults size_bytes to 1 GiB (missing field 422s); sandbox0 create sends the explicit s0fs/RWO request.
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 0.1.14
+
+### Patch Changes
+
+- 9ea2fa0: Use `namedWith(name, "ensure-exists")` for unified volume mounts — a mount issued right after `Volume.create` raced the volume landing and crashed sandbox boot (verify-run SIGABRT).
+- 1b639da: Add a unified persistent-volume surface: `CreateInstanceOptions.volumes` (create-time mounts), `compute.volume.create/get/list/delete` with multi-provider routing, and `instance.attachVolume`/`detachVolume` where the provider exposes runtime attach. Provider plumbing maps the unified `VolumeMount[]` onto each native wire shape (daytona `volumes[]`, e2b `volumeMounts`, modal `volumes` map, vercel `mounts`, namespace `volumes[]` with `persistency_kind`, northflank `volumesToAttach`, sandbox0 claim `mounts`, tenki `CreateOptions.volumes`, novita `volumeMounts`, createos `disks` attachments, plus volume managers for blaxel, declaw, beam, microsandbox, miosa).
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
 ## 0.1.13
 
 ### Patch Changes

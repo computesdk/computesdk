@@ -26,6 +26,10 @@ layout:
 
 [Run Cloud](https://run.cloud) provides fast Firecracker microVM sandboxes for AI agents, CI, and untrusted code execution.
 
+## Lifecycle
+
+`pause()`/`resume()` preserve memory and processes. Snapshots are different: they capture the ext4 rootfs without memory or tmpfs `/tmp`, and leave the source running. Restore with `snapshotId`; do not expect processes to continue from a disk snapshot.
+
 ## Installation & Setup
 
 ```bash

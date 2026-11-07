@@ -189,6 +189,43 @@ function buildConnectUrl(websocketUrl: string, apiKey: string, sessionId: string
 }
 
 /**
+ * Steel answers 404 for unknown session ids and 400/422 for ids that are not
+ * valid UUIDs; any other failure is a real error and must surface.
+ */
+function isMissingSessionError(error: unknown): boolean {
+  return error instanceof Steel.APIError && [400, 404, 422].includes(error.status as number);
+}
+
+/**
+ * Steel's read/release endpoints answer 404 for a few seconds after a session
+ * is created. Sessions this process just created are retried through that
+ * window; unknown ids fail fast.
+ */
+const PROPAGATION_WINDOW_MS = 30_000;
+const recentlyCreated = new Map<string, number>();
+
+function rememberCreated(sessionId: string) {
+  const now = Date.now();
+  for (const [id, at] of recentlyCreated) {
+    if (now - at > PROPAGATION_WINDOW_MS) recentlyCreated.delete(id);
+  }
+  recentlyCreated.set(sessionId, now);
+}
+
+async function withPropagationRetry<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+  for (;;) {
+    try {
+      return await fn();
+    } catch (error) {
+      const createdAt = recentlyCreated.get(sessionId);
+      const pending = createdAt !== undefined && Date.now() - createdAt < PROPAGATION_WINDOW_MS;
+      if (!pending || !(error instanceof Steel.NotFoundError)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
+
+/**
  * Create a Steel browser provider instance
  *
  * SECURITY NOTE: Steel's CDP endpoint authenticates via an `apiKey` query
@@ -228,6 +265,7 @@ export const steel = defineBrowserProvider<NativeSteelSession, SteelConfig>({
         const { apiKey } = resolveConfig(config);
         const client = createClient(config);
         const session = await client.sessions.create(mapSessionOptions(options));
+        rememberCreated(session.id);
         return {
           session,
           sessionId: session.id,
@@ -240,15 +278,16 @@ export const steel = defineBrowserProvider<NativeSteelSession, SteelConfig>({
         const { apiKey } = resolveConfig(config);
         const client = createClient(config);
         try {
-          const session = await client.sessions.retrieve(sessionId);
+          const session = await withPropagationRetry(sessionId, () => client.sessions.retrieve(sessionId));
           return {
             session,
             sessionId: session.id,
             connectUrl: buildConnectUrl(session.websocketUrl, apiKey, session.id),
             status: mapStatus(session.status),
           };
-        } catch {
-          return null;
+        } catch (error) {
+          if (isMissingSessionError(error)) return null;
+          throw error;
         }
       },
 
@@ -269,13 +308,13 @@ export const steel = defineBrowserProvider<NativeSteelSession, SteelConfig>({
 
       destroy: async (config, sessionId) => {
         const client = createClient(config);
-        await client.sessions.release(sessionId);
+        await withPropagationRetry(sessionId, () => client.sessions.release(sessionId));
       },
 
       getConnectUrl: async (config, sessionId) => {
         const { apiKey } = resolveConfig(config);
         const client = createClient(config);
-        const session = await client.sessions.retrieve(sessionId);
+        const session = await withPropagationRetry(sessionId, () => client.sessions.retrieve(sessionId));
         return buildConnectUrl(session.websocketUrl, apiKey, session.id);
       },
     },

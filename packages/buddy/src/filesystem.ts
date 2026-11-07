@@ -2,26 +2,39 @@
  * Filesystem operations.
  *
  * These go through the SDK's `FileSystem`, which talks to Buddy's `content/`
- * endpoints — one round trip per operation and binary-safe, unlike shelling out
- * to `cat`/`tee`.
+ * endpoints — binary-safe, unlike shelling out to `cat`/`tee`. Reads first
+ * resolve links because Buddy downloads a link's target path, not its bytes.
  *
  * Every call goes through the boot gate in `boot.ts`, because unlike commands
  * these endpoints do not queue against a sandbox that is still starting.
  */
 
 import type { FileEntry } from '@computesdk/provider';
+import { escapeShellArg } from '@computesdk/provider';
 
 import { whenBooted } from './boot.js';
+import { runCommand } from './commands.js';
 import {
   isNotFound,
   normalizeSandboxPath,
+  statusOf,
   toContentPath,
   type BuddySandboxHandle,
 } from './utils.js';
 
 export async function readFile(sandbox: BuddySandboxHandle, path: string): Promise<string> {
   const target = normalizeSandboxPath(path);
-  const buffer = await whenBooted(sandbox, () => sandbox.fs.downloadFile(target));
+  const buffer = await whenBooted(sandbox, async () => {
+    const resolved = await runCommand(sandbox, `readlink -e -z -- "${escapeShellArg(target)}"`);
+    if (resolved.exitCode !== 0) {
+      throw new Error(`Failed to resolve file ${target}: ${resolved.stderr || 'path is missing or inaccessible'}`);
+    }
+    const output = resolved.stdout;
+    if (!output.startsWith('/') || !output.endsWith('\0') || output.indexOf('\0') !== output.length - 1) {
+      throw new Error(`Buddy returned an invalid resolved path for ${target}.`);
+    }
+    return sandbox.fs.downloadFile(normalizeSandboxPath(output.slice(0, -1)));
+  });
   return buffer.toString('utf-8');
 }
 
@@ -37,7 +50,7 @@ export async function writeFile(
     // Buddy will not create missing parents for an upload, and mirroring
     // `fs.writeFile` here is what callers expect.
     if (parent) {
-      await sandbox.fs.createFolder(parent).catch(() => {});
+      await createFolder(sandbox, parent);
     }
     await sandbox.fs.uploadFile(Buffer.from(content, 'utf-8'), target);
   });
@@ -45,7 +58,20 @@ export async function writeFile(
 
 export async function mkdir(sandbox: BuddySandboxHandle, path: string): Promise<void> {
   const target = normalizeSandboxPath(path);
-  await whenBooted(sandbox, () => sandbox.fs.createFolder(target));
+  await whenBooted(sandbox, () => createFolder(sandbox, target));
+}
+
+async function createFolder(sandbox: BuddySandboxHandle, target: string): Promise<void> {
+  try {
+    await sandbox.fs.createFolder(target);
+  } catch (error) {
+    if (statusOf(error) !== 409) throw error;
+    const separator = target.lastIndexOf('/');
+    const entries = await sandbox.fs.listFiles(target.slice(0, separator) || '/');
+    if (!entries.some(entry => entry.name === target.slice(separator + 1) && entry.type === 'DIR')) {
+      throw error;
+    }
+  }
 }
 
 export async function readdir(sandbox: BuddySandboxHandle, path: string): Promise<FileEntry[]> {

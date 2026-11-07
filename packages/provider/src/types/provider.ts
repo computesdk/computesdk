@@ -4,7 +4,19 @@
  * Types related to provider configuration, authentication, and resource management
  */
 
-import type { CreateInstanceOptions, InstanceInterface } from 'computesdk';
+import type {
+  ProcessHandle,
+  ProcessTier,
+  StartProcessOptions,
+  CreateInstanceOptions,
+  CreateVolumeOptions,
+  InstanceInterface,
+  ListVolumesOptions,
+  PauseCapabilities,
+  LifetimeCapabilities,
+  SnapshotCapabilities,
+  Volume,
+} from 'computesdk';
 
 /**
  * Provider Instance - what provider implementations return
@@ -19,6 +31,26 @@ export interface ProviderInstance<TInstance = any> extends Omit<InstanceInterfac
   getInstance(): TInstance;
   /** Destroy instance and clean up resources */
   destroy(): Promise<void>;
+  /** Which runtime serves streaming `runCommand` and `startProcess` on this instance. */
+  readonly processRuntime?: { streaming: ProcessTier; processes: ProcessTier };
+  /**
+   * Rebuilds a handle for a shell-tier process from its `jobId` — e.g. in a
+   * new client after a restart. Output replays from the start of the job's log.
+   */
+  attachProcess?(jobId: string, options?: StartProcessOptions): Promise<ProcessHandle>;
+}
+
+/**
+ * Selects the opt-in daemond runtime for background processes and streaming.
+ * Accepted in every provider's config, e.g. `e2b({ apiKey, processRuntime: 'daemond' })`.
+ */
+export interface ProcessRuntimeOptions {
+  /**
+   * `'shell'` (default): provider-native hooks, else POSIX-shell process records
+   * over plain `runCommand` — no Node, daemon or download in the instance.
+   * `'daemond'`: provider-native hooks, else the in-box daemond bridge.
+   */
+  processRuntime?: 'shell' | 'daemond';
 }
 
 /** @deprecated Use {@link ProviderInstance} instead. */
@@ -83,6 +115,25 @@ export interface ListTemplatesOptions {
 }
 
 /**
+ * Provider volume manager interface - handles persistent volume lifecycle.
+ *
+ * Optional on Provider: only providers with an independent, mountable volume
+ * primitive implement it. Volumes are created/listed/deleted here and mounted
+ * either at instance creation (`CreateInstanceOptions.volumes`) or at runtime
+ * (`instance.attachVolume`).
+ */
+export interface ProviderVolumeManager<TVolume extends Volume = Volume> {
+  /** Create a new volume */
+  create(options: CreateVolumeOptions): Promise<TVolume>;
+  /** Get an existing volume by id or name */
+  get(volumeIdOrName: string): Promise<TVolume | null>;
+  /** List all volumes */
+  list(options?: ListVolumesOptions): Promise<TVolume[]>;
+  /** Delete a volume by id or name */
+  delete(volumeIdOrName: string): Promise<void>;
+}
+
+/**
  * Provider instance manager interface - handles instance lifecycle
  */
 export interface ProviderInstanceManager<TInstance = any> {
@@ -94,6 +145,10 @@ export interface ProviderInstanceManager<TInstance = any> {
   list(): Promise<ProviderInstance<TInstance>[]>;
   /** Destroy an instance */
   destroy(instanceId: string): Promise<void>;
+  /** Present when the provider's instances support `pause()`/`resume()`. */
+  readonly pause?: PauseCapabilities;
+  /** How long instances may live; absent on providers that haven't declared it. */
+  readonly lifetime?: LifetimeCapabilities;
 }
 
 /** @deprecated Use {@link ProviderInstanceManager} instead. */
@@ -121,14 +176,22 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
   list(options?: ListSnapshotsOptions): Promise<TSnapshot[]>;
   /** Delete a snapshot */
   delete(snapshotId: string): Promise<void>;
+  /** What snapshots keep; absent on providers that haven't declared it. */
+  readonly capabilities?: SnapshotCapabilities;
+  /** Resolve once a snapshot can be restored; present when `readiness` is `eventual`. */
+  waitUntilReady?(snapshotId: string, options?: { timeoutMs?: number }): Promise<void>;
 }
 
 /**
  * Provider interface - creates and manages resources
  */
-export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any> {
+export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume> {
   /** Provider name/type */
   readonly name: string;
+
+  /** Unrelated legacy extensions remain allowed; runtime contract narrowing is required.
+   * SDK-generated factories additionally return a required, typed InstanceSizeManager. */
+  readonly sizes?: unknown;
 
   /** Instance management operations */
   readonly instances: ProviderInstanceManager<TInstance>;
@@ -144,6 +207,9 @@ export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any> {
 
   /** Optional snapshot management operations */
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
+
+  /** Optional persistent volume management operations */
+  readonly volume?: ProviderVolumeManager<TVolume>;
 
   // Future resource managers will be added here:
   // readonly blob: ProviderBlobManager;

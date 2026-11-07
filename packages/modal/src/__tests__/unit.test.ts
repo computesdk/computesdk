@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createSandbox } = vi.hoisted(() => ({ createSandbox: vi.fn() }));
+const { createSandbox, appFromName, deleteImage } = vi.hoisted(() => ({ createSandbox: vi.fn(), appFromName: vi.fn(), deleteImage: vi.fn() }));
 
 const files = new Map<string, string>();
 const dirs = new Set<string>();
@@ -39,14 +39,36 @@ class FakeSandbox {
   };
   async exec(command: string[]) {
     execCalls.push(command);
-    if (command[2] === 'pwd' && pwdFails) {
+    const empty = { stdout: { readText: async () => '' }, stderr: { readText: async () => '' }, wait: async () => 0 };
+    // runCommand redirects output to guest files and reads them back with
+    // cat execs — simulate the redirect by materialising the files.
+    if (command[0] === 'cat') {
+      const content = files.get(command[1]) ?? '';
+      return { ...empty, stdout: { readText: async () => content }, wait: async () => (files.has(command[1]) ? 0 : 1) };
+    }
+    if (command[0] === 'rm') {
+      for (const p of command.slice(2)) files.delete(p);
+      return empty;
+    }
+    const wrapped = command[2]?.match(/^\( ([\s\S]*?)\n?\) > (\S+)\.out /);
+    const inner = wrapped ? wrapped[1] : command[2];
+    if (inner === 'pwd' && pwdFails) {
       return {
         stdout: { readText: async () => '' },
         stderr: { readText: async () => 'boom' },
         wait: async () => 1,
       };
     }
-    const content = command[2] === 'pwd' ? '/root\n' : (files.get(command[1]) ?? '');
+    const content = inner === 'pwd' ? '/root\n' : (files.get(command[1]) ?? '');
+    if (wrapped) {
+      const base = wrapped[2];
+      files.set(`${base}.out`, content);
+      files.set(`${base}.outlen`, String(Buffer.byteLength(content)));
+      files.set(`${base}.err`, '');
+      files.set(`${base}.errlen`, '0');
+      files.set(`${base}.code`, '0');
+      return empty;
+    }
     return {
       stdout: { readText: async () => content },
       stderr: { readText: async () => '' },
@@ -63,9 +85,10 @@ const fsCalls: string[][] = [];
 
 vi.mock('modal', () => ({
   SandboxFilesystemNotFoundError: class extends Error {},
+  NotFoundError: class extends Error {},
   ModalClient: class {
-    apps = { fromName: async () => ({}) };
-    images = { fromRegistry: () => ({ build: async () => ({}) }) };
+    apps = { fromName: appFromName.mockImplementation(async () => ({})) };
+    images = { fromRegistry: () => ({ build: async () => ({}) }), delete: deleteImage };
     sandboxes = {
       create: createSandbox.mockImplementation(async () => new FakeSandbox()),
       fromId: async () => new FakeSandbox(),
@@ -75,10 +98,44 @@ vi.mock('modal', () => ({
 }));
 
 import { modal } from '../index';
-import { SandboxFilesystemNotFoundError as FakeNotFoundError } from 'modal';
+import { SandboxFilesystemNotFoundError as FakeNotFoundError, NotFoundError as FakeModalNotFoundError } from 'modal';
+
+describe('modal snapshots', () => {
+  beforeEach(() => { deleteImage.mockReset(); });
+
+  it('declares whole-rootfs snapshots that keep the source running', () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    expect(provider.snapshot?.capabilities).toEqual({ scope: 'rootfs', memory: false, destroysSource: false });
+    expect(provider.sandbox.pause).toBeUndefined();
+  });
+
+  it('deletes the snapshot image and treats a missing one as deleted', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    await provider.snapshot!.delete('im-1');
+    expect(deleteImage).toHaveBeenCalledWith('im-1');
+
+    deleteImage.mockRejectedValueOnce(new FakeModalNotFoundError('Could not find image with ID im-2'));
+    await expect(provider.snapshot!.delete('im-2')).resolves.toBeUndefined();
+
+    deleteImage.mockRejectedValueOnce(new Error('boom'));
+    await expect(provider.snapshot!.delete('im-3')).rejects.toThrow(/Failed to delete Modal snapshot: boom/);
+  });
+});
 
 describe('modal sandbox creation', () => {
-  beforeEach(() => { createSandbox.mockClear(); });
+  beforeEach(() => { createSandbox.mockClear(); appFromName.mockClear(); });
+
+  it('looks up the app on first create, not at construction, and retries a failed lookup', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    expect(appFromName).not.toHaveBeenCalled();
+
+    appFromName.mockRejectedValueOnce(new Error('Profile is missing credentials'));
+    await expect(provider.sandbox.create()).rejects.toThrow(/authentication failed/);
+
+    const sandbox = await provider.sandbox.create();
+    expect(sandbox.sandboxId).toBe('sb-test');
+    expect(appFromName).toHaveBeenCalledTimes(2);
+  });
 
   it('creates sandboxes through the standard SDK API without experimental options', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's' });
@@ -165,7 +222,7 @@ describe('modal filesystem read/write', () => {
     expect(files.get('/root/a/../b.txt')).toBe('y');
 
     // The workdir is probed once (`pwd`) and cached across operations.
-    expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(1);
+    expect(execCalls.filter((c) => c[0] === 'sh' && c[2]?.includes('pwd'))).toHaveLength(1);
   });
 
   it('does not cache a failed workdir probe', async () => {
@@ -180,7 +237,7 @@ describe('modal filesystem read/write', () => {
     pwdFails = false;
     await sandbox.filesystem.writeFile('y.txt', 'y');
     expect(files.get('/root/y.txt')).toBe('y');
-    expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(2);
+    expect(execCalls.filter((c) => c[0] === 'sh' && c[2]?.includes('pwd'))).toHaveLength(2);
   });
 
   it('rejects ambiguous paths in remove', async () => {

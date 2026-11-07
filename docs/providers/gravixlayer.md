@@ -26,6 +26,10 @@ layout:
 
 [GravixLayer](https://gravixlayer.ai) provider for ComputeSDK — cloud runtimes with a native filesystem API, live command streaming, port publishing, templates, and snapshots.
 
+## Lifecycle
+
+`pause()`/`resume()` preserve memory and processes. Snapshot capabilities declare rootfs and memory preservation with the source kept. Restore with `snapshotId`; see [snapshot semantics and cleanup](../reference/compute.md#snapshot-capabilities).
+
 ## Installation & Setup
 
 ```bash

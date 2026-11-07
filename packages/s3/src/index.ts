@@ -5,6 +5,7 @@
  */
 
 import { get, head, list as tigrisList, put, remove } from '@tigrisdata/storage';
+import type { HeadResponse, ListResponse } from '@tigrisdata/storage';
 import type { StorageProvider, StorageObject, UploadOptions, DownloadResult, ListOptions, ListResult } from '@computesdk/provider';
 
 /**
@@ -15,7 +16,7 @@ export interface S3Config {
   accessKeyId?: string;
   /** Secret Access Key - if not provided, uses TIGRIS_STORAGE_SECRET_ACCESS_KEY */
   secretAccessKey?: string;
-  /** Required endpoint for the target S3-compatible service */
+  /** Endpoint for the target S3-compatible service - if not provided, uses TIGRIS_STORAGE_ENDPOINT, then the Tigris default */
   endpoint?: string;
 }
 
@@ -40,25 +41,7 @@ export interface S3 extends StorageProvider {
   };
 }
 
-interface ListedObject {
-  key?: string;
-  size?: number;
-  etag?: string;
-  lastModified?: string | Date;
-}
-
-interface ListData {
-  objects?: ListedObject[];
-  truncated?: boolean;
-  nextContinuationToken?: string;
-}
-
-interface HeadData {
-  contentType?: string;
-  etag?: string;
-  lastModified?: string | Date;
-  metadata?: Record<string, string>;
-}
+const DEFAULT_ENDPOINT = 'https://t3.storage.dev';
 
 /**
  * Create an S3-compatible storage provider instance backed by Tigris SDK.
@@ -72,7 +55,7 @@ export function s3(config: S3Config): S3 {
   const secretAccessKey =
     config.secretAccessKey ||
     process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY;
-  const endpoint = config.endpoint || process.env.TIGRIS_STORAGE_ENDPOINT;
+  const endpoint = config.endpoint || process.env.TIGRIS_STORAGE_ENDPOINT || DEFAULT_ENDPOINT;
 
   if (!accessKeyId) {
     throw new Error(`Missing access key. Provide 'accessKeyId' in config or set TIGRIS_STORAGE_ACCESS_KEY_ID.`);
@@ -80,10 +63,6 @@ export function s3(config: S3Config): S3 {
 
   if (!secretAccessKey) {
     throw new Error(`Missing secret key. Provide 'secretAccessKey' in config or set TIGRIS_STORAGE_SECRET_ACCESS_KEY.`);
-  }
-
-  if (!endpoint) {
-    throw new Error(`Missing endpoint. Provide 'endpoint' in config or set TIGRIS_STORAGE_ENDPOINT.`);
   }
 
   const operationConfig = { accessKeyId, secretAccessKey, endpoint };
@@ -134,7 +113,7 @@ export function s3(config: S3Config): S3 {
         }
 
         const headResult = await head(key, withConfig(bucket));
-        const headData: HeadData | undefined = headResult.error ? undefined : (headResult.data as HeadData | undefined);
+        const headData: HeadResponse | undefined = headResult.error ? undefined : headResult.data;
 
         const stream = result.data as ReadableStream;
         const reader = stream.getReader();
@@ -160,9 +139,7 @@ export function s3(config: S3Config): S3 {
           data,
           size: data.length,
           contentType: headData?.contentType,
-          etag: headData?.etag,
-          lastModified: headData?.lastModified ? new Date(headData.lastModified) : undefined,
-          metadata: headData?.metadata,
+          lastModified: headData?.modified ? new Date(headData.modified) : undefined,
         };
       } catch (error) {
         if (error instanceof Error && /not\s*found|no\s*such\s*key/i.test(error.message)) {
@@ -188,25 +165,24 @@ export function s3(config: S3Config): S3 {
         const result = await tigrisList(withConfig(bucket, {
           prefix: options?.prefix,
           limit: options?.maxKeys,
-          cursor: options?.continuationToken,
+          paginationToken: options?.continuationToken,
         }));
 
         if (result.error) {
           throw new Error(result.error.message);
         }
 
-        const responseData = (result.data ?? {}) as ListData;
+        const responseData: Partial<ListResponse> = result.data ?? {};
 
         return {
-          objects: (responseData.objects || []).map((obj) => ({
+          objects: (responseData.items || []).map((obj) => ({
             bucket,
-            key: obj.key || '',
+            key: obj.name,
             size: obj.size || 0,
-            etag: obj.etag,
             lastModified: obj.lastModified ? new Date(obj.lastModified) : undefined,
           })),
-          truncated: responseData?.truncated || false,
-          continuationToken: responseData?.nextContinuationToken,
+          truncated: responseData.hasMore || false,
+          continuationToken: responseData.paginationToken,
         };
       } catch (error) {
         throw new Error(`Failed to list objects in storage: ${error instanceof Error ? error.message : String(error)}`);

@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "computesdk": { "type": "http", "url": "https://platform.computesdk.com/mcp" }
+  }
+}

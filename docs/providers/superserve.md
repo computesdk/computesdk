@@ -31,6 +31,12 @@ tags:
 
 Superserve provides sandbox infrastructure to run code in isolated cloud environments powered by Firecracker MicroVMs.
 
+## Account sizes and lifecycle
+
+CPU/RAM are fixed by the account template. [Provider Setup](../../ADD-PROVIDER.md#provider-setup) creates the missing Node 22 size templates idempotently; boot them with `templateId`. The built-in `superserve/node-22` supplies 2 vCPU/4 GiB. This adapter has no standard `sizeClass` mapping (`unknown`); see [Sandbox sizes](../reference/sizes.md).
+
+`pause()`/`resume()` preserve memory and processes. Snapshots capture rootfs and memory and keep the source. Create-time `timeout` configures auto-pause, not a command deadline or automatic deletion.
+
 ## Installation & Setup
 
 ```bash

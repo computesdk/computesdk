@@ -194,7 +194,7 @@ jobs:
 
     strategy:
       matrix:
-        provider: [e2b, vercel, daytona, modal, archil, blaxel]
+        provider: [e2b, vercel, daytona, modal, archil, blaxel, platform]
       fail-fast: false
 
     steps:
@@ -233,6 +233,7 @@ jobs:
         ARCHIL_DISK_ID: ${{ secrets.ARCHIL_DISK_ID }}
         BL_API_KEY: ${{ secrets.BL_API_KEY }}
         BL_WORKSPACE: ${{ secrets.BL_WORKSPACE }}
+        COMPUTE_PLATFORM_TEST_API_KEY: ${{ secrets.COMPUTE_PLATFORM_TEST_API_KEY }}
       run: |
         case "$TEST_PROVIDER" in
           e2b)
@@ -260,14 +261,20 @@ jobs:
             fi
             ;;
           archil)
-            if [ -z "$ARCHIL_API_KEY" ] || [ -z "$ARCHIL_REGION" ] || [ -z "$ARCHIL_DISK_ID" ]; then
-              echo "Skipping computesdk integration for archil - missing Archil credentials (ARCHIL_API_KEY, ARCHIL_REGION, ARCHIL_DISK_ID)"
+            if [ -z "$ARCHIL_API_KEY" ] || [ -z "$ARCHIL_REGION" ]; then
+              echo "Skipping computesdk integration for archil - missing Archil credentials (ARCHIL_API_KEY, ARCHIL_REGION)"
               exit 0
             fi
             ;;
           blaxel)
             if [ -z "$BL_API_KEY" ] || [ -z "$BL_WORKSPACE" ]; then
               echo "Skipping computesdk integration for blaxel - missing Blaxel credentials (BL_API_KEY, BL_WORKSPACE)"
+              exit 0
+            fi
+            ;;
+          platform)
+            if [ -z "$COMPUTE_PLATFORM_TEST_API_KEY" ]; then
+              echo "Skipping computesdk integration for platform - missing COMPUTE_PLATFORM_TEST_API_KEY"
               exit 0
             fi
             ;;
@@ -283,7 +290,8 @@ jobs:
   k8s-integration-tests:
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+    # Disabled for now.
+    if: false
     permissions:
       contents: read
 

@@ -25,7 +25,7 @@ tokens renew automatically.
 
 ```
 compute actions …               # Actions API — repos, dispatch, runs, logs, vault
-compute market …                # sell side of the compute market
+compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
 compute bench …                 # benchmarks CLI (run, auth, org, results, …)
 compute providers               # sandbox provider credential status
@@ -54,6 +54,23 @@ a bare `--` before the command is optional but supported.
 compute sandboxes exec sb1 uname -a
 compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
 ```
+
+## Managed-agent persistence
+
+`compute agents run <agent>` starts a conversation. On platforms with managed
+Archil storage, the first run provisions the agent's disk automatically.
+After its turn finishes, `compute agents stop <sessionId>` flushes storage and
+releases compute. Resume that conversation, including Pi history and workspace:
+
+```sh
+compute agents run my-agent --resume <sessionId>
+compute agents run my-agent "Continue the task" --resume <sessionId>
+```
+
+Resume preserves the session ID and event journal but acquires a new sandbox.
+Only one session per agent can be active at a time. Legacy sessions without
+persistent state cannot be recovered retroactively. Requires the platform's
+managed-volume/resume API; no account storage credentials are needed in the CLI.
 
 ## Migrating from @computesdk/cli 1.x
 

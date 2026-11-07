@@ -31,6 +31,10 @@ tags:
 
 CreateOS provider for ComputeSDK — NodeOps VM sandboxes with pause/resume/fork snapshots. A thin adapter over the official `@nodeops-createos/sandbox` package.
 
+## Lifecycle
+
+`pause()`/`resume()` preserve memory and processes. Snapshots are separate paused VM forks, preserving the rootfs and memory. Capture briefly pauses a running source, makes a `start_paused` fork, then resumes the source; an already-paused source stays paused. The snapshot id differs from the source id. Restore with `snapshotId` and delete the paused fork when finished.
+
 ## Installation & Setup
 
 ```bash
@@ -98,9 +102,9 @@ interface CreateosConfig {
 
 ### Snapshots
 
-CreateOS has no decoupled snapshot object — **pausing IS the snapshot**, and the paused sandbox id is the snapshot id:
+CreateOS snapshots are separate paused sandbox forks:
 
-* `snapshot.create` pauses the sandbox (the source VM stops) and returns the sandbox id as the snapshot id.
+* `snapshot.create` briefly pauses a running source, creates a paused fork with its own id, then resumes the source. An already-paused source stays paused.
 * `snapshot.list` returns all paused sandboxes.
 * `snapshot.delete` destroys the paused sandbox.
 * `create({ snapshotId })` forks the paused bundle into a fresh running sandbox.
@@ -108,5 +112,5 @@ CreateOS has no decoupled snapshot object — **pausing IS the snapshot**, and t
 ### Notes
 
 * Requires Node.js >= 22.
-* `getInstance()` returns the bare native `@nodeops-createos/sandbox` handle, exposing the full stateful API (pause / resume / fork / disks / networks / bandwidth) that ComputeSDK's core surface does not model.
+* `getInstance()` returns the native `@nodeops-createos/sandbox` handle for provider-specific disks, networks, and bandwidth controls. Pause/resume and snapshots are also exposed on the unified surface.
 * `timeout` is informational only — it is reported by `getInfo()` but does not enforce an execution limit.

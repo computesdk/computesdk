@@ -82,9 +82,17 @@ export interface StartProcessOptions {
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
   onExit?: (result: { exitCode: number | null; signal: string | null }) => void;
-  /** Interval for the status-polling fallback used when the daemon's SSE port is not reachable. Default 500. */
+  /** Interval for the status-polling fallback of the opt-in daemond runtime. Default 500. */
   pollIntervalMs?: number;
 }
+
+/**
+ * Which runtime serves `startProcess` and streaming `runCommand` on an instance:
+ * - `native`: the provider's own process/streaming API
+ * - `shell`: the default POSIX-shell process records, built on plain `runCommand`
+ * - `daemond`: the in-box daemon, only when the provider was configured with `processRuntime: 'daemond'`
+ */
+export type ProcessTier = 'native' | 'shell' | 'daemond';
 
 /**
  * Snapshot of a running or exited process started via `startProcess`.
@@ -104,14 +112,76 @@ export interface ProcessStatus {
 export interface ProcessHandle {
   readonly pid: number | null;
   readonly jobId: string;
+  /** The runtime serving this process, when the framework knows it. */
+  readonly runtime?: ProcessTier;
   /** Write to stdin. Rejects if the process was not started with `stdin: true` or has exited. */
   write(data: string | Uint8Array): Promise<void>;
   closeStdin(): Promise<void>;
-  /** Current snapshot (daemond `status`). */
+  /** Current snapshot: state plus all output seen so far. */
   status(): Promise<ProcessStatus>;
-  /** Resolve when the process exits (daemond `wait`). Rejects with a `daemond:`-prefixed error if `timeout` elapses first. */
+  /** Resolve when the process exits. Rejects if `timeout` elapses first. */
   wait(options?: { timeout?: number }): Promise<CommandResult & { signal: string | null }>;
   kill(signal?: string): Promise<void>;
+}
+
+/**
+ * A persistent volume handle, as returned by `provider.volume` /
+ * `compute.volume` and accepted anywhere a volume reference is taken.
+ *
+ * Providers populate whichever fields their API exposes; `native` carries the
+ * provider SDK's own volume object for mounts that need it (Modal `Volume`,
+ * beam `Volume`) — treat it as opaque.
+ */
+export interface Volume {
+  /** Provider-assigned id, when the API returns one. */
+  id?: string;
+  /** Provider-assigned name (some providers address volumes by name). */
+  name?: string;
+  /** Provider-native object needed by some mounts; opaque to callers. */
+  native?: unknown;
+  /** Additional provider-specific fields. */
+  [key: string]: any;
+}
+
+/**
+ * Where to mount a volume on a new instance, for
+ * `CreateInstanceOptions.volumes` and `instance.attachVolume`.
+ *
+ * `volume` accepts a handle from `provider.volume` / `compute.volume`, or a
+ * plain string — a volume id or name, whatever the provider addresses
+ * volumes by.
+ */
+export interface VolumeMount {
+  volume: string | Volume;
+  mountPath: string;
+  readOnly?: boolean;
+}
+
+/**
+ * Options for creating a persistent volume.
+ *
+ * Every field is optional except `name`; providers only read the keys they
+ * understand (e.g. beam needs `mountPath` baked into its Volume object,
+ * MIOSA requires `sizeBytes`, namespace uses `tags`).
+ */
+export interface CreateVolumeOptions {
+  /** Volume name (required by most providers). */
+  name: string;
+  /** Requested size in bytes. Providers with fixed plans may round or reject. */
+  sizeBytes?: number;
+  /** Intended mount path — required by providers that bake it into the volume
+   * object at creation (beam). */
+  mountPath?: string;
+  /** Extra provider-specific fields, passed through to the volume create call. */
+  [key: string]: any;
+}
+
+/**
+ * Options for listing volumes.
+ */
+export interface ListVolumesOptions {
+  /** Limit the number of results */
+  limit?: number;
 }
 
 /**
@@ -126,6 +196,61 @@ export interface Snapshot {
   createdAt: Date;
   /** Additional provider-specific metadata */
   metadata?: Record<string, any>;
+}
+
+/**
+ * What a provider's snapshots keep, and what the source instance needs.
+ * Callers read this before snapshotting, e.g. to create the source with
+ * `createOptions` and write state they expect to survive under `path`.
+ */
+export interface SnapshotCapabilities {
+  /** `rootfs`: the whole root filesystem. `volume`: only the volume at `path`. */
+  scope: 'rootfs' | 'volume';
+  /** Directory whose contents survive a restore. Required for `volume` scope. */
+  path?: string;
+  /** Whether running processes and memory survive a restore. */
+  memory: boolean;
+  /** Whether `snapshot.create` stops or destroys the source instance. */
+  destroysSource: boolean;
+  /**
+   * What `snapshot.create` leaves of the source: `kept` (still running),
+   * `stopped` (exists but stopped; still needs destroying) or `destroyed`.
+   * Defaults to `destroyed` when `destroysSource` is true, else `kept`.
+   */
+  source?: 'kept' | 'stopped' | 'destroyed';
+  /** Paths inside `scope` that a restore does not keep (e.g. `/tmp`, a mount). */
+  excludes?: string[];
+  /** Whether one snapshot of a live source can be restored into many instances. */
+  fork?: boolean;
+  /**
+   * `eventual`: `snapshot.create` may return before the snapshot can be
+   * restored; call `snapshot.waitUntilReady(id)` first. Defaults to `immediate`.
+   */
+  readiness?: 'immediate' | 'eventual';
+  /** Create options the source instance needs for snapshots to work. */
+  createOptions?: Record<string, unknown>;
+}
+
+/**
+ * How long an instance may live, and whether that can be extended.
+ */
+export interface LifetimeCapabilities {
+  /** Lifetime when the caller sets no timeout, in ms. */
+  defaultMs?: number;
+  /** Longest lifetime the provider allows, in ms; absent means unbounded. */
+  maxMs?: number;
+  /** Whether `instance.extendLifetime()` is available. */
+  extendable: boolean;
+}
+
+/**
+ * What `instance.pause()`/`resume()` keep, and what the instance needs.
+ */
+export interface PauseCapabilities {
+  /** Whether running processes and memory survive pause/resume. */
+  memory: boolean;
+  /** Create options an instance needs before it can be paused. */
+  createOptions?: Record<string, unknown>;
 }
 
 /**
@@ -151,8 +276,7 @@ export interface InstanceFileSystem {
 /**
  * Resource sizing options for instance creation.
  *
- * These are the cross-provider knobs for CPU, memory, and provider-specific
- * resource selection. Field names intentionally mirror the provider SDKs that
+ * These are provider-native knobs for CPU, memory, and resource selection. Field names intentionally mirror the provider SDKs that
  * consume them, so callers can build a single typed resource map (e.g. keyed
  * by provider name) instead of resorting to `Record<string, any>`. Every field
  * is optional; providers only read the keys they understand and fall back to
@@ -161,6 +285,10 @@ export interface InstanceFileSystem {
  * Units are intentionally not normalized — `memory` is MB for Blaxel/Beam,
  * `memoryMiB`/`memMiB` are MiB for Modal/Isorun, and `memoryMb` is MB for
  * Tensorlake. See each provider's docs for the exact interpretation.
+ *
+ * This native-option/default behavior does NOT apply to the additive
+ * CreateInstanceOptions.sizeClass field: that uses normalized vCPUs/MiB and
+ * strict capability validation before create instead of silent default fallback.
  */
 export interface InstanceResourceOptions {
   /** CPU cores (Modal, Beam). Modal: 1 core = 2 vCPUs. */
@@ -301,6 +429,15 @@ export interface InstanceEgressInfo {
  */
 export interface CreateInstanceOptions extends InstanceResourceOptions {
   /**
+   * Standard CPU/RAM request. Never aliases the provider-native `size` field.
+   * Pins the normally selected provider; disables fallbackOnError even for
+   * native auth/capacity failures. Unknown/blocked mappings fail before create.
+   * Native CPU/RAM/tier selectors cannot be combined with this field.
+   * Standard root/resource context requires enumerable own string-key data
+   * properties; callable options, accessors and non-enumerable controls reject.
+   */
+  sizeClass?: import('../sizes').InstanceSizeClass;
+  /**
    * Select the provider's ephemeral compute surface when it offers both
    * ephemeral and persistent instances.
    *
@@ -354,6 +491,18 @@ export interface CreateInstanceOptions extends InstanceResourceOptions {
    * createos-sandbox's network allow-list); they do not activate the router.
    */
   egress?: InstanceEgressOptions | string | string[];
+  /**
+   * Volumes to mount on the new instance, for providers with a create-time
+   * mount (daytona, e2b, modal, beam, blaxel, namespace, vercel, sandbox0,
+   * microsandbox, northflank, archil). Each provider maps
+   * `{volume, mountPath, readOnly?}` onto its native wire shape; volumes are
+   * created separately via `provider.volume` / `compute.volume`.
+   *
+   * Providers that only attach at runtime (novita, miosa, tenki, createos)
+   * implement `instance.attachVolume` instead and may ignore this option —
+   * create the instance plain, then attach.
+   */
+  volumes?: VolumeMount[];
   // Allow provider-specific properties (e.g., domain for E2B)
   [key: string]: any;
 }
@@ -397,8 +546,10 @@ export interface Instance {
   /**
    * Start an interactive long-running process.
    *
-   * Runs `sh -lc <command>` via the on-instance daemon, returning a handle for
-   * stdin writes, status snapshots, output callbacks, and wait/kill control.
+   * Served by the provider's native process API when it has one, otherwise by
+   * the POSIX-shell process tier over plain `runCommand` (or daemond when the
+   * provider was configured with `processRuntime: 'daemond'`). Returns a handle
+   * for stdin writes, status snapshots, output callbacks, and wait/kill control.
    */
   startProcess(command: string, options?: StartProcessOptions): Promise<ProcessHandle>;
 
@@ -419,4 +570,36 @@ export interface Instance {
    * `CreateInstanceOptions.egress`. Undefined otherwise.
    */
   readonly egress?: InstanceEgressInfo;
+
+  /** Create-time request mapping only; absent on legacy creates and reattached instances. */
+  readonly sizing?: import('../sizes').InstanceSizeMetadata;
+
+  /**
+   * Attach a volume to this running instance — present only on providers
+   * that support runtime attach (novita, miosa, tenki, createos). Check
+   * `typeof instance.attachVolume === 'function'` to detect support.
+   */
+  attachVolume?(volume: string | Volume, mountPath: string): Promise<void>;
+
+  /**
+   * Detach a previously attached volume — present only on providers that
+   * support runtime detach. `mountPath` identifies the mount for providers
+   * that need it; others resolve the attachment from `volume` alone.
+   */
+  detachVolume?(volume: string | Volume, mountPath?: string): Promise<void>;
+
+  /**
+   * Pause this instance — present only on providers with native pause.
+   * Check `typeof instance.pause === 'function'` to detect support.
+   */
+  pause?(): Promise<void>;
+
+  /** Resume a paused instance — present whenever `pause` is. */
+  resume?(): Promise<void>;
+
+  /**
+   * Keep this instance alive for `ms` more from now, within the provider's
+   * `lifetime.maxMs`. Present only on providers that can extend a lifetime.
+   */
+  extendLifetime?(ms: number): Promise<void>;
 }

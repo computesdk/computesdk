@@ -1,5 +1,103 @@
 # @computesdk/tensorlake
 
+## 0.1.34
+
+### Patch Changes
+
+- 1904e82: Background `runCommand` now returns once the process starts instead of also running the command in the foreground.
+- 1904e82: Run timed foreground commands through the process API with a client-side deadline, so `nohup … &` launchers no longer have their detached children killed when the command's timeout expires.
+- 1904e82: Native pause/resume through suspend/resume (`ephemeral: false` creates a uniquely named, suspendable sandbox), plus declared pause and snapshot capabilities with conformance coverage. `destroy()` now finds the sandbox's leftover `suspend-<id>-…` snapshots through the project-level snapshot list and deletes them, so they no longer leak after the sandbox is gone.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.33
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.1.32
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.1.31
+
+### Patch Changes
+
+- e3f821f: Retry sandbox create briefly on "reached its quota": terminate() resolves before the project quota slot is released, so a destroy→create cycle could fail even with nothing still running.
+- e3f821f: Retry the writable-workdir probe before falling back to "/". Right after create() the exec endpoint can lag the sandbox's reported readiness, so a single failed probe sent relative runCommand calls to an unwritable "/" cwd.
+
+## 0.1.30
+
+### Patch Changes
+
+- d24737a: Retry sandbox create briefly on "reached its quota": terminate() resolves before the project quota slot is released, so a destroy→create cycle could fail even with nothing still running.
+- d24737a: Retry the writable-workdir probe before falling back to "/". Right after create() the exec endpoint can lag the sandbox's reported readiness, so a single failed probe sent relative runCommand calls to an unwritable "/" cwd.
+
+## 0.1.29
+
+### Patch Changes
+
+- 7668bf8: tensorlake: default `runCommand`/`streamCommand` cwd to the writable workdir already probed for filesystem paths — the sandbox default cwd is `/`, which isn't writable, so relative-path commands (e.g. `mkdir bench-rootfs`) failed with EACCES.
+
+  sandbox0: retry `sandbox.cmd` context creation on the transient "runtime access is not ready for this generation" response (and retryable 429/5xx), bounded by the command deadline — a claimed sandbox can race its runtime coming up.
+
+## 0.1.28
+
+### Patch Changes
+
+- b040637: Require `tensorlake` `^0.5.158`. From 0.5.136 to 0.5.157 the SDK's default `Sandbox.create()` sent the create with `wait: false` and then polled every 2 s, so a sandbox that was already running after a few hundred milliseconds still cost the caller the full poll interval. 0.5.158 waits on the server's own state change instead and returns as soon as the sandbox is running.
+
+  The adapter's create options are now typed as the SDK's `CreateAndConnectOptions`, which keeps the SDK's conditional return type resolved to a connected `Sandbox`. No runtime behavior in the adapter changes.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 0.1.27
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 0.1.26
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 0.1.25
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 0.1.24
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
 ## 0.1.23
 
 ### Patch Changes

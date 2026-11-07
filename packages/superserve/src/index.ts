@@ -11,7 +11,7 @@ import {
   Snapshot as SuperserveSnapshot,
   Template as SuperserveTemplate,
 } from '@superserve/sdk';
-import type { SnapshotInfo } from '@superserve/sdk';
+import type { SnapshotInfo, TemplateCreateOptions, TemplateInfo } from '@superserve/sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -19,6 +19,7 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 import type {
   CommandResult,
   CreateInstanceOptions,
+  CreateTemplateOptions,
   FileEntry,
   RunCommandOptions,
   InstanceInfo,
@@ -169,6 +170,19 @@ function toSnapshot(info: SnapshotInfo) {
       status: info.status,
       sizeBytes: info.sizeBytes,
     },
+  };
+}
+
+/** Superserve sizes sandboxes at the template: vCPU, memory and disk are set
+ *  here and every sandbox created from it inherits them. */
+export type SuperserveTemplateCreateOptions = CreateTemplateOptions & Partial<Omit<TemplateCreateOptions, 'apiKey' | 'baseUrl' | 'name'>>;
+
+function toTemplate(info: TemplateInfo) {
+  return {
+    id: info.id,
+    name: info.name,
+    createdAt: info.createdAt,
+    metadata: { status: info.status, vcpu: info.vcpu, memoryMib: info.memoryMib, diskMib: info.diskMib, errorMessage: info.errorMessage },
   };
 }
 
@@ -344,9 +358,31 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
       },
 
       getInstance: (sandbox: SuperserveSandbox): SuperserveSandbox => sandbox,
+
+      pause: async (sandbox: SuperserveSandbox): Promise<void> => {
+        try {
+          await sandbox.pause({ wait: true });
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to pause Superserve sandbox');
+        }
+      },
+
+      resume: async (sandbox: SuperserveSandbox): Promise<void> => {
+        try {
+          // The access token rotates on resume; the SDK refreshes the handle in place.
+          await sandbox.resume();
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to resume Superserve sandbox');
+        }
+      },
+
+      pauseCapabilities: { memory: true },
     },
 
     snapshot: {
+      // Snapshots hold memory and disk: restores keep the whole filesystem,
+      // tmpfs /tmp included, and running processes. The source keeps running.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
       create: async (config: SuperserveConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
@@ -376,23 +412,28 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
     },
 
     template: {
-      create: async (_config: SuperserveConfig, _options: { name: string }) => {
-        throw new Error(
-          'Templates require a build spec. Use the @superserve/sdk Template.create() ' +
-            'API directly with `from` and `steps`, or define templates via the Superserve console.',
-        );
+      create: async (config: SuperserveConfig, options: SuperserveTemplateCreateOptions) => {
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+        const { name, from, vcpu, memoryMib, diskMib, steps, startCmd, readyCmd } = options;
+        if (!from) {
+          throw new Error('Superserve templates are built from an image: pass `from` (e.g. "node:22").');
+        }
+        try {
+          const template = await SuperserveTemplate.create({
+            apiKey, baseUrl, name, from, vcpu, memoryMib, diskMib, steps, startCmd, readyCmd,
+          });
+          return toTemplate(await template.waitUntilReady());
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to create Superserve template');
+        }
       },
       list: async (config: SuperserveConfig) => {
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         try {
           const infos = await SuperserveTemplate.list({ apiKey, baseUrl });
-          return infos.map((info) => ({
-            id: info.id,
-            name: info.name,
-            createdAt: info.createdAt,
-            metadata: { status: info.status, vcpu: info.vcpu, memoryMib: info.memoryMib },
-          }));
+          return infos.map(toTemplate);
         } catch {
           return [];
         }

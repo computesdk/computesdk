@@ -6,8 +6,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { SandboxInstance, Snapshot, initialize } from '@blaxel/core';
-import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp } from '@computesdk/provider';
+import { SandboxInstance, Snapshot, VolumeInstance, initialize } from '@blaxel/core';
+import { defineProvider, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
 
@@ -121,8 +121,15 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					sandboxId: optSandboxId,
 					namespace: _namespace,
 					directory: _directory,
+					volumes,
 					...providerOptions
 				} = options || {};
+
+				// `volumes` only counts as unified VolumeMount[] when every entry
+				// carries `volume`; a provider-native volumes spec stays in
+				// providerOptions and reaches the wire untouched.
+				const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+				if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
 
 				const optRuntime = (options as any)?.runtime as string | undefined;
 
@@ -194,6 +201,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 						ttl: effectiveTtl,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
+						...(unifiedVolumes && {
+							// Unified mounts → blaxel VolumeAttachment shape.
+							volumes: unifiedVolumes.map((m: any) => {
+								const ref = resolveVolumeRef(m.volume);
+								return { name: ref.name ?? ref.id, mountPath: m.mountPath, readOnly: m.readOnly, type: 'persistent' };
+							}),
+						}),
 						...restProviderOptions, // Spread provider-specific options
 					});
 				}
@@ -265,49 +279,12 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				}),
 
 			// Instance operations (map to individual Sandbox methods)
-		runCommand: async (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> =>
-			withBlaxelInstance(sandbox, async () => {
-			const startTime = Date.now();
+			runCommand: (sandbox: SandboxInstance, command: string, options?: RunCommandOptions): Promise<CommandResult> =>
+				runBlaxelCommand(sandbox, command, options),
 
-			try {
-				// Build command with options
-				let fullCommand = command;
-				
-				// Handle environment variables
-				if (options?.env && Object.keys(options.env).length > 0) {
-					const envPrefix = Object.entries(options.env)
-						.map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-						.join(' ');
-					fullCommand = `${envPrefix} ${fullCommand}`;
-				}
-				
-				// Handle working directory
-				if (options?.cwd) {
-					fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-				}
-				
-				// Handle background execution
-				if (options?.background) {
-					fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-				}
-
-				const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, fullCommand, options?.timeout);
-
-				return {
-					stdout,
-					stderr,
-					exitCode,
-					durationMs: Date.now() - startTime
-				};
-			} catch (error) {
-				return {
-					stdout: '',
-					stderr: error instanceof Error ? error.message : String(error),
-					exitCode: 127,
-					durationMs: Date.now() - startTime
-				};
-			}
-			}),
+			// Blaxel's process API streams output while the command runs.
+			streamCommand: (sandbox: SandboxInstance, command: string, options: RunCommandOptions): Promise<CommandResult> =>
+				runBlaxelCommand(sandbox, command, options),
 
 			getInfo: async (sandbox: SandboxInstance): Promise<InstanceInfo> => {
 				const runtime = sandbox.spec?.runtime?.image?.includes('py') ? 'python' : 'node';
@@ -471,6 +448,11 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		},
 
 		snapshot: {
+			// Live-observed: a fork restores the whole overlay rootfs (/tmp, home
+			// and /opt included) and the source's running processes; the source
+			// keeps running.
+			capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
+
 			create: async (config: BlaxelConfig, sandboxId: string, options?: CreateSnapshotOptions) =>
 				withBlaxelConfig(config, async () => {
 					try {
@@ -543,6 +525,30 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					`Blaxel templates must be deleted via the Blaxel dashboard or CLI.`
 				);
 			}
+		},
+
+		volume: {
+			create: async (config: BlaxelConfig, options) =>
+				withBlaxelConfig(config, async () => {
+					const volume = await VolumeInstance.create({ name: options.name, size: options.sizeBytes ? Math.ceil(options.sizeBytes / (1024 * 1024)) : undefined, region: config.region });
+					return { name: volume.name, native: volume };
+				}),
+			get: async (config: BlaxelConfig, name: string) =>
+				withBlaxelConfig(config, async () => {
+					try {
+						const volume = await VolumeInstance.get(name);
+						return { name: volume.name, native: volume };
+					} catch { return null; }
+				}),
+			list: async (config: BlaxelConfig, options) =>
+				withBlaxelConfig(config, async () => {
+					const page = await VolumeInstance.list({ limit: options?.limit });
+					return page.data.map((v) => ({ name: v.name, native: v }));
+				}),
+			delete: async (config: BlaxelConfig, name: string) =>
+				withBlaxelConfig(config, async () => {
+					await withVolumeSettle(() => VolumeInstance.delete(name));
+				}),
 		}
 	}
 });
@@ -613,6 +619,73 @@ function convertSandboxStatus(status: string | undefined): 'running' | 'stopped'
 	}
 }
 
+/** Native env and working directory fields of a Blaxel process request. */
+function processEnvAndCwd(options: RunCommandOptions): { env?: Record<string, string>; workingDir?: string } {
+	return {
+		...(options.env && Object.keys(options.env).length > 0 && { env: options.env }),
+		...(options.cwd && { workingDir: options.cwd }),
+	};
+}
+
+/**
+ * Run a command through Blaxel's process API. Env and cwd go in the request's
+ * native fields so every part of a compound command sees them; background
+ * commands are started without waiting for completion.
+ */
+async function runBlaxelCommand(
+	sandbox: SandboxInstance,
+	command: string,
+	options: RunCommandOptions = {}
+): Promise<CommandResult> {
+	return withBlaxelInstance(sandbox, async () => {
+		const startTime = Date.now();
+		try {
+			if (options.background) {
+				await sandbox.process.exec({ command, waitForCompletion: false, ...processEnvAndCwd(options) });
+				return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - startTime };
+			}
+			const { stdout, stderr, exitCode } = await executeWithStreaming(sandbox, command, options);
+			return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
+		} catch (error) {
+			return {
+				stdout: '',
+				stderr: error instanceof Error ? error.message : String(error),
+				exitCode: 127,
+				durationMs: Date.now() - startTime,
+			};
+		}
+	});
+}
+
+/**
+ * Resolve with the exec result, or kill the named process and reject once the
+ * command outruns its deadline (exec's streamed response only ends on exit).
+ */
+async function raceProcessDeadline<T>(
+	sandbox: SandboxInstance,
+	execPromise: Promise<T>,
+	processName: string,
+	timeoutMs: number
+): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const deadline = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new Error(`Command timed out after ${timeoutMs}ms`)), timeoutMs);
+	});
+	try {
+		return await Promise.race([execPromise, deadline]);
+	} catch (error) {
+		execPromise.catch(() => {});
+		try {
+			await sandbox.process.kill(processName);
+		} catch {
+			// Process may have already exited
+		}
+		throw error;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 /** Process statuses from which no more output will arrive. */
 const TERMINAL_PROCESS_STATUSES = new Set(['completed', 'failed', 'stopped', 'killed']);
 
@@ -628,8 +701,9 @@ const STREAM_DRAIN_MS = 2000;
 async function executeWithStreaming(
 	sandbox: SandboxInstance,
 	command: string,
-	timeoutMs?: number
+	options: RunCommandOptions = {}
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+	const timeoutMs = options.timeout;
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
 	// streamLogs emits whole protocol lines with their delimiters stripped,
@@ -642,12 +716,26 @@ async function executeWithStreaming(
 	// path, which surfaces output via stdout/stderr events, the completed-process
 	// `logs` field, and the streamed `result` event. Reading `stdout` off the
 	// plain POST /process response comes back empty on current Blaxel infra.
-	const processResult = await sandbox.process.exec({
+	// A named process can be killed before exec resolves; the request's native
+	// timeout (seconds) lets the box stop it even if the kill is lost.
+	const processName = timeoutMs !== undefined ? `csdk-${randomUUID().slice(0, 12)}` : undefined;
+	const execPromise = sandbox.process.exec({
 		command,
 		waitForCompletion: true,
-		onStdout: (line) => stdoutLines.push(line),
-		onStderr: (line) => stderrLines.push(line),
+		...processEnvAndCwd(options),
+		...(processName && { name: processName, timeout: Math.max(1, Math.ceil(timeoutMs! / 1000)) }),
+		onStdout: (chunk) => {
+			stdoutLines.push(chunk);
+			options.onStdout?.(chunk);
+		},
+		onStderr: (chunk) => {
+			stderrLines.push(chunk);
+			options.onStderr?.(chunk);
+		},
 	});
+	const processResult = processName
+		? await raceProcessDeadline(sandbox, execPromise, processName, timeoutMs!)
+		: await execPromise;
 
 	type ExecResult = {
 		stdout?: string;
@@ -668,9 +756,17 @@ async function executeWithStreaming(
 		// Mark 3 doesn't retain process output for the logs GET after the
 		// process exits — attach the live log stream before waiting so output
 		// produced while the process finishes isn't lost.
+		// Forward a channel's stream lines only when exec delivered nothing on
+		// it, so a caller never sees the same output twice.
 		const logStream = sandbox.process.streamLogs(pid, {
-			onStdout: (line) => streamStdoutLines.push(line),
-			onStderr: (line) => streamStderrLines.push(line),
+			onStdout: (line) => {
+				streamStdoutLines.push(line);
+				if (stdoutLines.length === 0) options.onStdout?.(`${line}\n`);
+			},
+			onStderr: (line) => {
+				streamStderrLines.push(line);
+				if (stderrLines.length === 0) options.onStderr?.(`${line}\n`);
+			},
 			onError: () => {},
 		});
 		try {

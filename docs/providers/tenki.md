@@ -26,6 +26,10 @@ layout:
 
 Tenki Cloud provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH.
 
+## Lifecycle
+
+`pause()`/`resume()` preserve memory and processes. Snapshot methods `create`/`list`/`delete` are exposed directly. Snapshots preserve rootfs and memory and keep the source; the adapter notes that Tenki empties `/tmp` on the source during capture. Keep durable state outside `/tmp` (the declared path is `/home/tenki`). Restore with `snapshotId`.
+
 ## Installation & Setup
 
 ```bash
@@ -98,4 +102,4 @@ interface TenkiConfig {
 
 * Workspace API keys infer their workspace server-side. Set `workspaceId`, or `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
 * Background commands (`{ background: true }`) detach stdio automatically; a bare `&` would hold the exec output stream open.
-* Snapshots and pause/resume exist in the underlying `@tenkicloud/sandbox` SDK but are not yet wired to the provider's snapshot methods. For advanced features (SSH, volumes, tunnels, git, snapshots), use `sandbox.getInstance()` to reach the SDK `Session` directly.
+* Snapshots and pause/resume are wired to the unified surface. Use `sandbox.getInstance()` for additional native SDK controls such as SSH, tunnels, and git.

@@ -5,9 +5,11 @@
  * official `sandbox0` JavaScript SDK.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { APIError, Client } from 'sandbox0';
 import type { Sandbox as Sandbox0Sandbox } from 'sandbox0';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -56,6 +58,7 @@ interface Sandbox0ClaimOptions {
   };
   snapshotId?: string;
   memory?: string;
+  mounts?: { sandboxvolumeId: string; mountPoint: string }[];
 }
 
 const observations = new WeakMap<Sandbox0Sandbox, SandboxObservation>();
@@ -115,10 +118,16 @@ function buildClaimOptions(
   options?: CreateInstanceOptions,
 ): Sandbox0ClaimOptions | undefined {
   const providerOptions = options as Record<string, unknown> | undefined;
-  const ttl = optionalPositiveSeconds('ttl', providerOptions?.ttl ?? config.ttl);
+  // The unified `timeout` is the sandbox lifetime; without it a claim ends at
+  // the platform default TTL. Native ttl/hardTtl still win.
+  const timeoutSeconds =
+    typeof options?.timeout === 'number' && Number.isFinite(options.timeout) && options.timeout > 0
+      ? Math.ceil(options.timeout / 1000)
+      : undefined;
+  const ttl = optionalPositiveSeconds('ttl', providerOptions?.ttl ?? timeoutSeconds ?? config.ttl);
   const hardTtl = optionalPositiveSeconds(
     'hardTtl',
-    providerOptions?.hardTtl ?? config.hardTtl,
+    providerOptions?.hardTtl ?? timeoutSeconds ?? config.hardTtl,
   );
   const autoResume = providerOptions?.autoResume;
   if (autoResume !== undefined && typeof autoResume !== 'boolean') {
@@ -136,6 +145,19 @@ function buildClaimOptions(
   const claimOptions: Sandbox0ClaimOptions = {
     ...(Object.keys(sandboxConfig).length > 0 ? { config: sandboxConfig } : {}),
     ...(options?.snapshotId ? { snapshotId: options.snapshotId } : {}),
+    // Unified mounts → claim's [{sandboxvolumeId, mountPoint}] wire shape.
+    ...(isUnifiedVolumeMounts(options?.volumes)
+      ? {
+          mounts: options!.volumes!.map((m) => {
+            const ref = resolveVolumeRef(m.volume);
+            const sandboxvolumeId = ref.id ?? ref.name;
+            if (!sandboxvolumeId) {
+              throw new Error('sandbox0 volume mount requires a volume id');
+            }
+            return { sandboxvolumeId, mountPoint: m.mountPath };
+          }),
+        }
+      : {}),
     ...(
       providerOptions?.memory !== undefined || config.memory !== undefined
         ? { memory: normalizeMemory(providerOptions?.memory ?? config.memory) }
@@ -173,6 +195,17 @@ function isNotFound(error: unknown): boolean {
 function isRetryable(error: unknown): boolean {
   const status = statusCode(error);
   return status === 429 || (status !== undefined && status >= 500 && status <= 599);
+}
+
+function isRateLimited(error: unknown): boolean {
+  return statusCode(error) === 429;
+}
+
+// The contexts API reports "runtime access is not ready for this generation"
+// for a short window after a sandbox is claimed — creating the command
+// context right away can race the runtime coming up.
+function isRuntimeNotReady(error: unknown): boolean {
+  return error instanceof Error && /not ready for this generation/i.test(error.message);
 }
 
 function retryDelay(error: unknown, attempt: number): number {
@@ -446,13 +479,53 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
         const deadline = timeout !== undefined && timeout > 0
           ? startedAt + timeout
           : undefined;
-        const started = await sandbox.cmd(command, {
-          command: ['sh', '-lc', command],
-          wait: false,
-          cwd: options?.cwd,
-          envVars: options?.env,
-          ttlSec,
-        });
+        // The WebSocket output stream can drop a contiguous chunk mid-run
+        // while still delivering the exit event — and when the Context
+        // snapshot is unavailable that partial capture is returned as real
+        // output. Redirect to guest files so the command's output never
+        // depends on stream fidelity, then read the files back with
+        // byte-count verification. Background commands skip the
+        // redirect — their output would accumulate in the files forever
+        // (and nothing reads them back anyway).
+        const base = `/tmp/.sandbox0-exec-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+        // The closing paren sits on its own line: a command ending in a
+        // comment or heredoc would otherwise swallow `) > ...` into itself.
+        const wrapped = options?.background
+          ? command
+          : `( ${command}\n) > ${base}.out 2> ${base}.err;` +
+            ` C=$?;` +
+            ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
+            ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
+            ` printf '%s' "$C" > ${base}.code`;
+
+        let started: Awaited<ReturnType<Sandbox0Sandbox['cmd']>>;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            started = await sandbox.cmd(wrapped, {
+              command: ['sh', '-lc', wrapped],
+              wait: false,
+              cwd: options?.cwd,
+              envVars: options?.env,
+              ttlSec,
+            });
+            break;
+          } catch (error) {
+            const remaining =
+              deadline === undefined ? Number.POSITIVE_INFINITY : deadline - Date.now();
+            // Retry only failures that provably happened before the command
+            // context was created — runtime-not-ready and 429. A generic 5xx
+            // can arrive after cmd() already created the context server-side,
+            // so retrying it would run a non-idempotent command twice.
+            if (
+              (!isRuntimeNotReady(error) && !isRateLimited(error)) ||
+              remaining <= 0 ||
+              attempt >= 5
+            ) {
+              throw error;
+            }
+            await sleep(Math.min(retryDelay(error, attempt), Math.max(1, remaining)));
+          }
+        }
         if (options?.background) {
           return {
             stdout: started.stdout || '',
@@ -469,10 +542,88 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
             deadline,
             timeout,
           );
+
+          const readViaCommand = async (script: string): Promise<string> => {
+            const s = await sandbox.cmd(script, {
+              command: ['sh', '-lc', script],
+              wait: false,
+              ttlSec: 60,
+            });
+            try {
+              const done = await observeCommandCompletion(
+                sandbox,
+                s.contextId,
+                Date.now() + 60_000,
+                60_000,
+              );
+              return done.context?.stdout ?? done.output.stdout;
+            } finally {
+              deleteContextBestEffort(sandbox, s.contextId);
+            }
+          };
+          const readVerified = async (path: string, lenPath: string): Promise<string> => {
+            const expected = Number.parseInt(
+              (await readViaCommand(`cat ${lenPath} 2>/dev/null`)).trim(),
+              10,
+            );
+            const first = await readViaCommand(`cat ${path}`);
+            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
+            const second = await readViaCommand(`cat ${path}`);
+            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+          };
+
+          const readDirect = async (): Promise<[string, string, string] | undefined> => {
+            const decoder = new TextDecoder();
+            const read = (suffix: string) => sandbox.readFile(`${base}.${suffix}`);
+            try {
+              const [out, err, outLen, errLen, code] = await withinCommandDeadline(
+                Promise.all([read('out'), read('err'), read('outlen'), read('errlen'), read('code')]),
+                deadline,
+                timeout,
+              );
+              const expected = (bytes: Uint8Array) =>
+                Number.parseInt(decoder.decode(bytes).trim(), 10);
+              if (out.byteLength !== expected(outLen) || err.byteLength !== expected(errLen)) {
+                return undefined;
+              }
+              return [decoder.decode(out), decoder.decode(err), decoder.decode(code)];
+            } catch (error) {
+              if (error instanceof Sandbox0CommandTimeoutError) throw error;
+              return undefined;
+            }
+          };
+
+          let stdout: string;
+          let stderr: string;
+          let codeText: string;
+          // Read the capture files over the file API in one parallel round
+          // trip; fall back to byte-verified reads through commands if the
+          // file API fails or returns a short read.
+          const direct = await readDirect();
+          if (direct) {
+            [stdout, stderr, codeText] = direct;
+            void readViaCommand(
+              `rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`,
+            ).catch(() => undefined);
+          } else {
+            try {
+              stdout = await readVerified(`${base}.out`, `${base}.outlen`);
+              stderr = await readVerified(`${base}.err`, `${base}.errlen`);
+              codeText = await readViaCommand(`cat ${base}.code 2>/dev/null`).catch(() => '');
+            } finally {
+              await readViaCommand(
+                `rm -f ${base}.out ${base}.err ${base}.outlen ${base}.errlen ${base}.code`,
+              ).catch(() => undefined);
+            }
+          }
+
+          const fileExit = Number.parseInt(codeText.trim(), 10);
           return {
-            stdout: completed.context?.stdout ?? completed.output.stdout,
-            stderr: completed.context?.stderr ?? completed.output.stderr,
-            exitCode: completed.context?.exitCode ?? completed.terminal?.exitCode ?? 1,
+            stdout,
+            stderr,
+            exitCode: Number.isInteger(fileExit)
+              ? fileExit
+              : (completed.context?.exitCode ?? completed.terminal?.exitCode ?? 1),
             durationMs: Date.now() - startedAt,
           };
         } catch (error) {
@@ -557,6 +708,30 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
 
       getInstance: (sandbox): Sandbox0Sandbox => sandbox,
     },
+
+    volume: {
+      create: async (config: Sandbox0Config, options) => {
+        const client = createClient(config);
+        const volume = await client.volumes.create({ backend: 's0fs' as any, accessMode: 'RWO' as any });
+        return { id: volume.id, native: volume };
+      },
+      get: async (config: Sandbox0Config, id: string) => {
+        const client = createClient(config);
+        try {
+          const volume = await client.volumes.get(id);
+          return { id: volume.id, native: volume };
+        } catch { return null; }
+      },
+      list: async (config: Sandbox0Config) => {
+        const client = createClient(config);
+        const volumes = await client.volumes.list();
+        return (volumes ?? []).map((v) => ({ id: v.id, native: v }));
+      },
+      delete: async (config: Sandbox0Config, id: string) => {
+        const client = createClient(config);
+        await withVolumeSettle(() => client.volumes.delete(id, { force: true }));
+      },
+    }
   },
 });
 

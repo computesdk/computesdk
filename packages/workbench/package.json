@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/workbench",
-  "version": "33.0.12",
+  "version": "33.0.30",
   "description": "Interactive REPL for testing ComputeSDK sandbox operations",
   "author": "Garrison",
   "license": "MIT",
@@ -68,7 +68,6 @@
     "@computesdk/beam": "workspace:*",
     "@computesdk/just-bash": "workspace:*",
     "@computesdk/hopx": "workspace:*",
-    "@computesdk/declaw": "workspace:*",
     "@computesdk/isorun": "workspace:*",
     "@computesdk/modal": "workspace:*",
     "@computesdk/microsandbox": "workspace:*",
@@ -125,9 +124,6 @@
       "optional": true
     },
     "@computesdk/hopx": {
-      "optional": true
-    },
-    "@computesdk/declaw": {
       "optional": true
     },
     "@computesdk/isorun": {
