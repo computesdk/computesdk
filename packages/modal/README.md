@@ -73,13 +73,6 @@ interface ModalConfig {
 
 Provider instances with matching credentials, environment, app name, and `MODAL_*`
 settings share a Modal client, app lookup, and prepared images within the process.
-Concurrent creates share in-flight initialization; each create still starts a fresh
-sandbox with its own options. The Modal SDK manages authentication-token refresh.
-App and image lookups start on first use, and failed lookups can be retried.
-
-The cache retains the 32 most recently used configurations and up to 128 images
-per configuration. Eviction leaves existing provider and sandbox handles usable.
-Deleting a snapshot invalidates its cached image for providers sharing that configuration.
 
 ### Exposing Ports
 
