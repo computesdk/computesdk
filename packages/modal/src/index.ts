@@ -78,10 +78,6 @@ function cached<T>(cache: Map<string, T>, key: string, limit: number, create: ()
 }
 
 function sharedResources(config: ModalConfig, appName: string): ModalResources {
-  // The SDK resolves credentials and settings from the selected profile and
-  // MODAL_* variables. Include all Modal overrides so changing credentials,
-  // environments, endpoints, or SDK settings cannot reuse incompatible state.
-  // Hash the key to avoid retaining a second plaintext copy of credentials.
   const key = createHash('sha256').update(JSON.stringify([
     config.tokenId,
     config.tokenSecret,
