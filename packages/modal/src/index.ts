@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ModalClient, NotFoundError, SandboxFilesystemNotFoundError } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
+import { createHash } from 'node:crypto';
 
 type ModalNativeSandbox = Sandbox;
 
@@ -54,14 +55,57 @@ export interface ModalCreateSandboxOptions extends CreateInstanceOptions {
   daemonSsePort?: number | false;
 }
 
-/**
- * extends ModalConfig with resources initialised once at
- * factory time so they don't need to be recreated on every sandbox operation.
- */
-interface ModalInternalConfig extends ModalConfig {
+interface ModalResources {
   _client: ModalClient;
   _getApp: () => Promise<App>;
   _imageCache: Map<string, Promise<Image>>;
+}
+
+interface ModalInternalConfig extends ModalConfig, ModalResources {}
+
+const MAX_RESOURCE_CACHE_SIZE = 32;
+const MAX_IMAGE_CACHE_SIZE = 128;
+const resourceCache = new Map<string, ModalResources>();
+
+/** Keep recently used entries without retaining every configuration or image. */
+function cached<T>(cache: Map<string, T>, key: string, limit: number, create: () => T): T {
+  let value = cache.get(key);
+  if (value === undefined) value = create();
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > limit) cache.delete(cache.keys().next().value!);
+  return value;
+}
+
+function sharedResources(config: ModalConfig, appName: string): ModalResources {
+  const key = createHash('sha256').update(JSON.stringify([
+    config.tokenId,
+    config.tokenSecret,
+    config.environment,
+    appName,
+    Object.keys(process.env).filter((name) => name.startsWith('MODAL_')).sort()
+      .map((name) => [name, process.env[name]]),
+  ])).digest('hex');
+
+  return cached(resourceCache, key, MAX_RESOURCE_CACHE_SIZE, () => {
+    const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
+    let appPromise: Promise<App> | undefined;
+    return {
+      _client: client,
+      // Start network I/O on first create. Concurrent providers share the
+      // in-flight lookup, and a rejected lookup leaves the next call retryable.
+      _getApp: () => {
+        if (!appPromise) {
+          appPromise = client.apps.fromName(appName, { createIfMissing: true }).catch((error) => {
+            appPromise = undefined;
+            throw error;
+          });
+        }
+        return appPromise;
+      },
+      _imageCache: new Map(),
+    };
+  });
 }
 
 
@@ -155,14 +199,14 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           const sourceId = snapshotId || templateId;
           const cacheKey = sourceId ?? DEFAULT_IMAGE;
-          let promise = config._imageCache.get(cacheKey);
-          if (!promise) {
-            promise = loadImage(client, app, sourceId).catch((err) => {
-              config._imageCache.delete(cacheKey);
+          const promise = cached(config._imageCache, cacheKey, MAX_IMAGE_CACHE_SIZE, () => {
+            const pending = loadImage(client, app, sourceId).catch((err) => {
+              // An evicted or invalidated load must not remove its replacement.
+              if (config._imageCache.get(cacheKey) === pending) config._imageCache.delete(cacheKey);
               throw err;
             });
-            config._imageCache.set(cacheKey, promise);
-          }
+            return pending;
+          });
           const image = await promise;
 
           const sandboxOptions: SandboxCreateParams = {
@@ -438,23 +482,9 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
  */
 export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
   const appName = config.appName ?? DEFAULT_APP_NAME;
-  const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
-  // Resolved on first create, not here: an eager lookup rejects unobserved
-  // when credentials are missing, and a failed lookup must be retryable.
-  let appPromise: Promise<App> | undefined;
-  const getApp = (): Promise<App> => {
-    if (!appPromise) {
-      appPromise = client.apps.fromName(appName, { createIfMissing: true });
-      appPromise.catch(() => { appPromise = undefined; });
-    }
-    return appPromise;
-  };
-
   return _modal({
     ...config,
     appName,
-    _client: client,
-    _getApp: getApp,
-    _imageCache: new Map(),
+    ...sharedResources(config, appName),
   });
 }

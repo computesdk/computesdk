@@ -97,8 +97,14 @@ vi.mock('modal', () => ({
   Image: class {},
 }));
 
-import { modal } from '../index';
 import { SandboxFilesystemNotFoundError as FakeNotFoundError, NotFoundError as FakeModalNotFoundError } from 'modal';
+
+let modal: typeof import('../index').modal;
+
+beforeEach(async () => {
+  vi.resetModules();
+  ({ modal } = await import('../index'));
+});
 
 describe('modal snapshots', () => {
   beforeEach(() => { deleteImage.mockReset(); });

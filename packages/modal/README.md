@@ -69,6 +69,11 @@ interface ModalConfig {
 }
 ```
 
+### Initialization Caching
+
+Provider instances with matching credentials, environment, app name, and `MODAL_*`
+settings share a Modal client, app lookup, and prepared images within the process.
+
 ### Exposing Ports
 
 Ports declared on the provider are exposed as public Modal tunnels and reachable via `getUrl()`:
