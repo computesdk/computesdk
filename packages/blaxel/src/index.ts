@@ -4,12 +4,13 @@
  * Full-featured provider with filesystem support using the factory pattern.
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
-import { SandboxInstance, Snapshot, VolumeInstance, initialize } from '@blaxel/core';
+import { SANDBOX_API_IMAGE, SANDBOX_API_PATH, SandboxInstance, Snapshot, VolumeInstance, deleteImage, deleteImageTag, getImage, initialize, listImages, settings } from '@blaxel/core';
+import type { Image as BlaxelImage } from '@blaxel/core';
 import { defineProvider, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions, CreateTemplateOptions, ListTemplatesOptions } from '@computesdk/provider';
 
 /**
  * Blaxel rejects sandboxes with a ttl under 5 minutes
@@ -67,6 +68,30 @@ export interface BlaxelConfig {
 }
 
 /**
+ * Options for `template.create`: build a sandbox image from an OCI image.
+ */
+export interface BlaxelCreateTemplateOptions extends CreateTemplateOptions {
+	/** OCI image to build from, e.g. `ubuntu:24.04`. Required: create throws without it. */
+	image?: string;
+	/** Build timeout in ms. Default: 15 minutes. */
+	timeout?: number;
+	/** Called with each image status of this build (`UPLOADING`, `BUILDING`, `BUILT`, `FAILED`). */
+	onStatusChange?: (status: string) => void;
+}
+
+/**
+ * A Blaxel template: one tag of a sandbox image in the workspace registry.
+ */
+export interface BlaxelTemplateInfo {
+	/** Image ref (`sandbox/<name>:<tag>`); `create({ templateId: id })` boots it. */
+	id: string;
+	name: string;
+	provider: 'blaxel';
+	createdAt?: Date;
+	raw?: BlaxelImage;
+}
+
+/**
  * Blaxel's `initialize()` rewrites the SDK's process-global settings and
  * client config: a different credential must serialize against in-flight
  * calls, not interleave with them. The gate admits same-config calls
@@ -116,7 +141,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					envs,
 					name,
 					metadata,
-					templateId: _templateId,
+					templateId,
 					snapshotId,
 					sandboxId: optSandboxId,
 					namespace: _namespace,
@@ -133,11 +158,12 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 
 				const optRuntime = (options as any)?.runtime as string | undefined;
 
-				// Determine the image to use
-				let image = config.image || 'blaxel/base-image:latest';  // Default to prod-base
+				// Determine the image to use. A template id is the image ref
+				// template.create() built, so it wins over the configured image.
+				let image = templateId || config.image || 'blaxel/base-image:latest';  // Default to prod-base
 
 				// Override with runtime-specific image if runtime is specified and no explicit image
-				if (!config.image && optRuntime) {
+				if (!templateId && !config.image && optRuntime) {
 					switch (optRuntime) {
 						case 'python':
 							image = 'blaxel/py-app:latest';
@@ -506,25 +532,33 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				})
 		},
 
-		// Templates in Blaxel are pre-configured images
+		// A Blaxel template is a sandbox image in the workspace registry. The id
+		// is its image ref, which create({ templateId }) boots.
 		template: {
-			create: async (_config: BlaxelConfig, _options: { name: string }) => {
-				throw new Error(
-					`Blaxel templates must be created via the Blaxel dashboard or CLI. Use image in sandbox.create() to specify a base image.`
-				);
-			},
+			create: async (config: BlaxelConfig, options: BlaxelCreateTemplateOptions): Promise<BlaxelTemplateInfo> =>
+				withBlaxelConfig(config, () => buildBlaxelTemplate(options)),
 
-			list: async (_config: BlaxelConfig) => {
-				throw new Error(
-					`Blaxel provider does not support listing templates via API. Use the dashboard to manage templates.`
-				);
-			},
+			list: async (config: BlaxelConfig, options?: ListTemplatesOptions): Promise<BlaxelTemplateInfo[]> =>
+				withBlaxelConfig(config, async () => {
+					if (options?.limit === 0) return [];
+					const { data } = await listImages({ throwOnError: true });
+					const templates = (data ?? [])
+						.filter(image => image.metadata?.resourceType === SANDBOX_IMAGE_TYPE)
+						.flatMap(toTemplateInfos);
+					return options?.limit === undefined ? templates : templates.slice(0, options.limit);
+				}),
 
-			delete: async (_config: BlaxelConfig, _templateId: string) => {
-				throw new Error(
-					`Blaxel templates must be deleted via the Blaxel dashboard or CLI.`
-				);
-			}
+			delete: async (config: BlaxelConfig, templateId: string) =>
+				withBlaxelConfig(config, async () => {
+					const { imageName, tag } = parseTemplateId(templateId);
+					const { response, error } = tag
+						? await deleteImageTag({ path: { resourceType: SANDBOX_IMAGE_TYPE, imageName, tagName: tag } })
+						: await deleteImage({ path: { resourceType: SANDBOX_IMAGE_TYPE, imageName } });
+					// Already gone is fine; any other failure is reported.
+					if (error !== undefined && response?.status !== 404) {
+						throw new Error(`Failed to delete Blaxel template ${templateId}: ${describeError(error)}`);
+					}
+				}),
 		},
 
 		volume: {
@@ -568,6 +602,190 @@ function toSnapshotInfo(snapshot: Snapshot) {
 			sourceDeleted: snapshot.source?.deleted,
 		}
 	};
+}
+
+/** Registry resource type of the images sandboxes boot from. */
+const SANDBOX_IMAGE_TYPE = 'sandbox';
+
+const TEMPLATE_BUILD_TIMEOUT_MS = 15 * 60_000;
+const TEMPLATE_POLL_MS = 2_000;
+
+/**
+ * Build a template with Blaxel's image builder (`POST /images`): the source
+ * image gets Blaxel's sandbox API as its entrypoint and is built into the
+ * workspace registry. No sandbox is deployed for the build.
+ *
+ * The registry image is named `<name>-<hash of the build>`. Blaxel reuses an
+ * identical build without reporting which tag it reused, so one image per
+ * distinct build is what lets the tag be read back exactly.
+ */
+async function buildBlaxelTemplate(options: BlaxelCreateTemplateOptions): Promise<BlaxelTemplateInfo> {
+	const requested = options?.name?.trim();
+	if (!requested) throw new Error('A Blaxel template name is required.');
+	if (options.description !== undefined || options.metadata !== undefined) {
+		throw new Error('Blaxel template builds do not support description or metadata.');
+	}
+	const source = options.image?.trim();
+	if (!source || /\s/.test(source)) {
+		throw new Error('A Blaxel template needs an OCI image ref without spaces, e.g. image: \'ubuntu:24.04\'.');
+	}
+	const dockerfile = [
+		`FROM ${source}`,
+		`COPY --from=${SANDBOX_API_IMAGE}:latest /sandbox-api ${SANDBOX_API_PATH}`,
+		`ENTRYPOINT ["${SANDBOX_API_PATH}"]`,
+		'',
+	].join('\n');
+	const name = `${requested}-${createHash('sha256').update(dockerfile).digest('hex').slice(0, 8)}`;
+	const path = { resourceType: SANDBOX_IMAGE_TYPE, imageName: name };
+
+	const before = await getImage({ path });
+	if (before.error !== undefined && before.response?.status !== 404) {
+		throw new Error(`Failed to read the Blaxel template ${name}: ${describeError(before.error)}`);
+	}
+	const lastEventBefore = latestEventTime(before.data);
+	const tagsBefore = new Set((before.data?.spec?.tags ?? []).map(tag => tag.name));
+
+	await settings.authenticate();
+	const created = await fetch(`${settings.baseUrl}/images?upload=true`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...settings.headers },
+		body: JSON.stringify({ name, resourceType: SANDBOX_IMAGE_TYPE }),
+	});
+	const uploadUrl = created.headers.get('x-blaxel-upload-url');
+	if (!created.ok || !uploadUrl) {
+		throw new Error(`Failed to start the Blaxel template build for ${name}: ${created.status} ${await created.text()}`);
+	}
+	const uploaded = await fetch(uploadUrl, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/zip' },
+		body: zipSingleFile('Dockerfile', Buffer.from(dockerfile)),
+	});
+	if (!uploaded.ok) {
+		throw new Error(`Failed to upload the Blaxel template build for ${name}: ${uploaded.status} ${await uploaded.text()}`);
+	}
+
+	// This build is done when the image records a build result newer than
+	// any event it had before the upload.
+	const deadline = Date.now() + (options.timeout ?? TEMPLATE_BUILD_TIMEOUT_MS);
+	let lastStatus = before.data?.metadata?.status;
+	for (;;) {
+		const { data, error, response } = await getImage({ path });
+		if (error !== undefined && response?.status !== 404) {
+			throw new Error(`Failed to read the Blaxel template ${name}: ${describeError(error)}`);
+		}
+		const status = data?.metadata?.status;
+		if (status && status !== lastStatus) {
+			lastStatus = status;
+			options.onStatusChange?.(status);
+		}
+		const result = (data?.metadata?.events ?? []).find(event =>
+			eventTime(event) > lastEventBefore && (event.status === 'BUILT' || event.status === 'FAILED'));
+		if (result?.status === 'FAILED') {
+			throw new Error(`Blaxel failed to build template ${name} from ${source}: ${result.message?.replace(/\s+/g, ' ').trim() || 'build failed'}`);
+		}
+		// The tag can land a moment after the BUILT event: keep polling until it does.
+		const tags = data?.spec?.tags ?? [];
+		const tag = tags.find(t => t.name && !tagsBefore.has(t.name)) ?? newestTag(tags);
+		if (result && tag?.name) {
+			return {
+				id: `${SANDBOX_IMAGE_TYPE}/${name}:${tag.name}`,
+				name,
+				provider: 'blaxel',
+				createdAt: tag.createdAt ? new Date(tag.createdAt) : undefined,
+				raw: data,
+			};
+		}
+		if (Date.now() >= deadline) {
+			const state = result ? 'built but has no tag yet' : `did not finish building in time (last status ${lastStatus ?? 'none'})`;
+			throw new Error(`Blaxel template ${name} ${state}.`);
+		}
+		await new Promise(resolve => setTimeout(resolve, result ? 500 : TEMPLATE_POLL_MS));
+	}
+}
+
+type BlaxelImageEvent = NonNullable<NonNullable<BlaxelImage['metadata']['events']>[number]>;
+type BlaxelImageTag = NonNullable<BlaxelImage['spec']['tags']>[number];
+
+function eventTime(event: BlaxelImageEvent): number {
+	return Date.parse(event.time ?? '') || 0;
+}
+
+function latestEventTime(image: BlaxelImage | undefined): number {
+	return Math.max(0, ...(image?.metadata?.events ?? []).map(eventTime));
+}
+
+function newestTag(tags: BlaxelImageTag[]): BlaxelImageTag | undefined {
+	const time = (tag: BlaxelImageTag) => Date.parse(tag.updatedAt ?? tag.createdAt ?? '') || 0;
+	return [...tags].sort((a, b) => time(b) - time(a))[0];
+}
+
+/** A zip archive holding one uncompressed file: the build context upload. */
+function zipSingleFile(fileName: string, content: Buffer): Buffer {
+	const nameBytes = Buffer.from(fileName);
+	const crc = crc32(content);
+	const local = Buffer.alloc(30);
+	local.writeUInt32LE(0x04034b50, 0);
+	local.writeUInt16LE(20, 4);
+	local.writeUInt16LE(0x21, 12); // 1980-01-01
+	local.writeUInt32LE(crc, 14);
+	local.writeUInt32LE(content.length, 18);
+	local.writeUInt32LE(content.length, 22);
+	local.writeUInt16LE(nameBytes.length, 26);
+	const central = Buffer.alloc(46);
+	central.writeUInt32LE(0x02014b50, 0);
+	central.writeUInt16LE(20, 4);
+	central.writeUInt16LE(20, 6);
+	central.writeUInt16LE(0x21, 14);
+	central.writeUInt32LE(crc, 16);
+	central.writeUInt32LE(content.length, 20);
+	central.writeUInt32LE(content.length, 24);
+	central.writeUInt16LE(nameBytes.length, 28);
+	const centralOffset = local.length + nameBytes.length + content.length;
+	const end = Buffer.alloc(22);
+	end.writeUInt32LE(0x06054b50, 0);
+	end.writeUInt16LE(1, 8);
+	end.writeUInt16LE(1, 10);
+	end.writeUInt32LE(central.length + nameBytes.length, 12);
+	end.writeUInt32LE(centralOffset, 16);
+	return Buffer.concat([local, nameBytes, content, central, nameBytes, end]);
+}
+
+function crc32(bytes: Uint8Array): number {
+	let crc = 0xffffffff;
+	for (const byte of bytes) {
+		crc ^= byte;
+		for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+	}
+	return (crc ^ 0xffffffff) >>> 0;
+}
+
+/** One template per tag of a registry image. */
+function toTemplateInfos(image: BlaxelImage): BlaxelTemplateInfo[] {
+	const name = image.metadata?.name;
+	if (!name) return [];
+	return (image.spec?.tags ?? [])
+		.filter(tag => tag.name)
+		.map(tag => ({
+			id: `${SANDBOX_IMAGE_TYPE}/${name}:${tag.name}`,
+			name,
+			provider: 'blaxel' as const,
+			createdAt: tag.createdAt ? new Date(tag.createdAt) : undefined,
+			raw: image,
+		}));
+}
+
+/** `sandbox/<name>:<tag>` → registry image name and tag. A bare `<name>` has no tag, so delete removes all of its tags. */
+function parseTemplateId(templateId: string): { imageName: string; tag?: string } {
+	const ref = templateId.startsWith(`${SANDBOX_IMAGE_TYPE}/`) ? templateId.slice(SANDBOX_IMAGE_TYPE.length + 1) : templateId;
+	const colon = ref.lastIndexOf(':');
+	if (colon <= 0) return { imageName: ref };
+	return { imageName: ref.slice(0, colon), tag: ref.slice(colon + 1) || undefined };
+}
+
+function describeError(error: unknown): string {
+	if (error instanceof Error) return error.message;
+	if (typeof error === 'object' && error !== null) return JSON.stringify(error);
+	return String(error);
 }
 
 /**
