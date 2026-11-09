@@ -13,7 +13,15 @@ import { posix } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 
-import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
+import type {
+  CommandResult,
+  CreateInstanceOptions,
+  CreateSnapshotOptions,
+  FileEntry,
+  InstanceInfo,
+  ListSnapshotsOptions,
+  RunCommandOptions,
+} from '@computesdk/provider';
 
 export interface Agent37Config {
   /** Agent37 API key - if not provided, will fallback to AGENT37_API_KEY environment variable */
@@ -162,6 +170,25 @@ async function exec(sandbox: Agent37Sandbox, command: string, timeoutMs?: number
   return data;
 }
 
+async function waitForStatus(sandbox: Agent37Sandbox, status: string, timeoutMs = 120_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { data } = await request<Agent37InstanceData>(
+      sandbox,
+      'GET',
+      `/v1/instances/${encodeURIComponent(sandbox.id)}`,
+    );
+    if (data?.status === status) return;
+    if (!data || Date.now() > deadline) {
+      throw new Error(`Agent37 instance ${sandbox.id} did not reach '${status}' (last status: ${data?.status ?? 'gone'})`);
+    }
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+}
+
+// Instances created by snapshot.create are forks tagged so list() can find them.
+const SNAPSHOT_METADATA_KEY = 'agent37_snapshot_of';
+
 function infoStatus(status: string): InstanceInfo['status'] {
   if (status === 'failed') return 'error';
   if (status === 'stopped' || status === 'stopping' || status === 'deleting' || status === 'deleted') return 'stopped';
@@ -202,6 +229,21 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
     instances: {
       create: async (config: Agent37Config, options?: CreateInstanceOptions) => {
         const auth = resolveConfig(config);
+        // A snapshot is a forked instance (see `snapshot` below): restoring it
+        // forks that artifact, so one snapshot can restore many boxes.
+        if (options?.snapshotId) {
+          const body: Record<string, unknown> = {};
+          if (options.name) body.name = options.name;
+          if (options.metadata) body.metadata = options.metadata;
+          const { data } = await request<Agent37InstanceData>(
+            auth,
+            'POST',
+            `/v1/instances/${encodeURIComponent(options.snapshotId)}/fork`,
+            body,
+          );
+          if (!data) throw new Error(`Agent37 snapshot ${options.snapshotId} not found`);
+          return { instance: toSandbox(auth, data), instanceId: data.id };
+        }
         const { data } = await request<Agent37InstanceData>(auth, 'POST', '/v1/instances', createBody(options));
         if (!data) throw new Error('Agent37 API returned no instance on create');
         return { instance: toSandbox(auth, data), instanceId: data.id };
@@ -223,6 +265,19 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
         const auth = resolveConfig(config);
         await request(auth, 'DELETE', `/v1/instances/${encodeURIComponent(instanceId)}`);
       },
+
+      // Agent37 has no suspend call on the SDK surface, but the API's stop/start
+      // pair is a box-identity pause: the same id and the whole disk come back
+      // (memory is released — only files survive).
+      pause: async (sandbox: Agent37Sandbox) => {
+        await request(sandbox, 'POST', `/v1/instances/${encodeURIComponent(sandbox.id)}/stop`);
+        await waitForStatus(sandbox, 'stopped');
+      },
+      resume: async (sandbox: Agent37Sandbox) => {
+        await request(sandbox, 'POST', `/v1/instances/${encodeURIComponent(sandbox.id)}/start`);
+        await waitForStatus(sandbox, 'running');
+      },
+      pauseCapabilities: { memory: false },
 
       runCommand: async (sandbox: Agent37Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const start = Date.now();
@@ -345,6 +400,56 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
         remove: async (sandbox: Agent37Sandbox, path: string, run: FsRunCommand): Promise<void> => {
           await mustSucceed(run, sandbox, `rm -rf ${shellPath(path)}`, `remove ${path}`);
         },
+      },
+    },
+
+    // Agent37 has no standalone snapshot object — a fork is the artifact.
+    // `snapshot.create` forks the source into an independent instance that
+    // keeps its own id and outlives the source; `create({ snapshotId })`
+    // forks that artifact into a fresh box; `snapshot.delete` destroys it.
+    // Backups exist too (`/{id}/backups` + `/{id}/restore`), but restore is
+    // in-place and backups are dropped with the instance, which can't express
+    // "snapshot → destroy source → boot a new box".
+    snapshot: {
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false, source: 'kept', fork: true },
+      create: async (config: Agent37Config, sandboxId: string, options?: CreateSnapshotOptions) => {
+        const auth = resolveConfig(config);
+        const { data } = await request<Agent37InstanceData>(
+          auth,
+          'POST',
+          `/v1/instances/${encodeURIComponent(sandboxId)}/fork`,
+          {
+            ...(options?.name ? { name: options.name } : {}),
+            metadata: { ...options?.metadata, [SNAPSHOT_METADATA_KEY]: sandboxId },
+          },
+        );
+        if (!data) throw new Error(`Agent37 instance ${sandboxId} not found`);
+        return {
+          id: data.id,
+          provider: 'agent37',
+          createdAt: new Date((data.created ?? 0) * 1000),
+          metadata: { sourceSandboxId: sandboxId },
+          native: data,
+        };
+      },
+      list: async (config: Agent37Config, options?: ListSnapshotsOptions) => {
+        const auth = resolveConfig(config);
+        const { data } = await request<{ data: Agent37InstanceData[] }>(auth, 'GET', '/v1/instances');
+        const sourceId = options?.instanceId ?? (options as { sandboxId?: string } | undefined)?.sandboxId;
+        return (data?.data ?? [])
+          .filter((row) => (row.metadata as Record<string, string> | undefined)?.[SNAPSHOT_METADATA_KEY] !== undefined)
+          .filter((row) => !sourceId || (row.metadata as Record<string, string>)[SNAPSHOT_METADATA_KEY] === sourceId)
+          .map((row) => ({
+            id: row.id,
+            provider: 'agent37',
+            createdAt: new Date((row.created ?? 0) * 1000),
+            native: row,
+          }));
+      },
+      delete: async (config: Agent37Config, snapshotId: string) => {
+        const auth = resolveConfig(config);
+        // request() maps 404 to a data:null response — an already-gone fork is fine.
+        await request(auth, 'DELETE', `/v1/instances/${encodeURIComponent(snapshotId)}`);
       },
     },
   },
