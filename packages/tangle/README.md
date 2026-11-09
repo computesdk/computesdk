@@ -20,7 +20,7 @@ npm install @computesdk/tangle
 | `cpu`, `memory` (MB), `disk` (GB) | | server default shape |
 | `timeout` (ms) | | server default lifetime |
 
-Per-create `image`, `templateId` (a saved Tangle template), `cpu`, `memory`, `disk`, `timeout`, `name`, `envs`, `metadata`, `ephemeral` and `idempotencyKey` override the defaults.
+Per-create `image`, `templateId` (a saved Tangle template), `cpu`, `memory`, `disk`, `timeout`, `name`, `envs`, `metadata`, `ephemeral` and `idempotencyKey` override the defaults. `ephemeral: true` gives the sandbox a scratch home directory whose contents are lost when it restarts.
 
 ## Usage
 

@@ -2,7 +2,7 @@
  * Tangle Sandbox provider for ComputeSDK, a thin adapter over @tangle-network/sandbox.
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { NotFoundError, Sandbox, SandboxError, type CreateSandboxOptions, type SandboxInstance, type SandboxStatus } from '@tangle-network/sandbox';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
@@ -14,6 +14,8 @@ const EXEC_TIMEOUT_MS = 600_000;
 const LISTED_STATUSES: SandboxStatus[] = ['pending', 'provisioning', 'running', 'stopped', 'failed', 'expired'];
 /** Statuses a sandbox does not leave for `running` on its own. */
 const ENDED = new Set<SandboxStatus>(['stopped', 'expired', 'deleted']);
+/** 503 codes the SDK gives up on when no host has room; such a refusal allocated nothing. */
+const NO_ROOM = new Set<string>(['CAPACITY_EXHAUSTED', 'HOST_PRESSURE']);
 
 export interface TangleConfig {
   /** API key; falls back to TANGLE_API_KEY. */
@@ -57,8 +59,11 @@ function createOptions(config: TangleConfig, options: CreateInstanceOptions): Cr
   const memoryMB = options.memory ?? config.memory;
   const diskGB = options.disk ?? config.disk;
   const timeout = options.timeout ?? config.timeout;
+  // Always keyed, so a create whose outcome is unknown can be joined. The default name comes from the
+  // key, so a create sent again with the same key carries the same body.
+  const idempotencyKey = typeof options.idempotencyKey === 'string' ? options.idempotencyKey : randomUUID();
   return {
-    name: options.name ?? `computesdk-${randomUUID().slice(0, 8)}`,
+    name: options.name ?? `computesdk-${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 8)}`,
     agent: false,
     ...(environment !== undefined ? { environment } : {}),
     ...(options.templateId !== undefined ? { templateId: options.templateId } : {}),
@@ -68,8 +73,7 @@ function createOptions(config: TangleConfig, options: CreateInstanceOptions): Cr
     ...(options.ephemeral !== undefined ? { ephemeral: options.ephemeral } : {}),
     ...(options.envs ? { env: options.envs } : {}),
     ...(options.metadata ? { metadata: options.metadata } : {}),
-    // Always keyed, so a create whose outcome is unknown can be joined and cleaned up.
-    idempotencyKey: typeof options.idempotencyKey === 'string' ? options.idempotencyKey : randomUUID(),
+    idempotencyKey,
   };
 }
 
@@ -93,7 +97,7 @@ async function discard(sdk: Sandbox, id: string, failure: unknown): Promise<void
 /** Only a refusal shows a failed create left nothing behind; without a sandbox id, anything else is unknown. */
 function outcomeUnknown(error: unknown): boolean {
   if (!(error instanceof SandboxError)) return true;
-  if (error.allocationId !== undefined || error.createFailureDisposition === 'not-admitted') return false;
+  if (error.allocationId !== undefined || error.createFailureDisposition === 'not-admitted' || NO_ROOM.has(error.code)) return false;
   return !(error.status >= 400 && error.status < 500 && !error.retryable);
 }
 
@@ -103,7 +107,11 @@ async function admit(sdk: Sandbox, request: CreateSandboxOptions): Promise<Sandb
     return await sdk.create(request);
   } catch (error) {
     if (!outcomeUnknown(error)) throw error;
-    return sdk.create(request);
+    return sdk.create(request).catch((joined: unknown) => {
+      // Keep the first failure reachable when the second fails too.
+      if (joined instanceof Error && !('cause' in joined)) Object.assign(joined, { cause: error });
+      throw joined;
+    });
   }
 }
 
@@ -130,7 +138,6 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
         // A rejected create returns no id, so the caller could never delete what it left behind. With a
         // caller's key the platform can return a sandbox another call allocated, so delete only one under
         // the provider's own key or one the platform says this call created.
-        // Abort is left to the factory, which destroys an instance whose create resolves after an abort.
         const owned = (receipt: { outcome: string } | null | undefined): boolean =>
           typeof options.idempotencyKey !== 'string' || receipt?.outcome === 'created';
         let sandbox: SandboxInstance;
@@ -150,6 +157,11 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
         } catch (error) {
           if (owned(sandbox.createReceipt())) await discard(sdk, sandbox.id, error);
           throw error;
+        }
+        // The factory destroys an instance whose create resolves after an abort, so keep one this call
+        // did not create from reaching it.
+        if (options.signal?.aborted && !owned(sandbox.createReceipt())) {
+          throw new Error(`Create aborted; Tangle sandbox ${sandbox.id} belongs to an earlier create with this idempotencyKey.`);
         }
         return { instance: sandbox, instanceId: sandbox.id };
       },
@@ -185,7 +197,8 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
           provider: 'tangle',
           status: status(sandbox),
           createdAt: sandbox.createdAt,
-          timeout: sandbox.expiresAt ? Math.max(0, sandbox.expiresAt.getTime() - sandbox.createdAt.getTime()) : 0,
+          // Each start or resume begins a new lifetime interval.
+          timeout: sandbox.expiresAt ? Math.max(0, sandbox.expiresAt.getTime() - (sandbox.startedAt ?? sandbox.createdAt).getTime()) : 0,
           metadata: { ...sandbox.metadata, name: sandbox.name, resources: sandbox.resources },
         };
       },
