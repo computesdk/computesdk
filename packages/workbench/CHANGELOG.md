@@ -1,5 +1,23 @@
 # @computesdk/workbench
 
+## 33.0.32
+
+### Patch Changes
+
+- Updated dependencies [afd008f]
+- Updated dependencies [0198d58]
+- Updated dependencies [0b28544]
+  - @computesdk/microsandbox@0.1.26
+  - @computesdk/modal@1.9.29
+
+## 33.0.31
+
+### Patch Changes
+
+- Updated dependencies [e6d322d]
+  - @computesdk/gcp@0.1.12
+  - @computesdk/cloud-run@0.1.28
+
 ## 33.0.30
 
 ### Patch Changes
