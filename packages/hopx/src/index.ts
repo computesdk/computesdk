@@ -325,6 +325,15 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
         }
       },
 
+      pause: async (sandbox: HopxSandbox): Promise<void> => {
+        await sandbox.pause();
+      },
+      resume: async (sandbox: HopxSandbox): Promise<HopxSandbox> => {
+        await sandbox.resume();
+        return sandbox;
+      },
+      pauseCapabilities: { memory: true },
+
       /**
        * Native filesystem operations using HopX's files API
        * 
