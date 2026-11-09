@@ -20,7 +20,7 @@ npm install @computesdk/tangle
 | `cpu`, `memory` (MB), `disk` (GB) | | server default shape |
 | `timeout` (ms) | | server default lifetime |
 
-Per-create `image` (or `templateId`), `cpu`, `memory`, `disk`, `timeout`, `name`, `envs`, `metadata`, `ephemeral` and `idempotencyKey` override the defaults.
+Per-create `image`, `templateId` (a saved Tangle template), `cpu`, `memory`, `disk`, `timeout`, `name`, `envs`, `metadata`, `ephemeral` and `idempotencyKey` override the defaults.
 
 ## Usage
 
@@ -45,8 +45,8 @@ try {
 
 ## Supported operations
 
-- `instances.create`, `getById`, `list` (expired and deleted sandboxes omitted), `destroy`
-- `runCommand` with `cwd`, `env`, `timeout` and `background`; `timeout` defaults to and is capped at 10 minutes (600000 ms)
+- `instances.create`, `getById`, `list` (deleted sandboxes omitted), `destroy`
+- `runCommand` with `cwd`, `env`, `timeout` and `background`; `timeout` defaults to 600000 ms (10 minutes), the runtime's maximum, and must be a whole number of ms from 100 to 600000
 - `filesystem`: `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove`
 - `getUrl`, through the SDK's port exposure
 - `getInstance()` returns the native `SandboxInstance` for other SDK features

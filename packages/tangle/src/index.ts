@@ -8,12 +8,12 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
 
 const DEFAULT_BASE_URL = 'https://sandbox.tangle.tools';
-/** The runtime's per-command ceiling (whole ms, 100 to 600000); the SDK default would be 30 s. */
+/** The most the runtime allows per command; the SDK accepts whole ms from 100 to 600000 and defaults to 30 s. */
 const EXEC_TIMEOUT_MS = 600_000;
-/** Every status that still holds a sandbox; `expired` and `deleted` records are history. */
-const LISTED_STATUSES: SandboxStatus[] = ['pending', 'provisioning', 'running', 'stopped', 'failed'];
-/** Create failures that leave the request's outcome unknown, so a sandbox may exist. */
-const UNKNOWN_CREATE_OUTCOME = new Set<string>(['TIMEOUT', 'NETWORK_ERROR']);
+/** Every status `getById` returns; `deleted` records are history. */
+const LISTED_STATUSES: SandboxStatus[] = ['pending', 'provisioning', 'running', 'stopped', 'failed', 'expired'];
+/** Statuses a sandbox does not leave for `running` on its own. */
+const ENDED = new Set<SandboxStatus>(['stopped', 'expired', 'deleted']);
 
 export interface TangleConfig {
   /** API key; falls back to TANGLE_API_KEY. */
@@ -37,7 +37,7 @@ const env = (name: string): string | undefined =>
 
 /** Credentials are checked when a call needs them; constructing the SDK client does no I/O. */
 function client(config: TangleConfig): Sandbox {
-  const apiKey = (config.apiKey ?? env('TANGLE_API_KEY'))?.trim();
+  const apiKey = (config.apiKey || env('TANGLE_API_KEY'))?.trim();
   if (!apiKey) {
     throw new Error('Missing Tangle API key: pass tangle({ apiKey }) or set TANGLE_API_KEY. Create one at https://sandbox.tangle.tools.');
   }
@@ -51,7 +51,8 @@ function createOptions(config: TangleConfig, options: CreateInstanceOptions): Cr
   if (options.runtime !== undefined) {
     throw new Error('Tangle does not map runtime names; select an image such as "node:22" or "python:3.12-slim".');
   }
-  const environment = options.image ?? options.templateId ?? config.image;
+  // A saved template brings its own image, so the configured default image does not override it.
+  const environment = options.image ?? (options.templateId === undefined ? config.image : undefined);
   const cpuCores = options.cpu ?? config.cpu;
   const memoryMB = options.memory ?? config.memory;
   const diskGB = options.disk ?? config.disk;
@@ -60,6 +61,7 @@ function createOptions(config: TangleConfig, options: CreateInstanceOptions): Cr
     name: options.name ?? `computesdk-${randomUUID().slice(0, 8)}`,
     agent: false,
     ...(environment !== undefined ? { environment } : {}),
+    ...(options.templateId !== undefined ? { templateId: options.templateId } : {}),
     ...(cpuCores !== undefined || memoryMB !== undefined || diskGB !== undefined
       ? { resources: { cpuCores, memoryMB, diskGB } } : {}),
     ...(timeout !== undefined ? { maxLifetimeSeconds: Math.ceil(timeout / 1000) } : {}),
@@ -80,18 +82,28 @@ async function remove(sdk: Sandbox, id: string): Promise<void> {
   }
 }
 
-/**
- * The sandbox a failed create left behind, if any: the allocation the SDK names, or, when the outcome
- * is unknown (a timeout or network failure), the result of joining the request once by its key.
- */
-async function leftover(sdk: Sandbox, request: CreateSandboxOptions, error: unknown): Promise<string | undefined> {
-  if (!(error instanceof SandboxError)) return undefined;
-  if (error.allocationId !== undefined) return error.allocationId;
-  if (!UNKNOWN_CREATE_OUTCOME.has(error.catalogCode) || error.createFailureDisposition === 'not-admitted') return undefined;
+/** Deletes a sandbox that did not start, keeping the start failure as the error. */
+async function discard(sdk: Sandbox, id: string, failure: unknown): Promise<void> {
+  await remove(sdk, id).catch((cleanup: unknown) => {
+    const message = `Tangle sandbox ${id} did not start (${String(failure)}) and was not deleted (${String(cleanup)}).`;
+    throw Object.assign(new Error(message), { cause: failure });
+  });
+}
+
+/** Only a refusal shows a failed create left nothing behind; without a sandbox id, anything else is unknown. */
+function outcomeUnknown(error: unknown): boolean {
+  if (!(error instanceof SandboxError)) return true;
+  if (error.allocationId !== undefined || error.createFailureDisposition === 'not-admitted') return false;
+  return !(error.status >= 400 && error.status < 500 && !error.retryable);
+}
+
+/** Sends the create once more when its outcome is unknown; the same idempotency key joins the first attempt. */
+async function admit(sdk: Sandbox, request: CreateSandboxOptions): Promise<SandboxInstance> {
   try {
-    return (await sdk.create(request)).id;
-  } catch (joined) {
-    return joined instanceof SandboxError ? joined.allocationId : undefined;
+    return await sdk.create(request);
+  } catch (error) {
+    if (!outcomeUnknown(error)) throw error;
+    return sdk.create(request);
   }
 }
 
@@ -115,25 +127,25 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
       create: async (config, options = {}) => {
         const sdk = client(config);
         const request = createOptions(config, options);
-        let id: string | undefined;
+        // A rejected create returns no id, so the caller could never delete what it left behind.
+        // Abort is left to the factory, which destroys an instance whose create resolves after an abort.
+        let sandbox: SandboxInstance;
         try {
-          // create() waits for readiness itself. Abort is left to the factory, which destroys an
-          // instance whose create resolves after an abort; an aborted request has no id to delete.
-          const sandbox = await sdk.create(request);
-          id = sandbox.id;
-          if (sandbox.status !== 'running') await sandbox.waitFor('running');
-          return { instance: sandbox, instanceId: sandbox.id };
+          sandbox = await admit(sdk, request);
         } catch (error) {
-          // A rejected create returns no id, so the caller could never delete the sandbox.
-          const allocated = id ?? (await leftover(sdk, request, error));
-          if (allocated !== undefined) {
-            await remove(sdk, allocated).catch((cleanup: unknown) => {
-              const message = `Tangle sandbox ${allocated} did not start (${String(error)}) and was not deleted (${String(cleanup)}).`;
-              throw Object.assign(new Error(message), { cause: error });
-            });
-          }
+          // The SDK names the sandbox a failed readiness wait leaves behind.
+          if (error instanceof SandboxError && error.allocationId !== undefined) await discard(sdk, error.allocationId, error);
           throw error;
         }
+        try {
+          if (ENDED.has(sandbox.status)) throw new Error(`Tangle sandbox ${sandbox.id} is ${sandbox.status}.`);
+          // create() waits only while pending or provisioning; this also waits for the filesystem.
+          await sandbox.waitFor('running');
+        } catch (error) {
+          await discard(sdk, sandbox.id, error);
+          throw error;
+        }
+        return { instance: sandbox, instanceId: sandbox.id };
       },
 
       getById: async (config, instanceId) => {
@@ -141,11 +153,11 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
         return sandbox && sandbox.status !== 'deleted' ? { instance: sandbox, instanceId: sandbox.id } : null;
       },
 
-      // Without a limit the API returns every match, so one request lists the live sandboxes.
+      // Without a limit the API returns every match, so one request lists every sandbox not deleted.
       list: async (config) =>
         (await client(config).list({ status: LISTED_STATUSES })).map((sandbox) => ({ instance: sandbox, instanceId: sandbox.id })),
 
-      destroy: (config, instanceId) => remove(client(config), instanceId),
+      destroy: async (config, instanceId) => remove(client(config), instanceId),
 
       runCommand: async (sandbox, command, options: RunCommandOptions = {}): Promise<CommandResult> => {
         const start = Date.now();

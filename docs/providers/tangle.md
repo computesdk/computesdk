@@ -90,14 +90,14 @@ interface TangleConfig {
 }
 ```
 
-Per-create `image` (or `templateId`), `cpu`, `memory`, `disk`, `timeout`, `name`, `envs`, `metadata`, `ephemeral` and `idempotencyKey` override the defaults.
+Per-create `image`, `templateId` (a saved Tangle template), `cpu`, `memory`, `disk`, `timeout`, `name`, `envs`, `metadata`, `ephemeral` and `idempotencyKey` override the defaults.
 
 ## Supported Operations
 
 | Operation | Support |
 |---|---|
-| `instances.create` / `getById` / `list` / `destroy` | Yes; `list` omits expired and deleted sandboxes |
-| `runCommand` with `cwd`, `env`, `timeout`, `background` | Yes; `timeout` defaults to and is capped at 10 minutes (600000 ms) |
+| `instances.create` / `getById` / `list` / `destroy` | Yes; `list` omits deleted sandboxes |
+| `runCommand` with `cwd`, `env`, `timeout`, `background` | Yes; `timeout` defaults to 600000 ms (10 minutes), the runtime's maximum, and must be a whole number of ms from 100 to 600000 |
 | `filesystem` (read, write, mkdir, readdir, exists, remove) | Yes |
 | `getUrl` | Yes, through the SDK's port exposure |
 | Snapshot restore (`snapshotId`) | Not supported; throws |
