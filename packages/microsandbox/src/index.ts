@@ -1100,8 +1100,10 @@ const _microsandbox = defineProvider<
 
         // Prefer a live full-scope capture: the guest flushes writes itself,
         // memory and processes are checkpointed, and the source keeps running.
-        // Backends that reject it fall through to the disk-only path below.
-        if (wasRunning) {
+        // scope: 'full' requires it (errors propagate); the default auto mode
+        // falls back to the disk-only path only when the backend reports the
+        // live capture unsupported; scope: 'disk' skips it entirely.
+        if (wasRunning && options?.scope !== 'disk') {
           try {
             let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId).full().guestFlush('auto');
             for (const [key, value] of Object.entries(labels)) {
@@ -1130,7 +1132,7 @@ const _microsandbox = defineProvider<
               code === 'unsupported' ||
               code === 'unsupportedOperation' ||
               /unsupported|not supported|unimplemented/i.test(errorMessage(liveError));
-            if (!unsupported) throw liveError;
+            if (!unsupported || options?.scope === 'full') throw liveError;
           }
         }
 
