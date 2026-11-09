@@ -125,16 +125,21 @@ function createBody(options: CreateInstanceOptions = {}): Record<string, unknown
   if (options.metadata) body.metadata = options.metadata;
   if (options.envs && Object.keys(options.envs).length > 0) body.env = options.envs;
 
+  const resources = resourcesBody(options);
+  if (Object.keys(resources).length > 0) body.resources = resources;
+  return body;
+}
+
+/** Maps ComputeSDK's size options onto the `resources` block the API expects. */
+function resourcesBody(options: CreateInstanceOptions): Record<string, number> {
   const cpu = options.cpu ?? options.vcpus ?? options.cpus;
   const memory = megabytesToGb(options.memory ?? options.memoryMiB ?? options.memoryMb ?? options.memMiB);
   const disk = megabytesToGb(options.diskMb ?? options.diskMiB);
-  const resources = {
+  return {
     ...(typeof cpu === 'number' ? { cpu } : {}),
     ...(memory ? { memory } : {}),
     ...(disk ? { disk } : {}),
   };
-  if (Object.keys(resources).length > 0) body.resources = resources;
-  return body;
 }
 
 function wrapCommand(command: string, options?: RunCommandOptions): string {
@@ -232,16 +237,34 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
         // A snapshot is a forked instance (see `snapshot` below): restoring it
         // forks that artifact, so one snapshot can restore many boxes.
         if (options?.snapshotId) {
+          const snapshotRef = options.snapshotId;
+          // The artifact is kept stopped; fork needs a live source, so wake
+          // it, fork, and put it back to sleep.
+          const { data: artifactData } = await request<Agent37InstanceData>(
+            auth,
+            'GET',
+            `/v1/instances/${encodeURIComponent(snapshotRef)}`,
+          );
+          if (!artifactData) throw new Error(`Agent37 snapshot ${snapshotRef} not found`);
+          if (artifactData.status === 'stopped') {
+            await request(auth, 'POST', `/v1/instances/${encodeURIComponent(snapshotRef)}/start`);
+            await waitForStatus(toSandbox(auth, artifactData), 'running');
+          }
           const body: Record<string, unknown> = {};
           if (options.name) body.name = options.name;
           if (options.metadata) body.metadata = options.metadata;
+          const resources = resourcesBody(options);
+          if (Object.keys(resources).length > 0) body.resources = resources;
           const { data } = await request<Agent37InstanceData>(
             auth,
             'POST',
-            `/v1/instances/${encodeURIComponent(options.snapshotId)}/fork`,
+            `/v1/instances/${encodeURIComponent(snapshotRef)}/fork`,
             body,
           );
-          if (!data) throw new Error(`Agent37 snapshot ${options.snapshotId} not found`);
+          if (artifactData.status === 'stopped') {
+            await request(auth, 'POST', `/v1/instances/${encodeURIComponent(snapshotRef)}/stop`);
+          }
+          if (!data) throw new Error(`Agent37 snapshot ${snapshotRef} not found`);
           return { instance: toSandbox(auth, data), instanceId: data.id };
         }
         const { data } = await request<Agent37InstanceData>(auth, 'POST', '/v1/instances', createBody(options));
@@ -258,7 +281,11 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
       list: async (config: Agent37Config) => {
         const auth = resolveConfig(config);
         const { data } = await request<{ data: Agent37InstanceData[] }>(auth, 'GET', '/v1/instances');
-        return (data?.data ?? []).map((row) => ({ instance: toSandbox(auth, row), instanceId: row.id }));
+        // Snapshot artifacts are tagged fork instances; hide them so cleanup
+        // that walks the instance list doesn't delete saved snapshots.
+        return (data?.data ?? [])
+          .filter((row) => (row.metadata as Record<string, string> | undefined)?.[SNAPSHOT_METADATA_KEY] === undefined)
+          .map((row) => ({ instance: toSandbox(auth, row), instanceId: row.id }));
       },
 
       destroy: async (config: Agent37Config, instanceId: string) => {
@@ -424,6 +451,11 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
           },
         );
         if (!data) throw new Error(`Agent37 instance ${sandboxId} not found`);
+        // Stop the snapshot artifact so its processes can't mutate files that
+        // a later restore would see — a snapshot must stay frozen.
+        const snapshot = toSandbox(auth, data);
+        await request(auth, 'POST', `/v1/instances/${encodeURIComponent(data.id)}/stop`);
+        await waitForStatus(snapshot, 'stopped');
         return {
           id: data.id,
           provider: 'agent37',
