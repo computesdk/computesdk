@@ -161,6 +161,9 @@ export const arker = defineProvider<VM, ArkerConfig>({
     if (options?.snapshotId) {
       return { status: 'unknown', reason: 'A snapshot fork keeps its source VM\'s resource bounds, which this adapter has not verified.' };
     }
+    if (options?.image) {
+      return { status: 'unknown', reason: 'An OCI image fork does not use a golden source VM, so its resource bounds are not the golden bounds this adapter verifies.' };
+    }
     const pinned = options?.templateId || config.source || env('ARKER_SOURCE');
     if (pinned) {
       if (GOLDEN_BOUNDS[pinned] && !fitsGolden(pinned, vcpus, memoryMiB)) {
