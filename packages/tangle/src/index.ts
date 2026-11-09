@@ -108,7 +108,7 @@ async function admit(sdk: Sandbox, request: CreateSandboxOptions): Promise<Sandb
   } catch (error) {
     if (!outcomeUnknown(error)) throw error;
     return sdk.create(request).catch((joined: unknown) => {
-      // Keep the first failure reachable when the second fails too.
+      // Keep the first failure reachable when the second fails too, unless the second carries its own cause.
       if (joined instanceof Error && !('cause' in joined)) Object.assign(joined, { cause: error });
       throw joined;
     });
@@ -161,7 +161,7 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
         // The factory destroys an instance whose create resolves after an abort, so keep one this call
         // did not create from reaching it.
         if (options.signal?.aborted && !owned(sandbox.createReceipt())) {
-          throw new Error(`Create aborted; Tangle sandbox ${sandbox.id} belongs to an earlier create with this idempotencyKey.`);
+          throw new Error(`Create aborted; Tangle sandbox ${sandbox.id} may belong to another create with this idempotencyKey, so it is left running.`);
         }
         return { instance: sandbox, instanceId: sandbox.id };
       },
