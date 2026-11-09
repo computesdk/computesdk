@@ -41,8 +41,8 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@benchsdk/cli": "^0.7.1",
-    "@benchsdk/runner": "^0.6.0",
+    "@benchsdk/cli": "^0.9.3",
+    "@benchsdk/runner": "^0.8.3",
     "@clack/prompts": "^0.7.0",
     "@computesdk/platform": "workspace:*",
     "commander": "^11.1.0",

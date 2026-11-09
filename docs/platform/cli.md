@@ -102,6 +102,8 @@ compute bench auth          # browser login / credential management
 compute bench org           # organization info
 compute bench benchmarks    # list benchmarks
 compute bench runs          # list runs
+compute bench runs run-again <benchmark-slug> <runId> [--wait] [--timeout <seconds>]
+compute bench runs run-again-status <benchmark-slug> <runAgainId>
 compute bench results       # query results
 compute bench iterations    # per-iteration data
 compute bench artifacts     # download run artifacts
