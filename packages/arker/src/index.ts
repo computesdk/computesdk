@@ -196,12 +196,19 @@ export const arker = defineProvider<VM, ArkerConfig>({
         try {
           vm = options?.snapshotId
             ? await client.fork({ source_vm_id: options.snapshotId, name, ...(resources ? { resources } : {}) })
-            : await client.fork({
-                source_vm_name: source,
-                name,
-                ...(platforms?.length ? { platforms } : {}),
-                ...(resources ? { resources } : {}),
-              });
+            : options?.image
+              ? await client.fork({
+                  image: options.image,
+                  name,
+                  ...(platforms?.length ? { platforms } : {}),
+                  ...(resources ? { resources } : {}),
+                })
+              : await client.fork({
+                  source_vm_name: source,
+                  name,
+                  ...(platforms?.length ? { platforms } : {}),
+                  ...(resources ? { resources } : {}),
+                });
         } catch (err) {
           // The source VM bounds the resources a fork can take; Arker enforces them.
           if (resources && err instanceof ArkerError && (err.status === 400 || err.status === 422) &&
