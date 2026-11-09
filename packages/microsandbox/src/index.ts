@@ -801,6 +801,14 @@ async function restoreFromSnapshot(
   let builder = sdk.Sandbox.restore(snapshotId)
     .name(name)
     .idleTimeout(Math.max(1, Math.ceil(timeoutMs / 1000)));
+  try {
+    const snapshot = await (await sdk.Snapshot.get(snapshotId)).open();
+    // Full-scope snapshots carry memory/CPU state; request copy-on-write
+    // memory so the restore resumes the captured execution.
+    if (snapshot.scope === 'full') builder = builder.cowMemory();
+  } catch {
+    // Scope lookup failed (older backend or remote reference) — restore as-is.
+  }
   if (config.networkEnabled === false) builder = builder.disableNetwork();
   if (backendKind === 'local') {
     for (const port of ports) {
@@ -1072,13 +1080,53 @@ const _microsandbox = defineProvider<
     },
 
     snapshot: {
-      // Disk-only: the source is stopped for the capture, then restarted, so
-      // files survive but processes do not. Ephemeral sources can't be stopped.
+      // A live full-scope capture is tried first (source keeps running,
+      // memory checkpointed); where the backend rejects it we fall back to
+      // stopping the source for a disk-only capture, so files survive but
+      // processes do not. Declared capabilities stay on the conservative
+      // disk-only contract; a live capture leaves the source untouched.
       capabilities: { scope: 'rootfs', memory: false, destroysSource: false, createOptions: { ephemeral: false } },
 
       create: async (config, sandboxId, options?: CreateSnapshotOptions) => withBackend(selectBackend(config), async (sdk) => {
         const handle = await sdk.Sandbox.get(sandboxId);
         const wasRunning = handle.status === 'running' || handle.status === 'draining';
+
+        const name = options?.name ?? `csdk-snapshot-${Date.now().toString(36)}`;
+        const labels = {
+          [SNAPSHOT_LABEL_MARKER]: 'true',
+          [SNAPSHOT_LABEL_SANDBOX]: sandboxId,
+          ...encodeMetadata(options?.metadata ?? {}),
+        };
+
+        // Prefer a live full-scope capture: the guest flushes writes itself,
+        // memory and processes are checkpointed, and the source keeps running.
+        // Backends that reject it fall through to the disk-only path below.
+        if (wasRunning) {
+          try {
+            let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId).full().guestFlush('auto');
+            for (const [key, value] of Object.entries(labels)) {
+              builder = builder.label(key, value);
+            }
+            const snapshot = await builder.create();
+            return {
+              id: snapshot.reference ?? name,
+              provider: PROVIDER,
+              createdAt: new Date(snapshot.createdAt ?? Date.now()),
+              metadata: {
+                name,
+                sandboxId,
+                ...(snapshot.scope ? { scope: snapshot.scope } : {}),
+                ...(snapshot.imageRef ? { imageRef: snapshot.imageRef } : {}),
+                ...(snapshot.sizeBytes != null ? { sizeBytes: snapshot.sizeBytes } : {}),
+                labels: Object.fromEntries(snapshot.labels ?? []),
+              },
+            };
+          } catch {
+            // Live capture unsupported on this backend/source; use the
+            // disk-only stop/capture/restart path instead.
+          }
+        }
+
         // Snapshots need a stopped sandbox, and stopping an ephemeral one removes it.
         if (wasRunning && (handle.config() as RecoveredConfig).lifecycle?.ephemeral) {
           throw new Error(
@@ -1092,12 +1140,6 @@ const _microsandbox = defineProvider<
           await handle.waitUntilStopped();
         }
 
-        const name = options?.name ?? `csdk-snapshot-${Date.now().toString(36)}`;
-        const labels = {
-          [SNAPSHOT_LABEL_MARKER]: 'true',
-          [SNAPSHOT_LABEL_SANDBOX]: sandboxId,
-          ...encodeMetadata(options?.metadata ?? {}),
-        };
         // A builder is single-use, so each capture attempt builds its own.
         const capture = () => {
           let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId);
