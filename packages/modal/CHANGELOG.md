@@ -1,5 +1,12 @@
 # @computesdk/modal
 
+## 1.9.29
+
+### Patch Changes
+
+- 0198d58: Collect command stdout and stderr from Modal's native streams concurrently with process completion, avoiding temporary files and extra remote commands for output collection.
+- 0b28544: Share the Modal client, app lookup, and image preparation across provider instances with matching connection settings. Concurrent sandbox creation reuses in-flight initialization while preserving distinct sandbox options. Bound cache retention and retry failed lookups.
+
 ## 1.9.28
 
 ### Patch Changes
