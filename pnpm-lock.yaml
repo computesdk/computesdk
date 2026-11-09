@@ -668,11 +668,11 @@ importers:
   packages/cli:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.9.3
+        version: 0.9.3
       '@benchsdk/runner':
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.8.3
+        version: 0.8.3
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
@@ -2081,8 +2081,8 @@ importers:
   packages/platform:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.9.3
+        version: 0.9.3
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -3314,25 +3314,21 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
-  '@benchsdk/api@0.7.1':
-    resolution: {integrity: sha512-YqK5mX4QwWBVmkQgU83PSdoi+zMGhgr5A+aEBUD5kkTF0svWHHwKZSHpl36q4lFJUGvA3nCtjHUtvB/IrsaOtQ==}
+  '@benchsdk/api@0.11.1':
+    resolution: {integrity: sha512-yoT00Fm/V531uCK2/1SHSjFL2/AvxfnW2AV3ZZunBSilP1K2O6ehWWnFRA2Klux7xR5kM0BOhi0XKDXDYtPKaw==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/cli@0.7.0':
-    resolution: {integrity: sha512-UT26riKOPo33wG/B15Gghzzc2+SpE/RHaD+sTOOyP7Pig3Gqb6qk/iZXUGwih5ZoioggHamALqcVb67xV2msrQ==}
+  '@benchsdk/cli@0.9.3':
+    resolution: {integrity: sha512-RhVAWctAuPFnJfZ86megoWFlqhiYGWzIdhrbaS+I9hN3N+/1qoCHHnsH4FiACwmRz2vKaEDUGvajJ86FgqfwBA==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/cli@0.7.1':
-    resolution: {integrity: sha512-XHEPoVcKNQndsZw3uuA+3Vrm/3bUtTHzyiDUrak65U6nW0w7ULw/vP/aBma8BU+yUtWQvc9MXcr8jETpEehStA==}
-    engines: {node: '>=18.0.0'}
-
-  '@benchsdk/runner@0.6.0':
-    resolution: {integrity: sha512-oNBB6ZaZ2VNpF5FoXp1KmbrKIfWyCGlncjx/gbF6ZR0IlJONWZmk9L9jgX48ZU9ZL29Cf1fCMxZpwlap3eEhBg==}
+  '@benchsdk/runner@0.8.3':
+    resolution: {integrity: sha512-yZGMS/zLvx7vS3bBk6Y+dvhUeyphFK3xqNmqM/pOr4YvGjazOMU9G6vgHBTd5kq/vsUKJTPgmjq/EYKMmLg4ng==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@benchsdk/worker@0.3.2':
-    resolution: {integrity: sha512-gDSpxqnbHvWppuhdHFps3jb0Yn/dkkf0E+uPWs3RgwCggetbnr4m+QiGAd19qENxmTwhLQlYR1tM0MRGKc4Hpw==}
+  '@benchsdk/worker@0.4.1':
+    resolution: {integrity: sha512-IBll4ycysv48EuWxdiy3saIFPA4wa3fYKoiWElYgxic1d310jdGJ0NUqgY9JEsjQNesmN86wLysc1KHE+mhWPQ==}
     engines: {node: '>=18.0.0'}
 
   '@blaxel/core@0.3.21':
@@ -10221,25 +10217,21 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@benchsdk/api@0.7.1': {}
+  '@benchsdk/api@0.11.1': {}
 
-  '@benchsdk/cli@0.7.0':
+  '@benchsdk/cli@0.9.3':
     dependencies:
-      '@benchsdk/api': 0.7.1
+      '@benchsdk/api': 0.11.1
 
-  '@benchsdk/cli@0.7.1':
+  '@benchsdk/runner@0.8.3':
     dependencies:
-      '@benchsdk/api': 0.7.1
+      '@benchsdk/api': 0.11.1
+      '@benchsdk/cli': 0.9.3
+      '@benchsdk/worker': 0.4.1
 
-  '@benchsdk/runner@0.6.0':
+  '@benchsdk/worker@0.4.1':
     dependencies:
-      '@benchsdk/api': 0.7.1
-      '@benchsdk/cli': 0.7.0
-      '@benchsdk/worker': 0.3.2
-
-  '@benchsdk/worker@0.3.2':
-    dependencies:
-      '@benchsdk/api': 0.7.1
+      '@benchsdk/api': 0.11.1
 
   '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
