@@ -16,6 +16,7 @@ import type {
   LifetimeCapabilities,
   SnapshotCapabilities,
   Volume,
+  TemplateCapabilities,
 } from 'computesdk';
 
 /**
@@ -95,7 +96,10 @@ export interface ListSnapshotsOptions {
 }
 
 /**
- * Common options for creating templates/blueprints
+ * Common options for creating templates/blueprints.
+ *
+ * Pass exactly one source — `image` or `dockerfile` — for the unified path.
+ * With neither, the provider's native options (or its default base) apply.
  */
 export interface CreateTemplateOptions {
   /** Name of the template */
@@ -104,6 +108,10 @@ export interface CreateTemplateOptions {
   description?: string;
   /** Optional metadata for the template */
   metadata?: Record<string, string>;
+  /** OCI image ref to build the template from, e.g. `ubuntu:24.04` */
+  image?: string;
+  /** Dockerfile contents to build the template from */
+  dockerfile?: string;
 }
 
 /**
@@ -158,6 +166,11 @@ export type ProviderSandboxManager<TInstance = any> = ProviderInstanceManager<TI
  * Provider template manager interface - handles template/blueprint lifecycle
  */
 export interface ProviderTemplateManager<TTemplate = any, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> {
+  /**
+   * Declared template support. When set, `create`/`list` return
+   * `TemplateInfo` and `create({ templateId: info.id })` boots the template.
+   */
+  readonly capabilities?: TemplateCapabilities;
   /** Create a new template */
   create(options: TCreateOptions): Promise<TTemplate>;
   /** List all available templates */
