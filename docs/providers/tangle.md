@@ -96,8 +96,8 @@ Per-create `image` (or `templateId`), `cpu`, `memory`, `disk`, `timeout`, `name`
 
 | Operation | Support |
 |---|---|
-| `instances.create` / `getById` / `list` / `destroy` | Yes |
-| `runCommand` with `cwd`, `env`, `timeout`, `background` | Yes |
+| `instances.create` / `getById` / `list` / `destroy` | Yes; `list` omits expired and deleted sandboxes |
+| `runCommand` with `cwd`, `env`, `timeout`, `background` | Yes; `timeout` defaults to and is capped at 10 minutes (600000 ms) |
 | `filesystem` (read, write, mkdir, readdir, exists, remove) | Yes |
 | `getUrl` | Yes, through the SDK's port exposure |
 | Snapshot restore (`snapshotId`) | Not supported; throws |
