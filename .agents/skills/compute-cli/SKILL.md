@@ -21,7 +21,7 @@ npm i -g @computesdk/cli                # or install once
 - `compute org list` / `compute org use <slug>` / `compute org current` / `compute whoami` — manage the persisted active org (2.1+). `--org <slug>` or `COMPUTE_ORG` overrides per command; org API keys are tied to one org, so `--org` doesn't apply to them.
 - `compute providers` — lists third-party sandbox providers and which credential env vars each needs (e.g. `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` or `VERCEL_OIDC_TOKEN`; `NSC_TOKEN` or `NSC_TOKEN_FILE`). Local env-var detection only. (The gateway `compute run` command and `COMPUTESDK_API_KEY` were removed in @computesdk/cli 2.0.)
 - `compute sandboxes|sbx <sub>` — hosted platform sandboxes over `/api/v1/sandboxes` (create/list/get/destroy, use, run, serve, cp, exec, spawn/ps/logs/wait/kill/stdin/close-stdin, ls/cat/write/mkdir/rm, url, snapshots/snapshot/snapshot-delete). `[id]` is optional everywhere a sandbox id is taken — resolution: explicit arg → `COMPUTE_INSTANCE` → per-dir pick (`use`/`create` set it). `-q` prints only the identifier (id / job id / URL); `--verbose` prints full details. exec|spawn pass command flags through to the sandbox: everything after the command's first word goes through untouched (`uname -a`, `node -e …` are not CLI flags); CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`, `--api-key`, `--base-url`) go before the command; a bare `--` separator is optional but supported, e.g. `spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev`.
-- `compute actions|ci <sub>` — benchmarks-platform Actions API (dispatch/runs/history/run/summary/inspect/logs/cancel/rerun/artifacts, providers, repos, vault).
+- `compute actions|ci <sub>` — benchmarks-platform Actions API (dispatch/runs/schedule/history/run/summary/inspect/logs/cancel/rerun/artifacts, providers, repos, vault).
 - `compute market <sub>` — sell side of the compute market (asks/bids/fills, provider credential, settlements). `sell --use-case actions|sandbox` (default `actions`) posts into one lane — the principal must be approved for it or the API returns `market_lane_not_approved` (403); sandbox listings take a platform size (`small`–`xlarge`) as `--size`. `sell --price` needs a unit — `--price 0.12/hour` or `--price 0.12 --per hour` (same rule as `--max-price`). `book --use-case` filters the book to one lane (default: both); `listings` prints each listing's lane column. `status` shows the principal's approved lanes (`useCases`).
 - `compute bench <args>` — full bench CLI folded in (run/check/auth/org/benchmarks/runs/run-again/run-again-status/results/iterations/artifacts/logs/export); dispatched pre-commander to `@benchsdk/runner`'s `run()`.
 
@@ -36,6 +36,8 @@ Resolution order: `--api-key` → `COMPUTE_API_KEY` → `BENCHMARKS_PLATFORM_API
 ```
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...] [--manual]
 compute actions runs <repo> [--status ...] [--branch ...]
+compute actions schedule [--from ISO] [--to ISO] [--repo owner/repo] [--workflow path ...]
+    [--event ...] [--status ...] [--tz IANA] [--limit n] [--cursor cursor] [--json]
 compute actions history <repo> --workflow <path|name> [--branch ...] [--job] [--limit n]
 compute actions run|summary|inspect|benchmarks <run-id>
 compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
@@ -46,7 +48,8 @@ compute actions repos [sync|connect <cloneUrl>|enable|disable <owner/repo>]
 compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|variable]
 ```
 
-- `--workflow` matches the workflow's full path (`.github/workflows/ci.yml`), display name, or id — a bare basename like `ci.yml` does not resolve.
+- Dispatch/history `--workflow` matches the workflow's full path (`.github/workflows/ci.yml`), display name, or id — a bare basename like `ci.yml` does not resolve. Schedule `--workflow` accepts file paths only and is repeatable.
+- `schedule` calls `GET /api/v1/actions/schedule`: default window now to +7 days (maximum 45 days), timezone local unless `--tz` is supplied. Human output separates upcoming fires and actual runs, summarizes capped occurrences with `+N more`, and prints a next-cursor command with a fixed window and the same filters. Reuse the same credentials; keys are never included in the hint. Status filters are conclusions and exclude upcoming fires. `--json` preserves the complete API response, including daily totals and truncation flags.
 - `vault set NAME` reads the value from stdin (`printf %s "$V" |`, not `echo`) or `--from-file`, never argv; `--revealable` (secrets, fixed at creation) allows `vault get`. Needs an owner/admin key; API is `/api/v1/vault` in benchmarks-platform.
 - `logs --follow` uses resumable byte-offset cursors; reconnects resume from `nextOffset`.
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
