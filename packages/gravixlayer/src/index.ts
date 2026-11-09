@@ -603,11 +603,13 @@ const createGravixLayerProvider = defineProvider<
 
       detachVolume: async (instance: Runtime, volume, mountPath?: string) => {
         const ref = resolveVolumeRef(volume)
-        const target = ref.id ?? ref.name ?? mountPath
+        const id = ref.id ?? ref.name
         const { mounts } = await instance.mounts.list()
         const mount = mounts.find(
           (m: { id?: string; targetId?: string; mountPath?: string }) =>
-            m.targetId === ref.id || m.targetId === ref.name || m.mountPath === mountPath || m.id === target,
+            id !== undefined
+              ? (m.targetId === id || m.id === id) && (mountPath === undefined || m.mountPath === mountPath)
+              : m.mountPath === mountPath,
         )
         if (mount?.id) await instance.mounts.detach(mount.id)
       },
@@ -883,7 +885,10 @@ const createGravixLayerProvider = defineProvider<
 
       get: async (config: GravixLayerConfig, idOrName: string) => {
         const client = getClient(config)
-        const bucket = await client.storage.buckets.get(idOrName)
+        const bucket = await client.storage.buckets.get(idOrName).catch((err: unknown) => {
+          if ((err as { status?: number })?.status === 404) return null
+          throw err
+        })
         return bucket ? { id: bucket.id, name: bucket.name, native: bucket } : null
       },
 
@@ -897,7 +902,10 @@ const createGravixLayerProvider = defineProvider<
 
       delete: async (config: GravixLayerConfig, idOrName: string) => {
         const client = getClient(config)
-        const bucket = await client.storage.buckets.get(idOrName).catch(() => null)
+        const bucket = await client.storage.buckets.get(idOrName).catch((err: unknown) => {
+          if ((err as { status?: number })?.status === 404) return null
+          throw err
+        })
         if (!bucket) return
         await client.storage.buckets.delete(bucket.id ?? idOrName)
       },
