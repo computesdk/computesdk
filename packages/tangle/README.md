@@ -46,7 +46,7 @@ try {
 ## Supported operations
 
 - `instances.create`, `getById`, `list` (deleted sandboxes omitted), `destroy`
-- `runCommand` with `cwd`, `env`, `timeout` and `background`; `timeout` defaults to 600000 ms (10 minutes), the runtime's maximum, and must be a whole number of ms from 100 to 600000
+- `runCommand` with `cwd`, `env`, `timeout` and `background`; a foreground `timeout` defaults to 600000 ms (10 minutes), the runtime's maximum, and must be a whole number of ms from 100 to 600000; a background command has no limit unless `timeout` is set
 - `filesystem`: `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove`
 - `getUrl`, through the SDK's port exposure
 - `getInstance()` returns the native `SandboxInstance` for other SDK features

@@ -97,7 +97,7 @@ Per-create `image`, `templateId` (a saved Tangle template), `cpu`, `memory`, `di
 | Operation | Support |
 |---|---|
 | `instances.create` / `getById` / `list` / `destroy` | Yes; `list` omits deleted sandboxes |
-| `runCommand` with `cwd`, `env`, `timeout`, `background` | Yes; `timeout` defaults to 600000 ms (10 minutes), the runtime's maximum, and must be a whole number of ms from 100 to 600000 |
+| `runCommand` with `cwd`, `env`, `timeout`, `background` | Yes; a foreground `timeout` defaults to 600000 ms (10 minutes), the runtime's maximum, and must be a whole number of ms from 100 to 600000; a background command has no limit unless `timeout` is set |
 | `filesystem` (read, write, mkdir, readdir, exists, remove) | Yes |
 | `getUrl` | Yes, through the SDK's port exposure |
 | Snapshot restore (`snapshotId`) | Not supported; throws |

@@ -127,14 +127,20 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
       create: async (config, options = {}) => {
         const sdk = client(config);
         const request = createOptions(config, options);
-        // A rejected create returns no id, so the caller could never delete what it left behind.
+        // A rejected create returns no id, so the caller could never delete what it left behind. With a
+        // caller's key the platform can return a sandbox another call allocated, so delete only one under
+        // the provider's own key or one the platform says this call created.
         // Abort is left to the factory, which destroys an instance whose create resolves after an abort.
+        const owned = (receipt: { outcome: string } | null | undefined): boolean =>
+          typeof options.idempotencyKey !== 'string' || receipt?.outcome === 'created';
         let sandbox: SandboxInstance;
         try {
           sandbox = await admit(sdk, request);
         } catch (error) {
           // The SDK names the sandbox a failed readiness wait leaves behind.
-          if (error instanceof SandboxError && error.allocationId !== undefined) await discard(sdk, error.allocationId, error);
+          if (error instanceof SandboxError && error.allocationId !== undefined && owned(error.createReceipt)) {
+            await discard(sdk, error.allocationId, error);
+          }
           throw error;
         }
         try {
@@ -142,7 +148,7 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
           // create() waits only while pending or provisioning; this also waits for the filesystem.
           await sandbox.waitFor('running');
         } catch (error) {
-          await discard(sdk, sandbox.id, error);
+          if (owned(sandbox.createReceipt())) await discard(sdk, sandbox.id, error);
           throw error;
         }
         return { instance: sandbox, instanceId: sandbox.id };
@@ -164,7 +170,8 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
         // The runtime's cwd field only accepts paths inside the workspace, so change directory in the shell.
         const script = options.cwd ? `cd "${escapeShellArg(options.cwd)}" || exit $?\n${command}` : command;
         if (options.background) {
-          await sandbox.process.spawn(script, { env: options.env });
+          // 0 is no limit: a background command runs until it exits or the sandbox stops.
+          await sandbox.process.spawn(script, { env: options.env, timeoutMs: options.timeout ?? 0 });
           return { stdout: '', stderr: '', exitCode: 0, durationMs: Date.now() - start };
         }
         const result = await sandbox.exec(script, { env: options.env, timeoutMs: options.timeout ?? EXEC_TIMEOUT_MS });
@@ -179,7 +186,7 @@ export const tangle = defineProvider<SandboxInstance, TangleConfig>({
           status: status(sandbox),
           createdAt: sandbox.createdAt,
           timeout: sandbox.expiresAt ? Math.max(0, sandbox.expiresAt.getTime() - sandbox.createdAt.getTime()) : 0,
-          metadata: { name: sandbox.name, resources: sandbox.resources, ...sandbox.metadata },
+          metadata: { ...sandbox.metadata, name: sandbox.name, resources: sandbox.resources },
         };
       },
 
