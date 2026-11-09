@@ -219,8 +219,8 @@ export class FakeClient {
       }
       return { run_id: runId, state: 'running', sandboxes: refs };
     },
-    waitReady: async (runId: string, opts: { onReady?: (ref: { sandbox_id: string; state: string }) => void } = {}) => {
-      this.record('runs.waitReady', runId);
+    waitReady: async (runId: string, opts: { waitTimeoutMs?: number; onReady?: (ref: { sandbox_id: string; state: string }) => void } = {}) => {
+      this.record('runs.waitReady', runId, opts);
       const rows = [...this.store.values()].filter((s) => s.run_id === runId);
       for (const s of rows) {
         s.state = 'ready';
