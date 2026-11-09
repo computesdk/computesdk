@@ -142,6 +142,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					name,
 					metadata,
 					templateId,
+					image: optImage,
 					snapshotId,
 					sandboxId: optSandboxId,
 					namespace: _namespace,
@@ -159,11 +160,12 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				const optRuntime = (options as any)?.runtime as string | undefined;
 
 				// Determine the image to use. A template id is the image ref
-				// template.create() built, so it wins over the configured image.
-				let image = templateId || config.image || 'blaxel/base-image:latest';  // Default to prod-base
+				// template.create() built, so it wins over an image option, which
+				// wins over the configured image.
+				let image = templateId || (optImage as string | undefined) || config.image || 'blaxel/base-image:latest';  // Default to prod-base
 
 				// Override with runtime-specific image if runtime is specified and no explicit image
-				if (!templateId && !config.image && optRuntime) {
+				if (!templateId && !optImage && !config.image && optRuntime) {
 					switch (optRuntime) {
 						case 'python':
 							image = 'blaxel/py-app:latest';
@@ -609,6 +611,8 @@ const SANDBOX_IMAGE_TYPE = 'sandbox';
 
 const TEMPLATE_BUILD_TIMEOUT_MS = 15 * 60_000;
 const TEMPLATE_POLL_MS = 2_000;
+/** How long a rebuild waits for a new tag before it takes a reused one. */
+const TEMPLATE_TAG_SETTLE_MS = 10_000;
 
 /**
  * Build a template with Blaxel's image builder (`POST /images`): the source
@@ -668,6 +672,7 @@ async function buildBlaxelTemplate(options: BlaxelCreateTemplateOptions): Promis
 	// any event it had before the upload.
 	const deadline = Date.now() + (options.timeout ?? TEMPLATE_BUILD_TIMEOUT_MS);
 	let lastStatus = before.data?.metadata?.status;
+	let builtSeenAt: number | undefined;
 	for (;;) {
 		const { data, error, response } = await getImage({ path });
 		if (error !== undefined && response?.status !== 404) {
@@ -683,9 +688,14 @@ async function buildBlaxelTemplate(options: BlaxelCreateTemplateOptions): Promis
 		if (result?.status === 'FAILED') {
 			throw new Error(`Blaxel failed to build template ${name} from ${source}: ${result.message?.replace(/\s+/g, ' ').trim() || 'build failed'}`);
 		}
-		// The tag can land a moment after the BUILT event: keep polling until it does.
+		// The tag can land a moment after the BUILT event: keep polling until
+		// it does. A tag the image already had counts only once no new tag has
+		// shown up for TEMPLATE_TAG_SETTLE_MS after the build result, since an
+		// identical build reuses its tag without saying so.
 		const tags = data?.spec?.tags ?? [];
-		const tag = tags.find(t => t.name && !tagsBefore.has(t.name)) ?? newestTag(tags);
+		if (result && builtSeenAt === undefined) builtSeenAt = Date.now();
+		const settled = builtSeenAt !== undefined && Date.now() - builtSeenAt >= TEMPLATE_TAG_SETTLE_MS;
+		const tag = tags.find(t => t.name && !tagsBefore.has(t.name)) ?? (settled ? newestTag(tags) : undefined);
 		if (result && tag?.name) {
 			return {
 				id: `${SANDBOX_IMAGE_TYPE}/${name}:${tag.name}`,

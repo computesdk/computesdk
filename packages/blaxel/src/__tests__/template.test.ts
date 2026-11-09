@@ -108,16 +108,31 @@ describe('blaxel template.create', () => {
 	it('on a rebuild, waits for a build result newer than the previous one', async () => {
 		const core = await mockedCore();
 		const old = image('BUILT', [{ name: 'old', updatedAt: '2026-11-08T00:00:10Z' }], [built1]);
+		const rebuilt = image('BUILT', [{ name: 'old', updatedAt: '2026-11-08T00:00:10Z' }], [built1, initiated2, built2]);
 		vi.mocked(core.getImage)
+			.mockResolvedValue(rebuilt as never)
 			.mockResolvedValueOnce(old as never)
-			.mockResolvedValueOnce(old as never)
-			.mockResolvedValueOnce(image('BUILT', [{ name: 'old', updatedAt: '2026-11-08T00:00:10Z' }], [built1, initiated2, built2]) as never);
+			.mockResolvedValueOnce(old as never);
 
 		const template = await create({ name: 'oci-base', image: 'ubuntu:24.04' });
 
-		expect(core.getImage).toHaveBeenCalledTimes(3);
-		// An identical build is reused: same tag.
+		// An identical build is reused: same tag, once no new tag showed up.
 		expect(template.id).toMatch(/:old$/);
+		expect(vi.mocked(core.getImage).mock.calls.length).toBeGreaterThan(3);
+	});
+
+	it('on a rebuild, does not take the old tag when the new tag lands after BUILT', async () => {
+		const core = await mockedCore();
+		const oldTag = { name: 'old', updatedAt: '2026-11-08T00:00:10Z' };
+		vi.mocked(core.getImage)
+			.mockResolvedValueOnce(image('BUILT', [oldTag], [built1]) as never)
+			.mockResolvedValueOnce(image('BUILT', [oldTag], [built1, initiated2, built2]) as never)
+			.mockResolvedValueOnce(image('BUILT', [oldTag], [built1, initiated2, built2]) as never)
+			.mockResolvedValueOnce(image('BUILT', [oldTag, { name: 'new', createdAt: '2026-11-09T18:00:12Z' }], [built1, initiated2, built2]) as never);
+
+		const template = await create({ name: 'oci-base', image: 'ubuntu:24.04' });
+
+		expect(template.id).toMatch(/:new$/);
 	});
 
 	it('keeps polling when the BUILT event lands before the tag', async () => {
@@ -183,6 +198,26 @@ describe('blaxel sandbox.create from a template', () => {
 		await blaxel({ image: 'blaxel/base-image:latest' }).sandbox.create({ templateId: 'sandbox/oci-base:abc' });
 
 		expect(core.SandboxInstance.createIfNotExists).toHaveBeenCalledWith(expect.objectContaining({ image: 'sandbox/oci-base:abc' }));
+	});
+
+	it('boots the template even when an image option is also passed', async () => {
+		vi.useRealTimers();
+		const core = await mockedCore();
+		vi.mocked(core.SandboxInstance.createIfNotExists).mockResolvedValue({ metadata: { name: 'sb' } } as unknown as SandboxInstance);
+
+		await blaxel({}).sandbox.create({ templateId: 'sandbox/oci-base:abc', image: 'ubuntu:24.04' } as never);
+
+		expect(core.SandboxInstance.createIfNotExists).toHaveBeenCalledWith(expect.objectContaining({ image: 'sandbox/oci-base:abc' }));
+	});
+
+	it('boots an image option over the configured image when there is no template', async () => {
+		vi.useRealTimers();
+		const core = await mockedCore();
+		vi.mocked(core.SandboxInstance.createIfNotExists).mockResolvedValue({ metadata: { name: 'sb' } } as unknown as SandboxInstance);
+
+		await blaxel({ image: 'blaxel/base-image:latest' }).sandbox.create({ image: 'ubuntu:24.04' } as never);
+
+		expect(core.SandboxInstance.createIfNotExists).toHaveBeenCalledWith(expect.objectContaining({ image: 'ubuntu:24.04' }));
 	});
 });
 
