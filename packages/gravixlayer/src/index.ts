@@ -2,12 +2,12 @@
  * @computesdk/gravixlayer — GravixLayer provider for ComputeSDK.
  *
  * Cloud runtimes with a native filesystem API, live command streaming,
- * port publishing, templates, and snapshots.
+ * port publishing, templates, snapshots, and bucket-mount volumes.
  *
  * @see https://gravixlayer.ai
  */
 
-import { defineProvider } from '@computesdk/provider'
+import { defineProvider, isUnifiedVolumeMounts, resolveVolumeRef } from '@computesdk/provider'
 
 import type {
   CommandResult,
@@ -21,6 +21,8 @@ import type {
   ProviderTemplateManager,
   RunCommandOptions,
   SandboxInfo,
+  CreateVolumeOptions,
+  ListVolumesOptions,
 } from '@computesdk/provider'
 import { GravixLayer, Runtime, TemplateBuilder, type RuntimeInfo } from 'gravixlayer'
 
@@ -455,6 +457,7 @@ const createGravixLayerProvider = defineProvider<
           metadata?: Record<string, unknown>
           cloud?: string
           region?: string
+          mounts?: Array<{ kind: 'bucket'; bucket: string; path: string; mode: 'ro' | 'rw' }>
           signal?: AbortSignal
         } = {}
 
@@ -472,6 +475,18 @@ const createGravixLayerProvider = defineProvider<
 
         if (isPlainObject(options.metadata)) {
           body.metadata = options.metadata
+        }
+
+        // Unified mounts → gravixlayer's [{kind:'bucket',bucket,path,mode}] wire
+        // shape; buckets are created via `provider.volume`/`compute.volume`.
+        const volumes = options.volumes
+        if (isUnifiedVolumeMounts(volumes) && volumes.length > 0) {
+          body.mounts = volumes.map((m) => ({
+            kind: 'bucket' as const,
+            bucket: resolveVolumeRef(m.volume).id ?? resolveVolumeRef(m.volume).name ?? '',
+            path: m.mountPath,
+            mode: m.readOnly ? 'ro' : 'rw',
+          }))
         }
 
         if (typeof options.cloud === 'string') body.cloud = options.cloud
@@ -575,6 +590,29 @@ const createGravixLayerProvider = defineProvider<
       },
 
       getInstance: (sandbox: Runtime) => sandbox,
+
+      attachVolume: async (instance: Runtime, volume, mountPath: string) => {
+        const ref = resolveVolumeRef(volume)
+        await instance.mounts.attach({
+          kind: 'bucket',
+          bucket: ref.id ?? ref.name ?? '',
+          path: mountPath,
+          mode: 'rw',
+        })
+      },
+
+      detachVolume: async (instance: Runtime, volume, mountPath?: string) => {
+        const ref = resolveVolumeRef(volume)
+        const id = ref.id ?? ref.name
+        const { mounts } = await instance.mounts.list()
+        const mount = mounts.find(
+          (m: { id?: string; targetId?: string; mountPath?: string }) =>
+            id !== undefined
+              ? (m.targetId === id || m.id === id) && (mountPath === undefined || m.mountPath === mountPath)
+              : m.mountPath === mountPath,
+        )
+        if (mount?.id) await instance.mounts.detach(mount.id)
+      },
 
       pause: async (sandbox: Runtime) => {
         await sandbox.pause()
@@ -833,6 +871,43 @@ const createGravixLayerProvider = defineProvider<
         } catch (error) {
           if (!isNotFound(error)) throw error
         }
+      },
+    },
+
+    // GravixLayer "volumes" are managed object-storage buckets mounted into a
+    // runtime (`mounts: [{kind:'bucket'}]` at create, or runtime.attachVolume).
+    volume: {
+      create: async (config: GravixLayerConfig, options: CreateVolumeOptions) => {
+        const client = getClient(config)
+        const bucket = await client.storage.buckets.create(options.name)
+        return { id: bucket.id, name: bucket.name, native: bucket }
+      },
+
+      get: async (config: GravixLayerConfig, idOrName: string) => {
+        const client = getClient(config)
+        const bucket = await client.storage.buckets.get(idOrName).catch((err: unknown) => {
+          if ((err as { status?: number })?.status === 404) return null
+          throw err
+        })
+        return bucket ? { id: bucket.id, name: bucket.name, native: bucket } : null
+      },
+
+      list: async (config: GravixLayerConfig, options?: ListVolumesOptions) => {
+        const client = getClient(config)
+        const page = await client.storage.buckets.list()
+        const buckets = page.buckets ?? []
+        const limited = options?.limit === undefined ? buckets : buckets.slice(0, options.limit)
+        return limited.map((b: { id?: string; name?: string }) => ({ id: b.id, name: b.name, native: b }))
+      },
+
+      delete: async (config: GravixLayerConfig, idOrName: string) => {
+        const client = getClient(config)
+        const bucket = await client.storage.buckets.get(idOrName).catch((err: unknown) => {
+          if ((err as { status?: number })?.status === 404) return null
+          throw err
+        })
+        if (!bucket) return
+        await client.storage.buckets.delete(bucket.id ?? idOrName)
       },
     },
   },
