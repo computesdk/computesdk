@@ -1,5 +1,15 @@
 # @computesdk/workbench
 
+## 33.0.32
+
+### Patch Changes
+
+- Updated dependencies [afd008f]
+- Updated dependencies [0198d58]
+- Updated dependencies [0b28544]
+  - @computesdk/microsandbox@0.1.26
+  - @computesdk/modal@1.9.29
+
 ## 33.0.31
 
 ### Patch Changes
