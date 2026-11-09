@@ -1121,9 +1121,16 @@ const _microsandbox = defineProvider<
                 labels: Object.fromEntries(snapshot.labels ?? []),
               },
             };
-          } catch {
-            // Live capture unsupported on this backend/source; use the
-            // disk-only stop/capture/restart path instead.
+          } catch (liveError) {
+            // Only fall back when the backend says the operation is
+            // unsupported — a transient failure must not silently stop a
+            // live source for a disk-only capture instead.
+            const code = (liveError as { code?: string }).code;
+            const unsupported =
+              code === 'unsupported' ||
+              code === 'unsupportedOperation' ||
+              /unsupported|not supported|unimplemented/i.test(errorMessage(liveError));
+            if (!unsupported) throw liveError;
           }
         }
 
