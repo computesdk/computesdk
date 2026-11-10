@@ -32,6 +32,8 @@ compute providers               # sandbox provider credential status
 compute org list                # your organizations (* = active)
 compute org use <slug>          # switch the stored login's active org
 compute org current / whoami    # current user + active org (an API key: its org)
+compute org members|invitations|invite|member|leave   # members and invitations (see below)
+compute invitations …           # your own invitations: show, accept, decline
 ```
 
 All platform commands accept `--api-key` / `COMPUTE_API_KEY` and fall back to
@@ -245,6 +247,71 @@ error. The rate table needs the org's sandboxes feature.
 entry). Both repeat, and the CLI checks only their syntax; the platform checks
 provider and preset names. `compute instances settings` prints the resulting
 `resources` and `warm pool` rows.
+
+## compute org members and invitations
+
+`compute org` also manages who is in the organization, and `compute
+invitations` answers your own invitations. Every command takes `--api-key`,
+`--base-url`, `--org`, `--allow-untrusted-host` and `--json` (the v1 body on
+stdout; on failure the `{ok:false, error:{code, message, httpStatus, hint}}`
+envelope on stderr).
+
+```bash
+compute org members                                # email, role, name, member id (any member)
+compute org invitations                            # pending invitations with their links (owner/admin)
+compute org invite bob@example.com --role admin    # member (default) or admin; prints the link
+compute org invitations cancel <invitationId> -y
+compute org member set-role bob@example.com admin -y   # <member id|email> <member|admin>
+compute org member remove bob@example.com -y
+compute org leave -y                               # needs a user login
+compute invitations                                # your pending invitations (org slug, role)
+compute invitations show <invitationId>
+compute invitations accept <invitationId>          # no confirmation
+compute invitations decline <invitationId> -y
+```
+
+The org commands call `/api/v1/organizations/current/…`: the server resolves
+`current` to the credential's org. An org API key always acts on its own org;
+for a user login `--org <slug>` (or `COMPUTE_ORG`) picks the org through
+`X-Org-Slug`, and without it the login's active org is used.
+
+| Command | Route |
+|---|---|
+| `org members` | `GET /api/v1/organizations/current/members` |
+| `org invitations` | `GET /api/v1/organizations/current/invitations` |
+| `org invite <email> [--role member\|admin]` | `POST /api/v1/organizations/current/invitations` `{email, role}` |
+| `org invitations cancel <invitationId>` | `DELETE /api/v1/organizations/current/invitations/{invitationId}` |
+| `org member set-role <member> <member\|admin>` | `GET …/members` to resolve the member, then `PATCH …/members/{memberId}` `{role}` |
+| `org member remove <member>` | `GET …/members`, then `DELETE …/members/{memberId}` |
+| `org leave` | `POST /api/v1/organizations/current/leave` |
+| `invitations` | `GET /api/v1/me/invitations` |
+| `invitations show <invitationId>` | `GET /api/v1/invitations/{invitationId}` |
+| `invitations accept <invitationId>` | `POST /api/v1/invitations/{invitationId}/accept` |
+| `invitations decline <invitationId>` | `POST /api/v1/invitations/{invitationId}/decline` |
+
+**Confirmation.** `invite`, `invitations cancel`, `member set-role`, `member
+remove`, `leave` and `invitations decline` ask for confirmation on a terminal
+(the prompt names the email, role or org); elsewhere they need `-y`/`--yes`
+and exit 1 with a "Pass -y to confirm" hint, changing nothing. `invitations
+accept` never asks (it is your own answer); it takes `-y` so scripts can pass
+the same flags as `decline`.
+
+**Owners stay in the web app.** `invite --role owner` and `set-role … owner`
+are refused locally ("Owner invitations require the web app" / "Owner role
+changes require the web app"), and the platform refuses any role change or
+removal that targets an owner with 403, which the CLI prints. Members are
+named by member id or email; an unknown one exits 1 ("No member …").
+
+**User login.** `org leave`, `invitations`, `invitations show|accept|decline`
+need a user login (`compute login`). With an org API key (`bp_…`/`csdk_…`) the
+CLI refuses before sending anything; for any other credential without a user
+the platform's 403 `user_credential_required` is printed with a `compute
+login` hint. Leaving an org also revokes your login's grant for it: if you
+logged in for that org, run `compute login` again.
+
+`invite` prints the invitation link and whether the email went out; when the
+platform has no email configured (`emailSent: false`), share the link
+yourself.
 
 ## compute bench
 

@@ -7,6 +7,8 @@
  *   compute login                        # OAuth device login (benchsdk-cli)
  *   compute logout                       # clear stored credentials
  *   compute providers                    # list configured providers
+ *   compute org …                        # active org, members, invitations
+ *   compute invitations …                # your own invitations (show/accept/decline)
  *   compute actions …                    # Actions API
  *   compute market …                     # market sell-side commands
  *   compute instances …                  # platform compute-instance control plane
@@ -28,6 +30,7 @@ import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
 import { parseBenchDispatch, runBench } from './bench.js';
 import { registerManifestCommand } from './manifest.js';
+import { registerInvitationsCommands, registerOrgMemberCommands } from './org-members.js';
 import { benchAuth, benchAuthOverrides, envBaseUrl, fetchWhoami, formatWhoami } from './session.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -203,7 +206,7 @@ async function printWhoami(options: { json?: boolean; baseUrl?: string } = {}): 
   for (const line of formatWhoami(me)) console.log(line);
 }
 
-const org = program.command('org').description('Manage the active organization');
+const org = program.command('org').description('Manage the active organization, its members and invitations');
 
 org
   .command('list')
@@ -263,12 +266,21 @@ org
   .option('--json', 'print machine-readable JSON')
   .action((opts) => printWhoami(opts));
 
+// members / invitations / invite / member set-role|remove / leave, over the
+// v1 organization routes with the `current` org alias (src/org-members.ts).
+registerOrgMemberCommands(org);
+
 program
   .command('whoami')
   .description('Show the current user and active organization')
   .option('--base-url <url>', 'platform URL to query')
   .option('--json', 'print machine-readable JSON')
   .action((opts) => printWhoami(opts));
+
+// ─── invitations ─────────────────────────────────────────────────────────────
+// The signed-in user's own invitations: list, show, accept, decline.
+
+registerInvitationsCommands(program);
 
 // ─── actions ─────────────────────────────────────────────────────────────────
 

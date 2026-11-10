@@ -59,7 +59,7 @@
       "flags": [
         "--help"
       ],
-      "summary": "Manage the active organization"
+      "summary": "Manage the active organization, its members and invitations"
     },
     {
       "path": [
@@ -104,6 +104,161 @@
     },
     {
       "path": [
+        "org",
+        "members"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List the organization's members with their roles"
+    },
+    {
+      "path": [
+        "org",
+        "invitations"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List the organization's pending invitations with their links (owner/admin)"
+    },
+    {
+      "path": [
+        "org",
+        "invitations",
+        "cancel"
+      ],
+      "aliases": [],
+      "args": [
+        "<invitationId>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Cancel a pending invitation; its link stops working (owner/admin)"
+    },
+    {
+      "path": [
+        "org",
+        "invite"
+      ],
+      "aliases": [],
+      "args": [
+        "<email>"
+      ],
+      "flags": [
+        "--role",
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Invite someone to the organization by email and print the invite link (owner/admin)"
+    },
+    {
+      "path": [
+        "org",
+        "member"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Change a member's role or remove a member (owner/admin)"
+    },
+    {
+      "path": [
+        "org",
+        "member",
+        "set-role"
+      ],
+      "aliases": [],
+      "args": [
+        "<member>",
+        "<role>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Change a member's role between member and admin (owner roles change in the web app)"
+    },
+    {
+      "path": [
+        "org",
+        "member",
+        "remove"
+      ],
+      "aliases": [
+        [
+          "org",
+          "member",
+          "rm"
+        ]
+      ],
+      "args": [
+        "<member>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Remove a member from the organization (owners are removed in the web app)"
+    },
+    {
+      "path": [
+        "org",
+        "leave"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Leave the organization (needs a user login; the last owner cannot leave)"
+    },
+    {
+      "path": [
         "whoami"
       ],
       "aliases": [],
@@ -114,6 +269,81 @@
         "--help"
       ],
       "summary": "Show the current user and active organization"
+    },
+    {
+      "path": [
+        "invitations"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Your pending invitations to other organizations (needs a user login)"
+    },
+    {
+      "path": [
+        "invitations",
+        "show"
+      ],
+      "aliases": [],
+      "args": [
+        "<invitationId>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show one of your invitations"
+    },
+    {
+      "path": [
+        "invitations",
+        "accept"
+      ],
+      "aliases": [],
+      "args": [
+        "<invitationId>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Accept an invitation and join its organization (no confirmation)"
+    },
+    {
+      "path": [
+        "invitations",
+        "decline"
+      ],
+      "aliases": [],
+      "args": [
+        "<invitationId>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Decline an invitation"
     },
     {
       "path": [
