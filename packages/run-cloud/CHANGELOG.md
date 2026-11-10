@@ -1,5 +1,29 @@
 # @computesdk/run-cloud
 
+## 1.0.19
+
+### Patch Changes
+
+- 1904e82: Native pause/resume (`instance.pause()`/`resume()`, processes and `/tmp` survive) and declared snapshot capabilities (rootfs except tmpfs `/tmp`, no memory, source keeps running).
+- 1904e82: Write files through Run Cloud's native chunked file API, stage commands too large for one exec frame as a script, and transparently resume idle-paused sandboxes before retrying exec and file operations.
+- 1904e82: Stream `runCommand` output live: `onStdout`/`onStderr` now fire as the Run Cloud exec stream delivers bytes (served as native `streamCommand`) instead of once after the command exits.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.0.18
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 1.0.17
 
 ### Patch Changes

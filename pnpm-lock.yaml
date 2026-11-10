@@ -126,6 +126,40 @@ importers:
         specifier: ^4.135.0
         version: 4.136.1(@types/node@20.19.5)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
+  packages/agent37:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/agentcore:
     dependencies:
       '@computesdk/aws':
@@ -272,7 +306,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.68)(@computesdk/modal@1.9.26)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.52(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.71)(@computesdk/modal@1.9.29)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -468,6 +502,46 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/briq:
+    dependencies:
+      '@briq-cloud/sdk':
+        specifier: ^0.1.2
+        version: 0.1.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+      daemond:
+        specifier: workspace:*
+        version: link:../daemond
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/browserbase:
     dependencies:
       '@browserbasehq/sdk':
@@ -634,11 +708,11 @@ importers:
   packages/cli:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.9.3
+        version: 0.9.3
       '@benchsdk/runner':
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.8.3
+        version: 0.8.3
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
@@ -1015,43 +1089,6 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
-  packages/declaw:
-    dependencies:
-      '@computesdk/provider':
-        specifier: workspace:*
-        version: link:../provider
-      '@declaw/sdk':
-        specifier: ^1.2.3
-        version: 1.2.3
-      computesdk:
-        specifier: workspace:*
-        version: link:../computesdk
-    devDependencies:
-      '@computesdk/test-utils':
-        specifier: workspace:*
-        version: link:../test-utils
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.41
-      '@vitest/coverage-v8':
-        specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
-      eslint:
-        specifier: ^8.37.0
-        version: 8.57.1
-      rimraf:
-        specifier: ^5.0.0
-        version: 5.0.10
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
-
   packages/docker:
     dependencies:
       '@computesdk/provider':
@@ -1301,8 +1338,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       gravixlayer:
-        specifier: ^0.1.36
-        version: 0.1.36(@opentelemetry/api@1.9.1)
+        specifier: ^0.1.51
+        version: 0.1.51(@opentelemetry/api@1.9.1)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -1717,8 +1754,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       microsandbox:
-        specifier: ^0.6.18
-        version: 0.6.18
+        specifier: ^0.7.13
+        version: 0.7.13
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -2084,8 +2121,8 @@ importers:
   packages/platform:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.9.3
+        version: 0.9.3
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -2121,8 +2158,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@promigence/sdk':
-        specifier: ^0.1.0-beta.9
-        version: 0.1.0-beta.9
+        specifier: 0.1.0-beta.15
+        version: 0.1.0-beta.15
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2444,6 +2481,40 @@ importers:
       '@sailresearch/sdk':
         specifier: ^0.5.1
         version: 0.5.1
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/sandbox-cli:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3008,9 +3079,6 @@ importers:
       '@computesdk/daytona':
         specifier: workspace:*
         version: link:../daytona
-      '@computesdk/declaw':
-        specifier: workspace:*
-        version: link:../declaw
       '@computesdk/e2b':
         specifier: workspace:*
         version: link:../e2b
@@ -3357,25 +3425,21 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
-  '@benchsdk/api@0.7.1':
-    resolution: {integrity: sha512-YqK5mX4QwWBVmkQgU83PSdoi+zMGhgr5A+aEBUD5kkTF0svWHHwKZSHpl36q4lFJUGvA3nCtjHUtvB/IrsaOtQ==}
+  '@benchsdk/api@0.11.1':
+    resolution: {integrity: sha512-yoT00Fm/V531uCK2/1SHSjFL2/AvxfnW2AV3ZZunBSilP1K2O6ehWWnFRA2Klux7xR5kM0BOhi0XKDXDYtPKaw==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/cli@0.7.0':
-    resolution: {integrity: sha512-UT26riKOPo33wG/B15Gghzzc2+SpE/RHaD+sTOOyP7Pig3Gqb6qk/iZXUGwih5ZoioggHamALqcVb67xV2msrQ==}
+  '@benchsdk/cli@0.9.3':
+    resolution: {integrity: sha512-RhVAWctAuPFnJfZ86megoWFlqhiYGWzIdhrbaS+I9hN3N+/1qoCHHnsH4FiACwmRz2vKaEDUGvajJ86FgqfwBA==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/cli@0.7.1':
-    resolution: {integrity: sha512-XHEPoVcKNQndsZw3uuA+3Vrm/3bUtTHzyiDUrak65U6nW0w7ULw/vP/aBma8BU+yUtWQvc9MXcr8jETpEehStA==}
-    engines: {node: '>=18.0.0'}
-
-  '@benchsdk/runner@0.6.0':
-    resolution: {integrity: sha512-oNBB6ZaZ2VNpF5FoXp1KmbrKIfWyCGlncjx/gbF6ZR0IlJONWZmk9L9jgX48ZU9ZL29Cf1fCMxZpwlap3eEhBg==}
+  '@benchsdk/runner@0.8.3':
+    resolution: {integrity: sha512-yZGMS/zLvx7vS3bBk6Y+dvhUeyphFK3xqNmqM/pOr4YvGjazOMU9G6vgHBTd5kq/vsUKJTPgmjq/EYKMmLg4ng==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@benchsdk/worker@0.3.2':
-    resolution: {integrity: sha512-gDSpxqnbHvWppuhdHFps3jb0Yn/dkkf0E+uPWs3RgwCggetbnr4m+QiGAd19qENxmTwhLQlYR1tM0MRGKc4Hpw==}
+  '@benchsdk/worker@0.4.1':
+    resolution: {integrity: sha512-IBll4ycysv48EuWxdiy3saIFPA4wa3fYKoiWElYgxic1d310jdGJ0NUqgY9JEsjQNesmN86wLysc1KHE+mhWPQ==}
     engines: {node: '>=18.0.0'}
 
   '@blaxel/core@0.3.21':
@@ -3384,6 +3448,10 @@ packages:
 
   '@borewit/text-codec@0.2.1':
     resolution: {integrity: sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw==}
+
+  '@briq-cloud/sdk@0.1.2':
+    resolution: {integrity: sha512-t9opzVTALWVKADZzMWB9Mep3yhB1efedpfbXwzvVex2WFeBHY00e2hSfn1N7fhC9OzuuizBYBy3CG3jCftXcfA==}
+    engines: {node: '>=22.6'}
 
   '@browserbasehq/sdk@2.9.0':
     resolution: {integrity: sha512-Xzm1+6suzQypXjley4Phqer++pjnYyST6S7CArUn3kWyGA8aruXjAV5wkmqE21lgXo9K3/OQJvCu48bKEZFNDQ==}
@@ -3553,17 +3621,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.50':
-    resolution: {integrity: sha512-BTnM1SFugx+iqb3KwBQppvPnQmsY92cvkx/UyaJzeruiQ4k9Njsso5YWD2/7NsOgjD6YibA8EaNBESrv3n6cjg==}
+  '@computesdk/daytona@1.7.52':
+    resolution: {integrity: sha512-GTSsFmNgXdIEnOoJZEjk84FgWoPakFzPLbIpiQRPHZt9OkWKPUUxV5FtEfKyz49l4wk2iG71fIIV4A+eEqHxzQ==}
 
-  '@computesdk/e2b@1.7.68':
-    resolution: {integrity: sha512-44HwFGDmn9MFOnskgGHDTBf3wl9e/KCwrN58lE+jij2Qqr9wvQ5pHi3w7ooBYr6wODlLgWkXC0m3tiY6mGL9yA==}
+  '@computesdk/e2b@1.7.71':
+    resolution: {integrity: sha512-EQS0PVUx8ooV/KayYOv6MFBmgUyCmqbE0TegISDRr+4dZTnn0kh3vPyhYFbEw1e/83iGpm0KiEFZv0YERxgVJg==}
 
-  '@computesdk/modal@1.9.26':
-    resolution: {integrity: sha512-D8+HWaEfElArFI15mo0wEKPf0UChAu67N2Bxbap6MSexgKRFXrnmRbnQZ/EYrKzR7seVLGAtL/TIrIK/Zr69sw==}
+  '@computesdk/modal@1.9.29':
+    resolution: {integrity: sha512-FFZ79nd8IQMLbWsTADFzUd3iob/ggfXS4E1/QXNdxBoky+WHT+x8ZGH1RMx1IeX5Jx3/PA8zluT7YEjnKnqA7g==}
 
-  '@computesdk/provider@2.1.20':
-    resolution: {integrity: sha512-BlvIouuwrxMeAyxQ1vaDiqHxSguJFlAFRtLTpLZ1kfWZa6VKsEDxvAqUqdsxKzLmjwZl9noqVMgFoCHam87yCw==}
+  '@computesdk/provider@2.1.22':
+    resolution: {integrity: sha512-MC5NGv8Y0Rwdla1mLHhuNSfVvvCt7o9S+c/GdzHf3Oe2fAjMicRUcb4SOf6D7S39PhdwhOiWoMbjpJohGxQbjg==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -3653,10 +3721,6 @@ packages:
 
   '@daytonaio/sdk@0.224.0':
     resolution: {integrity: sha512-X2iaplWJjNIk2za33wxHvjTePxoQQT8jyVY3I4eP1X82bLqzx+LaogCTrPCDOagVvRlUKTY3wPuZyEU9JBTtOw==}
-
-  '@declaw/sdk@1.2.3':
-    resolution: {integrity: sha512-gTzSrV6M5VtxXmM2yM5Yfx6O0fZcjMyql+5ApvjWXbJ8/vCLoDkEJlEcsf0QdH38ptklaeEh/svBKjzgknyL+w==}
-    engines: {node: '>=20.18.1'}
 
   '@emnapi/runtime@1.11.3':
     resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
@@ -4616,6 +4680,9 @@ packages:
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
 
+  '@microsandbox/types@0.7.13':
+    resolution: {integrity: sha512-46PiHv30/FdeES5QHS3T+mwDaBFLiUcUQ9z/RX0I5V1Za55TFtp0gstLZFpQ6mAd3FCXd/KycnGoSFYLs2GboQ==}
+
   '@miosa/sdk@3.7.14':
     resolution: {integrity: sha512-JErb4xP9B/W4LYslYZCyp85M6SFAsQEHZ4TE/u7578vcSlV8+ZYzixf6lnw4yNjIwUibazT2HrAhln0Hl7l3rQ==}
     engines: {node: '>=18.0.0'}
@@ -5212,8 +5279,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.8
 
-  '@promigence/sdk@0.1.0-beta.9':
-    resolution: {integrity: sha512-6ShyRuFePXf41Qqvd+NllJtvOrRYMKVWSMFo8DMI7Dx/jPLUuiSY5sbp3ovwSNT5AiCoBAKCEIayy/gBWswW2g==}
+  '@promigence/sdk@0.1.0-beta.15':
+    resolution: {integrity: sha512-u7ew7WtMNjgNVPASxo41N70cu7det6UdwTHjcco2UxSRn3OfmkiyCdMQcCXIvZJ6pM5o76OFPNK43W2GoyoH3w==}
     engines: {node: '>=20'}
 
   '@protobufjs/aspromise@1.1.2':
@@ -5503,15 +5570,23 @@ packages:
   '@smithy/core@3.24.1':
     resolution: {integrity: sha512-3mT7o4qQyUWttYnVK3A0Z/u3Xha3E81tXn32Tz6vjZiUXhBrkEivpw1hBYfh84iFF9CSzkBU9Y1DJ3Q6RQ231g==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to bug in browser bundling instructions https://github.com/smithy-lang/smithy-typescript/issues/2025
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.29.0':
     resolution: {integrity: sha512-sEvpvkBVoMxjoek35XyJFn2ZD3EJ1RpiZrT47WaZodxzAIWS44zkdvbqGE/ZlugtjiQp62cffYZ9ldyRkjAGnA==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.35.2':
     resolution: {integrity: sha512-ejTukBuP/Pg3t9N8Ux+0zKsXeHWm7p6W3HbXFOyltKasSxZwCFmvTut7kBdZSCF3m9y1bXXyVu6p2xuMFcsTyQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.4.5':
     resolution: {integrity: sha512-LnjUTNG0GgQlKIq7IioeOrPaEmC5xOd1WtAz24TLSiYQnWX2uHr53GrFuQhkrJBktPYCMga/NbUOW7hFbSA2Cg==}
@@ -5591,32 +5666,32 @@ packages:
   '@speed-highlight/core@1.2.17':
     resolution: {integrity: sha512-Z92FwKpCtfaW1V0jTU/fh3QzYEZN8wDwrzRIBoADCJfn4mJCNcJN/XegifX7BDrQ8/h9Xh/JnbyMchL0FqXrkg==}
 
-  '@superradcompany/microsandbox-darwin-arm64@0.6.18':
-    resolution: {integrity: sha512-C+bz9+v8JXQ6BG0FXbiTywM/dSNjIFifF3fOh5IU3JW3OiB0HcgjBiVRFWpZYk/pV6eKhZTYSkUiIWwYc3SRNA==}
+  '@superradcompany/microsandbox-darwin-arm64@0.7.13':
+    resolution: {integrity: sha512-j4o5dlEATkJhalKUuvM/CEIE3Q1NaHAi1JG6JafHDk9HMEvSKE0Rh+hAaLI4hURjrduzARTpcAKxPkSoaCG3uw==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [darwin]
 
-  '@superradcompany/microsandbox-linux-arm64-gnu@0.6.18':
-    resolution: {integrity: sha512-UVtFm32CExLeB0VhiLIW+mvVCkyWi6Yg+1AYWQAvfXj8ngDYEprZz/0Kksp/T8lAnV5hFIYZ2ZrPs0jAGbAR6A==}
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.13':
+    resolution: {integrity: sha512-sQQ4MgzbM0yHKwxYuinOxMZgC51QSKaOJLt4iHIhvRLLtACj2K+TsyDmiEoarYVw6tLD9Q18l07uIAQnZ/M3ZQ==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [linux]
 
-  '@superradcompany/microsandbox-linux-x64-gnu@0.6.18':
-    resolution: {integrity: sha512-b9Mu+tu1Vq407c8sr7scNOxBgGpJX/Znd4NGFQ/Dx44SS6bHU3pjUEAdso3IpEB2Cx9nrGIBtBdaRrVw1ro+6w==}
+  '@superradcompany/microsandbox-linux-x64-gnu@0.7.13':
+    resolution: {integrity: sha512-833z4BHBJ5RwbZMHYHIGcxYxhnPGWOi0Lm2Zusu6Kl4taBM+4u76WPudKg246ElJgtPb0UIuwHlIQJA3crRodg==}
     engines: {node: '>= 22'}
     cpu: [x64]
     os: [linux]
 
-  '@superradcompany/microsandbox-win32-arm64-msvc@0.6.18':
-    resolution: {integrity: sha512-QDW9JfnTHd4lbFpms3y+c5oyEdOXK1kZCNPONm6nVrdz1Wr+UVy+zMiMadzL1AJgG4rF3Tg6WT9Xa1j0ekPk6w==}
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.13':
+    resolution: {integrity: sha512-ggs8eWAQJzrUNYhTpshe0UUgboZsagK9ngwBmeHXY/hW4sogBAgHnz9QJxrf00VWDMNFKSnISgCuQEIqtqLVIA==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [win32]
 
-  '@superradcompany/microsandbox-win32-x64-msvc@0.6.18':
-    resolution: {integrity: sha512-PS1vBcboB4QwZjruBouRApAsqyhUk9U1c2w+hQOCzYzFMoWVsSyUanAwuswiloqyoj2SREwBG5wY8jnAJFzr2g==}
+  '@superradcompany/microsandbox-win32-x64-msvc@0.7.13':
+    resolution: {integrity: sha512-pVOltXMyFQ+cKnnnIfChsMvgmLOguUSMF84ywrrwALB3PNusG4tz9XHxh0UU1YaPi5nyRxpoBcCjGgALHSvhUQ==}
     engines: {node: '>= 22'}
     cpu: [x64]
     os: [win32]
@@ -6456,8 +6531,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.14:
-    resolution: {integrity: sha512-87WwccvpbsfuiN6IxoUhNhLzm0RvwVcai3bPleG1x2EgLRLfd5O96EZSnSQGfdVBkkGBPt5hpvMwR8v7VOCsEg==}
+  computesdk@4.1.16:
+    resolution: {integrity: sha512-/A8IEr/EyuzDAhVFzyE5am7mUQ07FPuwo1fB4dJdvBd2nUtsVzqmTRhBjgp15J6VkhwqQKqNa7wZIG31D5Fs/g==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -7211,8 +7286,8 @@ packages:
     resolution: {integrity: sha512-Chq1s4CY7jmh8gO2qvLIJyfCDIN+EHLFW/9iShnp1z8FjBQMoodWP1kDC36VAMXXIvAjj4ARa7ntfAV2BrjsbA==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
-  gravixlayer@0.1.36:
-    resolution: {integrity: sha512-BQHMvAZ0AIwC12F//xkMGme9exUJCBUy9JQ8waQZesRUnKpRzIsl7J13fT+pHdK8EaryCVqWncyjKTqjMKg6pw==}
+  gravixlayer@0.1.51:
+    resolution: {integrity: sha512-M7qpdtQDIIWH1ut61DN2UqVRHXcGZIZIaH8vw20INsOQvuQV6EIw0Azg/OW/X7YLIXicqjUqLyr0C6BOH0gPnQ==}
     engines: {node: '>=20'}
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
@@ -7833,8 +7908,8 @@ packages:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
 
-  microsandbox@0.6.18:
-    resolution: {integrity: sha512-M38LkxCk6ppz7qXuQ+bHAgahX4bWNgNdrN5OIFpm7OVV1Bqfpvbwog+zP/QvIiImNHgIleB7M8dU1Kd4jTdwvg==}
+  microsandbox@0.7.13:
+    resolution: {integrity: sha512-+tt4XK0Lghnfk1ev/+SaSGUwMu1QM5Wuz3+nwSSWGiR6onGM6oD+FORMJ2QV8hl7LpsuIHkNbedQzJFDBjFJLg==}
     engines: {node: '>= 22'}
     hasBin: true
 
@@ -9782,15 +9857,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.68)(@computesdk/modal@1.9.26)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.52(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.71)(@computesdk/modal@1.9.29)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      '@computesdk/e2b': 1.7.68
-      '@computesdk/modal': 1.9.26
+      '@computesdk/daytona': 1.7.52(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@computesdk/e2b': 1.7.71
+      '@computesdk/modal': 1.9.29
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10269,25 +10344,21 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@benchsdk/api@0.7.1': {}
+  '@benchsdk/api@0.11.1': {}
 
-  '@benchsdk/cli@0.7.0':
+  '@benchsdk/cli@0.9.3':
     dependencies:
-      '@benchsdk/api': 0.7.1
+      '@benchsdk/api': 0.11.1
 
-  '@benchsdk/cli@0.7.1':
+  '@benchsdk/runner@0.8.3':
     dependencies:
-      '@benchsdk/api': 0.7.1
+      '@benchsdk/api': 0.11.1
+      '@benchsdk/cli': 0.9.3
+      '@benchsdk/worker': 0.4.1
 
-  '@benchsdk/runner@0.6.0':
+  '@benchsdk/worker@0.4.1':
     dependencies:
-      '@benchsdk/api': 0.7.1
-      '@benchsdk/cli': 0.7.0
-      '@benchsdk/worker': 0.3.2
-
-  '@benchsdk/worker@0.3.2':
-    dependencies:
-      '@benchsdk/api': 0.7.1
+      '@benchsdk/api': 0.11.1
 
   '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
@@ -10314,6 +10385,13 @@ snapshots:
       - utf-8-validate
 
   '@borewit/text-codec@0.2.1': {}
+
+  '@briq-cloud/sdk@0.1.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+    dependencies:
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@browserbasehq/sdk@2.9.0':
     dependencies:
@@ -10577,11 +10655,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.50(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@computesdk/daytona@1.7.52(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      '@computesdk/provider': 2.1.20
+      '@computesdk/provider': 2.1.22
       '@daytonaio/sdk': 0.224.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      computesdk: 4.1.14
+      computesdk: 4.1.16
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -10589,24 +10667,24 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@computesdk/e2b@1.7.68':
+  '@computesdk/e2b@1.7.71':
     dependencies:
-      '@computesdk/provider': 2.1.20
-      computesdk: 4.1.14
+      '@computesdk/provider': 2.1.22
+      computesdk: 4.1.16
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.26':
+  '@computesdk/modal@1.9.29':
     dependencies:
-      '@computesdk/provider': 2.1.20
-      computesdk: 4.1.14
+      '@computesdk/provider': 2.1.22
+      computesdk: 4.1.16
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.20':
+  '@computesdk/provider@2.1.22':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.14
+      computesdk: 4.1.16
       daemond: 0.1.8
     optional: true
 
@@ -10735,12 +10813,6 @@ snapshots:
       - debug
       - supports-color
       - utf-8-validate
-
-  '@declaw/sdk@1.2.3':
-    dependencies:
-      eventsource-parser: 3.0.6
-    optionalDependencies:
-      undici: 7.28.0
 
   '@emnapi/runtime@1.11.3':
     dependencies:
@@ -11413,6 +11485,8 @@ snapshots:
       fs-extra: 8.1.0
       globby: 11.1.0
       read-yaml-file: 1.1.0
+
+  '@microsandbox/types@0.7.13': {}
 
   '@miosa/sdk@3.7.14(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     optionalDependencies:
@@ -12176,7 +12250,7 @@ snapshots:
       - supports-color
     optional: true
 
-  '@promigence/sdk@0.1.0-beta.9': {}
+  '@promigence/sdk@0.1.0-beta.15': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -12588,19 +12662,19 @@ snapshots:
 
   '@speed-highlight/core@1.2.17': {}
 
-  '@superradcompany/microsandbox-darwin-arm64@0.6.18':
+  '@superradcompany/microsandbox-darwin-arm64@0.7.13':
     optional: true
 
-  '@superradcompany/microsandbox-linux-arm64-gnu@0.6.18':
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.13':
     optional: true
 
-  '@superradcompany/microsandbox-linux-x64-gnu@0.6.18':
+  '@superradcompany/microsandbox-linux-x64-gnu@0.7.13':
     optional: true
 
-  '@superradcompany/microsandbox-win32-arm64-msvc@0.6.18':
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.13':
     optional: true
 
-  '@superradcompany/microsandbox-win32-x64-msvc@0.6.18':
+  '@superradcompany/microsandbox-win32-x64-msvc@0.7.13':
     optional: true
 
   '@superserve/sdk@0.9.3': {}
@@ -13697,7 +13771,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.14:
+  computesdk@4.1.16:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.8
@@ -14664,7 +14738,7 @@ snapshots:
 
   graphql@16.14.2: {}
 
-  gravixlayer@0.1.36(@opentelemetry/api@1.9.1):
+  gravixlayer@0.1.51(@opentelemetry/api@1.9.1):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
 
@@ -15309,13 +15383,15 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.1
 
-  microsandbox@0.6.18:
+  microsandbox@0.7.13:
+    dependencies:
+      '@microsandbox/types': 0.7.13
     optionalDependencies:
-      '@superradcompany/microsandbox-darwin-arm64': 0.6.18
-      '@superradcompany/microsandbox-linux-arm64-gnu': 0.6.18
-      '@superradcompany/microsandbox-linux-x64-gnu': 0.6.18
-      '@superradcompany/microsandbox-win32-arm64-msvc': 0.6.18
-      '@superradcompany/microsandbox-win32-x64-msvc': 0.6.18
+      '@superradcompany/microsandbox-darwin-arm64': 0.7.13
+      '@superradcompany/microsandbox-linux-arm64-gnu': 0.7.13
+      '@superradcompany/microsandbox-linux-x64-gnu': 0.7.13
+      '@superradcompany/microsandbox-win32-arm64-msvc': 0.7.13
+      '@superradcompany/microsandbox-win32-x64-msvc': 0.7.13
 
   miller-rabin@4.0.1:
     dependencies:
@@ -15995,7 +16071,7 @@ snapshots:
 
   pyodide@0.27.7(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate

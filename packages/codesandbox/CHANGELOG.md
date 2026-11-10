@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.5.70
+
+### Patch Changes
+
+- 1904e82: Fix background commands (`runCommand(..., { background: true })`) failing with a shell syntax error.
+- 1904e82: Snapshots are now hibernated forks of the running sandbox (memory, processes and disk) that restore into new sandboxes via `snapshotId`, and can be listed and deleted. Sandboxes expose native `pause()`/`resume()` (hibernate/wake). Commands use CodeSandbox's native `env`/`cwd`, report stdout and stderr separately with the real exit code, enforce `timeout` in the box, and the provider now runs the streaming and process conformance suites. `destroy` closes the session and shuts the VM down before deleting, retrying transient delete failures.
+- 1904e82: Expose hibernate/resume as `instance.pause()`/`resume()` and declare pause and snapshot capabilities: hibernation and fork snapshots keep the whole VM, memory and running processes included, snapshotting leaves the source running (its session is reopened after the fork), and each restore is an independent fork.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.5.69
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 1.5.68
 
 ### Patch Changes

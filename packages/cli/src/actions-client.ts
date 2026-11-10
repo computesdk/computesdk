@@ -97,6 +97,47 @@ export interface CiWorkflow {
 }
 
 export type CiConclusion = 'passed' | 'failed' | 'running' | 'cancelled' | 'none';
+
+export interface CiScheduleWorkflow {
+  repoFullName: string;
+  workflowName: string;
+  workflowPath: string;
+}
+
+export interface CiScheduleRun extends CiScheduleWorkflow {
+  id: string;
+  event: string;
+  ref: string;
+  status: 'queued' | 'running' | 'completed';
+  conclusion: string;
+  startedAt: string | null;
+  createdAt: string;
+}
+
+/** `GET /api/v1/actions/schedule`: daily totals, paginated runs and capped fires. */
+export interface CiSchedule {
+  from: string;
+  to: string;
+  timeZone: string;
+  countsTruncated: boolean;
+  days: (CiScheduleWorkflow & {
+    date: string;
+    runs: { total: number; byConclusion: Record<string, number>; items: CiScheduleRun[] };
+    upcoming: { total: number; items: string[] };
+  })[];
+  runs: CiScheduleRun[];
+  nextCursor: string | null;
+  upcoming: (CiScheduleWorkflow & {
+    scheduleId: string;
+    cron: string;
+    description: string;
+    occurrences: string[];
+    occurrenceCount: number;
+    truncated: boolean;
+    countTruncated: boolean;
+  })[];
+}
+
 export type CiJobState =
   | 'queued'
   | 'running'

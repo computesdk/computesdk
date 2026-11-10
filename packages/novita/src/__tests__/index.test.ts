@@ -31,6 +31,8 @@ function nativeSandbox(id = 'sbx-1') {
     sandboxId: id,
     commands: { run: vi.fn().mockResolvedValue(commandHandle()) },
     getHost: vi.fn((port: number) => `${port}-${id}.example.test`),
+    pause: vi.fn().mockResolvedValue(true),
+    connect: vi.fn(),
     getInfo: vi.fn().mockResolvedValue({
       sandboxId: id, templateId: 'base', state: 'running', metadata: { team: 'test' },
       startedAt: new Date('2026-01-01T00:00:00Z'), endAt: new Date('2026-01-01T00:10:00Z'),
@@ -224,6 +226,22 @@ describe('Novita provider', () => {
     await sandbox.filesystem.remove('/tmp/test/file');
     expect(native.files.write).toHaveBeenCalledWith('/tmp/test/file', 'content');
     expect(native.files.remove).toHaveBeenCalledWith('/tmp/test/file');
+  });
+
+  it('pauses natively and resumes by reconnecting with the creation lifetime', async () => {
+    const sdk = novita({ apiKey: 'key', timeout: 600_000 });
+    expect(sdk.sandbox.pause).toEqual({ memory: true });
+    native.connect.mockResolvedValue(native);
+    const sandbox = await sdk.sandbox.create();
+    await sandbox.pause!();
+    expect(native.pause).toHaveBeenCalledOnce();
+    await sandbox.resume!();
+    expect(native.connect).toHaveBeenCalledWith({ timeoutMs: 600_000 });
+    expect(sandbox.getInstance()).toBe(native);
+  });
+
+  it('declares that snapshots keep the root filesystem and running processes', () => {
+    expect(provider().snapshot!.capabilities).toEqual({ scope: 'rootfs', memory: true, destroysSource: false });
   });
 
   it('creates, lists and deletes snapshots using the snapshot API', async () => {

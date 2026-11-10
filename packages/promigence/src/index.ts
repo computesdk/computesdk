@@ -9,6 +9,7 @@ import { defineProvider, escapeShellArg, TIMEOUT_EXIT_CODE } from '@computesdk/p
 import type {
   CommandResult,
   CreateInstanceOptions,
+  CreateSnapshotOptions,
   FileEntry,
   InstanceInfo,
   ListSnapshotsOptions,
@@ -30,6 +31,7 @@ import type {
   OptimizeFor,
   SandboxCreateOpts,
   SandboxRecord,
+  SandboxSnapshotResult,
   SnapshotRecord,
   Tier,
 } from '@promigence/sdk';
@@ -289,6 +291,97 @@ async function execOrThrow(inst: PromigenceInstance, command: string, what: stri
   }
 }
 
+/** Runs a command and returns its stdout; a non-zero exit is an error that names the operation. */
+async function execOutput(inst: PromigenceInstance, command: string, what: string): Promise<string> {
+  let r: PromigenceCommandResult;
+  try {
+    r = await inst.sandbox.commands.run(command, { throwOnExit: false });
+  } catch (e) {
+    rethrow(e, what);
+  }
+  if (r.exitCode !== 0) {
+    throw promigenceError(`Promigence ${what} failed (exit ${r.exitCode}): ${r.stderr.trim()}`);
+  }
+  return r.stdout;
+}
+
+/**
+ * Instances for which the Promigence API refused the files API of the installed `@promigence/sdk`
+ * (older releases put the path in the URL; the API now takes it in the body). From then on, their
+ * files are read, written, checked and listed with shell commands in the sandbox.
+ */
+const filesApiRefused = new WeakSet<PromigenceInstance>();
+
+function isFilesApiRefusal(e: unknown): boolean {
+  return e instanceof PromigenceError && e.code === 'usage' && /URL/.test(e.message);
+}
+
+/** Calls the files API; once the API has refused it, or when it refuses this call, runs `viaShell`. */
+async function viaFilesApi<T>(
+  inst: PromigenceInstance,
+  api: () => Promise<T>,
+  viaShell: () => Promise<T>,
+  what: string
+): Promise<T> {
+  if (filesApiRefused.has(inst)) return viaShell();
+  try {
+    return await api();
+  } catch (e) {
+    if (!isFilesApiRefusal(e)) rethrow(e, what);
+    filesApiRefused.add(inst);
+    return viaShell();
+  }
+}
+
+const shellFs = {
+  readFile: async (inst: PromigenceInstance, path: string): Promise<string> => {
+    const q = `"${escapeShellArg(path)}"`;
+    const out = await execOutput(
+      inst,
+      `if [ -f ${q} ]; then base64 < ${q}; else echo "no such file: ${escapeShellArg(path)}" >&2; exit 1; fi`,
+      `read of ${path}`
+    );
+    return Buffer.from(out.replace(/\s+/g, ''), 'base64').toString('utf8');
+  },
+  writeFile: async (inst: PromigenceInstance, path: string, content: string): Promise<void> => {
+    const q = `"${escapeShellArg(path)}"`;
+    const b64 = Buffer.from(content, 'utf8').toString('base64');
+    await execOutput(
+      inst,
+      `mkdir -p -- "$(dirname -- ${q})" && printf '%s' '${b64}' | base64 -d > ${q}`,
+      `write of ${path}`
+    );
+  },
+  exists: async (inst: PromigenceInstance, path: string): Promise<boolean> => {
+    const q = `"${escapeShellArg(path)}"`;
+    const out = await execOutput(inst, `if [ -e ${q} ] || [ -L ${q} ]; then echo yes; else echo no; fi`, `check of ${path}`);
+    return out.trim() === 'yes';
+  },
+  readdir: async (inst: PromigenceInstance, path: string): Promise<FileEntry[]> => {
+    const q = `"${escapeShellArg(path)}"`;
+    const out = await execOutput(
+      inst,
+      `cd -- ${q} || exit 1; for f in * .[!.]* ..?*; do [ -e "$f" ] || [ -L "$f" ] || continue; ` +
+        `if [ -d "$f" ]; then t=d; else t=f; fi; m=$(stat -c '%s %Y' -- "$f" 2>/dev/null); ` +
+        `printf '%s\\t%s\\t%s\\n' "$t" "$m" "$f"; done`,
+      `listing of ${path}`
+    );
+    return out
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [t, meta, ...rest] = line.split('\t');
+        const [size, mtime] = (meta ?? '').split(' ').map(Number);
+        return {
+          name: rest.join('\t'),
+          type: t === 'd' ? 'directory' : 'file',
+          ...(Number.isFinite(size) ? { size } : {}),
+          ...(Number.isFinite(mtime) ? { modified: new Date(mtime * 1000) } : {}),
+        } as FileEntry;
+      });
+  },
+};
+
 function toSnapshotInfo(s: SnapshotRecord) {
   return {
     id: s.snapshot_id,
@@ -516,37 +609,49 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
 
       getInstance: (inst: PromigenceInstance): PromigenceInstance => inst,
 
+      /**
+       * Pauses the sandbox: it bills nothing and holds no capacity until `resume()`. Files and
+       * memory are kept; background execs (`background: true`) end at the pause.
+       */
+      pause: async (inst: PromigenceInstance): Promise<void> => {
+        try {
+          await inst.sandbox.pause();
+        } catch (e) {
+          rethrow(e, 'sandbox pause');
+        }
+      },
+
+      resume: async (inst: PromigenceInstance): Promise<void> => {
+        try {
+          await inst.sandbox.resume();
+        } catch (e) {
+          rethrow(e, 'sandbox resume');
+        }
+      },
+
+      pauseCapabilities: { memory: true },
+
       filesystem: {
-        readFile: async (inst: PromigenceInstance, path: string): Promise<string> => {
-          try {
-            return await inst.sandbox.files.read(path);
-          } catch (e) {
-            rethrow(e, `read of ${path}`);
-          }
-        },
-        writeFile: async (inst: PromigenceInstance, path: string, content: string): Promise<void> => {
-          try {
-            await inst.sandbox.files.write(path, content);
-          } catch (e) {
-            rethrow(e, `write of ${path}`);
-          }
-        },
+        readFile: (inst: PromigenceInstance, path: string): Promise<string> =>
+          viaFilesApi(inst, () => inst.sandbox.files.read(path), () => shellFs.readFile(inst, path), `read of ${path}`),
+        writeFile: (inst: PromigenceInstance, path: string, content: string): Promise<void> =>
+          viaFilesApi(
+            inst,
+            () => inst.sandbox.files.write(path, content),
+            () => shellFs.writeFile(inst, path, content),
+            `write of ${path}`
+          ),
         mkdir: (inst: PromigenceInstance, path: string): Promise<void> =>
           execOrThrow(inst, `mkdir -p -- "${escapeShellArg(path)}"`, `mkdir of ${path}`),
-        readdir: async (inst: PromigenceInstance, path: string): Promise<FileEntry[]> => {
-          try {
-            return (await inst.sandbox.files.list(path)).map(toFileEntry);
-          } catch (e) {
-            rethrow(e, `listing of ${path}`);
-          }
-        },
-        exists: async (inst: PromigenceInstance, path: string): Promise<boolean> => {
-          try {
-            return await inst.sandbox.files.exists(path);
-          } catch (e) {
-            rethrow(e, `check of ${path}`);
-          }
-        },
+        readdir: (inst: PromigenceInstance, path: string): Promise<FileEntry[]> =>
+          viaFilesApi(
+            inst,
+            async () => (await inst.sandbox.files.list(path)).map(toFileEntry),
+            () => shellFs.readdir(inst, path),
+            `listing of ${path}`
+          ),
+        exists: (inst: PromigenceInstance, path: string): Promise<boolean> =>
+          viaFilesApi(inst, () => inst.sandbox.files.exists(path), () => shellFs.exists(inst, path), `check of ${path}`),
         // ComputeSDK's remove takes directories too.
         remove: (inst: PromigenceInstance, path: string): Promise<void> =>
           execOrThrow(inst, `rm -rf -- "${escapeShellArg(path)}"`, `remove of ${path}`),
@@ -554,12 +659,36 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
     },
 
     snapshot: {
-      create: async (_config: PromigenceConfig, instanceId: string) => {
-        throw unsupported(
-          `Promigence does not create a snapshot from a running sandbox (${instanceId}).`,
-          'Build one with the Promigence CLI (promigence snapshot create --image <image>) and pass its id or ' +
-            'alias to create() as templateId or snapshotId, or pass an image to create().'
-        );
+      // The whole sandbox, memory included: a restored sandbox has the files and running processes
+      // the source had. Only background execs are ended to take it.
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
+      /**
+       * A snapshot of the sandbox as it is now; the sandbox keeps running. Background execs are
+       * ended to take it (`metadata.backgroundExecsKilled`). Restore with `create({ snapshotId })`.
+       */
+      create: async (config: PromigenceConfig, instanceId: string, options?: CreateSnapshotOptions) => {
+        const client = clientFor(config);
+        let r: SandboxSnapshotResult;
+        try {
+          r = await client.sandboxes.snapshot(instanceId);
+        } catch (e) {
+          rethrow(e, 'snapshot create');
+        }
+        return {
+          id: r.snapshot_id,
+          provider: PROVIDER,
+          createdAt: new Date(),
+          metadata: {
+            ...(options?.metadata ?? {}),
+            ...(options?.name ? { name: options.name } : {}),
+            sandboxId: r.sandbox_id,
+            tier: r.tier,
+            ...(r.alias ? { alias: r.alias } : {}),
+            bytes: r.bytes?.allocated,
+            backgroundExecsKilled: r.background_execs_killed,
+            ...(typeof r.took_ms === 'number' ? { tookMs: r.took_ms } : {}),
+          },
+        };
       },
       list: async (config: PromigenceConfig, options?: ListSnapshotsOptions) => {
         const limit = snapshotLimit(options?.limit);

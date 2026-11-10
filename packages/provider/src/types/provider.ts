@@ -5,10 +5,16 @@
  */
 
 import type {
+  ProcessHandle,
+  ProcessTier,
+  StartProcessOptions,
   CreateInstanceOptions,
   CreateVolumeOptions,
   InstanceInterface,
   ListVolumesOptions,
+  PauseCapabilities,
+  LifetimeCapabilities,
+  SnapshotCapabilities,
   Volume,
 } from 'computesdk';
 
@@ -25,6 +31,26 @@ export interface ProviderInstance<TInstance = any> extends Omit<InstanceInterfac
   getInstance(): TInstance;
   /** Destroy instance and clean up resources */
   destroy(): Promise<void>;
+  /** Which runtime serves streaming `runCommand` and `startProcess` on this instance. */
+  readonly processRuntime?: { streaming: ProcessTier; processes: ProcessTier };
+  /**
+   * Rebuilds a handle for a shell-tier process from its `jobId` — e.g. in a
+   * new client after a restart. Output replays from the start of the job's log.
+   */
+  attachProcess?(jobId: string, options?: StartProcessOptions): Promise<ProcessHandle>;
+}
+
+/**
+ * Selects the opt-in daemond runtime for background processes and streaming.
+ * Accepted in every provider's config, e.g. `e2b({ apiKey, processRuntime: 'daemond' })`.
+ */
+export interface ProcessRuntimeOptions {
+  /**
+   * `'shell'` (default): provider-native hooks, else POSIX-shell process records
+   * over plain `runCommand` — no Node, daemon or download in the instance.
+   * `'daemond'`: provider-native hooks, else the in-box daemond bridge.
+   */
+  processRuntime?: 'shell' | 'daemond';
 }
 
 /** @deprecated Use {@link ProviderInstance} instead. */
@@ -54,6 +80,13 @@ export interface CreateSnapshotOptions {
   name?: string;
   /** Optional metadata for the snapshot */
   metadata?: Record<string, string>;
+  /**
+   * Optional capture scope hint. `'full'` asks for a live capture that
+   * checkpoints memory and keeps the source running; `'disk'` asks for a
+   * disk-only capture (the source may be stopped for it). Omitted lets the
+   * provider pick. Providers without a live-capture mode ignore this.
+   */
+  scope?: 'disk' | 'full';
 }
 
 /**
@@ -119,6 +152,10 @@ export interface ProviderInstanceManager<TInstance = any> {
   list(): Promise<ProviderInstance<TInstance>[]>;
   /** Destroy an instance */
   destroy(instanceId: string): Promise<void>;
+  /** Present when the provider's instances support `pause()`/`resume()`. */
+  readonly pause?: PauseCapabilities;
+  /** How long instances may live; absent on providers that haven't declared it. */
+  readonly lifetime?: LifetimeCapabilities;
 }
 
 /** @deprecated Use {@link ProviderInstanceManager} instead. */
@@ -146,6 +183,10 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
   list(options?: ListSnapshotsOptions): Promise<TSnapshot[]>;
   /** Delete a snapshot */
   delete(snapshotId: string): Promise<void>;
+  /** What snapshots keep; absent on providers that haven't declared it. */
+  readonly capabilities?: SnapshotCapabilities;
+  /** Resolve once a snapshot can be restored; present when `readiness` is `eventual`. */
+  waitUntilReady?(snapshotId: string, options?: { timeoutMs?: number }): Promise<void>;
 }
 
 /**
@@ -154,6 +195,10 @@ export interface ProviderSnapshotManager<TSnapshot = any> {
 export interface Provider<TInstance = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume> {
   /** Provider name/type */
   readonly name: string;
+
+  /** Unrelated legacy extensions remain allowed; runtime contract narrowing is required.
+   * SDK-generated factories additionally return a required, typed InstanceSizeManager. */
+  readonly sizes?: unknown;
 
   /** Instance management operations */
   readonly instances: ProviderInstanceManager<TInstance>;

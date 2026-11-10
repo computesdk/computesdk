@@ -1,5 +1,28 @@
 # @computesdk/sail
 
+## 1.0.21
+
+### Patch Changes
+
+- 1904e82: Expose Sail checkpoints as snapshots: `snapshot.create` checkpoints a Sailbox, `sandbox.create({ snapshotId })` starts a new Sailbox from it, and `snapshot.list`/`delete` use Sail's checkpoint API.
+- 1904e82: Native pause/resume through `instance.pause()`/`resume()` (in memory: files and processes survive), and declared checkpoint snapshot capabilities (whole rootfs plus memory, source keeps running).
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.0.20
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 1.0.19
 
 ### Patch Changes

@@ -76,8 +76,11 @@ With `lazyCreate` on, `create()` makes no network call. The first `runCommand()`
 | `filesystem.readdir()` | `GET /sandboxes/:id/fs?path=` | native |
 | `filesystem.exists()` | `POST /sandboxes/:id/exec` (`test -e`) | **composed** because there is no boolean exists endpoint |
 | `filesystem.remove()` | `DELETE /sandboxes/:id/fs?path=` | native |
-| `snapshot.create()` | `POST /sandboxes/:id/snapshots` | native Firecracker checkpoints; `name → comment` |
+| `snapshot.create()` | `POST /sandboxes/:id/snapshots` | native Firecracker checkpoints; `name → comment`; waits until the snapshot is ready to restore |
 | `snapshot.list({instanceId})` | `GET /sandboxes/:id/snapshots` | MIOSA snapshots are sandbox-scoped |
+| `instance.pause()` / `.resume()` | `POST /sandboxes/:id/pause` / `resume` | same-box suspend: memory, processes and files survive; Firecracker runtime only (also on `getInstance()`) |
+
+Set `runtime: "firecracker"` per create (`sandbox.create({ runtime: "firecracker" })`), on the provider, or with `MIOSA_RUNTIME=firecracker` to create sandboxes on MIOSA's Firecracker runtime (`runtime_profile: "standard"`), which has pause/resume and snapshots and keeps background processes alive between commands. Unset, MIOSA picks the runtime (currently SOMA, which has none of these). `provider.sandbox.pause` and `provider.snapshot.capabilities` declare this as `createOptions: { runtime: "firecracker" }`. A snapshot captures memory and the whole rootfs (`/tmp`, `/root`, `/var` included), so background processes keep running in the sandbox restored from it; the source keeps running. Snapshots take a couple of minutes to become ready, and `snapshot.create()` waits for that.
 
 Beyond the ComputeSDK surface, the same API key unlocks the full MIOSA API: sandbox fork/branching, pause/resume, desktop graduation, deploys, and off-host exports.
 

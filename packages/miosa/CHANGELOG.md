@@ -1,5 +1,31 @@
 # @computesdk/miosa
 
+## 1.2.7
+
+### Patch Changes
+
+- 1904e82: Add a `runtime` option (`MIOSA_RUNTIME`) that selects MIOSA's Firecracker runtime, and expose same-box `pause()`/`resume()` on the native handle.
+- 1904e82: Sandboxes expose native `pause()`/`resume()` on the instance (Firecracker runtime; files and processes survive), declared in `provider.sandbox.pause`, and snapshots declare `snapshot.capabilities` (memory and whole rootfs, source keeps running). `runtime` can be set per create (`sandbox.create({ runtime: 'firecracker' })`). `snapshot.create` now waits until the snapshot is ready, so `create({ snapshotId })` can restore it straight away. The package runs the live conformance suite, including pause/resume and snapshot restore.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.2.6
+
+### Patch Changes
+
+- 946f4dc: Account-API filesystem calls (read/write/mkdir/readdir/remove) now replay 404s through a fresh sandbox's boot window instead of racing it. The control plane's `wait: true` create can still return before the VM finishes booting and `/sandboxes/:id/fs/*` answers 404 until the sandbox attaches; a 404 on a sandbox past the window still surfaces immediately as a genuine miss.
+- 936ba64: Account-API fs 404s on a young sandbox now wait out the boot via exec's `wait` readiness hold plus a 10s post-attach grace, instead of replaying 404s for the whole window — a missing file on a fresh sandbox surfaces within ~10s rather than stalling for two minutes.
+- 428423f: Snapshot calls on regionally-created sandboxes now fail with an actionable error naming the cause and remedy (snapshots are account-API only; recreate the sandbox with `runnerMode: false` or `MIOSA_RUNNER_MODE=0`) instead of a bare `404 NOT_FOUND` from `POST /sandboxes/:id/snapshots`.
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 1.2.5
 
 ### Patch Changes

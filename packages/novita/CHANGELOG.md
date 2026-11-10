@@ -1,5 +1,27 @@
 # @computesdk/novita
 
+## 0.0.17
+
+### Patch Changes
+
+- 1904e82: Expose native pause/resume as `instance.pause()`/`resume()` (memory kept) and declare snapshot capabilities (rootfs and memory, source keeps running).
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.0.16
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.0.15
 
 ### Patch Changes

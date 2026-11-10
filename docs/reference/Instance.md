@@ -146,11 +146,11 @@ await sandbox.runCommand('python train.py', {
 - **Chunk boundaries are not guaranteed.** A chunk may contain a partial line, multiple
   lines, or a mix — do not assume one callback invocation equals one line. Buffer and
   split on `\n` yourself if you need line-by-line handling.
-- **Incremental delivery depends on the sandbox environment.** Streaming is handled by
-  a built-in in-sandbox daemon, not by each provider — the command always runs and the
-  full output is always returned in the result. But if the environment can't stream
-  live chunks, the callbacks fall back to firing once when the command completes,
-  carrying the full output, rather than incrementally.
+- **Runtime selection is capability-specific:** provider-native streaming first,
+  then the POSIX shell fallback. The in-sandbox daemon is used only with provider
+  config `processRuntime: 'daemond'`, and native hooks still take precedence.
+  Shell streaming on instances whose execs share no state falls back to one plain
+  execution, delivering output at completion rather than incrementally.
 - **Cannot be combined with `background: true`.** Passing streaming callbacks together
   with `background: true` throws, since a backgrounded command returns immediately and
   has no output to stream.
@@ -162,20 +162,20 @@ await sandbox.runCommand('python train.py', {
 
 ## `startProcess(command, options?)`
 
-Start an interactive long-running process via the in-sandbox daemon. Unlike
+Start an interactive long-running process. Unlike
 `runCommand`, this returns immediately with a handle while the process keeps
 running — the handle lets you write to its stdin, poll its status, and wait for
 or kill it.
 
 **Parameters:**
-- `command` (string): Shell command to run (executed as `sh -lc <command>`)
+- `command` (string): Shell command to run; native providers may use their own shell invocation
 - `options` (StartProcessOptions, optional):
   - `cwd` (string): Working directory
   - `env` (Record<string, string>): Environment variables
   - `stdin` (boolean): Open a writable stdin pipe (default `false`)
   - `onStdout` / `onStderr` ((chunk: string) => void): Streamed output callbacks
   - `onExit` ((result: { exitCode: number | null; signal: string | null }) => void): Fires once when the process exits
-  - `pollIntervalMs` (number): Interval for the status-polling fallback used when the daemon's SSE port is not reachable (default 500)
+  - `pollIntervalMs` (number): Daemond status-polling fallback interval (default 500 ms); the shell tier uses in-instance long-polls instead
 
 **Returns:** `Promise<ProcessHandle>`
 
@@ -216,19 +216,92 @@ const result = await proc.wait();      // { exitCode: -1, signal: 'SIGTERM', ...
 
 **Behavior:**
 
-- Runs via the in-sandbox daemon: the sandbox needs `node`, or a Linux/glibc
-  image the daemon can bootstrap one into; otherwise `startProcess` throws a
-  `daemond:`-prefixed error.
-- Output callbacks are driven from the daemon's buffered `status` snapshot —
-  SSE (when the daemon's port is routable from the caller) only lowers latency,
-  otherwise the snapshot is polled every `pollIntervalMs`. Chunk boundaries
-  therefore follow the snapshot, not the process's own writes.
-- Each buffered output stream is capped at 4 MiB; when exceeded the tail is
-  kept and snapshots report `truncated: true`.
-- Exited processes stay retrievable (`status`/`wait`) for 10 minutes.
+- Provider-native `startProcess` wins. Otherwise the default shell tier uses
+  plain provider execs, `nohup setsid`, process groups, stdin FIFOs, and durable
+  framed logs under `${TMPDIR:-/tmp}/.computesdk/jobs/<jobId>/`. No Node installation,
+  daemon download, or routable port is needed.
+- Inspect `sandbox.processRuntime`, e.g. `{ streaming: 'native', processes: 'shell' }`.
+  `sandbox.attachProcess(jobId, options?)` reattaches to a shell-tier job from a new
+  client; output is replayed from the start of its log. Use `stdin: true` to write
+  to a job originally started with stdin enabled. Native/daemon reattachment is not
+  implemented by this method.
+- Shell callbacks come from incremental log reads, not necessarily the command's
+  write boundaries. Each handle keeps up to 4 Mi characters per stream, retaining
+  the tail with `truncated: true` when exceeded; the on-instance log remains available
+  until cleanup. Job directories are removed 10 minutes after exit (60 seconds after kill).
+- Shell `kill()` signals the whole process group. A streaming `runCommand` timeout
+  uses an in-instance watchdog (exit code 124), even if the client disconnects.
+  `handle.wait({ timeout })` only bounds waiting; it does not kill the process.
+- The shell tier requires POSIX tools including `sh`, `setsid`, `mkfifo`, `kill`,
+  `cat`, `dd`, `wc`, `tail`, `head`, `base64`, `mkdir`, `rm`, `mv`, and `sleep`.
+  Missing tools raise `ShellProcessUnsupportedError`. Instances without shared
+  filesystem/process state between execs raise `ShellStateNotPersistentError`
+  on `startProcess` before executing the user's command.
+- To opt into daemond, configure the provider, e.g.
+  `e2b({ processRuntime: 'daemond' })`. This tier needs Node or an image it can
+  bootstrap Node into. Its callbacks use buffered status snapshots, with SSE
+  when reachable and polling otherwise; each stream retains a 4-MiB tail and
+  exited processes remain retrievable for 10 minutes. These are daemon-specific
+  requirements, not the default process contract.
 
 <br/>
 <br/>
+
+---
+
+## Lifecycle
+
+### `pause()` / `resume()`
+
+Optional native operations. Check `typeof sandbox.pause === 'function'` and read
+`provider.instances.pause` on the direct provider before creation:
+
+- `memory`: whether running processes and memory survive pause/resume. `false`
+  means a filesystem-preserving stop/start, not process suspension.
+- `createOptions`: options the instance needs to be pausable (for example
+  `{ persistent: true }` on Vercel or `{ ephemeral: false }` on Archil/Upstash).
+
+```typescript
+const requirements = provider.instances.pause?.createOptions;
+const sandbox = await provider.instances.create({ ...requirements });
+if (sandbox.pause && sandbox.resume) {
+  await sandbox.pause();
+  await sandbox.resume();
+}
+```
+
+Do not use `destroy()` as pause: destruction is cleanup, not a reversible operation.
+Some providers expose the methods on all handles but reject an incompatible backend
+or execution mode; apply the declared requirements and check the provider page.
+
+### `extendLifetime(ms)` and timeouts
+
+`extendLifetime` is optional and keeps the instance alive for `ms` more **from now**,
+within the provider's limit; it is not an increment added to the previous deadline.
+The direct provider's `instances.lifetime`, when declared, contains `defaultMs`
+(when create sets no timeout), `maxMs` (absent means no declared bound), and
+`extendable` (whether the instance method exists). Providers need not publish this
+descriptor; its absence is not a promise of unlimited lifetime or extension support.
+
+```typescript
+if (sandbox.extendLifetime) await sandbox.extendLifetime(60_000);
+```
+
+`instances.create({ timeout })` configures the provider's lifetime/idle policy;
+`runCommand(command, { timeout })` bounds a command; `process.wait({ timeout })`
+only bounds the caller's wait. All SDK values here are milliseconds. Native options
+may use other units. Auto-delete, auto-stop, and auto-pause are not interchangeable:
+see the provider page, and always destroy resources when finished.
+
+### Snapshots and forks
+
+Snapshots belong to the provider, not the instance: use
+`provider.snapshot.create(sandbox.instanceId)` and restore with
+`provider.instances.create({ snapshotId })`. Read the source's required create
+options and the snapshot's scope/memory/source semantics **before** capture.
+There is no universal `sandbox.fork()` method: independent forks are new instances
+restored from the same snapshot only where the provider supports that behavior.
+See [snapshot capabilities and safe cleanup](./compute.md#snapshot-capabilities).
 
 ---
 

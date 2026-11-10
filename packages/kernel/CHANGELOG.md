@@ -1,5 +1,27 @@
 # @computesdk/kernel
 
+## 0.2.28
+
+### Patch Changes
+
+- 1904e82: Fix a syntax error in the Kernel option-mapping test so the package test suite runs, and drop unused type imports.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.2.27
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.2.26
 
 ### Patch Changes

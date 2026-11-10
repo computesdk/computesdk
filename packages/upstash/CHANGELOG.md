@@ -1,5 +1,29 @@
 # @computesdk/upstash
 
+## 0.3.28
+
+### Patch Changes
+
+- 1904e82: Apply `runCommand` env and cwd to every part of a compound command, with safe single-quote escaping (also for background commands).
+- 1904e82: Pass absolute file paths (e.g. `/tmp`) through unchanged, follow symlinks in `readFile`, chunk files larger than the files API payload limit, report raw stdout for failing commands, and implement `snapshot.delete` via `Box.deleteSnapshots`.
+- 1904e82: Expose native pause/resume as `instance.pause()`/`resume()` and declare pause and snapshot capabilities: the root filesystem survives except tmpfs mounts (`/var/tmp`, `/var/cache`, `/var/log`, `/root`, `/run`, `/dev/shm`); running processes do not.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.3.27
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.3.26
 
 ### Patch Changes

@@ -2,13 +2,17 @@
  * Upstash Box Provider - Factory-based Implementation
  *
  * Wraps @upstash/box SDK with ComputeSDK's provider interface.
- * Supports code execution, shell commands, filesystem, snapshots, and preview URLs.
+ * Supports code execution, shell commands, filesystem, pause/resume, snapshots, and preview URLs.
  */
 
 import { Box, EphemeralBox } from '@upstash/box';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 export type UpstashSandboxInstance = Box | EphemeralBox;
 
@@ -36,19 +40,91 @@ export interface UpstashConfig {
 }
 
 /**
- * Resolve a path relative to the box's workspace directory.
- * Upstash requires all file paths to be under /workspace/home.
- * Absolute paths like "/tmp/foo" get remapped to "/workspace/home/tmp/foo".
+ * Resolve a path for the Upstash files API. Absolute paths (including ones
+ * outside /workspace/home, e.g. /tmp) are passed through unchanged; relative
+ * paths are resolved by the SDK against the box's current directory.
  */
-function resolvePath(sandbox: UpstashSandboxInstance, path: string): string {
-  const root = sandbox.cwd;
-  if (path.startsWith(root)) {
-    return path;
-  }
-  if (path.startsWith('/')) {
-    return `${root}${path}`;
-  }
+function resolvePath(_sandbox: UpstashSandboxInstance, path: string): string {
   return path;
+}
+
+/** The files API rejects request bodies of ~16 MB; larger payloads are moved in chunks. */
+const FILE_CHUNK_BYTES = 4 * 1024 * 1024;
+const FILE_CHUNK_CONCURRENCY = 4;
+
+async function mapLimit<T>(items: T[], limit: number, fn: (item: T, index: number) => Promise<void>): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+}
+
+async function execOrThrow(sandbox: UpstashSandboxInstance, command: string): Promise<string> {
+  const run = await sandbox.exec.command(command);
+  if ((run.exitCode ?? 0) !== 0) {
+    throw new Error(run.stderr || run.result || `command failed with exit code ${run.exitCode}`);
+  }
+  return run.stdout ?? run.result ?? '';
+}
+
+function chunkDir(path: string): string {
+  return `${path}.computesdk-chunks-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function writeFileChunked(sandbox: UpstashSandboxInstance, path: string, data: Buffer): Promise<void> {
+  const dir = chunkDir(path);
+  const count = Math.ceil(data.length / FILE_CHUNK_BYTES);
+  const parts = Array.from({ length: count }, (_, i) => `${dir}/${String(i).padStart(6, '0')}`);
+  try {
+    await mapLimit(parts, FILE_CHUNK_CONCURRENCY, async (part, i) => {
+      const slice = data.subarray(i * FILE_CHUNK_BYTES, (i + 1) * FILE_CHUNK_BYTES);
+      await sandbox.files.write({ path: part, content: slice.toString('base64'), encoding: 'base64' });
+    });
+    await execOrThrow(sandbox, `cat ${shellQuote(dir)}/* > ${shellQuote(path)}`);
+  } finally {
+    await sandbox.exec.command(`rm -rf ${shellQuote(dir)}`).catch(() => undefined);
+  }
+}
+
+async function readFileChunked(sandbox: UpstashSandboxInstance, path: string): Promise<string> {
+  const dir = chunkDir(path);
+  try {
+    const listing = await execOrThrow(
+      sandbox,
+      `mkdir -p ${shellQuote(dir)} && split -b ${FILE_CHUNK_BYTES} -a 6 -d ${shellQuote(path)} ${shellQuote(`${dir}/`)} && ls ${shellQuote(dir)}`
+    );
+    const parts = listing.split('\n').map((l) => l.trim()).filter(Boolean).sort();
+    const buffers: Buffer[] = new Array(parts.length);
+    await mapLimit(parts, FILE_CHUNK_CONCURRENCY, async (part, i) => {
+      buffers[i] = Buffer.from(await sandbox.files.read(`${dir}/${part}`, { encoding: 'base64' }), 'base64');
+    });
+    return Buffer.concat(buffers).toString('utf8');
+  } finally {
+    await sandbox.exec.command(`rm -rf ${shellQuote(dir)}`).catch(() => undefined);
+  }
+}
+
+async function readFileNative(sandbox: UpstashSandboxInstance, path: string): Promise<string> {
+  try {
+    const content = await sandbox.files.read(path);
+    if (content !== '') return content;
+  } catch (error) {
+    if (/file not found/i.test(error instanceof Error ? error.message : String(error))) throw error;
+  }
+  // Empty or failed reads: the files API returns an empty body for symlinks and
+  // rejects files above its payload limit, so follow the link and chunk if needed.
+  const out = await execOrThrow(
+    sandbox,
+    `p=${shellQuote(path)}; [ -e "$p" ] || { echo "file not found: $p" >&2; exit 1; }; [ -L "$p" ] && p=$(readlink -f "$p"); printf '%s\\n%s' "$(stat -L -c %s "$p")" "$p"`
+  );
+  const [sizeLine, target] = out.split('\n');
+  if (Number(sizeLine) === 0) return '';
+  if (Number(sizeLine) > FILE_CHUNK_BYTES) return readFileChunked(sandbox, target);
+  return sandbox.files.read(target);
 }
 
 /**
@@ -198,26 +274,25 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
 
         try {
           let fullCommand = command;
+          const envEntries = Object.entries(options?.env ?? {});
 
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
+          if (envEntries.length > 0) {
+            const assignments = envEntries.map(([k, v]) => `${k}=${shellQuote(String(v))}`).join(' ');
+            fullCommand = `env ${assignments} sh -c ${shellQuote(fullCommand)}`;
           }
 
           if (options?.cwd) {
-            fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
+            fullCommand = `cd ${shellQuote(options.cwd)} && ${envEntries.length > 0 ? fullCommand : `{ ${fullCommand}\n}`}`;
           }
 
           if (options?.background) {
-            fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+            fullCommand = `nohup sh -c ${shellQuote(fullCommand)} > /dev/null 2>&1 &`;
           }
 
           const run = await sandbox.exec.command(fullCommand);
 
           return {
-            stdout: run.result || '',
+            stdout: run.stdout ?? run.result ?? '',
             stderr: run.stderr || '',
             exitCode: run.exitCode ?? 0,
             durationMs: Date.now() - startTime,
@@ -283,10 +358,15 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
       // Filesystem methods - Upstash Box has full filesystem support
       filesystem: {
         readFile: async (sandbox: UpstashSandboxInstance, path: string): Promise<string> => {
-          return await sandbox.files.read(resolvePath(sandbox, path));
+          return await readFileNative(sandbox, resolvePath(sandbox, path));
         },
 
         writeFile: async (sandbox: UpstashSandboxInstance, path: string, content: string): Promise<void> => {
+          const data = Buffer.from(content, 'utf8');
+          if (data.length > FILE_CHUNK_BYTES) {
+            await writeFileChunked(sandbox, resolvePath(sandbox, path), data);
+            return;
+          }
           await sandbox.files.write({ path: resolvePath(sandbox, path), content });
         },
 
@@ -308,7 +388,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         exists: async (sandbox: UpstashSandboxInstance, path: string): Promise<boolean> => {
           try {
             const run = await sandbox.exec.command(`test -e "${escapeShellArg(resolvePath(sandbox, path))}" && echo "exists" || echo "not_found"`);
-            return (run.result || '').trim() === 'exists';
+            return (run.stdout ?? run.result ?? '').trim() === 'exists';
           } catch {
             return false;
           }
@@ -319,6 +399,24 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         },
       },
 
+      // Native pause releases compute; a paused box also resumes on its next exec or file call.
+      pause: async (sandbox: UpstashSandboxInstance): Promise<void> => {
+        if (isEphemeralSandboxInstance(sandbox)) {
+          throw new Error('Ephemeral Upstash boxes cannot be paused. Create the box with ephemeral: false.');
+        }
+        await sandbox.pause();
+      },
+
+      resume: async (sandbox: UpstashSandboxInstance): Promise<void> => {
+        if (isEphemeralSandboxInstance(sandbox)) {
+          throw new Error('Ephemeral Upstash boxes cannot be paused or resumed. Create the box with ephemeral: false.');
+        }
+        await sandbox.resume();
+      },
+
+      // Files survive except on tmpfs mounts (/var/tmp, /var/cache, /var/log, /root, /run, /dev/shm); running processes do not.
+      pauseCapabilities: { memory: false, createOptions: { ephemeral: false } },
+
       // Provider-specific typed getInstance method
       getInstance: (sandbox: UpstashSandboxInstance): UpstashSandboxInstance => {
         return sandbox;
@@ -326,6 +424,9 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
     },
 
     snapshot: {
+      // Restores keep the root filesystem, except tmpfs mounts (/var/tmp, /var/cache, /var/log, /root, /run, /dev/shm).
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
+
       create: async (config: UpstashConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = config.apiKey || process.env.UPSTASH_BOX_API_KEY!;
 
@@ -355,10 +456,12 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         return [];
       },
 
-      delete: async (_config: UpstashConfig, _snapshotId: string) => {
-        throw new Error(
-          'Upstash snapshot deletion requires a box context. Use sandbox.getInstance().deleteSnapshot(snapshotId) instead.'
-        );
+      delete: async (config: UpstashConfig, snapshotId: string) => {
+        const apiKey = config.apiKey || process.env.UPSTASH_BOX_API_KEY!;
+        const result = await Box.deleteSnapshots({ apiKey, snapshotIds: [snapshotId] });
+        if (result && typeof result === 'object' && 'failed' in result && Number((result as any).failed) > 0) {
+          throw new Error(`Failed to delete Upstash snapshot ${snapshotId}`);
+        }
       },
     },
 

@@ -1,5 +1,34 @@
 # @computesdk/buddy
 
+## 1.0.22
+
+### Patch Changes
+
+- e6d322d: Make directory creation idempotent only for verified existing directories, preserve parent-directory errors when writing files, and resolve symlinks before native downloads so reads return the target contents before and after snapshots.
+
+## 1.0.21
+
+### Patch Changes
+
+- 1904e82: Sandboxes expose `pause()`/`resume()`, which stop the sandbox and start the same one again with its disk kept (except `/tmp`, cleared on boot; processes are not kept). `buddy.sandbox.pause` declares `{ memory: false }` and `buddy.snapshot.capabilities` declares root-filesystem snapshots that leave the source running. `getInstance().stop()`/`start()` keep working.
+- 1904e82: Expose `stop()` and `start()` on the sandbox handle returned by `getInstance()`, so a Buddy sandbox can be stopped and started again under the same id with its disk preserved.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.0.20
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 1.0.19
 
 ### Patch Changes

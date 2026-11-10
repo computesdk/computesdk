@@ -15,6 +15,7 @@ export type {
   StartProcessOptions,
   ProcessStatus,
   ProcessHandle,
+  ProcessTier,
   InstanceFileSystem,
   CreateInstanceOptions,
   Volume,
@@ -26,6 +27,9 @@ export type {
   InstanceEgressInfo,
   RunloopLaunchParameters,
   VercelSandboxResources,
+  SnapshotCapabilities,
+  PauseCapabilities,
+  LifetimeCapabilities,
 } from 'computesdk';
 
 // Deprecated Sandbox* aliases for backwards compatibility

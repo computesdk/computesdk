@@ -1,5 +1,31 @@
 # @computesdk/sprites
 
+## 0.1.34
+
+### Patch Changes
+
+- 1904e82: Sprites: pass env/cwd through the exec API's native `env`/`dir` fields (env now reaches every part of a compound command, values kept verbatim), parse the exec response's stdout/stderr/exit frames instead of stripping control characters, stream `onStdout`/`onStderr` natively from those frames, and read `sprites[]` with pagination in `list()`.
+
+  `runCommand(..., { background: true })` now launches through the shell process tier and returns once the command starts, instead of waiting for it to exit.
+
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.33
+
+### Patch Changes
+
+- b63030e: fix(sprites): suffix the default sandbox name with a uuid so concurrent `sandbox.create()` calls no longer collide — `sprite-${Date.now()}` produced identical names within the same millisecond and the API returned 409 "already exists"
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.1.32
 
 ### Patch Changes

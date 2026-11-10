@@ -169,7 +169,7 @@ function toInstance(vm: FirecrabVm, apiUrl: string, config: Ec2FirecrabConfig, p
   return {
     vm,
     apiUrl,
-    sshUser: config.sshUser ?? process.env.EC2_FIRECRAB_SSH_USER ?? 'root',
+    sshUser: config.sshUser || process.env.EC2_FIRECRAB_SSH_USER || 'root',
     sshProxyCommand: proxyCommand,
     timeoutMs: config.timeout ?? DEFAULT_TIMEOUT_MS,
   };
@@ -265,6 +265,10 @@ async function waitForRunning(apiUrl: string, id: string, bootTimeoutMs: number)
     }
     await new Promise((resolve) => setTimeout(resolve, BOOT_POLL_INTERVAL_MS));
   }
+}
+
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
 async function execViaSsh(
@@ -419,7 +423,9 @@ const _ec2Firecrab = defineProvider<Ec2FirecrabInstance, Ec2FirecrabConfig, neve
         // config.sshProxyCommand (host-as-jumphost). Upgrades to
         // computesdk-runtime HTTP exec once guest injection lands.
         if (options?.background) {
-          throw new Error('ec2-firecrab runCommand does not support background mode yet');
+          // Detach fully so the ssh session closes right away.
+          const detached = `nohup sh -c ${shellQuote(command)} >/dev/null 2>&1 </dev/null &`;
+          return execViaSsh(instance, detached, { ...options, background: false });
         }
         return execViaSsh(instance, command, options);
       },

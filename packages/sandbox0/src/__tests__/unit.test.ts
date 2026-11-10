@@ -101,7 +101,8 @@ function makeSandbox() {
       };
     }),
     deleteContext: vi.fn().mockResolvedValue(undefined),
-    readFile: vi.fn().mockResolvedValue(new TextEncoder().encode('file-content')),
+    readFile: vi.fn().mockImplementation(async (path: string) =>
+      new TextEncoder().encode(guestFiles.get(path) ?? 'file-content')),
     writeFile: vi.fn().mockResolvedValue(undefined),
     mkdir: vi.fn().mockResolvedValue(undefined),
     listFiles: vi.fn().mockResolvedValue([
@@ -187,6 +188,16 @@ describe('sandbox0 provider', () => {
     }
   });
 
+  it('maps the unified timeout onto the claim TTLs', async () => {
+    const provider = sandbox0({ token: 's0_test', ttl: 30, hardTtl: 300 });
+
+    await provider.sandbox.create({ templateId: 'node', timeout: 21_900_500 });
+
+    expect(claimMock).toHaveBeenLastCalledWith('node', {
+      config: { ttl: 21_901, hardTtl: 21_901 },
+    });
+  });
+
   it('maps create options to the official Sandbox0 SDK', async () => {
     const provider = sandbox0({
       token: 's0_test',
@@ -251,6 +262,36 @@ describe('sandbox0 provider', () => {
     expect(nativeSandbox.getContext).toHaveBeenCalledWith('ctx_123');
     expect(result).toMatchObject({ stdout: 'ok\n', stderr: '', exitCode: 0 });
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reads captured output over the file API in one round trip', async () => {
+    nativeSandbox.canned.out = 'out\n';
+    nativeSandbox.canned.err = 'err\n';
+    nativeSandbox.canned.code = '3';
+    const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+
+    const result = await sandbox.runCommand('echo out; echo err >&2; exit 3');
+
+    expect(result).toMatchObject({ stdout: 'out\n', stderr: 'err\n', exitCode: 3 });
+    const scripts = nativeSandbox.cmd.mock.calls.map((c) => c[0] as string);
+    expect(scripts.filter((script) => script.startsWith('cat '))).toHaveLength(0);
+    expect(nativeSandbox.readFile).toHaveBeenCalledWith(expect.stringMatching(/\.out$/));
+    expect(nativeSandbox.readFile).toHaveBeenCalledWith(expect.stringMatching(/\.code$/));
+  });
+
+  it('falls back to verified command reads when the file API is short', async () => {
+    nativeSandbox.canned.out = 'full output\n';
+    nativeSandbox.readFile.mockImplementation(async (path: string) =>
+      new TextEncoder().encode(
+        path.endsWith('.out') ? 'full' : (nativeSandbox.guestFiles.get(path) ?? ''),
+      ));
+    const sandbox = await sandbox0({ token: 's0_test' }).sandbox.create();
+
+    const result = await sandbox.runCommand('echo full output');
+
+    expect(result).toMatchObject({ stdout: 'full output\n', exitCode: 0 });
+    const scripts = nativeSandbox.cmd.mock.calls.map((c) => c[0] as string);
+    expect(scripts.some((script) => script.startsWith('cat '))).toBe(true);
   });
 
   it('still completes when the final Context lookup fails', async () => {

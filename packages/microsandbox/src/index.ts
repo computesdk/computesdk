@@ -47,7 +47,7 @@ export interface MicrosandboxConfig {
    * installed on the calling machine.
    */
   backend?: 'cloud' | 'local';
-  /** Cloud API key. Falls back to the microsandbox SDK's `MSB_API_KEY` resolution. */
+  /** Cloud API key. Falls back to `MSB_API_KEY` (and `MSB_API_URL`). */
   apiKey?: string;
   /** Hosted API endpoint override. Requires `apiKey`. */
   apiUrl?: string;
@@ -103,6 +103,7 @@ export interface MicrosandboxSnapshot {
 
 interface RecoveredConfig {
   labels?: Record<string, string>;
+  lifecycle?: { ephemeral?: boolean };
   network?: {
     ports?: Array<{
       host?: number;
@@ -218,7 +219,18 @@ function selectBackend(config: MicrosandboxConfig): BackendSelection {
     };
   }
 
-  // Let the SDK resolve MSB_API_KEY, MSB_PROFILE, or the active profile, then
+  // The SDK only reads MSB_API_KEY under MSB_BACKEND=cloud; on its own the key
+  // would leave the SDK on its local default, so install it explicitly.
+  const envApiKey = process.env.MSB_API_KEY;
+  if (envApiKey && !process.env.MSB_BACKEND && !process.env.MSB_PROFILE) {
+    const envApiUrl = process.env.MSB_API_URL;
+    return {
+      kind,
+      override: { kind: 'cloud', apiKey: envApiKey, ...(envApiUrl ? { url: envApiUrl } : {}) },
+    };
+  }
+
+  // Let the SDK resolve MSB_BACKEND, MSB_PROFILE, or the active profile, then
   // enforce cloud so an unconfigured machine does not silently fall back local.
   return { kind };
 }
@@ -364,7 +376,7 @@ async function connectedSandbox(sandbox: MicrosandboxSandbox): Promise<NativeSan
 
 function mapStatus(status: string): InstanceInfo['status'] {
   if (status === 'running' || status === 'draining') return 'running';
-  if (status === 'stopped') return 'stopped';
+  if (status === 'stopped' || status === 'paused') return 'stopped';
   return 'error';
 }
 
@@ -456,7 +468,7 @@ function detachedStatusScript(paths: DetachedPaths): string {
     `test -f ${paths.code} && exit 0;` +
     ` test -f ${paths.pid} || exit 3;` +
     ` P=$(cat ${paths.pid});` +
-    ` [ -n "$P" ] && ! kill -0 "$P" 2>/dev/null && exit 2;` +
+    ` [ -n "$P" ] && ! kill -0 "$P" 2>/dev/null && { test -f ${paths.code} && exit 0; exit 2; };` +
     ` exit 1`
   );
 }
@@ -479,6 +491,33 @@ function detachedKillScript(paths: DetachedPaths): string {
 
 function detachedCleanupScript(paths: DetachedPaths): string {
   return `rm -f ${paths.pid} ${paths.out} ${paths.err} ${paths.outLen} ${paths.errLen} ${paths.code}`;
+}
+
+/** The cloud relay closes the channel on a single fs write of ~1 MiB, so
+ *  larger payloads are streamed in chunks well under that limit. */
+const FS_WRITE_CHUNK_BYTES = 256 * 1024;
+
+async function writeGuestFile(fs: ReturnType<NativeSandbox['fs']>, path: string, content: string): Promise<void> {
+  const data = Buffer.from(content);
+  if (data.byteLength <= FS_WRITE_CHUNK_BYTES) {
+    await fs.write(path, data);
+    return;
+  }
+  const sink = await fs.writeStream(path);
+  try {
+    for (let offset = 0; offset < data.byteLength; offset += FS_WRITE_CHUNK_BYTES) {
+      await sink.write(data.subarray(offset, offset + FS_WRITE_CHUNK_BYTES));
+    }
+  } finally {
+    await sink.close();
+  }
+}
+
+/** A one-shot read of a large file (~64 MiB) drops the relay channel; the
+ *  streamed read does not. */
+async function readGuestFileStreamed(fs: ReturnType<NativeSandbox['fs']>, path: string): Promise<string> {
+  const stream = await fs.readStream(path);
+  return new TextDecoder().decode(await stream.collect());
 }
 
 async function execShort(native: NativeSandbox, script: string) {
@@ -706,6 +745,17 @@ async function retry<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+async function retrySourceDisk<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!/snapshot_source_disk_unavailable/.test(errorMessage(error)) || attempt === 11) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+  }
+}
+
 async function removeSandbox(handle: NativeSandboxHandle): Promise<void> {
   if (handle.status !== 'stopped' && handle.status !== 'crashed') {
     await retry(() => handle.stopWithTimeout(10_000));
@@ -716,12 +766,13 @@ async function removeSandbox(handle: NativeSandboxHandle): Promise<void> {
 function snapshotFromNative(snapshot: {
   digest: string;
   name: string | null;
+  reference?: string;
   createdAt: Date;
   imageRef?: string;
   sizeBytes?: bigint | null;
 }, sandboxId?: string): MicrosandboxSnapshot {
   return {
-    id: snapshot.name ?? snapshot.digest,
+    id: snapshot.reference ?? snapshot.name ?? snapshot.digest,
     provider: PROVIDER,
     createdAt: snapshot.createdAt,
     metadata: {
@@ -731,6 +782,55 @@ function snapshotFromNative(snapshot: {
       ...(snapshot.sizeBytes != null ? { sizeBytes: snapshot.sizeBytes } : {}),
     },
   };
+}
+
+/**
+ * Disk restore keeps the snapshot's own config: the restore builder takes no
+ * image, labels, envs or workdir, so only host-side settings apply here.
+ */
+async function restoreFromSnapshot(
+  sdk: MicrosandboxModule,
+  config: MicrosandboxConfig,
+  options: CreateInstanceOptions,
+  snapshotId: string,
+  name: string,
+  timeoutMs: number,
+  ports: MicrosandboxPort[],
+): Promise<{ instance: MicrosandboxSandbox; instanceId: string }> {
+  const backendKind = sdk.defaultBackendKind();
+  let builder = sdk.Sandbox.restore(snapshotId)
+    .name(name)
+    .idleTimeout(Math.max(1, Math.ceil(timeoutMs / 1000)));
+  try {
+    const snapshot = await (await sdk.Snapshot.get(snapshotId)).open();
+    // Full-scope snapshots carry memory/CPU state; request copy-on-write
+    // memory so the restore resumes the captured execution.
+    if (snapshot.scope === 'full') builder = builder.cowMemory();
+  } catch {
+    // Scope lookup failed (older backend or remote reference) — restore as-is.
+  }
+  if (config.networkEnabled === false) builder = builder.disableNetwork();
+  if (backendKind === 'local') {
+    for (const port of ports) {
+      builder = port.bind
+        ? builder.portBind(port.bind, port.host, port.guest)
+        : builder.port(port.host, port.guest);
+    }
+  }
+  const native = await builder.restore();
+  const sandbox: MicrosandboxSandbox = {
+    name,
+    backendKind: native.backendKind,
+    sandbox: native,
+    handle: null,
+    createdAt: new Date(),
+    timeoutMs,
+    metadata: options.metadata ?? {},
+    ports: new Map(ports.map((port) => [port.guest, port.host])),
+  };
+  sandboxBackends.set(sandbox, selectBackend(config));
+  sandboxPortBinds.set(sandbox, bindAddressesFor(ports));
+  return { instance: sandbox, instanceId: name };
 }
 
 const _microsandbox = defineProvider<
@@ -753,13 +853,11 @@ const _microsandbox = defineProvider<
         let builder = sdk.Sandbox.builder(name);
 
         if (options?.snapshotId) {
-          requireLocal(backendKind, 'disk snapshots');
-          builder = builder.fromSnapshot(options.snapshotId);
-        } else {
-          builder = builder.image(options?.image ?? options?.templateId ?? config.image ?? DEFAULT_IMAGE);
-          const rootDiskMib = options?.rootDiskMib ?? config.rootDiskMib;
-          if (rootDiskMib !== undefined) builder = builder.rootDisk(rootDiskMib);
+          return restoreFromSnapshot(sdk, config, options, options.snapshotId, name, timeoutMs, ports);
         }
+        builder = builder.image(options?.image ?? options?.templateId ?? config.image ?? DEFAULT_IMAGE);
+        const rootDiskMib = options?.rootDiskMib ?? config.rootDiskMib;
+        if (rootDiskMib !== undefined) builder = builder.rootDisk(rootDiskMib);
 
         builder = builder
           .cpus(cpusFor(config, options))
@@ -942,13 +1040,24 @@ const _microsandbox = defineProvider<
 
       getInstance: (sandbox) => sandbox,
 
+      // Resident VM suspend; the cloud backend rejects it as unsupported.
+      pause: async (sandbox) => {
+        requireLocal(sandbox.backendKind, 'pause/resume');
+        await (await nativeHandle(sandbox)).pause();
+      },
+      resume: async (sandbox) => {
+        requireLocal(sandbox.backendKind, 'pause/resume');
+        await (await nativeHandle(sandbox)).resume();
+      },
+      pauseCapabilities: { memory: true },
+
       filesystem: {
-        readFile: async (sandbox, path) => (await connectedSandbox(sandbox)).fs().readToString(path),
+        readFile: async (sandbox, path) => readGuestFileStreamed((await connectedSandbox(sandbox)).fs(), path),
         writeFile: async (sandbox, path, content) => {
           const fs = (await connectedSandbox(sandbox)).fs();
           const parent = posixPath.dirname(path);
           if (parent !== '.' && parent !== '/' && !(await fs.exists(parent))) await fs.mkdir(parent);
-          await fs.write(path, content);
+          await writeGuestFile(fs, path, content);
         },
         mkdir: async (sandbox, path) => (await connectedSandbox(sandbox)).fs().mkdir(path),
         readdir: async (sandbox, path): Promise<FileEntry[]> => {
@@ -971,27 +1080,88 @@ const _microsandbox = defineProvider<
     },
 
     snapshot: {
+      // A live full-scope capture is tried first (source keeps running,
+      // memory checkpointed); where the backend rejects it we fall back to
+      // stopping the source for a disk-only capture, so files survive but
+      // processes do not. Declared capabilities stay on the conservative
+      // disk-only contract; a live capture leaves the source untouched.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false, createOptions: { ephemeral: false } },
+
       create: async (config, sandboxId, options?: CreateSnapshotOptions) => withBackend(selectBackend(config), async (sdk) => {
-        requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const handle = await sdk.Sandbox.get(sandboxId);
         const wasRunning = handle.status === 'running' || handle.status === 'draining';
-        if (wasRunning) await retry(() => handle.stopWithTimeout(10_000));
 
         const name = options?.name ?? `csdk-snapshot-${Date.now().toString(36)}`;
-        let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId);
         const labels = {
           [SNAPSHOT_LABEL_MARKER]: 'true',
           [SNAPSHOT_LABEL_SANDBOX]: sandboxId,
           ...encodeMetadata(options?.metadata ?? {}),
         };
-        for (const [key, value] of Object.entries(labels)) {
-          builder = builder.label(key, value);
+
+        // Prefer a live full-scope capture: the guest flushes writes itself,
+        // memory and processes are checkpointed, and the source keeps running.
+        // scope: 'full' requires it (errors propagate); the default auto mode
+        // falls back to the disk-only path only when the backend reports the
+        // live capture unsupported; scope: 'disk' skips it entirely.
+        if (wasRunning && options?.scope !== 'disk') {
+          try {
+            let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId).full().guestFlush('auto');
+            for (const [key, value] of Object.entries(labels)) {
+              builder = builder.label(key, value);
+            }
+            const snapshot = await builder.create();
+            return {
+              id: snapshot.reference ?? name,
+              provider: PROVIDER,
+              createdAt: new Date(snapshot.createdAt ?? Date.now()),
+              metadata: {
+                name,
+                sandboxId,
+                ...(snapshot.scope ? { scope: snapshot.scope } : {}),
+                ...(snapshot.imageRef ? { imageRef: snapshot.imageRef } : {}),
+                ...(snapshot.sizeBytes != null ? { sizeBytes: snapshot.sizeBytes } : {}),
+                labels: Object.fromEntries(snapshot.labels ?? []),
+              },
+            };
+          } catch (liveError) {
+            // Only fall back when the backend says the operation is
+            // unsupported — a transient failure must not silently stop a
+            // live source for a disk-only capture instead.
+            const code = (liveError as { code?: string }).code;
+            const unsupported =
+              code === 'unsupported' ||
+              code === 'unsupportedOperation' ||
+              /unsupported|not supported|unimplemented/i.test(errorMessage(liveError));
+            if (!unsupported || options?.scope === 'full') throw liveError;
+          }
         }
 
+        // Snapshots need a stopped sandbox, and stopping an ephemeral one removes it.
+        if (wasRunning && (handle.config() as RecoveredConfig).lifecycle?.ephemeral) {
+          throw new Error(
+            `Microsandbox sandbox ${sandboxId} is ephemeral and would be removed by the stop a snapshot requires. ` +
+            `Create it with ephemeral: false to snapshot it.`,
+          );
+        }
+        if (wasRunning) {
+          await retry(() => handle.stopWithTimeout(10_000));
+          // Cloud reports the source disk unavailable until the stop settles.
+          await handle.waitUntilStopped();
+        }
+
+        // A builder is single-use, so each capture attempt builds its own.
+        const capture = () => {
+          let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId);
+          for (const [key, value] of Object.entries(labels)) {
+            builder = builder.label(key, value);
+          }
+          return builder.create();
+        };
+
         let snapshotError: unknown;
-        let snapshot: Awaited<ReturnType<typeof builder.create>> | undefined;
+        let snapshot: Awaited<ReturnType<typeof capture>> | undefined;
         try {
-          snapshot = await builder.create();
+          snapshot = await retrySourceDisk(capture);
         } catch (error) {
           snapshotError = error;
         }
@@ -1010,10 +1180,9 @@ const _microsandbox = defineProvider<
         if (snapshotError) throw snapshotError;
 
         return {
-          // ComputeSDK feeds this id back to create({ snapshotId }). The SDK's
-          // restore builder resolves snapshot names and paths, so return the
-          // stable name rather than the content digest used by its index.
-          id: name,
+          // ComputeSDK feeds this id back to create({ snapshotId }); cloud
+          // restores resolve only the snapshot reference, never its name.
+          id: snapshot?.reference ?? name,
           provider: PROVIDER,
           createdAt: new Date(snapshot?.createdAt ?? Date.now()),
           metadata: {
@@ -1027,10 +1196,9 @@ const _microsandbox = defineProvider<
       }),
 
       list: async (config, options?: ListSnapshotsOptions) => withBackend(selectBackend(config), async (sdk) => {
-        requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const snapshots: MicrosandboxSnapshot[] = [];
         for (const handle of await sdk.Snapshot.list()) {
-          const live = await sdk.Snapshot.get(handle.digest);
+          const live = await sdk.Snapshot.get(sdk.defaultBackendKind() === 'cloud' ? handle.reference : handle.digest);
           const snapshot = await live.open();
           const labels = Object.fromEntries(snapshot.labels);
           if (labels[SNAPSHOT_LABEL_MARKER] !== 'true') continue;
@@ -1049,7 +1217,6 @@ const _microsandbox = defineProvider<
       }),
 
       delete: async (config, snapshotId) => withBackend(selectBackend(config), async (sdk) => {
-        requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         await sdk.Snapshot.remove(snapshotId);
       }),
     },

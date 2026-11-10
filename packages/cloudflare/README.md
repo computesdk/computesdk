@@ -10,20 +10,22 @@ npm install @computesdk/cloudflare
 
 ## Setup
 
-Deploy the Cloudflare sandbox demo Worker from the Cloudflare Containers demos repository:
-
-https://github.com/cloudflare/containers-demos/tree/main/sandbox
-
-Configure the sandbox demo Worker with an API key secret:
+Deploy the bridge Worker in [`worker/`](./worker). It needs a Cloudflare account on the Workers Paid plan and Docker running locally; `wrangler deploy` builds the container images and pushes them to Cloudflare's registry.
 
 ```bash
+git clone https://github.com/computesdk/computesdk.git
+cd computesdk/packages/cloudflare/worker
+npm ci
+npx wrangler login
+openssl rand -hex 32   # use the output as the API key
 npx wrangler secret put SANDBOX_API_KEY
+npx wrangler deploy
 ```
 
 Then configure your application with the deployed Worker URL and the same API key:
 
 ```bash
-CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
+CLOUDFLARE_SANDBOX_URL=https://computesdk-sandbox.<your-subdomain>.workers.dev
 CLOUDFLARE_SANDBOX_API_KEY=<same value as SANDBOX_API_KEY>
 ```
 
@@ -34,6 +36,16 @@ npx @computesdk/cloudflare
 ```
 
 to print these setup instructions.
+
+A Worker deployed from the [Cloudflare sandbox demo](https://github.com/cloudflare/containers-demos/tree/main/sandbox) keeps working for commands and files. The adapter checks `GET /v1/info` and uses the bridge's native file transfer, preview URLs and snapshots only when the Worker lists them.
+
+### Preview URLs
+
+With the bridge Worker, `sandbox.getUrl({ port })` returns `<sandboxUrl>/v1/sandbox/<id>/ports/<port>/`, which forwards HTTP and WebSocket requests to that port. The server must listen on `0.0.0.0`. Preview URLs need no API key: anyone with the URL can reach the port.
+
+### Snapshots
+
+With the bridge Worker, `compute.snapshot.create(sandboxId)` saves the sandbox's filesystem and `compute.instances.create({ snapshotId })` starts a new sandbox from it. Snapshots keep files only, not memory or running processes. Cloudflare keeps snapshot data for 30 days after its creation or last restore; `snapshot.delete` removes the handle from the bridge.
 
 ## Quick Start
 
@@ -134,7 +146,7 @@ const sandbox = await compute.instances.create({
 | `vcpu`      | vCPUs of a [custom instance type](https://developers.cloudflare.com/containers/platform/limits/#custom-instance-types) |
 | `memoryMib` | Memory of the custom instance type, in MiB                                                                               |
 | `diskMb`    | Disk of the custom instance type, in MB                                                                                  |
-| `image`     | Name of an image declared by the sandbox demo Worker. `builder` has Node.js 24 and common build tools.                   |
+| `image`     | Name of an image declared by the Worker. `builder` has Node.js 24 and common build tools.                                |
 
 Set `vcpu`, `memoryMib`, and `diskMb` together. Without them, the sandbox uses the Worker's default instance type. Without `image`, it uses the Worker's default image.
 
@@ -142,13 +154,13 @@ Set `vcpu`, `memoryMib`, and `diskMb` together. Without them, the sandbox uses t
 
 ```typescript
 interface CloudflareConfig {
-  /** URL of the deployed sandbox demo Worker */
+  /** URL of the deployed bridge Worker (or sandbox demo Worker) */
   sandboxUrl?: string;
   /** API key that matches the Worker's SANDBOX_API_KEY secret */
   sandboxApiKey?: string;
   /** Deprecated compatibility alias for sandboxApiKey */
   sandboxSecret?: string;
-  /** Durable Object binding to the sandbox demo Worker's Sandbox class (direct mode only) */
+  /** Durable Object binding to the Worker's Sandbox class (direct mode only) */
   sandboxBinding?: any;
   /** Execution timeout in milliseconds (default 30,000; maximum 900,000) */
   timeout?: number;
@@ -159,7 +171,7 @@ interface CloudflareConfig {
 
 ## Direct Mode
 
-If your code already runs inside a Cloudflare Worker, bind directly to the `Sandbox` Durable Object exported by the sandbox demo Worker:
+If your code already runs inside a Cloudflare Worker, bind directly to the `Sandbox` Durable Object exported by the Worker:
 
 ```jsonc
 {
@@ -198,7 +210,7 @@ if (result.exitCode !== 0) {
 
 - Resource limits apply based on your Cloudflare plan
 - Some system calls may be restricted in the container environment
-- Port forwarding is not supported
+- Preview URLs and snapshots need the bridge Worker, and are not available in direct mode
 - Listing all sandboxes is not supported — use `getById` to reconnect to a specific sandbox ID.
 
 ## License

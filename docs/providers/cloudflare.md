@@ -39,7 +39,9 @@ npm install @computesdk/cloudflare
 
 ## Setup
 
-To use the Cloudflare provider in remote mode, deploy the Cloudflare sandbox demo Worker once and connect to it over HTTP.
+Remote mode uses the bridge Worker shipped in `packages/cloudflare/worker`.
+It requires a Workers Paid account and Docker to build the container images.
+See the [Worker source](../../packages/cloudflare/worker) for deployment configuration.
 
 You can print these setup instructions at any time by running:
 
@@ -49,13 +51,14 @@ npx @computesdk/cloudflare
 
 > **Note:** This command only prints instructions — it does not deploy anything and does not require Docker.
 
-### Step 1: Deploy the sandbox demo Worker
+### Step 1: Deploy the bridge Worker
 
-Follow the deployment instructions for the [sandbox demo Worker](https://github.com/cloudflare/containers-demos/tree/main/sandbox).
+From a checkout, enter `packages/cloudflare/worker`, run `npm ci`, authenticate
+with `npx wrangler login`, set the secret below, then run `npx wrangler deploy`.
 
 ### Step 2: Set the Worker's API key secret
 
-From the sandbox demo Worker project, set the `SANDBOX_API_KEY` secret:
+From the bridge Worker project, set a strong generated `SANDBOX_API_KEY` secret:
 
 ```bash
 npx wrangler secret put SANDBOX_API_KEY
@@ -71,6 +74,23 @@ CLOUDFLARE_SANDBOX_API_KEY=<same value as SANDBOX_API_KEY>
 ```
 
 These are the only env vars needed at runtime.
+
+### Snapshots and preview URLs
+
+The adapter checks the Worker's `GET /v1/info` feature list. The bridge supports
+native files, HTTP/WebSocket preview URLs, and filesystem snapshots; an older demo
+Worker remains usable for commands/files but does not gain these features automatically.
+
+`snapshot.create(instanceId)` captures the writable rootfs while keeping the
+container running. Restore with `instances.create({ snapshotId })`. Snapshots
+preserve files, not memory or processes. Data expires 30 days after creation or
+last restore; `snapshot.delete` removes the bridge's handle, not the underlying
+retained data. The adapter does not yet declare `snapshot.capabilities`, so do not
+infer unified memory/fork flags from method availability.
+
+`sandbox.getUrl({ port })` works with the bridge. The server must listen on
+`0.0.0.0`; preview URLs forward HTTP and WebSockets and are accessible to anyone
+with the URL, without an API key.
 
 ## Usage
 
@@ -206,5 +226,5 @@ const compute = cloudflare({
 
 * Resource limits apply based on your Cloudflare plan
 * Some system calls may be restricted in the container environment
-* Port forwarding is not supported
+* Preview URLs require the bridge Worker's advertised port support; older demo Workers do not support them
 * Listing all sandboxes is not supported — use `getById` to reconnect to a specific sandbox

@@ -1,5 +1,27 @@
 # @computesdk/quilt
 
+## 1.0.20
+
+### Patch Changes
+
+- 1904e82: Route the Quilt unit-test fetch mocks by request so the framework's own exec calls don't consume them.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.0.19
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 1.0.18
 
 ### Patch Changes

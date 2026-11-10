@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/platform",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Hosted ComputeSDK platform provider - sandboxes on your org's providers or the compute market, with market placement, credits, quotes and one bill",
   "author": "ComputeSDK",
   "license": "MIT",
@@ -31,7 +31,7 @@
     "@computesdk/provider": "workspace:*"
   },
   "peerDependencies": {
-    "@benchsdk/cli": "^0.7.1"
+    "@benchsdk/cli": "^0.9.3"
   },
   "peerDependenciesMeta": {
     "@benchsdk/cli": {

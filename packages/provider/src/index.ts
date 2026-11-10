@@ -70,5 +70,25 @@ export {
 } from './stream-process';
 export type { StreamedProcess } from './stream-process';
 
+// Export the shell process tier (the default background-process runtime)
+export {
+  startShellProcess,
+  attachShellProcess,
+  runCommandViaShell,
+  readShellJob,
+  parseFramedLog,
+  ShellProcessUnsupportedError,
+  ShellStateNotPersistentError,
+  ShellProcessRuntime,
+} from './shell-process';
+export type { CommandRunner, ShellProcessHandle, ShellProcessOptions, ShellJobRead, ShellLogRecord } from './shell-process';
+export { ShellFileSystem } from './shell-filesystem';
+export { SHELL_TIER_TOOLS } from './shell-scripts';
+
 // Export all types
 export type * from './types';
+
+export { createInstanceSizeManager } from './sizes';
+export type { InstanceSizeResolver, InstanceSizeSupport } from './sizes';
+export { InstanceSizeError, INSTANCE_SIZE_PROFILES, isInstanceSizeManager } from 'computesdk';
+export type { InstanceSizeClass, InstanceSizeProfile, InstanceSizeManager, InstanceSizeResolution, InstanceSizeMetadata, InstanceSizeStatus, InstanceSizeErrorCode, InstanceSizeNativeOptions, InstanceSizeNativeValue } from 'computesdk';

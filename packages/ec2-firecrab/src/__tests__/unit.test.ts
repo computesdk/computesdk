@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { ec2Firecrab } from '../index';
 
 const mocks = vi.hoisted(() => ({ runSshCommand: vi.fn() }));
@@ -16,12 +17,28 @@ describe('ec2Firecrab', () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
+    // Live-run credentials in the environment must not leak into mock tests.
+    for (const name of [
+      'EC2_FIRECRAB_API_URL',
+      'EC2_FIRECRAB_SSH_TARGET',
+      'EC2_FIRECRAB_SSH_TARGETS',
+      'EC2_FIRECRAB_SSH_KEY',
+      'EC2_FIRECRAB_SSH_KEY_PATH',
+      'EC2_FIRECRAB_SSH_PROXY_COMMAND',
+      'EC2_FIRECRAB_SSH_USER',
+      'EC2_FIRECRAB_MICRO_NETWORK',
+      'EC2_FIRECRAB_MICRO_NETWORK_ID',
+      'EC2_FIRECRAB_TEMPLATE',
+    ]) {
+      vi.stubEnv(name, '');
+    }
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it('creates a provider factory named ec2-firecrab', () => {
@@ -115,5 +132,24 @@ describe('ec2Firecrab', () => {
     });
     const all = await provider.instances.list();
     expect(all.map((i: any) => i.instanceId).sort()).toEqual(['vm-a', 'vm-b']);
+  });
+  it('accepts a base64-encoded host PEM (vault form) for sshIdentityPem', async () => {
+    const pem = '-----BEGIN OPENSSH PRIVATE KEY-----\nB64TEST\n-----END OPENSSH PRIVATE KEY-----\n';
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse([])) // tunnel probe
+      .mockResolvedValueOnce(
+        jsonResponse({ id: 'vm-3', name: 'csdk-fc-z', state: 'running', ipv4: '10.0.0.9' }),
+      ); // getVm
+
+    const provider = ec2Firecrab({
+      microNetworkId: 'net-1',
+      sshTarget: 'ubuntu@host-b64',
+      sshIdentityPem: Buffer.from(pem).toString('base64'),
+    });
+    const found = await provider.instances.getById('vm-3');
+    const proxy: string = (found as any).instance.sshProxyCommand;
+    const keyPath = /-i '([^']+)'/.exec(proxy)?.[1];
+    expect(keyPath).toBeTruthy();
+    expect(readFileSync(keyPath!, 'utf8')).toBe(pem);
   });
 });

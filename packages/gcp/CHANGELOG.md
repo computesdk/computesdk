@@ -1,5 +1,44 @@
 # @computesdk/gcp
 
+## 0.1.12
+
+### Patch Changes
+
+- e6d322d: Fix Cloud Run gateway snapshot listing and deletion to use the documented default service-account token metadata endpoint instead of a nonexistent path.
+
+  Attempt bounded cleanup of failed and timed-out stateful creates/restores only for gateway-allocated IDs, preserving the original error and leaving caller-supplied IDs untouched. SDK auto-create delegates ID allocation to the gateway so it can establish cleanup ownership. Redeploy the gateway to apply these fixes.
+
+## 0.1.11
+
+### Patch Changes
+
+- c9718e9: Cloud Run: `sandbox.create()` accepts `allowEgress` and `executionMode` per sandbox, defaulting to the `cloudRun()` config.
+- c9718e9: Cloud Run: declare the rootfs snapshot capabilities proven against a deployed gateway. Setup reuses `CLOUD_RUN_SANDBOX_SECRET` when set, passes `CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS` through, routes traffic to the new revision, and builds the sandbox image with `git`, `python3`, `unzip`, `curl` and CA certificates, keeping apt package lists, running apt as root on root-owned apt dirs and adding a `sudo` shim, so root sandboxes can `apt-get install` more. The gateway no longer reaps a sandbox while a command is running, and `0` disables idle cleanup.
+- c9718e9: Cloud Run: support `sizeClass` (`xs` to `xl`) by routing each size to a gateway service deployed at that CPU and memory. Configure these with `sizeGateways` or `CLOUD_RUN_SANDBOX_URL_<SIZE>`, and deploy them with `CLOUD_RUN_SIZE=<size>` setup. The gateway reports its size in `/v1/health`. An unconfigured or mismatched size, or `2xl`, fails instead of running another size.
+
+## 0.1.10
+
+### Patch Changes
+
+- 1904e82: Cloud Run gateway: stateful sandboxes are real `sandbox run` sessions that exec and file calls reuse until destroy, with command exit codes preserved, in-sandbox deadlines, streamed exec output, rootfs snapshots (`sandbox tar` to GCS or the instance) with restore via `create({ snapshotId })`, fork, and idle cleanup. The provider adds `snapshot` methods (capabilities stay undeclared until proven against a deployed gateway), native streaming, session-affinity routing, and keeps working against older gateways. Setup can create a snapshot bucket and grant its IAM role.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.9
+
+### Patch Changes
+
+- fc62a65: fix(gcp/cloud-run): chunk writeFile payloads into a staging file so a single `/bin/sh -c` argument stays under the kernel's MAX_ARG_STRLEN (spawn E2BIG on files >~96KB)
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.1.8
 
 ### Patch Changes

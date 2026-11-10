@@ -1,5 +1,28 @@
 # @computesdk/isorun
 
+## 0.1.21
+
+### Patch Changes
+
+- 1904e82: Native pause/resume via Isorun hibernate (memory and processes survive), and declared snapshot capabilities (whole rootfs plus memory; the source keeps running).
+- 1904e82: Run commands detached and poll for completion so commands longer than Isorun's ~120s exec request cap finish (and `timeout` kills them), apply `env`/`cwd` to every part of a compound command, and move large files and command output in small verified chunks: multi-MiB downloads/exec bodies truncate and drop the sandbox console, and uploads above 4 MiB silently corrupt.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.20
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.1.19
 
 ### Patch Changes

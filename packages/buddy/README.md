@@ -193,7 +193,7 @@ The handle's `fs` and `client` call the API directly, without the provider's fir
 | `runCommand` | ✅        | One round trip via `exec` for plain calls; streams output as it arrives when callbacks are passed. Real exit codes either way. |
 | `getInfo`    | ✅        | Reports Buddy's own status and setup status, plus every tunnel, in `metadata`.                 |
 | `getUrl`     | ✅        | Opens a tunnel if the port has none yet, keeping the existing ones.                           |
-| `filesystem` | ✅        | Uses Buddy's native content endpoints, not the shell — no quoting or size limits of a command line, one round trip each. |
+| `filesystem` | ✅        | Transfers file contents through Buddy's native endpoints, without command-line content limits. Reads first resolve symlinks with a native command; existing directories are accepted only after verifying their type. |
 | `snapshot`   | ✅        | `create` / `list` / `delete`; `create` waits until the snapshot is restorable.                 |
 | `template`   | ⚠️        | No template entity in Buddy — `list`/`delete` alias snapshots, `create` throws with a hint.    |
 

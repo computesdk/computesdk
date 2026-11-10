@@ -1,5 +1,27 @@
 # @computesdk/lelantos
 
+## 0.2.20
+
+### Patch Changes
+
+- 1904e82: Surface the underlying network error (e.g. `ECONNREFUSED`) instead of a bare `fetch failed` when sandbox creation or a command cannot reach the Lelantos control plane.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.2.19
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.2.18
 
 ### Patch Changes

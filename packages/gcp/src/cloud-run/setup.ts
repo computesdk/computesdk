@@ -7,6 +7,20 @@ import { randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
+/** Sandboxes already run as root and cannot switch users: drop sudo's options and run the command. */
+const SUDO_SHIM = `#!/bin/sh
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -u|-g|-C|-D|-h|-p|-r|-t|-U|-T) shift 2 ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+[ $# -eq 0 ] && exit 0
+exec env "$@"
+`
+
 function loadEnvFile(filePath: string) {
   if (!existsSync(filePath)) return
   const content = readFileSync(filePath, 'utf8')
@@ -37,10 +51,39 @@ function run(command: string, args: string[], options: { cwd?: string; input?: s
   })
 }
 
+/** Cloud Run instance shape per standard size; sandboxes share the instance's CPU and memory. */
+const SIZE_SHAPES = {
+  xs: { cpu: '1', memory: '1Gi' },
+  sm: { cpu: '1', memory: '2Gi' },
+  md: { cpu: '2', memory: '4Gi' },
+  lg: { cpu: '4', memory: '8Gi' },
+  xl: { cpu: '8', memory: '16Gi' },
+} as const
+type SetupSize = keyof typeof SIZE_SHAPES
+
 async function setup() {
+  // CLOUD_RUN_SIZE deploys a sized gateway (`computesdk-sandbox-<size>`) whose
+  // instances have that size's CPU/memory; the adapter routes sizeClass to it.
+  const size = process.env.CLOUD_RUN_SIZE as SetupSize | undefined
+  if (size && !Object.prototype.hasOwnProperty.call(SIZE_SHAPES, size)) {
+    console.error(`\n  Invalid CLOUD_RUN_SIZE=${size}; use one of ${Object.keys(SIZE_SHAPES).join(', ')} (Cloud Run instances top out at 8 vCPU).\n`)
+    process.exit(1)
+  }
+  const shape = size ? SIZE_SHAPES[size] : { cpu: '1', memory: '2Gi' }
   const projectId = process.env.CLOUD_RUN_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT ?? process.env.PROJECT_ID
   const region = process.env.CLOUD_RUN_REGION ?? process.env.GOOGLE_CLOUD_LOCATION ?? process.env.REGION
-  const serviceName = process.env.CLOUD_RUN_SERVICE_NAME ?? 'computesdk-sandbox'
+  const serviceName = process.env.CLOUD_RUN_SERVICE_NAME ?? (size ? `computesdk-sandbox-${size}` : 'computesdk-sandbox')
+  // Optional GCS bucket for `sandbox tar` snapshots; without it snapshots stay
+  // on the gateway instance that took them.
+  const snapshotBucket = process.env.CLOUD_RUN_SNAPSHOT_BUCKET?.replace(/^gs:\/\//, '').replace(/\/$/, '')
+  const serviceAccount = process.env.CLOUD_RUN_SERVICE_ACCOUNT
+  // Stateful sandboxes live on one instance and follow-up calls reach it via
+  // session affinity, which needs spare request slots on that instance.
+  const concurrency = process.env.CLOUD_RUN_CONCURRENCY ?? '20'
+  // A warm pool of large sized instances is expensive; sized gateways keep one warm by default.
+  const minInstances = process.env.CLOUD_RUN_MIN_INSTANCES ?? (size ? '1' : '100')
+  const maxInstances = process.env.CLOUD_RUN_MAX_INSTANCES ?? '100'
+  const idleTimeout = process.env.CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS
 
   console.log('\n  ComputeSDK Cloud Run Setup\n')
 
@@ -60,7 +103,9 @@ async function setup() {
     process.exit(1)
   }
 
-  const secret = randomBytes(32).toString('hex')
+  // Redeploying with the current secret keeps existing clients working.
+  const reusedSecret = process.env.CLOUD_RUN_SANDBOX_SECRET
+  const secret = reusedSecret || randomBytes(32).toString('hex')
   const distDir = dirname(realpathSync(fileURLToPath(import.meta.url)))
   const gatewayPath = join(distDir, 'gateway.mjs')
   const tmpDir = mkdtempSync(join(tmpdir(), 'computesdk-cloud-run-'))
@@ -69,14 +114,37 @@ async function setup() {
   try {
     copyFileSync(gatewayPath, join(tmpDir, 'gateway.mjs'))
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ type: 'module', scripts: { start: 'node gateway.mjs' } }, null, 2))
+    writeFileSync(join(tmpDir, 'sudo'), SUDO_SHIM)
     writeFileSync(join(tmpDir, 'Dockerfile'), [
       'FROM node:22-slim',
+      // Sandboxes run as root on this image's rootfs: ship common agent tools,
+      // and keep the apt lists so `apt-get install` works in writable sandboxes.
+      // The sandbox CLI also needs the system CAs (e.g. for gs:// snapshots).
+      'RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git python3 unzip',
+      // Sandbox root cannot switch users or bypass file permissions: apt must not drop
+      // to `_apt` and needs its `_apt`-owned dirs, and sudo just runs the command.
+      `RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99computesdk-sandbox`
+        + ' && mkdir -p /var/lib/apt/lists/auxfiles && chown -R root:root /var/cache/apt /var/lib/apt/lists',
+      'COPY sudo /usr/local/bin/sudo',
+      'RUN chmod 755 /usr/local/bin/sudo',
       'WORKDIR /app',
       'COPY package.json gateway.mjs ./',
       'ENV NODE_ENV=production',
       'CMD ["node", "gateway.mjs"]',
       '',
     ].join('\n'))
+
+    if (snapshotBucket) {
+      try {
+        run('gcloud', ['storage', 'buckets', 'describe', `gs://${snapshotBucket}`, '--project', projectId])
+      } catch {
+        console.log(`  Creating snapshot bucket gs://${snapshotBucket}...`)
+        run('gcloud', ['storage', 'buckets', 'create', `gs://${snapshotBucket}`, '--project', projectId, '--location', region, '--uniform-bucket-level-access'], { stdio: 'inherit' })
+      }
+      const member = serviceAccount ?? `${run('gcloud', ['projects', 'describe', projectId, '--format', 'value(projectNumber)']).trim()}-compute@developer.gserviceaccount.com`
+      console.log(`  Granting ${member} roles/storage.objectAdmin on gs://${snapshotBucket}...`)
+      run('gcloud', ['storage', 'buckets', 'add-iam-policy-binding', `gs://${snapshotBucket}`, '--member', `serviceAccount:${member}`, '--role', 'roles/storage.objectAdmin', '--project', projectId], { stdio: 'inherit' })
+    }
 
     console.log(`  Building gateway image ${image}...`)
     run('gcloud', ['builds', 'submit', '--tag', image, '--project', projectId], { cwd: tmpDir, stdio: 'inherit' })
@@ -89,16 +157,20 @@ async function setup() {
       '--project', projectId,
       '--sandbox-launcher',
       '--allow-unauthenticated',
-      '--cpu', '1',
-      '--memory', '2Gi',
-      '--concurrency', '1',
-      '--min-instances', '100',
-      '--max-instances', '100',
+      '--cpu', shape.cpu,
+      '--memory', shape.memory,
+      '--concurrency', concurrency,
+      '--min-instances', minInstances,
+      '--max-instances', maxInstances,
       '--session-affinity',
       '--cpu-boost',
       '--no-cpu-throttling',
-      '--set-env-vars', `SANDBOX_SECRET=${secret}`,
+      ...(serviceAccount ? ['--service-account', serviceAccount] : []),
+      '--set-env-vars', [`SANDBOX_SECRET=${secret}`, ...(snapshotBucket ? [`CLOUD_RUN_SNAPSHOT_BUCKET=${snapshotBucket}`] : []), ...(idleTimeout ? [`CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS=${idleTimeout}`] : []), ...(size ? [`CLOUD_RUN_SANDBOX_SIZE=${size}`] : [])].join(','),
     ], { stdio: 'inherit' })
+
+    // A pinned traffic split keeps serving the old revision after deploy.
+    run('gcloud', ['run', 'services', 'update-traffic', serviceName, '--to-latest', '--region', region, '--project', projectId], { stdio: 'inherit' })
 
     const serviceUrl = run('gcloud', [
       'run', 'services', 'describe', serviceName,
@@ -108,8 +180,9 @@ async function setup() {
     ]).trim()
 
     console.log('\n  Setup complete! Add these to your .env:\n')
-    console.log(`  CLOUD_RUN_SANDBOX_URL=${serviceUrl}`)
-    console.log(`  CLOUD_RUN_SANDBOX_SECRET=${secret}`)
+    const suffix = size ? `_${size.toUpperCase()}` : ''
+    console.log(`  CLOUD_RUN_SANDBOX_URL${suffix}=${serviceUrl}`)
+    console.log(reusedSecret ? '  CLOUD_RUN_SANDBOX_SECRET is unchanged' : `  CLOUD_RUN_SANDBOX_SECRET${suffix}=${secret}`)
     console.log('')
   } finally {
     rmSync(tmpDir, { recursive: true, force: true })

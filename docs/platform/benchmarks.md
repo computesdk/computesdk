@@ -79,6 +79,8 @@ Everything above is also reachable through the bench half of the CLI:
 ```bash
 compute bench benchmarks     # list
 compute bench runs           # list runs
+compute bench runs run-again <benchmark-slug> <runId> [--wait] [--timeout <seconds>]
+compute bench runs run-again-status <benchmark-slug> <runAgainId>
 compute bench results        # query results
 compute bench iterations     # per-iteration data
 compute bench artifacts      # download run artifacts
@@ -87,6 +89,8 @@ compute bench export         # export results
 compute bench run            # execute a run
 compute bench check          # validate a benchmark definition
 ```
+
+Run again always uses the latest code of the benchmark's linked workflow; `compute actions rerun <run-id>` repeats the exact commit. The API starts a Run again with `POST /api/v1/benchmarks/{benchmarkSlug}/runs/{runId}/run-again`, then polls `GET /api/v1/benchmarks/{benchmarkSlug}/run-again/{runAgainId}`; the POST returns 409 when Run again is turned off for that benchmark.
 
 `runs` and `results` take the same filters as the API:
 

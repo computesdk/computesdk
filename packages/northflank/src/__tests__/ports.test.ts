@@ -10,22 +10,17 @@ import '@computesdk/test-utils';
 
 import { describe, it, expect } from 'vitest';
 import { northflank } from '../index';
+import { liveConfig, skipLive } from './live-config';
 
 const SINGLE_PORT = 3000;
 const MULTI_PORT_1 = 4001;
 const MULTI_PORT_2 = 4002;
 const UNUSED_PORT = 9999;
 
-const skipTests = !process.env.NORTHFLANK_TOKEN || !process.env.NORTHFLANK_PROJECT_ID;
-const host = process.env.NORTHFLANK_API_URL;
+const skipTests = skipLive;
 
 function makeProvider(extra: Record<string, unknown> = {}) {
-  return northflank({
-    token: process.env.NORTHFLANK_TOKEN!,
-    projectId: process.env.NORTHFLANK_PROJECT_ID!,
-    ...(host ? { host } : {}),
-    ...extra,
-  });
+  return northflank(liveConfig(extra));
 }
 
 describe('Northflank Port Forwarding Integration Tests', () => {

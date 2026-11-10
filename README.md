@@ -79,6 +79,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 
 | Provider | Environment Variables | Use Cases |
 |----------|----------------------|-----------|
+| **Agent37** | `AGENT37_API_KEY` | Persistent agent sandboxes, signed port URLs, dedicated-core VMs |
 | **Archil** | `ARCHIL_API_KEY` | Disk-attached command execution |
 | **Arker** | `ARKER_API_KEY` | Sandboxed VMs with persistent filesystems, forked from golden images |
 | **AWS Bedrock AgentCore** | `AWS_REGION` + AWS SDK credential chain (or `profile` / `credentials`) | Managed Code Interpreter sessions, no infrastructure to provision |
@@ -86,6 +87,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
 | **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
 | **Brezel** | `BREZEL_API_KEY`, `BREZEL_API_URL`, `BREZEL_PROJECT_ID`, `BREZEL_ENVIRONMENT_REVISION` | Self-hosted Firecracker sandboxes |
+| **Briq** | `BRIQ_API_KEY` | Sandboxes on microVMs with streaming commands, files, previews and interactive processes |
 | **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
 | **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_API_KEY` | Edge computing |
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
@@ -113,6 +115,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
 | **Runtime** | `RUNTIME_API_KEY` | Firecracker microVM sandboxes with streaming, previews and snapshots |
 | **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
+| **sandbox-cli** | `SANDBOX_ENDPOINT`, `SANDBOX_TOKEN` | MicroVM sandboxes with their own kernel, one API on a Mac, a self-hosted Linux machine or the cloud |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
 | **Sandock** | `SANDOCK_API_KEY` | Docker-based sandboxes for AI agents, with streaming output, filesystem and preview URLs |
 | **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
@@ -303,18 +306,19 @@ await sandbox.destroy();
 Install the provider packages you need and pass their instances into `compute.setConfig`:
 
 ```bash
+npm install @computesdk/agent37          # Agent37 provider
 npm install @computesdk/archil           # Archil provider
 npm install @computesdk/aws              # AWS providers (@computesdk/aws/ec2, @computesdk/aws/agentcore)
 npm install @computesdk/beam             # Beam provider
 npm install @computesdk/blaxel           # Blaxel provider
 npm install @computesdk/brezel           # Brezel provider
+npm install @computesdk/briq            # Briq provider
 npm install @computesdk/buddy            # Buddy provider
 npm install @computesdk/gcp              # Google Cloud providers (Cloud Run: @computesdk/gcp/cloud-run)
 npm install @computesdk/cloudflare       # Cloudflare provider
 npm install @computesdk/codesandbox      # CodeSandbox provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/daytona          # Daytona provider
-npm install @computesdk/declaw           # Declaw provider
 npm install @computesdk/e2b              # E2B provider
 npm install @computesdk/ec2-firecrab     # Firecracker microVMs on self-hosted EC2
 npm install @computesdk/freestyle        # Freestyle provider
@@ -336,6 +340,7 @@ npm install @computesdk/run-cloud        # Run Cloud Firecracker sandbox provide
 npm install @computesdk/runloop          # Runloop provider
 npm install @computesdk/runtime          # Runtime provider
 npm install @computesdk/sail             # Sail provider
+npm install @computesdk/sandbox-cli      # sandbox-cli provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/sandock          # Sandock provider
 npm install @computesdk/superserve       # Superserve provider
@@ -355,18 +360,19 @@ const sandbox = await e2bCompute.sandbox.create();
 ```
 
 See individual provider READMEs for details:
+- **[@computesdk/agent37](./packages/agent37)** - Persistent agent sandboxes with signed URLs for any port, plus dedicated-core VMs
 - **[@computesdk/archil](./packages/archil)** - Disk-attached command-execution sandboxes
 - **[@computesdk/aws](./packages/aws)** - AWS providers; `@computesdk/aws/ec2`: on-demand or Spot EC2 instances, commands over SSM Run Command; `@computesdk/aws/agentcore`: Bedrock AgentCore Code Interpreter sessions
 - **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
 - **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
 - **[@computesdk/brezel](./packages/brezel)** - Self-hosted Firecracker sandboxes with immutable environments
+- **[@computesdk/briq](./packages/briq)** - Sandboxes on microVMs with streaming commands, files, previews and interactive processes
 - **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
 - **[@computesdk/gcp](./packages/gcp)** - Google Cloud providers: Cloud Run sandboxes via `@computesdk/gcp/cloud-run`
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
 - **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
-- **[@computesdk/declaw](./packages/declaw)** - Isolated cloud sandboxes
 - **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
 - **[@computesdk/freestyle](./packages/freestyle)** - Full Linux VMs for long-running agent tasks, with snapshots and persistence
 - **[@computesdk/givemeanode](./packages/givemeanode)** - Very fast microVM sandboxes, from any container image

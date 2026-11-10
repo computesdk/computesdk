@@ -91,13 +91,14 @@ await compute.instances.create({ cpuCores: 4, memoryMb: 8192 });
 | List / getById / destroy | Yes |
 | Background commands | Yes - `{ background: true }` detaches stdio automatically |
 | Custom images | Via Tenki templates (`templateId` maps to a Tenki image ref) |
-| Snapshots / pause-resume | In the Tenki SDK (`@tenkicloud/sandbox`); not yet wired to provider snapshot methods |
+| Pause / resume | Yes - `sandbox.pause()` / `sandbox.resume()`; memory, processes and files (including `/tmp`) survive |
+| Snapshots | Yes - `compute.snapshot.create(id)`, restore with `create({ snapshotId })`; memory snapshots that keep the rootfs except `/tmp` (emptied on the source too), source keeps running |
 
 ## Notes
 
 - `runCommand` wraps the command in `sh -lc` because Tenki's exec runs argv directly (execve, no shell).
 - A long-running process started with a bare `&` would hold the exec output stream open; use `{ background: true }`, which detaches stdio for you.
-- For advanced features (SSH, volumes, tunnels, git operations, snapshots), use the underlying SDK directly via `sandbox.getInstance()`, which returns the `@tenkicloud/sandbox` `Session`.
+- For advanced features (SSH, tunnels, git operations), use the underlying SDK directly via `sandbox.getInstance()`, which returns the `@tenkicloud/sandbox` `Session`.
 
 ## License
 

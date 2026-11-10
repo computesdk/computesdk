@@ -28,6 +28,12 @@ layout:
 
 The default sandbox uses 2 vCPU, 4 GiB of memory, and 10 GiB of copy-on-write disk.
 
+## Lifecycle
+
+Pause/resume and snapshots require a Firecracker source (`createOptions: { runtime: 'firecracker' }`). Both preserve memory and processes; snapshots keep the whole rootfs and leave the source running.
+
+Snapshot operations use the account API, not regionally-created sandboxes. Create the source through the account endpoint for snapshots. Use `provider.snapshot.list({ sandboxId })`; unscoped listing rejects. Deletion resolves the owner from snapshots created/listed in the client or a bounded account scan, then deletes within that sandbox's scope.
+
 ## Installation & Setup
 
 ```bash
@@ -80,7 +86,7 @@ interface MiosaConfig {
 | `getInfo` | Yes | Maps MIOSA lifecycle state to the ComputeSDK status model. |
 | `getUrl` | Yes | Creates a tenant-aware public preview URL for a port. |
 | `filesystem` | Yes | Native read, write, directory, list, existence, and remove operations. |
-| `snapshot` | Partial | Creates and lists Firecracker checkpoints. ComputeSDK does not currently pass the sandbox scope required for deletion. |
+| `snapshot` | Yes | Account-API Firecracker checkpoints: create, sandbox-scoped list, and delete with owner resolution. Regional sandboxes are not snapshot-capable. |
 
 ### Runtime Model
 

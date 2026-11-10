@@ -41,6 +41,10 @@ const sshBase = [
 
 function resolveSshTargets(config: Ec2FirecrabConfig): string[] {
   if (config.sshTargets?.length) return config.sshTargets;
+  if (config.sshTarget) return [config.sshTarget];
+  // An explicit apiUrl means the caller owns the transport; env targets
+  // are only fallbacks and must not override it.
+  if (config.apiUrl) return [];
   const csv = process.env.EC2_FIRECRAB_SSH_TARGETS;
   if (csv) return csv.split(',').map((s) => s.trim()).filter(Boolean);
   const single = config.sshTarget ?? process.env.EC2_FIRECRAB_SSH_TARGET;
@@ -52,13 +56,24 @@ function resolveSshTargets(config: Ec2FirecrabConfig): string[] {
 // one tunnel instead of leaking a tunnel + port per call.
 const pemFileCache = new Map<string, string>();
 
+// Vaults that can't hold multi-line values store the PEM base64-encoded
+// (`base64 < key.pem | tr -d '\n'`); accept both forms.
+function decodePem(value: string | undefined): string | undefined {
+  if (!value || value.includes('-----BEGIN')) return value;
+  const compact = value.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) return value;
+  const decoded = Buffer.from(compact, 'base64').toString('utf8');
+  return decoded.includes('-----BEGIN') ? decoded : value;
+}
+
 function resolveSsh(config: Ec2FirecrabConfig, target: string): ResolvedSsh {
-  const pem =
-    config.sshIdentityPem ??
-    process.env.EC2_FIRECRAB_SSH_KEY ??
-    undefined;
+  const pem = decodePem(
+    config.sshIdentityPem ||
+    process.env.EC2_FIRECRAB_SSH_KEY ||
+    undefined,
+  );
   const path =
-    config.sshIdentityPath ?? process.env.EC2_FIRECRAB_SSH_KEY_PATH ?? undefined;
+    config.sshIdentityPath || process.env.EC2_FIRECRAB_SSH_KEY_PATH || undefined;
   if (pem && pem.includes('-----BEGIN')) {
     let identityPath = pemFileCache.get(pem);
     if (!identityPath) {
@@ -89,10 +104,14 @@ function freePort(): Promise<number> {
   });
 }
 
-async function waitForApi(apiUrl: string, timeoutMs: number): Promise<void> {
+async function waitForApi(
+  apiUrl: string,
+  timeoutMs: number,
+  tunnelExited: () => string | undefined = () => undefined,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastErr: unknown;
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && !tunnelExited()) {
     try {
       // /api/vms is a cheap authenticated-surface probe; any HTTP response
       // (even a 4xx) proves the forward is live.
@@ -151,21 +170,34 @@ async function establish(
           '--',
           ssh.target,
         ],
-        { stdio: 'ignore' },
+        { stdio: ['ignore', 'ignore', 'pipe'] },
       );
       children.add(child);
-      child.once('exit', () => children.delete(child));
+      // Keep ssh's own diagnostics (auth, host key, routing) for the error.
+      let sshStderr = '';
+      child.stderr?.on('data', (chunk: Buffer) => {
+        if (sshStderr.length < 2000) sshStderr += chunk.toString();
+      });
+      let exited: string | undefined;
+      child.once('exit', (code, signal) => {
+        children.delete(child);
+        exited = signal ? `signal ${signal}` : `exit ${code}`;
+      });
       child.unref();
+      (child.stderr as { unref?: () => void } | null)?.unref?.();
       const apiUrl = `http://127.0.0.1:${port}`;
       try {
-        await waitForApi(apiUrl, 15_000);
+        await waitForApi(apiUrl, 15_000, () => exited);
       } catch (err) {
         child.kill('SIGKILL');
-        throw err;
+        const detail = sshStderr.trim();
+        throw new Error(
+          `${(err as Error).message}${exited ? ` (ssh ${exited})` : ''}${detail ? `: ${detail}` : ''}`,
+        );
       }
       const proxyCommand =
-        config.sshProxyCommand ??
-        process.env.EC2_FIRECRAB_SSH_PROXY_COMMAND ??
+        config.sshProxyCommand ||
+        process.env.EC2_FIRECRAB_SSH_PROXY_COMMAND ||
         `ssh ${sshBase.join(' ')} ${ssh.identityPath ? `-i ${quote(ssh.identityPath)}` : ''} -W %h:%p -- ${quote(ssh.target)}`;
       return { apiUrl, proxyCommand };
     })();

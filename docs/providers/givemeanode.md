@@ -28,6 +28,10 @@ layout:
 [givemeanode](https://givemeanode.com) provider for ComputeSDK. Very fast
 microVM sandboxes.
 
+## Lifecycle
+
+Snapshot capabilities declare whole-rootfs and memory preservation with the source kept. Restore with `snapshotId`; see [snapshot semantics and cleanup](../reference/compute.md#snapshot-capabilities).
+
 ## Installation & Setup
 
 ```bash

@@ -18,10 +18,13 @@
  *  - The control plane drops per-exec env server-side (env is sandbox-level,
  *    set at create time), so per-command `env`/`cwd` are synthesised by
  *    wrapping the command in an inline `sh -c` script.
- *  - Snapshot semantics differ from running-snapshot providers (e2b/tensorlake):
- *    `snapshot.create` *pauses* the sandbox (the source VM stops), and the
- *    paused sandbox id IS the snapshot id. `create({ snapshotId })` forks that
- *    paused bundle into a fresh sandbox.
+ *  - createos has no standalone snapshot object; a paused sandbox is the
+ *    forkable artifact. `snapshot.create` pauses the source, forks it into a
+ *    paused copy (the snapshot, with its own id) and resumes the source.
+ *    `create({ snapshotId })` forks that paused copy into a fresh sandbox;
+ *    `snapshot.delete` destroys it.
+ *  - Pause and paused forks keep memory: files (including /tmp and /dev/shm)
+ *    and running processes survive `pause`/`resume` and snapshot restores.
  *
  * Error policy: provider operations fail loudly when the provider boundary is
  * broken. Only a genuine 404 (`CreateosSandboxNotFoundError`) is mapped to the
@@ -169,7 +172,7 @@ export interface CreateosCreateOptions extends CreateInstanceOptions {
   cpus?: number;
   /** Overlay disk size (MiB). 0 / omitted = the shape's default disk. */
   ephemeralDiskMb?: number;
-  /** Enable public ingress. Defaults to false. */
+  /** Enable public ingress at create. Defaults to false; `getUrl` enables it on demand. */
   ingressEnabled?: boolean;
   /** SSH public keys to inject at boot. */
   sshPubkeys?: string[];
@@ -267,6 +270,19 @@ async function resolveShape(
   }
   const picked = pickShape(entry.shapes, opts.memoryMb, opts.cpus) ?? defaultShape(entry.shapes) ?? FALLBACK_SHAPE;
   return picked;
+}
+
+/** Public URL for a port. Sandboxes are created with ingress off, so asking
+ *  for a URL turns it on (PATCH) first; a handle that has ingress on but no
+ *  URL template (e.g. a stale view) is refreshed before building the URL. */
+export async function ingressUrl(
+  sandbox: Pick<Sandbox, "data" | "setIngress" | "refresh" | "previewUrl">,
+  options: { port: number; protocol?: string },
+): Promise<string> {
+  const scheme = options.protocol === "http" ? "http" : "https";
+  if (!sandbox.data.ingress_enabled) await sandbox.setIngress(true);
+  else if (!sandbox.data.ingress_url_template) await sandbox.refresh();
+  return sandbox.previewUrl(options.port, { scheme });
 }
 
 /** Map an createos-sandbox lifecycle state onto ComputeSDK's running|stopped|error. */
@@ -579,14 +595,31 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         };
       },
 
-      getUrl: async (sandbox: Sandbox, options: { port: number; protocol?: string }) => {
-        const scheme = options.protocol === "http" ? "http" : "https";
-        return sandbox.previewUrl(options.port, { scheme });
-      },
+      getUrl: async (sandbox: Sandbox, options: { port: number; protocol?: string }) =>
+        ingressUrl(sandbox, options),
 
       // Escape hatch: the bare native @nodeops-createos/sandbox handle
       // (pause/resume/fork/disks/...).
       getInstance: (sandbox: Sandbox): Sandbox => sandbox,
+
+      // Native pause returns while still `pausing`, and resume 409s until the
+      // pause settles, so both wait for the terminal state.
+      pause: async (sandbox: Sandbox): Promise<void> => {
+        await sandbox.refresh();
+        if (sandbox.status !== "paused") {
+          if (sandbox.status !== "pausing") await sandbox.pause();
+          await sandbox.waitUntilPaused();
+        }
+      },
+      resume: async (sandbox: Sandbox): Promise<void> => {
+        await sandbox.refresh();
+        if (sandbox.status === "pausing") await sandbox.waitUntilPaused();
+        if (sandbox.status !== "running") {
+          if (sandbox.status !== "resuming") await sandbox.resume();
+          await sandbox.waitUntilRunning();
+        }
+      },
+      pauseCapabilities: { memory: true },
 
       attachVolume: async (sandbox: Sandbox, volume, mountPath) => {
         const ref = resolveVolumeRef(volume);
@@ -642,24 +675,48 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
     },
 
     snapshot: {
+      // Paused forks are full VM snapshots: the whole rootfs (tmpfs included)
+      // and running processes come back in the restore.
+      capabilities: { scope: "rootfs", memory: true, destroysSource: false },
       create: async (
         config: CreateosConfig,
         sandboxId: string,
         options?: CreateSnapshotOptions,
       ) => {
         const client = resolveClient(config);
-        const sandbox = await client.getSandbox(sandboxId);
-        // createos-sandbox has no decoupled snapshot object: pausing IS the snapshot,
-        // and the paused sandbox id is the snapshot id. This stops the source VM.
-        await sandbox.pause();
-        // The success claim is "it paused" — surface a pause that timed out or
-        // entered a terminal state rather than returning a phantom snapshot.
-        await sandbox.waitUntilPaused();
+        const source = await client.getSandbox(sandboxId);
+        // createos forks only from a paused sandbox, so the snapshot is a
+        // paused fork (`start_paused`): a point-in-time copy with its own id
+        // that outlives the source. The source is paused just long enough to
+        // fork, then resumed — it keeps running like on other providers.
+        const wasPaused = source.status === "paused";
+        if (!wasPaused) {
+          await source.pause();
+          await source.waitUntilPaused();
+        }
+        let snapshot: Sandbox | undefined;
+        try {
+          snapshot = await source.fork({ start_paused: true });
+          await snapshot.waitUntilPaused();
+        } catch (err) {
+          if (snapshot) await snapshot.destroy().catch(() => {});
+          if (!wasPaused) await source.resume().catch(() => {});
+          throw err;
+        }
+        if (!wasPaused) {
+          try {
+            await source.resume();
+            await source.waitUntilRunning();
+          } catch (err) {
+            await snapshot.destroy().catch(() => {});
+            throw err;
+          }
+        }
         return {
-          id: sandboxId,
+          id: snapshot.id,
           provider: PROVIDER_NAME,
           createdAt: new Date(),
-          metadata: { name: options?.name, ...options?.metadata },
+          metadata: { name: options?.name, sourceSandboxId: sandboxId, ...options?.metadata },
         };
       },
       list: async (config: CreateosConfig, _options?: ListSnapshotsOptions) => {

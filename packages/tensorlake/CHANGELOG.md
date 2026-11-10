@@ -1,5 +1,29 @@
 # @computesdk/tensorlake
 
+## 0.1.34
+
+### Patch Changes
+
+- 1904e82: Background `runCommand` now returns once the process starts instead of also running the command in the foreground.
+- 1904e82: Run timed foreground commands through the process API with a client-side deadline, so `nohup … &` launchers no longer have their detached children killed when the command's timeout expires.
+- 1904e82: Native pause/resume through suspend/resume (`ephemeral: false` creates a uniquely named, suspendable sandbox), plus declared pause and snapshot capabilities with conformance coverage. `destroy()` now finds the sandbox's leftover `suspend-<id>-…` snapshots through the project-level snapshot list and deletes them, so they no longer leak after the sandbox is gone.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.33
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.1.32
 
 ### Patch Changes

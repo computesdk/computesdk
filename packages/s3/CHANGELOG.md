@@ -1,5 +1,25 @@
 # @computesdk/s3
 
+## 1.2.23
+
+### Patch Changes
+
+- 1904e82: Fix `list()` returning no objects: read the Tigris SDK's `items`/`name`/`hasMore`/`paginationToken` response and pass `continuationToken` as `paginationToken`. Default the endpoint to Tigris (`https://t3.storage.dev`, like the Tigris SDK) when neither `endpoint` nor `TIGRIS_STORAGE_ENDPOINT` is set, instead of throwing.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+
+## 1.2.22
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - @computesdk/provider@2.1.21
+
 ## 1.2.21
 
 ### Patch Changes

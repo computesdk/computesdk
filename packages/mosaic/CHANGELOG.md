@@ -1,5 +1,29 @@
 # @computesdk/mosaic
 
+## 0.1.23
+
+### Patch Changes
+
+- 1904e82: `runCommand({ background: true })` launches the command detached through the shell process tier instead of Mosaic's durable process API, so `pause()` no longer refuses with 409 `sandbox_busy` while it runs; the process survives pause/resume. The returned `stdout` is the shell job id.
+- 1904e82: Mosaic instances expose native `pause()`/`resume()` (memory and processes survive), and snapshots declare their capabilities: whole rootfs plus memory, source keeps running. The shared conformance suite now runs live against Mosaic.
+- 1904e82: Read and write files of any size through ranged and staged files-API requests instead of oversized exec bodies, read through symlinks, and expose native `pause()`/`resume()` on the sandbox handle.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.22
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
 ## 0.1.21
 
 ### Patch Changes

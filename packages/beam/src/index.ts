@@ -99,6 +99,13 @@ function withBeamInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): Pr
   return withBeamConfig(config, fn);
 }
 
+/**
+ * Beam's exec gateway starts commands with a bare environment that has no
+ * HOME, which breaks `$HOME`, `~` and tools that keep state there (npm, git).
+ * Fill it from the passwd entry of the running user when it is unset.
+ */
+const HOME_PRELUDE = `[ -n "$HOME" ] || HOME=$(awk -F: -v u="$(id -u 2>/dev/null)" '$3==u{print $6;exit}' /etc/passwd 2>/dev/null); export HOME="\${HOME:-/}"`;
+
 function shellEscape(arg: string): string {
   if (arg === '') return "''";
   return `'${arg.replace(/'/g, "'\\''")}'`;
@@ -180,6 +187,101 @@ function getCachedSandbox(cacheKey: string, sandboxConfig: any): Sandbox {
   return sandbox;
 }
 
+/**
+ * The file upload/download routes carry the whole file base64-encoded in one
+ * gateway message, which the gateway caps at 16 MiB. Larger files move in
+ * parts below that cap and are joined or split inside the sandbox.
+ */
+const FILE_CHUNK_BYTES = 8 * 1024 * 1024;
+
+async function execOrThrow(sandbox: SandboxInstance, script: string, what: string): Promise<void> {
+  const proc = await sandbox.exec(['sh', '-c', script]);
+  await proc.wait();
+  if (proc.exitCode) {
+    const stderr = await proc.stderr.read().catch(() => '');
+    throw new Error(`${what} failed (exit ${proc.exitCode})${stderr ? `: ${stderr}` : ''}`);
+  }
+}
+
+async function writeLargeText(sandbox: SandboxInstance, path: string, content: string): Promise<void> {
+  const bytes = Buffer.from(content, 'utf8');
+  if (bytes.length <= FILE_CHUNK_BYTES) {
+    await sandbox.fs.writeText(path, content);
+    return;
+  }
+  const prefix = `${path}.computesdk-part-${Date.now().toString(36)}`;
+  const parts: string[] = [];
+  try {
+    for (let offset = 0, i = 0; offset < bytes.length; offset += FILE_CHUNK_BYTES, i++) {
+      const part = `${prefix}-${String(i).padStart(6, '0')}`;
+      parts.push(part);
+      await sandbox.fs.writeBytes(part, bytes.subarray(offset, offset + FILE_CHUNK_BYTES));
+    }
+    await execOrThrow(sandbox, `cat ${parts.map(shellEscape).join(' ')} > ${shellEscape(path)}`, 'joining file parts');
+  } finally {
+    if (parts.length) {
+      await execOrThrow(sandbox, `rm -f ${parts.map(shellEscape).join(' ')}`, 'removing file parts').catch(() => {});
+    }
+  }
+}
+
+// Downloads above ~4 MiB come back as HTTP 429 from the gateway.
+const READ_CHUNK_BYTES = 1024 * 1024;
+
+async function retryThrottled<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt >= 4 || !/status code 429/.test(error instanceof Error ? error.message : String(error))) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
+    }
+  }
+}
+
+async function readLargeText(sandbox: SandboxInstance, path: string, resolveLinks = true): Promise<string> {
+  let info: Awaited<ReturnType<SandboxInstance['fs']['statFile']>>;
+  try {
+    return await sandbox.fs.readText(path);
+  } catch (error) {
+    // The download gateway rejects absolute symlink targets, even inside the
+    // guest. Resolve there, then let the same gateway validate the target.
+    if (resolveLinks && error instanceof Error && error.message.includes('path escapes from parent')) {
+      const proc = await sandbox.exec(['readlink', '-f', '--', path]);
+      await proc.wait();
+      if (proc.exitCode === 0) {
+        const resolved = (await proc.stdout.read()).replace(/\n$/, '');
+        if (resolved.startsWith('/') && resolved !== path) {
+          return readLargeText(sandbox, resolved, false);
+        }
+      }
+      throw error;
+    }
+    // Oversized downloads fail at the gateway; anything else is a real error.
+    try {
+      info = await retryThrottled(() => sandbox.fs.statFile(path));
+    } catch {
+      throw error;
+    }
+    if (!(Number(info.size) > READ_CHUNK_BYTES)) throw error;
+  }
+  const prefix = `/tmp/computesdk-read-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-`;
+  try {
+    await execOrThrow(sandbox, `split -a 6 -d -b ${READ_CHUNK_BYTES} ${shellEscape(path)} ${shellEscape(prefix)}`, 'splitting file');
+    const count = Math.ceil(Number(info.size) / READ_CHUNK_BYTES);
+    const chunks: Buffer[] = [];
+    for (let i = 0; i < count; i++) {
+      const part = `${prefix}${String(i).padStart(6, '0')}`;
+      chunks.push(await retryThrottled(() => sandbox.fs.readBytes(part)).catch((error) => {
+        throw new Error(`reading part ${i + 1}/${count}: ${error instanceof Error ? error.message : String(error)}`);
+      }));
+    }
+    return Buffer.concat(chunks).toString('utf8');
+  } finally {
+    await execOrThrow(sandbox, `rm -f ${shellEscape(prefix)}*`, 'removing file parts').catch(() => {});
+  }
+}
+
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
   methods: {
@@ -207,7 +309,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             name,
             metadata: _metadata,
             templateId: _templateId,
-            snapshotId: _snapshotId,
+            snapshotId,
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
@@ -220,6 +322,14 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           // providerOptions and reaches the wire untouched.
           const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
           if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
+
+          // A Beam snapshot is a memory + filesystem checkpoint; restoring it
+          // boots a new sandbox from the checkpoint, not from an image.
+          if (snapshotId) {
+            const restored = await Sandbox.createFromSnapshot(snapshotId);
+            sandboxReadiness.set(restored, Promise.resolve());
+            return { instance: beamStamp.stamp(restored, config), instanceId: restored.containerId };
+          }
 
           const optRuntime = (options as any)?.runtime as string | undefined;
           const runtime = optRuntime || 'node';
@@ -254,7 +364,16 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           if (unifiedVolumes) {
             sandboxConfig.volumes = unifiedVolumes.map((m: any) => {
               const ref = resolveVolumeRef(m.volume);
-              return ref.native ?? new BeamVolume(ref.name ?? ref.id!, m.mountPath);
+              // The mount path lives on the Volume itself, so a native handle
+              // created for another path is rebound to this mount's path.
+              const native = ref.native instanceof BeamVolume ? ref.native : undefined;
+              if (native && native.mountPath === m.mountPath) return native;
+              const volume = new BeamVolume(native?.name ?? ref.name ?? ref.id!, m.mountPath);
+              if (native?.ready) {
+                volume.ready = true;
+                volume.volumeId = native.volumeId;
+              }
+              return volume;
             });
           }
 
@@ -302,13 +421,15 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
         withBeamInstance(sandbox, async () => {
         const startTime = Date.now();
         try {
+          // export (not a VAR=x prefix) so env reaches every part of a
+          // compound command; cwd likewise scopes the whole script.
           let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          const setup: string[] = [];
+          for (const [k, v] of Object.entries(options?.env ?? {})) setup.push(`export ${k}="${escapeShellArg(String(v))}"`);
+          if (options?.cwd) setup.push(`cd "${escapeShellArg(options.cwd)}" || exit 1`);
+          if (setup.length) fullCommand = `${setup.join('; ')}\n${fullCommand}`;
+          if (options?.background) fullCommand = `nohup sh -c ${shellEscape(fullCommand)} > /dev/null 2>&1 &`;
+          fullCommand = `${HOME_PRELUDE}; ${fullCommand}`;
 
           // wait:true makes the gateway block until the command finishes, so a
           // client-side timeout must launch with wait:false to get the process
@@ -386,7 +507,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           withBeamInstance(sandbox, async () => {
             await ensureSandboxReady(sandbox);
             try {
-              return await sandbox.fs.readText(path);
+              return await readLargeText(sandbox, path);
             } catch (error) {
               throw new Error(`Failed to read file ${path}: ${error instanceof Error ? error.message : String(error)}`);
             }
@@ -395,7 +516,7 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
           withBeamInstance(sandbox, async () => {
             await ensureSandboxReady(sandbox);
             try {
-              await sandbox.fs.writeText(path, content);
+              await writeLargeText(sandbox, path, content);
             } catch (error) {
               throw new Error(`Failed to write file ${path}: ${error instanceof Error ? error.message : String(error)}`);
             }
@@ -426,6 +547,27 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
       },
 
       getInstance: (sandbox: SandboxInstance): SandboxInstance => sandbox,
+    },
+
+    snapshot: {
+      // snapshot-memory checkpoints memory and filesystem; the checkpoint id
+      // restores through `create({ snapshotId })`. Verified live: running
+      // processes, /tmp, /root, /etc and /opt survive, the source keeps
+      // running, but the /mnt/code mount (the default cwd) is not kept.
+      capabilities: { scope: 'rootfs', path: '/root', memory: true, destroysSource: false },
+      create: async (config: BeamConfig, instanceId: string, options?: { name?: string; metadata?: Record<string, string> }) =>
+        withBeamConfig(config, async () => {
+          try {
+            const instance = await Sandbox.connect(instanceId);
+            const id = await instance.snapshot();
+            return { id, provider: 'beam', instanceId, createdAt: new Date(), metadata: { ...options?.metadata, ...(options?.name ? { name: options.name } : {}) } };
+          } catch (error) {
+            throw new Error(`Failed to create Beam snapshot: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }),
+      // beam-js exposes no checkpoint list or delete RPC.
+      list: async (_config: BeamConfig) => [],
+      delete: async (_config: BeamConfig, _snapshotId: string) => { /* no delete API */ },
     },
 
     volume: {

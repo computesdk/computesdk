@@ -11,11 +11,13 @@
 * [Providers](providers/README.md)
   * [AWS Bedrock AgentCore](providers/agentcore.md)
   * [AWS EC2](providers/aws-ec2.md)
+  * [Agent37](providers/agent37.md)
   * [Agentuity](providers/agentuity.md)
   * [Archil](providers/archil.md)
   * [Beam](providers/beam.md)
   * [Blaxel](providers/blaxel.md)
   * [Brezel](providers/brezel.md)
+  * [Briq](providers/briq.md)
   * [Buddy](providers/buddy.md)
   * [Cloud Run (GCP)](providers/cloud-run.md)
   * [Cloudflare](providers/cloudflare.md)
@@ -23,7 +25,6 @@
   * [Collimate](providers/collimate.md)
   * [CreateOS](providers/createos-sandbox.md)
   * [Daytona](providers/daytona.md)
-  * [Declaw](providers/declaw.md)
   * [Docker](providers/docker.md)
   * [E2B](providers/e2b.md)
   * [EC2 Firecrab](providers/ec2-firecrab.md)
@@ -54,6 +55,7 @@
   * [Runloop](providers/runloop.md)
   * [Runtime](providers/runtime.md)
   * [Sail](providers/sail.md)
+  * [sandbox-cli](providers/sandbox-cli.md)
   * [Sandbox0](providers/sandbox0.md)
   * [Sandock](providers/sandock.md)
   * [Secure Exec](providers/secure-exec.md)
@@ -79,8 +81,8 @@
 * [Instance (interface)](reference/Instance.md)
 * [compute](reference/compute.md)
 * [compute.instances](reference/compute.instances.md)
+* [Sandbox sizes](reference/sizes.md)
 
 ***
 
-* [LLM Documentation Files](<README (1).md>)
-
+* [LLM Documentation Files](llm-docs.md)
