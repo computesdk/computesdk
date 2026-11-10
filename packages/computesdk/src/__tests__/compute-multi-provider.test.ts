@@ -38,6 +38,7 @@ function makeProvider(
     },
     snapshot: snapshotHandlers
       ? {
+          listScope: snapshotHandlers.listScope,
           create:
             snapshotHandlers.create ||
             (async (sandboxId: string) => ({
@@ -349,7 +350,7 @@ describe('compute multi-provider', () => {
 
   it('forwards scoped snapshot listing and does not turn unsupported inventory into empty results', async () => {
     const list = vi.fn().mockResolvedValue([]);
-    const provider = makeProvider('scoped', {}, { list });
+    const provider = makeProvider('scoped', {}, { list, listScope: 'instance' });
     const sdk = compute({ provider });
     const options = { instanceId: 'source', limit: 3 };
     await expect(sdk.snapshot.list(options)).resolves.toEqual([]);
@@ -367,6 +368,55 @@ describe('compute multi-provider', () => {
     const sdk = compute({ providers: [unsupported, makeProvider('owner', {}, { delete: remove })] });
     await sdk.snapshot.delete('unknown-snapshot');
     expect(remove).toHaveBeenCalledWith('unknown-snapshot');
+  });
+
+  it('lists scoped snapshots only through the known instance owner', async () => {
+    const unrelated = vi.fn().mockResolvedValue([{ id: 'unrelated', provider: 'other', createdAt: new Date() }]);
+    const expected = { id: 'owned', provider: 'owner', createdAt: new Date() };
+    const scoped = vi.fn().mockResolvedValue([expected]);
+    const sdk = compute({ providers: [
+      makeProvider('other', {}, { list: unrelated }),
+      makeProvider('owner', {}, { list: scoped, listScope: 'instance' }),
+    ] });
+    await sdk.instances.create({ provider: 'owner' });
+    await expect(sdk.snapshot.list({ instanceId: 'owner-sandbox' })).resolves.toEqual([expected]);
+    expect(scoped).toHaveBeenCalledWith({ instanceId: 'owner-sandbox' });
+    expect(unrelated).not.toHaveBeenCalled();
+  });
+
+  it('rejects ambiguous scoped inventory before querying unrelated providers', async () => {
+    const list = vi.fn().mockResolvedValue([]);
+    const sdk = compute({ providers: [
+      makeProvider('one', {}, { list }),
+      makeProvider('two', {}, { list }),
+    ] });
+    await expect(sdk.snapshot.list({ instanceId: 'unknown' })).rejects.toThrow('known instance owner');
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('filters provider-wide inventories by authoritative source IDs', async () => {
+    const canonical = { id: 'canonical', instanceId: 'source', provider: 'one', createdAt: new Date() };
+    const legacy = { id: 'legacy', sandboxId: 'source', provider: 'one', createdAt: new Date() };
+    const unrelated = { id: 'unrelated', instanceId: 'other', provider: 'one', createdAt: new Date() };
+    const sdk = compute({ provider: makeProvider('one', {}, {
+      list: async () => [canonical, unrelated, legacy],
+    }) });
+    await expect(sdk.snapshot.list({ sandboxId: 'source' })).resolves.toEqual([canonical, legacy]);
+    await expect(sdk.snapshot.list({ instanceId: 'other', sandboxId: 'source' })).resolves.toEqual([unrelated]);
+  });
+
+  it('rejects scoped inventory that cannot identify snapshot sources', async () => {
+    const sdk = compute({ provider: makeProvider('one', {}, {
+      list: async () => [{ id: 'unattributed', provider: 'one', createdAt: new Date() }],
+    }) });
+    await expect(sdk.snapshot.list({ instanceId: 'source' })).rejects.toMatchObject({ code: 'unsupported' });
+  });
+
+  it('does not return empty scoped inventory for an owner without snapshots', async () => {
+    const sdk = compute({ provider: makeProvider('one') });
+    await sdk.instances.create();
+    await expect(sdk.snapshot.list({ instanceId: 'one-sandbox' })).rejects.toMatchObject({ code: 'unsupported' });
+    await expect(sdk.snapshot.list({ instanceId: '' })).rejects.toThrow('non-empty instanceId');
   });
 
   it('preserves unsupported errors when deleting an external snapshot through one provider', async () => {

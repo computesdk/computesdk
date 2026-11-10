@@ -148,6 +148,14 @@ Snapshot providers whose inventory requires an instance must declare
 unscoped calls before invoking the provider. The legacy `sandboxId` option remains
 supported. The default list scope is `'provider'`.
 
+`compute.snapshot.list({ instanceId })` routes only to that instance's owner.
+With multiple providers, create or resolve the instance through `compute` first,
+or use a single-provider `compute` client. Instance-scoped managers supply the
+filtered inventory; provider-wide inventories must identify each snapshot's
+`instanceId` (or legacy `sandboxId`) so the SDK can filter safely. An inventory
+without source identities rejects scoped listing instead of returning unrelated
+snapshots or pretending the scoped inventory is empty.
+
 ### Required Instance Methods
 
 #### Collection Operations
