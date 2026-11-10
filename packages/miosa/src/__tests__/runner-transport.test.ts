@@ -1699,19 +1699,27 @@ describe("regional sandbox endpoint", () => {
       ).toHaveLength(0);
     });
 
-    it("should refuse snapshot.list for a regional sandbox", async () => {
-      runnerSpies.createSandbox.mockResolvedValueOnce({
-        id: sandboxRecord().id,
-        runnerUrl: "https://3.run-us.miosa.ai",
-        data: sandboxRecord(),
-      });
-      const provider = miosa({ apiKey: API_KEY });
-      const sandbox = await provider.sandbox.create();
+    it.each(["instanceId", "sandboxId"] as const)(
+      "should refuse snapshot.list for a regional sandbox using %s",
+      async (scope) => {
+        runnerSpies.createSandbox.mockResolvedValueOnce({
+          id: sandboxRecord().id,
+          runnerUrl: "https://3.run-us.miosa.ai",
+          data: sandboxRecord(),
+        });
+        const provider = miosa({ apiKey: API_KEY });
+        const sandbox = await provider.sandbox.create();
 
-      await expect(
-        provider.snapshot!.list({ sandboxId: sandbox.sandboxId }),
-      ).rejects.toThrow("does not own it");
-    });
+        await expect(
+          provider.snapshot!.list({ [scope]: sandbox.sandboxId }),
+        ).rejects.toThrow("does not own it");
+        expect(
+          fetchMock.mock.calls.filter(([url]) =>
+            String(url).includes("/snapshots"),
+          ),
+        ).toHaveLength(0);
+      },
+    );
 
     it("should keep the 404 status while appending regional guidance", async () => {
       // A handle whose origin this process never recorded gets a real

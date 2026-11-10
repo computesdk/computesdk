@@ -81,6 +81,7 @@ export interface MosaicSandbox {
 export interface MosaicSnapshot {
   id: string;
   provider: typeof PROVIDER;
+  instanceId?: string;
   createdAt: Date;
   metadata: {
     name?: string;
@@ -346,6 +347,7 @@ function asSnapshot(info: MarSnapshotInfo): MosaicSnapshot {
   return {
     id: info.id,
     provider: PROVIDER,
+    ...(info.source_sandbox_id ? { instanceId: info.source_sandbox_id } : {}),
     createdAt: new Date(Math.round(info.created_at_ns / 1_000_000)),
     metadata: {
       ...(info.name ? { name: info.name } : {}),

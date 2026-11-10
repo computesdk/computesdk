@@ -467,6 +467,7 @@ const _provider = defineProvider<OpenComputerNativeSandbox, OpenComputerConfig, 
     },
 
     snapshot: {
+      listScope: 'instance',
       create: async (config: OpenComputerConfig, sandboxId: string, options?: CreateSnapshotOptions) => {
         const Sandbox = await loadSandbox();
         const sandbox = await Sandbox.connect(sandboxId, baseOpts(config));

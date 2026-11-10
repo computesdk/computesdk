@@ -2568,6 +2568,7 @@ const createMiosaProvider = defineProvider<
     // request; an unrecorded id's 404 gets the same remedy appended while
     // keeping its NOT_FOUND status (the sandbox may simply be missing).
     snapshot: {
+      listScope: "instance",
       // Live-verified: a restore keeps the whole ext4 rootfs (/tmp, /root,
       // /var) and memory (background processes keep running), and the
       // source keeps running. Firecracker only.
