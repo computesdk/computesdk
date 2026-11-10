@@ -47,6 +47,8 @@ export interface LaneSettings {
     string,
     { cpus?: number; memoryMb?: number; ephemeralDiskMb?: number }
   >;
+  /** Preset name matching each providerResources entry, when one does. */
+  providerResourcePresets?: Record<string, string | null>;
   warmPool?: Record<string, number>;
   snapshotPool?: Record<string, number>;
 }
@@ -186,7 +188,10 @@ export function printLaneSettings(
   const resources = Object.entries(s.providerResources ?? {});
   console.log('resources:');
   if (resources.length === 0) console.log('  —');
-  for (const [provider, r] of resources) console.log(`  ${provider}  ${formatResources(r)}`);
+  for (const [provider, r] of resources) {
+    const preset = s.providerResourcePresets?.[provider];
+    console.log(preset ? `  ${provider}  ${preset} (${formatResources(r)})` : `  ${provider}  ${formatResources(r)}`);
+  }
   const pool = Object.entries(s.warmPool ?? {});
   console.log('warm pool:');
   if (pool.length === 0) console.log('  —');

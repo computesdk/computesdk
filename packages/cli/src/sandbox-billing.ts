@@ -28,7 +28,14 @@ export interface SandboxCosts {
   running: { count: number; costUsd: number };
   settled: { count: number; costUsd: number };
   totalUsd: number;
-  byProvider: Array<{ provider: string; count: number; costUsd: number }>;
+  byProvider: Array<{
+    provider: string;
+    count: number;
+    costUsd: number;
+    /** Absent on servers that predate the per-provider split. */
+    running?: { count: number; costUsd: number };
+    settled?: { count: number; costUsd: number };
+  }>;
 }
 
 export type RateSource = 'organization' | 'platform' | 'builtin';
@@ -98,10 +105,7 @@ function printTable(header: string[], rows: string[][]): void {
   for (const row of rows) console.log(line(row));
 }
 
-/**
- * `byProvider` carries one count and cost per provider, not the running /
- * settled split, so provider rows leave those columns empty.
- */
+/** Older servers send no per-provider running / settled split; those cells show `—`. */
 export function printCosts(c: SandboxCosts, customerOnly: boolean): void {
   if (customerOnly) console.log('customer sandboxes only');
   printTable(
@@ -115,7 +119,14 @@ export function printCosts(c: SandboxCosts, customerOnly: boolean): void {
         `${c.settled.count} · ${formatMoney(c.settled.costUsd)}`,
         formatMoney(c.totalUsd),
       ],
-      ...c.byProvider.map((p) => [p.provider, String(p.count), '—', '—', '—', formatMoney(p.costUsd)]),
+      ...c.byProvider.map((p) => [
+        p.provider,
+        String(p.count),
+        p.running ? String(p.running.count) : '—',
+        p.running ? formatMoney(p.running.costUsd) : '—',
+        p.settled ? `${p.settled.count} · ${formatMoney(p.settled.costUsd)}` : '—',
+        formatMoney(p.costUsd),
+      ]),
     ],
   );
   if (c.currency !== 'USD') console.log(`currency: ${c.currency}`);

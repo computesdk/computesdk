@@ -79,8 +79,8 @@ const COSTS = {
   settled: { count: 3, costUsd: 1.2 },
   totalUsd: 1.22,
   byProvider: [
-    { provider: 'blaxel', count: 3, costUsd: 1.02 },
-    { provider: 'beam', count: 1, costUsd: 0.2 },
+    { provider: 'blaxel', count: 3, costUsd: 1.02, running: { count: 1, costUsd: 0.02 }, settled: { count: 2, costUsd: 1 } },
+    { provider: 'beam', count: 1, costUsd: 0.2, running: { count: 0, costUsd: 0 }, settled: { count: 1, costUsd: 0.2 } },
   ],
 };
 
@@ -154,6 +154,17 @@ describe('compute instances costs', () => {
     expect(all).toMatch(/all\s+4\s+1\s+\$0\.02\s+3 · \$1\.20\s+\$1\.22/);
     expect(lines.find((l) => l.startsWith('blaxel'))).toContain('$1.02');
     expect(lines.find((l) => l.startsWith('beam'))).toContain('$0.20');
+    expect(lines.find((l) => l.startsWith('blaxel'))).toMatch(/blaxel\s+3\s+1\s+\$0\.02\s+2 · \$1\.00\s+\$1\.02/);
+    expect(lines.find((l) => l.startsWith('beam'))).toMatch(/beam\s+1\s+0\s+\$0\.00\s+1 · \$0\.20\s+\$0\.20/);
+  });
+
+  it('shows — in provider split columns when the server omits them', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json({ ...COSTS, byProvider: [{ provider: 'blaxel', count: 3, costUsd: 1.02 }] }),
+    );
+    expect(await cli('costs')).toBe(0);
+    const row = stdout.split('\n').find((l) => l.startsWith('blaxel'));
+    expect(row).toMatch(/blaxel\s+3\s+—\s+—\s+—\s+\$1\.02/);
   });
 
   it('renders the error envelope and exits 1 on an API error', async () => {

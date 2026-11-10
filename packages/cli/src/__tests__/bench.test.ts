@@ -213,11 +213,11 @@ describe.skipIf(!existsSync(distEntry))('compute bench (built CLI)', () => {
     expect(res.stdout.split('\n')[0]).toMatch(/^Usage: bench reliability <benchmark-slug>/);
   });
 
-  it('exposes `bench retrigger` with --wait, --timeout and status', () => {
-    const res = compute(['bench', 'retrigger', '--help']);
+  it('exposes `bench run-again` with --wait, --timeout and status', () => {
+    const res = compute(['bench', 'run-again', '--help']);
     expect(res.status).toBe(0);
-    expect(res.stdout.split('\n')[0]).toMatch(/^Usage: bench retrigger <benchmark-slug>/);
-    for (const text of ['--wait', '--timeout', 'bench retrigger status']) expect(res.stdout).toContain(text);
+    expect(res.stdout.split('\n')[0]).toMatch(/^Usage: bench run-again <benchmark-slug>/);
+    for (const text of ['--wait', '--timeout', 'bench run-again status']) expect(res.stdout).toContain(text);
   });
 
   it('exposes the benchmark management commands', () => {
@@ -229,7 +229,7 @@ describe.skipIf(!existsSync(distEntry))('compute bench (built CLI)', () => {
 
   it('lists the run feed, reliability cards, activity and run archive commands', () => {
     const res = compute(['bench', '--help']);
-    for (const text of ['runs feed', 'runs days', 'runs day <YYYY-MM-DD>', 'runs archive|unarchive', 'reliability cards', 'activity [--days N]', 'retrigger <benchmark-slug>']) {
+    for (const text of ['runs feed', 'runs days', 'runs day <YYYY-MM-DD>', 'runs archive|unarchive', 'reliability cards', 'activity [--days N]', 'run-again <benchmark-slug>', 'runs run-again <benchmark-slug> <runId>', 'runs run-again-status']) {
       expect(res.stdout).toContain(text);
     }
   });
@@ -252,7 +252,7 @@ describe.skipIf(!existsSync(distEntry))('compute bench (built CLI)', () => {
     expect(own).toBe(direct);
     const paths = (JSON.parse(own) as { commands: Array<{ path: string[] }> }).commands.map((c) => c.path.join(' '));
     expect(paths).toEqual(
-      expect.arrayContaining(['benchmarks pause', 'runs feed', 'runs day', 'reliability cards', 'activity', 'retrigger status']),
+      expect.arrayContaining(['benchmarks pause', 'runs feed', 'runs day', 'reliability cards', 'activity', 'run-again status', 'runs run-again', 'runs run-again-status']),
     );
   });
 });

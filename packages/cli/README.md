@@ -227,8 +227,9 @@ compute instances settings set --resources blaxel=none --warm-pool blaxel=0
 
 `costs` calls `GET /api/v1/sandboxes/costs` (`?customerOnly=true` with
 `--customer-only`); `--json` prints `{currency, running, settled, totalUsd,
-byProvider}`. The table's `all` row splits running and settled; the API gives
-one count and cost per provider, so provider rows show only those.
+byProvider}`. The `all` row and each provider row split running and settled;
+against older servers without the per-provider split, provider rows show `—`
+in those columns.
 
 `rates` calls `GET /api/v1/sandboxes/rates` and works for any member; `--json`
 prints `{rates}`, each with `provider, usd, per, rateUsd, source, fallback`.

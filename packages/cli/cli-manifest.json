@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "bin": "compute",
   "package": "@computesdk/cli",
-  "version": "2.6.2",
+  "version": "2.6.4",
   "source": {
     "repo": "computesdk/computesdk",
     "released": false
@@ -629,6 +629,38 @@
         "--help"
       ],
       "summary": "Set a workflow's provider order and snapshot cap (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "schedule"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "schedule"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--reliability",
+        "--from",
+        "--to",
+        "--repo",
+        "--workflow",
+        "--event",
+        "--status",
+        "--tz",
+        "--limit",
+        "--cursor",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List upcoming scheduled fires and past runs in a time window"
     },
     {
       "path": [
@@ -3090,6 +3122,7 @@
         "[message]"
       ],
       "flags": [
+        "--resume",
         "--size",
         "--api-key",
         "--base-url",
@@ -3212,13 +3245,13 @@
       ],
       "runner": {
         "package": "@benchsdk/runner",
-        "version": "0.8.1",
+        "version": "0.8.3",
         "linked": true,
         "released": false
       },
       "cli": {
         "package": "@benchsdk/cli",
-        "version": "0.9.1",
+        "version": "0.9.3",
         "linked": true,
         "released": false
       }

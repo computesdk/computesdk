@@ -342,7 +342,8 @@ describe('compute sandboxes settings set --resources / --warm-pool', () => {
   it('settings render has a resources row and a warm-pool row', async () => {
     get.mockImplementation(async () => ({
       ...SANDBOX_SETTINGS,
-      providerResources: { blaxel: { memoryMb: 2048 }, archil: { cpus: 4, memoryMb: 8192 } },
+      providerResources: { blaxel: { memoryMb: 2048 }, archil: { cpus: 4, memoryMb: 8192 }, e2b: { cpus: 2, memoryMb: 4096 } },
+      providerResourcePresets: { blaxel: null, archil: 'large' },
       warmPool: { blaxel: 1 },
     }));
     const out = await captureStdout(() =>
@@ -351,7 +352,8 @@ describe('compute sandboxes settings set --resources / --warm-pool', () => {
     expect(out).toContain('resources:');
     expect(out).toContain('blaxel  2048 MB');
     expect(out).not.toContain('? vCPU');
-    expect(out).toContain('archil  4 vCPU / 8192 MB');
+    expect(out).toContain('archil  large (4 vCPU / 8192 MB)');
+    expect(out).toContain('e2b  2 vCPU / 4096 MB');
     expect(out).toMatch(/warm pool:\s*\n?\s*blaxel {2}1/);
   });
 });
