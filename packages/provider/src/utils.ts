@@ -2,6 +2,15 @@
  * Utility functions for ComputeSDK
  */
 
+export class UnsupportedOperationError extends Error {
+  readonly code = 'unsupported';
+
+  constructor(readonly provider: string, readonly operation: string) {
+    super(`${provider}: ${operation} is not supported`);
+    this.name = 'UnsupportedOperationError';
+  }
+}
+
 /**
  * Calculate exponential backoff delay with jitter
  * 

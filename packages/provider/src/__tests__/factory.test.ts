@@ -758,6 +758,51 @@ describe('pause/resume and snapshot capabilities', () => {
     expect(provider.snapshot?.capabilities).toEqual(capabilities)
   })
 
+  it('rejects absent snapshot and template operations without disabling creation', async () => {
+    const createSnapshot = vi.fn().mockResolvedValue({ id: 'snap-1' })
+    const createTemplate = vi.fn().mockResolvedValue({ id: 'template-1' })
+    const provider = defineProvider({
+      name: 'mock',
+      methods: {
+        sandbox: base(),
+        snapshot: { create: createSnapshot },
+        template: { create: createTemplate },
+      },
+    })({})
+    expect(provider.snapshot?.operations).toEqual({ create: true, list: false, delete: false })
+    expect(provider.template?.operations).toEqual({ create: true, list: false, delete: false })
+    await expect(provider.snapshot!.create('source')).resolves.toEqual({ id: 'snap-1' })
+    await expect(provider.template!.create({ name: 'test' })).resolves.toEqual({ id: 'template-1' })
+    await expect(provider.snapshot!.list()).rejects.toMatchObject({ code: 'unsupported', operation: 'snapshot.list' })
+    await expect(provider.snapshot!.delete('snap-1')).rejects.toMatchObject({ code: 'unsupported', operation: 'snapshot.delete' })
+    await expect(provider.template!.list()).rejects.toMatchObject({ code: 'unsupported', operation: 'template.list' })
+    await expect(provider.template!.delete('template-1')).rejects.toMatchObject({ code: 'unsupported', operation: 'template.delete' })
+  })
+
+  it('requires scope for instance-scoped listing and preserves native errors', async () => {
+    const failure = new Error('native list unavailable')
+    const list = vi.fn().mockResolvedValue([{ id: 'snap-1' }])
+    const remove = vi.fn().mockRejectedValue(failure)
+    const provider = defineProvider({
+      name: 'mock',
+      methods: {
+        sandbox: base(),
+        snapshot: { create: vi.fn(), list, delete: remove, listScope: 'instance' },
+      },
+    })({})
+    expect(provider.snapshot?.operations).toEqual({ create: true, list: true, delete: true })
+    expect(provider.snapshot?.listScope).toBe('instance')
+    await expect(provider.snapshot!.list()).rejects.toMatchObject({ code: 'unsupported' })
+    expect(list).not.toHaveBeenCalled()
+    await expect(provider.snapshot!.list({ instanceId: 'source', limit: 3 })).resolves.toEqual([{ id: 'snap-1' }])
+    expect(list).toHaveBeenCalledWith({}, { instanceId: 'source', sandboxId: 'source', limit: 3 })
+    await provider.snapshot!.list({ sandboxId: 'legacy' })
+    expect(list).toHaveBeenLastCalledWith({}, { sandboxId: 'legacy' })
+    list.mockRejectedValueOnce(failure)
+    await expect(provider.snapshot!.list({ instanceId: 'source' })).rejects.toBe(failure)
+    await expect(provider.snapshot!.delete('snap-1')).rejects.toBe(failure)
+  })
+
   it('wires lifetime extension and derives extendable', async () => {
     const extendLifetime = vi.fn().mockResolvedValue(undefined)
     const provider = defineProvider({

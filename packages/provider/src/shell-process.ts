@@ -466,6 +466,10 @@ export class ShellProcessRuntime {
 
   constructor(private readonly run: CommandRunner) {}
 
+  get supportsStreaming(): boolean {
+    return this.state !== 'ephemeral';
+  }
+
   async startProcess(command: string, options: ShellProcessOptions = {}): Promise<ShellProcessHandle> {
     if (this.state === 'ephemeral') throw new ShellStateNotPersistentError();
     try {
@@ -489,11 +493,8 @@ export class ShellProcessRuntime {
         this.state = 'ephemeral';
       }
     }
-    const { onStdout, onStderr, ...plain } = options;
-    const result = await this.run(command, plain);
-    if (result.stdout) onStdout?.(result.stdout);
-    if (result.stderr) onStderr?.(result.stderr);
-    return result;
+    if (options.onStdout || options.onStderr) throw new ShellStateNotPersistentError();
+    return await this.run(command, options);
   }
 
   attachProcess(jobId: string, options: ShellProcessOptions = {}): ShellProcessHandle {

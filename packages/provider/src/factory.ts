@@ -46,7 +46,7 @@ import {
   type SeedInvocationResult,
 } from 'daemond';
 import { readInstanceEgress, setupInstanceEgress } from './egress.js';
-import { withVolumeSettle } from './utils.js';
+import { UnsupportedOperationError, withVolumeSettle } from './utils.js';
 import { ShellFileSystem } from './shell-filesystem';
 import { InstanceSizeError, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeMetadata } from 'computesdk';
 import { applyInstanceSizePatch, createInstanceSizeManager, type InstanceSizeResolver } from './sizes.js';
@@ -375,8 +375,8 @@ export type SandboxMethods<TInstance = any, TConfig = any> = InstanceMethods<TIn
  */
 export interface TemplateMethods<TTemplate = any, TConfig = any, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> {
   create: (config: TConfig, options: TCreateOptions) => Promise<TTemplate>;
-  list: (config: TConfig, options?: ListTemplatesOptions) => Promise<TTemplate[]>;
-  delete: (config: TConfig, templateId: string) => Promise<void>;
+  list?: (config: TConfig, options?: ListTemplatesOptions) => Promise<TTemplate[]>;
+  delete?: (config: TConfig, templateId: string) => Promise<void>;
 }
 
 /**
@@ -384,8 +384,10 @@ export interface TemplateMethods<TTemplate = any, TConfig = any, TCreateOptions 
  */
 export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
   create: (config: TConfig, instanceId: string, options?: CreateSnapshotOptions) => Promise<TSnapshot>;
-  list: (config: TConfig, options?: ListSnapshotsOptions) => Promise<TSnapshot[]>;
-  delete: (config: TConfig, snapshotId: string) => Promise<void>;
+  list?: (config: TConfig, options?: ListSnapshotsOptions) => Promise<TSnapshot[]>;
+  delete?: (config: TConfig, snapshotId: string) => Promise<void>;
+  /** Instance-scoped listing rejects requests without instanceId/sandboxId. */
+  listScope?: 'provider' | 'instance';
   /** What snapshots keep and what the source needs; see {@link SnapshotCapabilities}. */
   capabilities?: SnapshotCapabilities;
   /** For `readiness: 'eventual'` providers: resolve once the snapshot can be restored. */
@@ -484,7 +486,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   readonly extendLifetime?: (ms: number) => Promise<void>;
   private daemonStreamState?: DaemonStreamState;
   /** Which runtime serves streaming `runCommand` and `startProcess`. */
-  readonly processRuntime: { streaming: ProcessTier; processes: ProcessTier };
+  readonly processRuntime: { streaming: ProcessTier | 'unsupported'; processes: ProcessTier };
   /** The shell process tier, built on the provider's plain `runCommand`. */
   private readonly shell: ShellProcessRuntime;
   constructor(
@@ -499,11 +501,13 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   ) {
     this.instanceId = instanceId;
     const fallback: ProcessTier = runtimeMode === 'daemond' ? 'daemond' : 'shell';
+    const shell = this.shell = new ShellProcessRuntime((command, options) => this.methods.runCommand(this.instance, command, options));
     this.processRuntime = {
-      streaming: methods.streamCommand ? 'native' : fallback,
+      get streaming() {
+        return methods.streamCommand ? 'native' : fallback === 'shell' && !shell.supportsStreaming ? 'unsupported' : fallback;
+      },
       processes: methods.startProcess ? 'native' : fallback,
     };
-    this.shell = new ShellProcessRuntime((command, options) => this.methods.runCommand(this.instance, command, options));
     this.sandboxId = instanceId;
     this.provider = providerName;
 
@@ -1250,20 +1254,27 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
  * Auto-generated Template Manager implementation
  */
 class GeneratedTemplateManager<TTemplate, TConfig, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> implements ProviderTemplateManager<TTemplate, TCreateOptions> {
+  readonly operations: { create: boolean; list: boolean; delete: boolean };
+
   constructor(
     private config: TConfig,
-    private methods: TemplateMethods<TTemplate, TConfig, TCreateOptions>
-  ) {}
+    private methods: TemplateMethods<TTemplate, TConfig, TCreateOptions>,
+    private providerName: string
+  ) {
+    this.operations = Object.freeze({ create: true, list: !!methods.list, delete: !!methods.delete });
+  }
 
   async create(options: TCreateOptions): Promise<TTemplate> {
     return await this.methods.create(this.config, options);
   }
 
   async list(options?: ListTemplatesOptions): Promise<TTemplate[]> {
+    if (!this.methods.list) throw new UnsupportedOperationError(this.providerName, 'template.list');
     return await this.methods.list(this.config, options);
   }
 
   async delete(templateId: string): Promise<void> {
+    if (!this.methods.delete) throw new UnsupportedOperationError(this.providerName, 'template.delete');
     return await this.methods.delete(this.config, templateId);
   }
 }
@@ -1273,11 +1284,16 @@ class GeneratedTemplateManager<TTemplate, TConfig, TCreateOptions extends Create
  */
 class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotManager<TSnapshot> {
   readonly capabilities?: SnapshotCapabilities;
+  readonly operations: { create: boolean; list: boolean; delete: boolean };
+  readonly listScope: 'provider' | 'instance';
   constructor(
     private config: TConfig,
-    private methods: SnapshotMethods<TSnapshot, TConfig>
+    private methods: SnapshotMethods<TSnapshot, TConfig>,
+    private providerName: string
   ) {
     this.capabilities = methods.capabilities;
+    this.operations = Object.freeze({ create: true, list: !!methods.list, delete: !!methods.delete });
+    this.listScope = methods.listScope ?? 'provider';
     if (methods.waitUntilReady) {
       const wait = methods.waitUntilReady.bind(methods);
       this.waitUntilReady = (snapshotId, options) => wait(this.config, snapshotId, options);
@@ -1291,14 +1307,19 @@ class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotMa
   }
 
   async list(options?: ListSnapshotsOptions): Promise<TSnapshot[]> {
+    if (!this.methods.list) throw new UnsupportedOperationError(this.providerName, 'snapshot.list');
     // Legacy implementations still read `sandboxId`; keep both keys populated.
     const normalized = options
       ? { ...options, sandboxId: options.instanceId ?? options.sandboxId }
       : options;
+    if (this.listScope === 'instance' && !normalized?.sandboxId) {
+      throw new UnsupportedOperationError(this.providerName, 'snapshot.list without instanceId');
+    }
     return await this.methods.list(this.config, normalized);
   }
 
   async delete(snapshotId: string): Promise<void> {
+    if (!this.methods.delete) throw new UnsupportedOperationError(this.providerName, 'snapshot.delete');
     return await this.methods.delete(this.config, snapshotId);
   }
 }
@@ -1370,11 +1391,11 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
 
     // Initialize optional managers if methods are provided
     if (providerConfig.methods.template) {
-      this.template = new GeneratedTemplateManager(config, providerConfig.methods.template);
+      this.template = new GeneratedTemplateManager(config, providerConfig.methods.template, providerConfig.name);
     }
 
     if (providerConfig.methods.snapshot) {
-      this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot);
+      this.snapshot = new GeneratedSnapshotManager(config, providerConfig.methods.snapshot, providerConfig.name);
     }
 
     if (providerConfig.methods.volume) {
