@@ -171,6 +171,24 @@ export interface MiosaSnapshotRecord {
   [key: string]: unknown;
 }
 
+export interface MiosaSnapshot extends MiosaSnapshotRecord {
+  provider: "miosa";
+  createdAt: string;
+  instanceId: string;
+  sandboxId: string;
+}
+
+function toSnapshot(record: MiosaSnapshotRecord, ownerId: string): MiosaSnapshot {
+  const instanceId = record.sandbox_id ?? ownerId;
+  return {
+    ...record,
+    provider: "miosa",
+    createdAt: record.created_at,
+    instanceId,
+    sandboxId: instanceId,
+  };
+}
+
 /**
  * The native sandbox handle carried through ComputeSDK: the MIOSA sandbox
  * record plus the resolved client settings needed for instance operations.
@@ -2066,7 +2084,7 @@ const createMiosaProvider = defineProvider<
   MiosaSandbox,
   MiosaConfig,
   never,
-  MiosaSnapshotRecord
+  MiosaSnapshot
 >({
   name: "miosa",
   methods: {
@@ -2583,7 +2601,7 @@ const createMiosaProvider = defineProvider<
         config: MiosaConfig,
         sandboxId: string,
         options?: CreateSnapshotOptions,
-      ): Promise<MiosaSnapshotRecord> => {
+      ): Promise<MiosaSnapshot> => {
         const auth = resolveAuth(config);
         sandboxId = await resolveSandboxId(auth.apiKey, sandboxId);
         if (sandboxTransport.get(sandboxId) === "regional")
@@ -2602,13 +2620,14 @@ const createMiosaProvider = defineProvider<
         const record = response.data ?? response;
         if (record?.id)
           snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), sandboxId);
-        return record?.id ? waitForSnapshotReady(auth, sandboxId, record) : record;
+        const ready = record?.id ? await waitForSnapshotReady(auth, sandboxId, record) : record;
+        return toSnapshot(ready, sandboxId);
       },
 
       list: async (
         config: MiosaConfig,
         options?: { sandboxId?: string },
-      ): Promise<MiosaSnapshotRecord[]> => {
+      ): Promise<MiosaSnapshot[]> => {
         const auth = resolveAuth(config);
         if (!options?.sandboxId) {
           throw new Error(
@@ -2638,7 +2657,7 @@ const createMiosaProvider = defineProvider<
           if (record?.id && owner)
             snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), owner);
         }
-        return records;
+        return records.map((record) => toSnapshot(record, ownerId));
       },
 
       delete: async (

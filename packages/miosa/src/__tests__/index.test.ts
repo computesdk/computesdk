@@ -684,7 +684,7 @@ describe("miosa provider", () => {
     );
 
     it.each(["instanceId", "sandboxId"] as const)(
-      "list should GET the owning sandbox's snapshots using %s without reshaping records",
+      "list should GET the owning sandbox's snapshots using %s while preserving native fields",
       async (scope) => {
         const records = [{
           id: "snap-1",
@@ -705,7 +705,13 @@ describe("miosa provider", () => {
         expect((init.headers as Record<string, string>).authorization).toBe(
           `Bearer ${API_KEY}`,
         );
-        expect(snapshots).toEqual(records);
+        expect(snapshots).toEqual(records.map((record) => ({
+          ...record,
+          provider: "miosa",
+          createdAt: record.created_at,
+          instanceId: "sb-1",
+          sandboxId: "sb-1",
+        })));
       },
     );
 
@@ -717,7 +723,15 @@ describe("miosa provider", () => {
         fetchMock.mockResolvedValueOnce(jsonResponse({ data: records }));
         const provider = miosa({ apiKey: API_KEY });
 
-        await expect(provider.snapshot!.list({ [scope]: "sb-1" })).resolves.toEqual(records);
+        await expect(provider.snapshot!.list({ [scope]: "sb-1" })).resolves.toEqual(
+          records.map((record) => ({
+            ...record,
+            provider: "miosa",
+            createdAt: undefined,
+            instanceId: "sb-1",
+            sandboxId: "sb-1",
+          })),
+        );
         fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
         await provider.snapshot!.delete(snapshotId);
 
