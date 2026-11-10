@@ -167,7 +167,7 @@ export interface MiosaSnapshotRecord {
   sandbox_id: string;
   status: string;
   comment: string | null;
-  created_at: string;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -178,12 +178,31 @@ export interface MiosaSnapshot extends MiosaSnapshotRecord {
   sandboxId: string;
 }
 
-function toSnapshot(record: MiosaSnapshotRecord, ownerId: string): MiosaSnapshot {
+function isSnapshotDate(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
+async function toSnapshot(
+  auth: MiosaAuth,
+  record: MiosaSnapshotRecord,
+  ownerId: string,
+): Promise<MiosaSnapshot> {
+  let createdAt = record.created_at;
+  if (!isSnapshotDate(createdAt)) {
+    const detail = await miosaRequest<{ data?: { id: string; created_at?: string } }>(
+      auth, "GET", `/snapshots/${encodeURIComponent(record.id)}`,
+    );
+    const nativeDate = detail.data?.created_at;
+    if (detail.data?.id !== record.id || !isSnapshotDate(nativeDate)) {
+      throw new Error(`MIOSA snapshot ${record.id} has no valid creation date in native metadata.`);
+    }
+    createdAt = nativeDate;
+  }
   const instanceId = record.sandbox_id ?? ownerId;
   return {
     ...record,
     provider: "miosa",
-    createdAt: record.created_at,
+    createdAt,
     instanceId,
     sandboxId: instanceId,
   };
@@ -2621,7 +2640,7 @@ const createMiosaProvider = defineProvider<
         if (record?.id)
           snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), sandboxId);
         const ready = record?.id ? await waitForSnapshotReady(auth, sandboxId, record) : record;
-        return toSnapshot(ready, sandboxId);
+        return toSnapshot(auth, ready, sandboxId);
       },
 
       list: async (
@@ -2657,7 +2676,7 @@ const createMiosaProvider = defineProvider<
           if (record?.id && owner)
             snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), owner);
         }
-        return records.map((record) => toSnapshot(record, ownerId));
+        return Promise.all(records.map((record) => toSnapshot(auth, record, ownerId)));
       },
 
       delete: async (

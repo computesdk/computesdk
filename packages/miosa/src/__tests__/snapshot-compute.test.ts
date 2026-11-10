@@ -125,4 +125,89 @@ describe("Miosa snapshots through ComputeSDK", () => {
     });
     expect(snapshot.createdAt.toISOString()).toBe(CREATED_AT);
   });
+
+  function compactSnapshot(createdAt?: string) {
+    const record: Partial<typeof nativeSnapshot> = { ...nativeSnapshot };
+    delete record.created_at;
+    if (createdAt !== undefined) record.created_at = createdAt;
+    return record;
+  }
+
+  describe.each([undefined, "not-a-date"])("native created_at %j", (createdAt) => {
+    it.each(["instanceId", "sandboxId"] as const)(
+      "should hydrate only the date for %s listing without discarding records or changing status",
+      async (scope) => {
+        const compact = { ...compactSnapshot(createdAt), id: "snapshot-compact", status: "uploading" };
+        fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+          expect(init.method).toBe("GET");
+          if (url === `${BASE_URL}/sandboxes/${OWNER_ID}/snapshots`) {
+            return new Response(JSON.stringify({ data: [nativeSnapshot, compact] }));
+          }
+          expect(url).toBe(`${BASE_URL}/snapshots/${compact.id}`);
+          return new Response(JSON.stringify({ data: { ...nativeSnapshot, id: compact.id }, dependents: [] }));
+        });
+
+        const snapshots = await sdk().snapshot.list({ [scope]: OWNER_ID });
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(snapshots).toEqual([nativeSnapshot, compact].map((record) => ({
+          ...record,
+          provider: "miosa",
+          instanceId: OWNER_ID,
+          sandboxId: OWNER_ID,
+          createdAt: new Date(CREATED_AT),
+        })));
+        expect(snapshots[1].createdAt.toISOString()).toBe(CREATED_AT);
+      },
+    );
+
+    it("should hydrate compact creation only after native readiness has completed", async () => {
+      const compact = compactSnapshot(createdAt);
+      fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+        if (url === `${BASE_URL}/sandboxes/${OWNER_ID}/snapshots`) {
+          if (init.method === "POST") {
+            return new Response(JSON.stringify({ data: { ...compact, status: "pending" } }), { status: 201 });
+          }
+          expect(init.method).toBe("GET");
+          return new Response(JSON.stringify({ data: [compact] }));
+        }
+        expect(url).toBe(`${BASE_URL}/snapshots/${nativeSnapshot.id}`);
+        expect(init.method).toBe("GET");
+        return new Response(JSON.stringify({ data: nativeSnapshot, dependents: [] }));
+      });
+
+      const snapshot = await sdk().snapshot.create(OWNER_ID);
+
+      expect(fetchMock.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
+        [`${BASE_URL}/sandboxes/${OWNER_ID}/snapshots`, "POST"],
+        [`${BASE_URL}/sandboxes/${OWNER_ID}/snapshots`, "GET"],
+        [`${BASE_URL}/snapshots/${nativeSnapshot.id}`, "GET"],
+      ]);
+      expect(snapshot).toEqual({
+        ...compact,
+        provider: "miosa",
+        createdAt: new Date(CREATED_AT),
+        instanceId: OWNER_ID,
+        sandboxId: OWNER_ID,
+      });
+      expect(snapshot.createdAt.toISOString()).toBe(CREATED_AT);
+    });
+
+    it("should report unavailable native date metadata explicitly, not return an Invalid Date", async () => {
+      const compact = compactSnapshot(createdAt);
+      fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+        expect(init.method).toBe("GET");
+        if (url === `${BASE_URL}/sandboxes/${OWNER_ID}/snapshots`) {
+          return new Response(JSON.stringify({ data: [compact] }));
+        }
+        expect(url).toBe(`${BASE_URL}/snapshots/${nativeSnapshot.id}`);
+        return new Response(JSON.stringify({ data: compact, dependents: [] }));
+      });
+
+      await expect(sdk().snapshot.list({ instanceId: OWNER_ID })).rejects.toThrow(
+        /snapshot-boundary.*valid creation date/,
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
 });

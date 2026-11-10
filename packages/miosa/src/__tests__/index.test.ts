@@ -625,7 +625,7 @@ describe("miosa provider", () => {
         ),
       );
       fetchMock.mockResolvedValueOnce(
-        jsonResponse({ data: [{ id: "snap-1", sandbox_id: "sb-1", status: "ready" }] }),
+        jsonResponse({ data: [{ id: "snap-1", sandbox_id: "sb-1", status: "ready", created_at: "2026-07-11T00:00:00Z" }] }),
       );
       const provider = miosa({ apiKey: API_KEY });
 
@@ -719,7 +719,7 @@ describe("miosa provider", () => {
       "list should retain the owner for delete when a record omits sandbox_id using %s",
       async (scope) => {
         const snapshotId = `snap-owner-${scope}`;
-        const records = [{ id: snapshotId, status: "ready" }];
+        const records = [{ id: snapshotId, status: "ready", created_at: "2026-07-11T00:00:00Z" }];
         fetchMock.mockResolvedValueOnce(jsonResponse({ data: records }));
         const provider = miosa({ apiKey: API_KEY });
 
@@ -727,7 +727,7 @@ describe("miosa provider", () => {
           records.map((record) => ({
             ...record,
             provider: "miosa",
-            createdAt: undefined,
+            createdAt: record.created_at,
             instanceId: "sb-1",
             sandboxId: "sb-1",
           })),
