@@ -122,6 +122,39 @@ the `PATCH /api/v1/actions/workflows` result (`repoFullName, path, enabled,
 userDisabledAt, providerOrder, snapshotCap`). Enable, disable and set ask for
 confirmation on a terminal; elsewhere they need `-y` and exit 1 without it.
 
+## compute actions repos
+
+`compute actions repos` lists the org's repositories with their run counts,
+latest run and poll state (from `GET /api/v1/actions/repos`):
+
+```
+enabled  computesdk/computesdk  github-app · main · 3 workflows · 12 runs · last passed 3h ago · next poll in 2m
+enabled  local/fixture  token · main · 1 workflow · 0 runs · not polled yet · fork PRs on
+disabled  acme/legacy  github-app · main · no workflows yet · 4 runs · last failed 9d ago
+```
+
+```bash
+compute actions repos --json                                     # {repos}, the v1 body
+compute actions branches computesdk/computesdk --search 482      # refs containing "482"
+compute actions branches computesdk/computesdk --archived --json # {repo, defaultBranch, branches}; counts archived runs
+compute actions repos poll local/fixture -y                      # owner/admin; at most every 30 s
+compute actions repos set computesdk/ref-heavy --fork-prs refuse -y   # or allow; owner/admin
+```
+
+`compute actions branches <repo>` lists the watched branches and open pull
+requests, then the refs that only have run history, each with its run count
+and latest run. `repos poll` fetches the repo's refs now and starts the runs
+new commits call for; the platform allows one poll every 30 seconds per repo
+(shared with the dashboard's "Poll now"), so a second poll inside that window
+exits 1 with `retry after <time>`. A poll that ran but failed against the
+remote prints the error and exits 1. `repos set --fork-prs allow|refuse`
+decides whether pull requests from forks run CI (isolated: no org secrets, no
+GitHub token); private repositories refuse them. `--repo-id` picks one row when
+two installations grant the same name. `--json` prints the v1 body: the poll
+result `{fullName, repoId, polled, error, createdRunIds, repo}` and the
+`PATCH /api/v1/actions/repos` result for `set`. Poll and set ask for
+confirmation on a terminal; elsewhere they need `-y` and exit 1 without it.
+
 ## Actions schedule
 
 ```bash

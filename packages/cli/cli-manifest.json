@@ -674,7 +674,7 @@
         "--json",
         "--help"
       ],
-      "summary": "List the org's connected repositories"
+      "summary": "List the org's connected repositories: run counts, last run and next poll"
     },
     {
       "path": [
@@ -785,6 +785,90 @@
         "--help"
       ],
       "summary": "Disable a repo — it stays connected but no runs are scheduled"
+    },
+    {
+      "path": [
+        "actions",
+        "repos",
+        "poll"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos",
+          "poll"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--repo-id",
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Poll a repo now: fetch its refs and start the runs new commits call for (owner/admin; at most every 30 s)"
+    },
+    {
+      "path": [
+        "actions",
+        "repos",
+        "set"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos",
+          "set"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--fork-prs",
+        "--repo-id",
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Change a repo's settings: whether pull requests from forks run CI (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "branches"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "branches"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--search",
+        "--archived",
+        "--repo-id",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List a repo's refs: watched branches and pull requests, then refs with run history only"
     },
     {
       "path": [

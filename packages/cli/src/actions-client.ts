@@ -546,7 +546,54 @@ export interface CiRepo {
 }
 
 export interface CiReposResponse {
-  repos: CiRepo[];
+  repos: CiApiRepo[];
+}
+
+export type CiPollSchedule = 'disabled' | 'never' | 'scheduled';
+
+/**
+ * A repo on `GET /api/v1/actions/repos` since the platform added poll state
+ * and run counts. Older deployments send only the `CiRepo` fields.
+ */
+export interface CiApiRepo extends CiRepo {
+  pollIntervalSeconds: number;
+  /** `disabled`: repo off; `never`: enabled but not polled yet; `scheduled`: `nextPollDueAt` is set. */
+  pollSchedule: CiPollSchedule;
+  nextPollDueAt: string | null;
+  lastPollErrorAt: string | null;
+  lastPollSucceededAt: string | null;
+  lastChangeAt: string | null;
+  /** Unarchived runs (reliability runs included), as the repository index counts them. */
+  runs: { total: number; lastRunState: CiConclusion | null; lastRunQueuedAt: string | null };
+}
+
+/** `POST /api/v1/actions/repos/poll`: a poll that failed against the remote still answers with `error` set. */
+export interface CiRepoPollResponse {
+  fullName: string;
+  repoId: string;
+  polled: true;
+  error: string | null;
+  createdRunIds: string[];
+  repo: CiApiRepo;
+}
+
+/** One ref of `GET /api/v1/actions/repos/branches`: a watched cursor, or run history alone. */
+export interface CiBranch {
+  /** Fully qualified: refs/heads/…, refs/pull/<n>/head, refs/tags/… */
+  ref: string;
+  prNumber: number | null;
+  /** True while a live ref cursor polls the ref; false: run history only. */
+  watched: boolean;
+  runCount: number;
+  /** "" when the ref has no run in view. */
+  latestRunId: string;
+  lastRunAt: string;
+}
+
+export interface CiBranchesResponse {
+  repo: string;
+  defaultBranch: string;
+  branches: CiBranch[];
 }
 
 /** What an enable/remote-connect discovered before answering. */
