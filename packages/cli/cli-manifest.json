@@ -2504,9 +2504,145 @@
         "--org",
         "--allow-untrusted-host",
         "--json",
+        "--resources",
+        "--warm-pool",
         "--help"
       ],
       "summary": "Update the org's sandboxes routing policy"
+    },
+    {
+      "path": [
+        "instances",
+        "costs"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "costs"
+        ],
+        [
+          "sbx",
+          "costs"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--customer-only",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the org's sandbox spend: running, settled and per provider"
+    },
+    {
+      "path": [
+        "instances",
+        "rates"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "rates"
+        ],
+        [
+          "sbx",
+          "rates"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the org's sandbox rate per provider and where each comes from"
+    },
+    {
+      "path": [
+        "instances",
+        "rates",
+        "set"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "rates",
+          "set"
+        ],
+        [
+          "sbx",
+          "rates",
+          "set"
+        ]
+      ],
+      "args": [
+        "<provider>",
+        "[rate]"
+      ],
+      "flags": [
+        "--usd",
+        "--per",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Set the org rate override for a provider (applies to sandboxes created afterwards)"
+    },
+    {
+      "path": [
+        "instances",
+        "rates",
+        "rm"
+      ],
+      "aliases": [
+        [
+          "instances",
+          "rates",
+          "remove"
+        ],
+        [
+          "sandboxes",
+          "rates",
+          "rm"
+        ],
+        [
+          "sandboxes",
+          "rates",
+          "remove"
+        ],
+        [
+          "sbx",
+          "rates",
+          "rm"
+        ],
+        [
+          "sbx",
+          "rates",
+          "remove"
+        ]
+      ],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Remove the org's rate override for a provider"
     },
     {
       "path": [

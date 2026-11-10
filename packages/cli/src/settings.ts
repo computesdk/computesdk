@@ -12,7 +12,7 @@
 
 import { Command } from 'commander';
 import pc from 'picocolors';
-import { ActionsApiError, type ActionsClient } from './actions-client.js';
+import { ActionsApiError, ActionsCliError, type ActionsClient } from './actions-client.js';
 import { formatUsdPer } from './rate-display.js';
 import type { CommonOpts } from './actions.js';
 
@@ -107,6 +107,46 @@ function parseSizeCap(entry: string): { size: string; cap: Rate | null } {
   return { size, cap };
 }
 
+/** Mirrors MAX_WARM_POOL_SIZE in benchmarks-platform lib/providers/provider-order.ts. */
+export const MAX_WARM_POOL_SIZE = 16;
+
+/** One `<provider>=<preset>` or `<provider>=none` `--resources` value; the server checks the names. */
+export function parseResourcesFlag(entry: string): { provider: string; preset: string | null } {
+  const eq = entry.indexOf('=');
+  const provider = eq === -1 ? '' : entry.slice(0, eq).trim();
+  const preset = eq === -1 ? '' : entry.slice(eq + 1).trim();
+  if (provider === '' || preset === '') {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Invalid --resources "${entry}" — expected <provider>=<preset> (e.g. blaxel=large) or <provider>=none.`,
+    );
+  }
+  return { provider, preset: preset === 'none' ? null : preset };
+}
+
+/** One `<provider[:region]>=<n>` `--warm-pool` value, n in 0..16 (0 clears the entry). */
+export function parseWarmPoolFlag(entry: string): { key: string; size: number } {
+  const eq = entry.indexOf('=');
+  const key = eq === -1 ? '' : entry.slice(0, eq).trim();
+  const value = eq === -1 ? '' : entry.slice(eq + 1).trim();
+  const size = Number(value);
+  if (key === '' || !/^\d+$/.test(value) || size > MAX_WARM_POOL_SIZE) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Invalid --warm-pool "${entry}" — expected <provider>[:<region>]=<n> with n in 0..${MAX_WARM_POOL_SIZE} (0 clears it).`,
+    );
+  }
+  return { key, size };
+}
+
+function formatResources(r: { cpus?: number; memoryMb?: number; ephemeralDiskMb?: number }): string {
+  const parts: string[] = [];
+  if (r.cpus !== undefined) parts.push(`${r.cpus} vCPU`);
+  if (r.memoryMb !== undefined) parts.push(`${r.memoryMb} MB`);
+  if (r.ephemeralDiskMb) parts.push(`${r.ephemeralDiskMb} MB disk`);
+  return parts.join(' / ') || '—';
+}
+
 const fmtRate = (cap: Rate | null | undefined): string =>
   cap ? formatUsdPer(cap) : '—';
 
@@ -144,13 +184,9 @@ export function printLaneSettings(
         : '—';
   console.log(`provider order: ${orderText}`);
   const resources = Object.entries(s.providerResources ?? {});
-  console.log('sizes:');
+  console.log('resources:');
   if (resources.length === 0) console.log('  —');
-  for (const [provider, r] of resources) {
-    console.log(
-      `  ${provider}  ${r.cpus ?? '?'} vCPU / ${r.memoryMb ?? '?'} MB${r.ephemeralDiskMb ? ` / ${r.ephemeralDiskMb} MB disk` : ''}`,
-    );
-  }
+  for (const [provider, r] of resources) console.log(`  ${provider}  ${formatResources(r)}`);
   const pool = Object.entries(s.warmPool ?? {});
   console.log('warm pool:');
   if (pool.length === 0) console.log('  —');
@@ -210,7 +246,7 @@ export function registerSettingsCommands(
     }
   });
 
-  common(
+  const set = common(
     settings
       .command('set')
       .description(`Update the org's ${lane} routing policy`)
@@ -233,11 +269,29 @@ export function registerSettingsCommands(
           ? 'provider order, comma-separated (e.g. "market,blaxel,vercel"); "inherit" restores the Actions order'
           : 'provider order, comma-separated (e.g. "market,blaxel,vercel"); "default" restores the platform default',
       ),
-  ).action(async (opts: CommonOpts & {
+  );
+  if (lane === 'sandboxes') {
+    set
+      .option(
+        '--resources <provider=preset>',
+        'per-provider size preset (e.g. blaxel=large); <provider>=none clears it (repeatable)',
+        (v, a: string[]) => a.concat(v),
+        [] as string[],
+      )
+      .option(
+        '--warm-pool <provider[:region]=n>',
+        `warm pool size per placement entry, 0..${MAX_WARM_POOL_SIZE}; 0 clears it (repeatable)`,
+        (v, a: string[]) => a.concat(v),
+        [] as string[],
+      );
+  }
+  set.action(async (opts: CommonOpts & {
     cap: string[];
     generalCap?: string;
     orderType?: string;
     order?: string;
+    resources?: string[];
+    warmPool?: string[];
   }) => {
     try {
       const body: Record<string, unknown> = {};
@@ -284,9 +338,27 @@ export function registerSettingsCommands(
           }
         }
       }
+      if (opts.resources && opts.resources.length > 0) {
+        const resources: Record<string, string | null> = {};
+        for (const entry of opts.resources) {
+          const { provider, preset } = parseResourcesFlag(entry);
+          resources[provider] = preset;
+        }
+        body.providerResources = resources;
+      }
+      if (opts.warmPool && opts.warmPool.length > 0) {
+        const pool: Record<string, number> = {};
+        for (const entry of opts.warmPool) {
+          const { key, size } = parseWarmPoolFlag(entry);
+          pool[key] = size;
+        }
+        body.warmPool = pool;
+      }
       if (Object.keys(body).length === 0) {
         throw new Error(
-          'Nothing to change — pass --cap, --general-cap, --order-type, or --order.',
+          lane === 'sandboxes'
+            ? 'Nothing to change — pass --cap, --general-cap, --order-type, --order, --resources, or --warm-pool.'
+            : 'Nothing to change — pass --cap, --general-cap, --order-type, or --order.',
         );
       }
       const c = await deps.client(opts);

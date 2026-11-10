@@ -270,3 +270,88 @@ describe('review fixes', () => {
     expect(patch).not.toHaveBeenCalled();
   });
 });
+
+describe('compute sandboxes settings set --resources / --warm-pool', () => {
+  async function rejects(args: string[]): Promise<string> {
+    let errText = '';
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('exit');
+    });
+    const err = vi.spyOn(console, 'error').mockImplementation((...a) => void (errText += a.join(' ')));
+    try {
+      await buildSandboxes().parseAsync(['sandboxes', 'settings', 'set', ...args], { from: 'user' });
+    } catch {
+      /* exit */
+    } finally {
+      expect(exit).toHaveBeenCalledWith(1);
+      exit.mockRestore();
+      err.mockRestore();
+    }
+    expect(patch).not.toHaveBeenCalled();
+    return errText;
+  }
+
+  it('builds providerResources from repeatable --resources, none clearing', async () => {
+    await buildSandboxes().parseAsync(
+      ['sandboxes', 'settings', 'set', '--resources', 'archil=large', '--resources', 'e2b=none'],
+      { from: 'user' },
+    );
+    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', {
+      providerResources: { archil: 'large', e2b: null },
+    });
+  });
+
+  it('builds warmPool from repeatable --warm-pool with provider[:region] keys', async () => {
+    await buildSandboxes().parseAsync(
+      ['sandboxes', 'settings', 'set', '--warm-pool', 'archil:us-east=3', '--warm-pool', 'blaxel=0'],
+      { from: 'user' },
+    );
+    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', {
+      warmPool: { 'archil:us-east': 3, blaxel: 0 },
+    });
+  });
+
+  it('combines with the other flags in one PATCH', async () => {
+    await buildSandboxes().parseAsync(
+      ['sandboxes', 'settings', 'set', '--resources', 'blaxel=small', '--warm-pool', 'blaxel=1', '--order', 'blaxel'],
+      { from: 'user' },
+    );
+    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', {
+      providerOrder: ['blaxel'],
+      providerResources: { blaxel: 'small' },
+      warmPool: { blaxel: 1 },
+    });
+  });
+
+  it('rejects a warm pool above 16', async () => {
+    expect(await rejects(['--warm-pool', 'blaxel=17'])).toMatch(/0\.\.16/);
+  });
+
+  it('rejects a warm pool without =n, or with a non-integer', async () => {
+    expect(await rejects(['--warm-pool', 'blaxel'])).toMatch(/--warm-pool/);
+    expect(await rejects(['--warm-pool', 'blaxel=1.5'])).toMatch(/--warm-pool/);
+    expect(await rejects(['--warm-pool', '=2'])).toMatch(/--warm-pool/);
+  });
+
+  it('rejects --resources without a preset', async () => {
+    expect(await rejects(['--resources', 'blaxel'])).toMatch(/--resources/);
+    expect(await rejects(['--resources', 'blaxel='])).toMatch(/--resources/);
+    expect(await rejects(['--resources', '=small'])).toMatch(/--resources/);
+  });
+
+  it('settings render has a resources row and a warm-pool row', async () => {
+    get.mockImplementation(async () => ({
+      ...SANDBOX_SETTINGS,
+      providerResources: { blaxel: { memoryMb: 2048 }, archil: { cpus: 4, memoryMb: 8192 } },
+      warmPool: { blaxel: 1 },
+    }));
+    const out = await captureStdout(() =>
+      buildSandboxes().parseAsync(['sandboxes', 'settings'], { from: 'user' }),
+    );
+    expect(out).toContain('resources:');
+    expect(out).toContain('blaxel  2048 MB');
+    expect(out).not.toContain('? vCPU');
+    expect(out).toContain('archil  4 vCPU / 8192 MB');
+    expect(out).toMatch(/warm pool:\s*\n?\s*blaxel {2}1/);
+  });
+});

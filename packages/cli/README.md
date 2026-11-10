@@ -207,6 +207,44 @@ Only one session per agent can be active at a time. Legacy sessions without
 persistent state cannot be recovered retroactively. Requires the platform's
 managed-volume/resume API; no account storage credentials are needed in the CLI.
 
+## compute instances costs, rates and settings
+
+`compute instances` (aliases `sandboxes`, `sbx`) also reads and sets the org's
+sandbox spend, rate table and routing policy. Each command takes `--org`,
+`--api-key`, `--base-url`, `--allow-untrusted-host` and `--json` (the v1 body).
+
+```bash
+compute instances costs                      # spend: running, settled, per provider
+compute instances costs --customer-only      # without idle platform sandboxes (warm pool, CI sync, snapshot builds)
+compute instances rates                      # provider, rate, per, source, fallback
+compute instances rates set beam 0.5/hour    # or: --usd 0.5 --per hour; owner/admin
+compute instances rates rm beam -y           # owner/admin; falls back to the platform rate
+compute instances settings set --resources blaxel=large --warm-pool blaxel=1
+compute instances settings set --resources blaxel=none --warm-pool blaxel=0
+```
+
+`costs` calls `GET /api/v1/sandboxes/costs` (`?customerOnly=true` with
+`--customer-only`); `--json` prints `{currency, running, settled, totalUsd,
+byProvider}`. The table's `all` row splits running and settled; the API gives
+one count and cost per provider, so provider rows show only those.
+
+`rates` calls `GET /api/v1/sandboxes/rates` and works for any member; `--json`
+prints `{rates}`, each with `provider, usd, per, rateUsd, source, fallback`.
+`source` is `organization` (the org's override), `platform` or `builtin`.
+`rates set <provider> <usd>/<second|minute|hour>` (`PUT`) writes the org
+override for sandboxes created afterwards and prints the resolved rate; it has
+no confirmation step. `rates rm <provider>` (`DELETE ?provider=`) asks for
+confirmation on a terminal; elsewhere it needs `-y` and exits 1 without it.
+Removing a provider with no override exits 1 with the server's not-found
+error. The rate table needs the org's sandboxes feature.
+
+`settings set` (`PATCH /api/v1/sandboxes/settings`, owner/admin) takes
+`--resources <provider>=<preset>` (the provider's size preset, such as
+`small`, `medium`, `large` or `xlarge`; `none` clears it) and
+`--warm-pool <provider>[:<region>]=<n>` (`n` from 0 to 16; 0 clears the
+entry). Both repeat, and the CLI checks only their syntax; the platform checks
+provider and preset names. `compute instances settings` prints the resulting
+`resources` and `warm pool` rows.
 ## compute bench
 
 `compute bench …` runs the benchmarks CLI (`bench`) in-process: the same

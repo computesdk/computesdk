@@ -40,6 +40,7 @@ import {
 } from './current-instance.js';
 import { formatMoney, formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits } from './rate-display.js';
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
+import { registerBillingCommands } from './sandbox-billing.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
 // The definitions moved to @computesdk/platform in cli 2.x — re-exported here
@@ -1262,17 +1263,17 @@ export function registerSandboxesCommands(program: Command): void {
     sub.option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)');
   }
 
-  // Registered after the --org pass so `settings`/`settings set` declare
+  // Registered after the --org pass so `settings`, `costs`, `rates` and their subcommands declare
   // their own full option set (the loop above only covers direct children).
-  registerSettingsCommands(cmd, 'sandboxes', (sub) =>
+  const nestedCommon = (sub: Command) =>
     sub
       .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
       .option('--base-url <url>', 'platform base URL')
       .option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)')
       .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
-      .option('--json', 'print the raw response'),
-    { client, fail, output, usageErrorOutput },
-  );
+      .option('--json', 'print the raw response');
+  registerSettingsCommands(cmd, 'sandboxes', nestedCommon, { client, fail, output, usageErrorOutput });
+  registerBillingCommands(cmd, nestedCommon, { client, fail, output });
 }
 
 /** Streams a process's daemon-buffered output to the console until `exit`. */
