@@ -24,7 +24,7 @@ tokens renew automatically.
 ## Commands
 
 ```
-compute actions …               # Actions API — repos, dispatch, runs, logs, vault
+compute actions …               # Actions API — repos, dispatch, runs, schedule, logs, vault
 compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
 compute bench …                 # benchmarks CLI (run, auth, org, results, …)
@@ -54,6 +54,41 @@ a bare `--` before the command is optional but supported.
 compute sandboxes exec sb1 uname -a
 compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
 ```
+
+## Actions schedule
+
+```bash
+compute actions schedule                         # now through seven days later, local timezone
+compute actions schedule --repo acme/widgets --tz America/Chicago
+compute actions schedule --reliability            # only reliability runs and scheduled fires
+compute actions schedule --from 2026-11-01T00:00:00Z --to 2026-11-08T00:00:00Z \
+  --workflow .github/workflows/ci.yml --workflow .github/workflows/nightly.yml
+compute actions schedule --event push --status failed --limit 50 --json
+```
+
+Reads `GET /api/v1/actions/schedule`. `--from` is inclusive and `--to` exclusive;
+the maximum window is 45 days. If `--to` is omitted it is seven days after
+`--from` (or now). `--tz` is an IANA zone, defaults to the local zone, and controls
+display times and API day buckets. Invalid zones fall back to UTC on the API.
+
+Human output lists upcoming fires with their workflow, repository and cron
+description, then past runs with event and status. Upcoming previews contain at
+most 100 fires per schedule; `+N more` reports the remainder in the window.
+Reliability activity is hidden by default. `--reliability` shows only reliability
+runs and workflows, matching the dashboard toggle; pagination hints retain it.
+Incomplete counts produce a warning to choose a smaller window.
+
+`--repo` takes `owner/repo`; `--workflow` takes file paths, not display names, and
+is repeatable. `--event` and `--status` accept multiple values. Status filters
+are conclusions (`passed`, `failed`, `running`, `cancelled`, `none`) and exclude
+upcoming fires. `--limit` pages actual runs (default 100, maximum 500).
+When another page exists, copy the printed `--cursor` command: it preserves the
+resolved window, timezone and filters, including a leading `compute --org <slug>`
+override (a command-local `--org` takes precedence). Credentials are never printed; reuse the
+same API-key environment or supply the same `--api-key` separately.
+
+`--json` returns the complete API response, including `days`, `runs`, `upcoming`,
+`nextCursor`, and truncation/count flags, without human headings or hints.
 
 ## Managed-agent persistence
 

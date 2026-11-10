@@ -51,6 +51,7 @@ import {
   type CiRunHistory,
   type CiRunInspection,
   type CiRunSummary,
+  type CiSchedule,
   type CiVaultDeleteResponse,
   type CiVaultItem,
   type CiVaultKind,
@@ -78,6 +79,76 @@ export interface CommonOpts extends JsonOpts {
   allowUntrustedHost?: boolean;
   /** One-off org override sent as X-Org-Slug (or set $COMPUTE_ORG). */
   org?: string;
+}
+
+interface ScheduleOpts extends CommonOpts {
+  reliability?: boolean;
+  from?: string;
+  to?: string;
+  repo?: string;
+  workflow?: string[];
+  event?: string[];
+  status?: string[];
+  tz?: string;
+  limit?: string;
+  cursor?: string;
+}
+
+function scheduleQuery(opts: ScheduleOpts): Record<string, string | string[] | undefined> {
+  const from = opts.from === undefined ? new Date() : new Date(opts.from);
+  const to = opts.to === undefined ? new Date(from.getTime() + 7 * 86_400_000) : new Date(opts.to);
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) {
+    throw new ActionsCliError('invalid_argument', '--from and --to must be valid timestamps.');
+  }
+  return {
+    from: from.toISOString(), to: to.toISOString(),
+    repo: opts.repo, workflow: opts.workflow, event: opts.event, status: opts.status,
+    reliability: opts.reliability ? '1' : undefined,
+    timeZone: opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    limit: opts.limit, cursor: opts.cursor,
+  };
+}
+
+function nextScheduleCommand(data: CiSchedule, opts: ScheduleOpts): string {
+  const args = ['compute', 'actions', 'schedule', '--from', data.from, '--to', data.to, '--tz', data.timeZone];
+  for (const key of ['repo', 'workflow', 'event', 'status', 'limit', 'org', 'baseUrl'] as const) {
+    const value = opts[key];
+    if (value === undefined) continue;
+    for (const item of Array.isArray(value) ? value : [value]) args.push(`--${key === 'baseUrl' ? 'base-url' : key}`, item);
+  }
+  if (opts.reliability) args.push('--reliability');
+  if (opts.allowUntrustedHost) args.push('--allow-untrusted-host');
+  args.push('--cursor', data.nextCursor!);
+  return args.map((value) => /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`).join(' ');
+}
+
+export function formatSchedule(data: CiSchedule, nextCommand?: string): string {
+  const time = new Intl.DateTimeFormat('en-CA', {
+    timeZone: data.timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZoneName: 'short',
+  });
+  const lines = [pc.bold(`Upcoming fires (${safeTerm(data.timeZone)})`)];
+  const fires = data.upcoming.flatMap((schedule) => schedule.occurrences.map((at) => ({ at, schedule })))
+    .sort((a, b) => a.at.localeCompare(b.at));
+  if (fires.length === 0) lines.push('No upcoming fires.');
+  for (const { at, schedule } of fires) {
+    lines.push([time.format(new Date(at)), safeTerm(schedule.workflowName || schedule.workflowPath), safeTerm(schedule.repoFullName), safeTerm(schedule.description)].join('  '));
+  }
+  for (const schedule of data.upcoming) {
+    const remaining = schedule.occurrenceCount - schedule.occurrences.length;
+    if (remaining > 0) lines.push(`+${remaining.toLocaleString('en-US')} more scheduled for ${safeTerm(schedule.workflowName || schedule.workflowPath)}  ${safeTerm(schedule.repoFullName)}  ${safeTerm(schedule.description)}`);
+  }
+  lines.push('', pc.bold(`Past runs (${safeTerm(data.timeZone)})`));
+  if (data.runs.length === 0) lines.push('No past runs found.');
+  for (const run of data.runs) {
+    lines.push([
+      time.format(new Date(run.startedAt ?? run.createdAt)), safeTerm(run.workflowName || run.workflowPath),
+      safeTerm(run.repoFullName), safeTerm(run.event), conclusionLabel(safeTerm(run.status === 'completed' ? run.conclusion : run.status)),
+    ].join('  '));
+  }
+  if (data.countsTruncated) lines.push('Warning: some schedule totals reached the safety limit; use a smaller window for exact counts.');
+  if (nextCommand) lines.push('', `Next page (reuse the same credentials):\n${safeTerm(nextCommand)}`);
+  return lines.join('\n');
 }
 
 /** The platform API client behind both `compute actions` and `compute market`. */
@@ -1052,6 +1123,31 @@ export function registerActionsCommands(program: Command): void {
         }
         for (const run of rs) console.log(formatRunRow(run));
       });
+    } catch (e) {
+      fail(e, opts);
+    }
+  });
+
+  common(
+    actions
+      .command('schedule')
+      .description('List upcoming scheduled fires and past runs in a time window')
+      .option('--reliability', 'show only reliability runs and workflows (hidden by default)')
+      .option('--from <timestamp>', 'inclusive start timestamp (default: now)')
+      .option('--to <timestamp>', 'exclusive end timestamp (default: seven days after --from)')
+      .option('--repo <repo>', 'repository in owner/repo format')
+      .option('--workflow <path...>', 'workflow file paths; repeatable')
+      .option('--event <event...>', 'trigger events: schedule, push, pull_request, workflow_dispatch')
+      .option('--status <status...>', 'run conclusions: passed, failed, running, cancelled, none (excludes upcoming)')
+      .option('--tz <zone>', 'IANA time zone (default: local)')
+      .option('--limit <n>', 'past-run page size (default 100, max 500)')
+      .option('--cursor <cursor>', 'nextCursor from a prior page; keep the window and filters unchanged'),
+  ).action(async (opts: ScheduleOpts) => {
+    opts.org ??= program.opts<CommonOpts>().org;
+    try {
+      const query = scheduleQuery(opts);
+      const data = await (await client(opts)).get<CiSchedule>('/api/v1/actions/schedule', query);
+      output(opts, data, (result) => console.log(formatSchedule(result, result.nextCursor ? nextScheduleCommand(result, opts) : undefined)));
     } catch (e) {
       fail(e, opts);
     }
