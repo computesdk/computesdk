@@ -1,5 +1,17 @@
 # @computesdk/microsandbox
 
+## 0.1.27
+
+### Patch Changes
+
+- 8e11040: `CreateSnapshotOptions` gains an optional `scope: 'disk' | 'full'` hint (both the universal-instance and provider-factory surfaces).
+
+  `snapshot.create` now tries a live full-scope capture first — `Snapshot.builder(name).fromSandbox(id).full().guestFlush('auto')` — so on backends that support it (SDK `scope: "full"` / checkpoint), the source keeps running and memory/process state is preserved. When the backend rejects live capture, it falls back to the previous disk-only stop/capture/restart path. Restores of `scope === "full"` snapshots request `cowMemory()` so the captured execution resumes.
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
 ## 0.1.26
 
 ### Patch Changes

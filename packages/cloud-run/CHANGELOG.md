@@ -1,5 +1,11 @@
 # @computesdk/cloud-run
 
+## 0.1.29
+
+### Patch Changes
+
+- @computesdk/gcp@0.1.13
+
 ## 0.1.28
 
 ### Patch Changes

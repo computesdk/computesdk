@@ -1,5 +1,16 @@
 # @computesdk/cli
 
+## 2.6.4
+
+### Patch Changes
+
+- 86a24e9: Add `compute actions schedule` for timezone-aware upcoming fires and paginated past runs, with filters, JSON output and next-page hints.
+- 7b74e97: Bump @benchsdk/runner to 0.8.3 for `compute bench runs run-again`.
+- Updated dependencies [8e11040]
+- Updated dependencies [7b74e97]
+  - computesdk@4.1.17
+  - @computesdk/platform@0.2.3
+
 ## 2.6.3
 
 ### Patch Changes

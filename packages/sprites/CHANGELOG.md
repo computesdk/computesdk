@@ -1,5 +1,13 @@
 # @computesdk/sprites
 
+## 0.1.35
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
 ## 0.1.34
 
 ### Patch Changes

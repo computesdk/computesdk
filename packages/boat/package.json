@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/boat",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Boat provider for ComputeSDK - Ubuntu cloud sandboxes with streaming, named snapshots, signed file transfers, and preview URLs",
   "author": "Dao Hoang Son",
   "license": "MIT",
