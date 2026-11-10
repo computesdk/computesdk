@@ -1,5 +1,13 @@
 # @computesdk/platform
 
+## 0.2.3
+
+### Patch Changes
+
+- 7b74e97: Update the optional `@benchsdk/cli` peer to 0.9.3.
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+
 ## 0.2.2
 
 ### Patch Changes

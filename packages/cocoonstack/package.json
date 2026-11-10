@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/cocoonstack",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Cocoon Stack provider for ComputeSDK - self-hosted microVM sandboxes served from warm pools by sandboxd",
   "author": "CMGS",
   "license": "MIT",
