@@ -87,6 +87,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
 | **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
 | **Brezel** | `BREZEL_API_KEY`, `BREZEL_API_URL`, `BREZEL_PROJECT_ID`, `BREZEL_ENVIRONMENT_REVISION` | Self-hosted Firecracker sandboxes |
+| **Briq** | `BRIQ_API_KEY` | Sandboxes on microVMs with streaming commands, files, previews and interactive processes |
 | **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
 | **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_API_KEY` | Edge computing |
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
@@ -310,6 +311,7 @@ npm install @computesdk/aws              # AWS providers (@computesdk/aws/ec2, @
 npm install @computesdk/beam             # Beam provider
 npm install @computesdk/blaxel           # Blaxel provider
 npm install @computesdk/brezel           # Brezel provider
+npm install @computesdk/briq            # Briq provider
 npm install @computesdk/buddy            # Buddy provider
 npm install @computesdk/gcp              # Google Cloud providers (Cloud Run: @computesdk/gcp/cloud-run)
 npm install @computesdk/cloudflare       # Cloudflare provider
@@ -362,6 +364,7 @@ See individual provider READMEs for details:
 - **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
 - **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
 - **[@computesdk/brezel](./packages/brezel)** - Self-hosted Firecracker sandboxes with immutable environments
+- **[@computesdk/briq](./packages/briq)** - Sandboxes on microVMs with streaming commands, files, previews and interactive processes
 - **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
 - **[@computesdk/gcp](./packages/gcp)** - Google Cloud providers: Cloud Run sandboxes via `@computesdk/gcp/cloud-run`
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
