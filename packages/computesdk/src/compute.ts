@@ -478,7 +478,7 @@ class ComputeManager {
           this.snapshotProviders.delete(snapshotId);
           return;
         } catch (error) {
-          if (this.snapshotProviders.has(snapshotId)) throw error;
+          if (candidates.length === 1) throw error;
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         }
       }

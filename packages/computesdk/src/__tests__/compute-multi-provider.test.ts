@@ -369,6 +369,12 @@ describe('compute multi-provider', () => {
     expect(remove).toHaveBeenCalledWith('unknown-snapshot');
   });
 
+  it('preserves unsupported errors when deleting an external snapshot through one provider', async () => {
+    const failure = Object.assign(new Error('snapshot.delete is unsupported'), { code: 'unsupported' });
+    const provider = makeProvider('unsupported', {}, { delete: async () => { throw failure; } });
+    await expect(compute({ provider }).snapshot.delete('external-snapshot')).rejects.toBe(failure);
+  });
+
   it('preserves a known snapshot owner failure instead of claiming success through another provider', async () => {
     const failure = Object.assign(new Error('snapshot.delete is unsupported'), { code: 'unsupported' });
     const removeOwner = vi.fn().mockRejectedValue(failure);
