@@ -31,11 +31,11 @@ compute bench …                 # benchmarks CLI (run, auth, org, results, …
 compute providers               # sandbox provider credential status
 compute org list                # your organizations (* = active)
 compute org use <slug>          # switch the stored login's active org
-compute org current / whoami    # current user + active org
+compute org current / whoami    # current user + active org (an API key: its org)
 ```
 
 All platform commands accept `--api-key` / `COMPUTE_API_KEY` and fall back to
-the stored OAuth credentials.
+the stored OAuth credentials. `COMPUTE_PLATFORM_URL` sets the platform URL.
 
 The active org comes from the stored login (`compute org use` changes it —
 it's per user, so every CLI on every machine sees the switch). For a one-off
@@ -107,6 +107,32 @@ Only one session per agent can be active at a time. Legacy sessions without
 persistent state cannot be recovered retroactively. Requires the platform's
 managed-volume/resume API; no account storage credentials are needed in the CLI.
 
+## compute bench
+
+`compute bench …` runs the benchmarks CLI (`bench`) in-process: the same
+commands, flags and output as `bench …`. This release bundles
+`@benchsdk/runner` 0.8.3 with `@benchsdk/cli` 0.9.3 (`compute bench --version`
+prints the bench CLI version), which adds `bench fork`, `bench runs run-again`
+and the result filters `--participant`, `--since`, `--until`, `--day`, `--tz`
+and `--source-org`.
+
+compute's settings are forwarded to bench:
+
+| compute | bench | |
+|---|---|---|
+| `COMPUTE_PLATFORM_URL` | `BENCHMARKS_PLATFORM_URL` | only when `BENCHMARKS_PLATFORM_URL` is unset |
+| `COMPUTE_API_KEY` | `BENCHMARKS_PLATFORM_API_KEY` | only when `BENCHMARKS_PLATFORM_API_KEY` is unset |
+| `compute --org <slug> bench …`, else `COMPUTE_ORG` | `--org <slug>` | only when the bench command has no `--org` of its own; not added to `run` / `check` |
+
+```bash
+COMPUTE_API_KEY=bp_… compute bench runs list my-benchmark --json
+COMPUTE_ORG=acme compute bench auth status --json      # same as: compute bench --org acme auth status
+```
+
+`compute whoami` and `compute org current` also read `COMPUTE_API_KEY`. An
+org API key has no user, so they print the key's organization and
+`API key (no user identity)` (with `--json`: `"user": null`,
+`"credential": "api_key"`).
 ## Migrating from @computesdk/cli 1.x
 
 v2 removes the legacy console authentication and its commands:
