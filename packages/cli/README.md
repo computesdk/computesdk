@@ -60,6 +60,7 @@ compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
 ```bash
 compute actions schedule                         # now through seven days later, local timezone
 compute actions schedule --repo acme/widgets --tz America/Chicago
+compute actions schedule --reliability            # only reliability runs and scheduled fires
 compute actions schedule --from 2026-11-01T00:00:00Z --to 2026-11-08T00:00:00Z \
   --workflow .github/workflows/ci.yml --workflow .github/workflows/nightly.yml
 compute actions schedule --event push --status failed --limit 50 --json
@@ -73,6 +74,8 @@ display times and API day buckets. Invalid zones fall back to UTC on the API.
 Human output lists upcoming fires with their workflow, repository and cron
 description, then past runs with event and status. Upcoming previews contain at
 most 100 fires per schedule; `+N more` reports the remainder in the window.
+Reliability activity is hidden by default. `--reliability` shows only reliability
+runs and workflows, matching the dashboard toggle; pagination hints retain it.
 Incomplete counts produce a warning to choose a smaller window.
 
 `--repo` takes `owner/repo`; `--workflow` takes file paths, not display names, and

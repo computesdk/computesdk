@@ -82,6 +82,7 @@ export interface CommonOpts extends JsonOpts {
 }
 
 interface ScheduleOpts extends CommonOpts {
+  reliability?: boolean;
   from?: string;
   to?: string;
   repo?: string;
@@ -102,6 +103,7 @@ function scheduleQuery(opts: ScheduleOpts): Record<string, string | string[] | u
   return {
     from: from.toISOString(), to: to.toISOString(),
     repo: opts.repo, workflow: opts.workflow, event: opts.event, status: opts.status,
+    reliability: opts.reliability ? '1' : undefined,
     timeZone: opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
     limit: opts.limit, cursor: opts.cursor,
   };
@@ -114,6 +116,7 @@ function nextScheduleCommand(data: CiSchedule, opts: ScheduleOpts): string {
     if (value === undefined) continue;
     for (const item of Array.isArray(value) ? value : [value]) args.push(`--${key === 'baseUrl' ? 'base-url' : key}`, item);
   }
+  if (opts.reliability) args.push('--reliability');
   if (opts.allowUntrustedHost) args.push('--allow-untrusted-host');
   args.push('--cursor', data.nextCursor!);
   return args.map((value) => /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`).join(' ');
@@ -1129,6 +1132,7 @@ export function registerActionsCommands(program: Command): void {
     actions
       .command('schedule')
       .description('List upcoming scheduled fires and past runs in a time window')
+      .option('--reliability', 'show only reliability runs and workflows (hidden by default)')
       .option('--from <timestamp>', 'inclusive start timestamp (default: now)')
       .option('--to <timestamp>', 'exclusive end timestamp (default: seven days after --from)')
       .option('--repo <repo>', 'repository in owner/repo format')

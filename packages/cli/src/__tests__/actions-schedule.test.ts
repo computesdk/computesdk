@@ -41,15 +41,17 @@ describe('compute actions schedule', () => {
     expect(url.searchParams.get('from')).toBe(FROM);
     expect(url.searchParams.get('to')).toBe('2026-11-16T06:00:00.000Z');
     expect(url.searchParams.get('timeZone')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(url.searchParams.has('reliability')).toBe(false);
     expect(JSON.parse(String(stdout.mock.calls[0][0]))).toEqual(schedule);
     expect(log).not.toHaveBeenCalled();
   });
 
   it('passes all filters, repeated workflows, paging and an explicit time zone', async () => {
-    await run('--from', FROM, '--to', TO, '--repo', 'acme/widgets', '--workflow', 'first.yml', '--workflow', 'second.yml', '--event', 'push', '--status', 'failed', '--tz', 'America/Chicago', '--limit', '2', '--cursor', CURSOR);
+    await run('--from', FROM, '--to', TO, '--repo', 'acme/widgets', '--workflow', 'first.yml', '--workflow', 'second.yml', '--event', 'push', '--status', 'failed', '--tz', 'America/Chicago', '--limit', '2', '--cursor', CURSOR, '--reliability');
     const params = new URL(String(fetchMock.mock.calls[0][0])).searchParams;
     expect(Object.fromEntries(params)).toMatchObject({ from: FROM, to: TO, repo: 'acme/widgets', event: 'push', status: 'failed', timeZone: 'America/Chicago', limit: '2', cursor: CURSOR });
     expect(params.getAll('workflow')).toEqual(['first.yml', 'second.yml']);
+    expect(params.get('reliability')).toBe('1');
     const text = log.mock.calls.flat().join('\n');
     expect(text).toContain('Every minute');
     expect(text).toContain('+1,439 more');
@@ -59,12 +61,21 @@ describe('compute actions schedule', () => {
     expect(text).toContain(`--cursor '${CURSOR}'`);
     expect(text).toContain('--workflow first.yml --workflow second.yml');
     expect(text).toContain('--limit 2');
+    expect(text).toContain('--reliability');
     expect(text).not.toContain('test-key');
   });
 
   it('uses seven days after an explicit from when to is omitted', async () => {
     await run('--from', '2026-11-01T00:00:00Z');
     expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('to')).toBe('2026-11-08T00:00:00.000Z');
+  });
+
+  it('passes the reliability-only view option with empty JSON results', async () => {
+    const empty = { ...schedule, days: [], runs: [], upcoming: [], nextCursor: null };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(empty)));
+    await run('--reliability', '--json');
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('reliability')).toBe('1');
+    expect(JSON.parse(String(stdout.mock.calls[0][0]))).toEqual(empty);
   });
 
   it('prints explicit empty states without a pagination hint', async () => {

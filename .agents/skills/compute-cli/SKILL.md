@@ -37,7 +37,7 @@ Resolution order: `--api-key` → `COMPUTE_API_KEY` → `BENCHMARKS_PLATFORM_API
 compute actions dispatch <repo> --workflow <path|name> [--ref] [--inputs k=v ...] [--manual]
 compute actions runs <repo> [--status ...] [--branch ...]
 compute actions schedule [--from ISO] [--to ISO] [--repo owner/repo] [--workflow path ...]
-    [--event ...] [--status ...] [--tz IANA] [--limit n] [--cursor cursor] [--json]
+    [--event ...] [--status ...] [--reliability] [--tz IANA] [--limit n] [--cursor cursor] [--json]
 compute actions history <repo> --workflow <path|name> [--branch ...] [--job] [--limit n]
 compute actions run|summary|inspect|benchmarks <run-id>
 compute actions logs <run-id> [--job] [--step <n|runner>] [--follow]
@@ -49,7 +49,7 @@ compute actions vault ls|set|get|rm [<name>] [--repo owner/repo] [--kind secret|
 ```
 
 - Dispatch/history `--workflow` matches the workflow's full path (`.github/workflows/ci.yml`), display name, or id — a bare basename like `ci.yml` does not resolve. Schedule `--workflow` accepts file paths only and is repeatable.
-- `schedule` calls `GET /api/v1/actions/schedule`: default window now to +7 days (maximum 45 days), timezone local unless `--tz` is supplied. Human output separates upcoming fires and actual runs, summarizes capped occurrences with `+N more`, and prints a next-cursor command with a fixed window and the same filters. Reuse the same credentials; keys are never included in the hint. Status filters are conclusions and exclude upcoming fires. `--json` preserves the complete API response, including daily totals and truncation flags.
+- `schedule` calls `GET /api/v1/actions/schedule`: default window now to +7 days (maximum 45 days), timezone local unless `--tz` is supplied. Reliability activity is hidden by default; `--reliability` shows only reliability runs and workflows. Human output separates upcoming fires and actual runs, summarizes capped occurrences with `+N more`, and prints a next-cursor command with a fixed window and the same filters. Reuse the same credentials; keys are never included in the hint. Status filters are conclusions and exclude upcoming fires. `--json` preserves the complete API response, including daily totals and truncation flags.
 - `vault set NAME` reads the value from stdin (`printf %s "$V" |`, not `echo`) or `--from-file`, never argv; `--revealable` (secrets, fixed at creation) allows `vault get`. Needs an owner/admin key; API is `/api/v1/vault` in benchmarks-platform.
 - `logs --follow` uses resumable byte-offset cursors; reconnects resume from `nextOffset`.
 - Registered-workflow repos: `computesdk/ci-test` (Smoke + Conformance 01-12 + Long), `computesdk/benchmarks` (15), `computesdk/benchmarks-ai-gateway-model-index` (26). Live list: `GET /api/v1/actions/workflows?repo=<owner>/<name>`.
