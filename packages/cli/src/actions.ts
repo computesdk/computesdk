@@ -25,6 +25,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { spawnSync } from 'child_process';
 import { registerSettingsCommands } from './settings.js';
 import { registerRunsCommands } from './actions-runs.js';
+import { matchRefOnly, registerWorkflowsCommands, workflowChoices } from './actions-workflows.js';
+import { conclusionLabel, safeTerm } from './term.js';
 import { basename, join } from 'path';
 import {
   ActionsApiError,
@@ -59,8 +61,12 @@ import {
   type CiVaultListResponse,
   type CiVaultRevealResponse,
   type CiVaultSaveResponse,
+  type CiRefOnlyWorkflow,
   type CiWorkflow,
+  type CiWorkflowsResponse,
 } from './actions-client.js';
+
+export { conclusionLabel, safeTerm };
 
 /** The jobs inside a `/state` response — a subset of CiJob, no name/steps. */
 interface CiLiveStateJob {
@@ -283,17 +289,6 @@ export function formatDuration(ms: number | null | undefined): string {
 
 export function shortSha(sha: string): string {
   return sha.slice(0, 8);
-}
-
-export function conclusionLabel(conclusion: string): string {
-  switch (conclusion) {
-    case 'passed': return pc.green('passed');
-    case 'failed': return pc.red('failed');
-    case 'running': return pc.yellow('running');
-    case 'cancelled': return pc.gray('cancelled');
-    case 'none': return pc.yellow('queued');
-    default: return conclusion;
-  }
 }
 
 export function formatRunRow(run: CiRun): string {
@@ -639,13 +634,6 @@ async function* followRunLogs(
   }
 }
 
-// Job and step names come from workflow files — potentially attacker-controlled
-// in a PR context — so strip control characters before writing to the terminal.
-export function safeTerm(s: string): string {
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '�');
-}
-
 export function formatRunHistory(history: CiRunHistory): string {
   const lines: string[] = [];
   const parts = (Object.entries(history.conclusions) as [string, number][])
@@ -730,8 +718,12 @@ function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: st
  * is run anyway; such a run has no inputs, so any given are refused rather
  * than silently dropped. A dispatchable workflow keeps its inputs either way.
  */
-/** A workflow that exists only in the dispatched diff: addressed by path since it has no catalog row yet. */
-export type PatchedWorkflowTarget = { repoFullName: string; workflowPath: string };
+/**
+ * A workflow with no catalog row yet — a file the dispatched diff creates, or
+ * one only the dispatched ref has — so it is addressed by path. `dispatchable`
+ * is known only for a ref-only file; a diff's file is left to the platform.
+ */
+export type PatchedWorkflowTarget = { repoFullName: string; workflowPath: string; dispatchable?: boolean };
 
 export function isPatchedWorkflowTarget(target: CiWorkflow | PatchedWorkflowTarget): target is PatchedWorkflowTarget {
   return 'workflowPath' in target;
@@ -766,16 +758,18 @@ export function dispatchBody(
   },
 ): Record<string, unknown> {
   const patched = isPatchedWorkflowTarget(workflow);
-  if (!patched && !workflow.dispatchable && !opts.manual) {
+  const path = patched ? workflow.workflowPath : workflow.path;
+  const pushOnly = workflow.dispatchable === false;
+  if (pushOnly && !opts.manual) {
     throw new ActionsCliError(
       'invalid_argument',
-      `Workflow "${workflow.path}" does not declare workflow_dispatch. Pass --manual to run it anyway (no inputs).`,
+      `Workflow "${path}" does not declare workflow_dispatch. Pass --manual to run it anyway (no inputs).`,
     );
   }
-  if (!patched && !workflow.dispatchable && opts.inputs !== undefined && opts.inputs.length > 0) {
+  if (pushOnly && opts.inputs !== undefined && opts.inputs.length > 0) {
     throw new ActionsCliError(
       'invalid_argument',
-      `Workflow "${workflow.path}" has no workflow_dispatch inputs; --manual runs of it take no --inputs.`,
+      `Workflow "${path}" has no workflow_dispatch inputs; --manual runs of it take no --inputs.`,
     );
   }
   const ref = opts.ref ?? (patched ? undefined : workflow.refs[0]);
@@ -1037,7 +1031,7 @@ export function registerActionsCommands(program: Command): void {
       .description('Dispatch a workflow_dispatch run (or any workflow with --manual)')
       .argument('<repo>', 'repository in owner/repo format')
       .requiredOption('--workflow <path|name>', 'workflow path or name')
-      .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref)')
+      .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref); also finds a workflow file only this ref has')
       .option('--inputs <pairs...>', 'workflow inputs as key=value (workflow_dispatch inputs only)')
       .option('--manual', 'run a workflow even if it does not declare workflow_dispatch (such runs take no --inputs)')
       .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
@@ -1063,11 +1057,20 @@ export function registerActionsCommands(program: Command): void {
       );
       // A workflow file the diff creates has no catalog row yet; the platform
       // builds the run's definition from the diff when addressed by path.
-      const workflow: CiWorkflow | PatchedWorkflowTarget | undefined =
+      let workflow: CiWorkflow | PatchedWorkflowTarget | undefined =
         matchWorkflow(workflows, opts.workflow) ??
         (local && patchTouches(local.patch, opts.workflow) ? { repoFullName: repo, workflowPath: opts.workflow } : undefined);
+      // A file only the ref has is not in the catalog either; it dispatches by path.
+      let refOnly: CiRefOnlyWorkflow[] | undefined;
+      if (!workflow && ref !== undefined) {
+        refOnly = (await c.get<CiWorkflowsResponse>('/api/v1/actions/workflows', { repo, ref })).refOnly ?? [];
+        const match = matchRefOnly(refOnly, opts.workflow);
+        if (match) workflow = { repoFullName: repo, workflowPath: match.path, dispatchable: match.dispatchable };
+      }
       if (!workflow) {
-        const choices = workflows.map((w) => `${w.path} (${w.name})`).join(', ') || 'none';
+        const choices =
+          workflowChoices(workflows) +
+          (refOnly && refOnly.length > 0 ? `; only on ${ref}: ${workflowChoices(refOnly)}` : '');
         const hint =
           !opts.withChanges && hasLocalChanges() && /^\.github\/workflows\//.test(opts.workflow)
             ? ' If it only exists in your working tree, add --with-changes.'
@@ -1106,6 +1109,7 @@ export function registerActionsCommands(program: Command): void {
   });
 
   registerRunsCommands(actions, common, { client, fail, output, formatRunRow });
+  registerWorkflowsCommands(actions, common, { client, fail, output });
 
   common(
     actions

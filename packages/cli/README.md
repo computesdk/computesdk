@@ -24,7 +24,7 @@ tokens renew automatically.
 ## Commands
 
 ```
-compute actions …               # Actions API — repos, dispatch, runs, schedule, logs, vault (see below)
+compute actions …               # Actions API — repos, workflows, dispatch, runs, schedule, logs, vault (see below)
 compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
 compute bench …                 # benchmarks CLI (run, auth, org, results, …)
@@ -86,6 +86,41 @@ for `runs days`, and `{archived, archivedAt}` for archive and unarchive.
 Archive and unarchive ask for confirmation on a terminal; elsewhere they need
 `-y` and exit 1 without it. When an id is unknown or another org's, nothing
 changes and the command prints the ids it could not find and exits 1.
+
+## compute actions workflows
+
+`compute actions workflows` lists the workflows that can run now, across every
+repo or one (`compute actions workflows <owner/repo>`), with each one's
+controls and latest run:
+
+```
+● enabled  acme/widgets  .github/workflows/ci.yml (CI)  order: inherits  snapshots: dynamic  last: passed 3h ago
+○ disabled (user)  acme/widgets  .github/workflows/nightly.yml (Nightly)  order: vercel  snapshots: 3  last: never
+○ repo disabled  acme/legacy  .github/workflows/build.yml (Build)  order: inherits  snapshots: dynamic  last: never
+```
+
+`--all` adds the workflows that cannot run now (user-disabled, or on a
+disabled repo). `--ref <ref>` (with a repo) also lists the workflow files only
+that branch or tag has, with their inputs (`target* (required)`,
+`suite default=dax`); `compute actions dispatch <repo> --workflow <path> --ref <ref>`
+dispatches one of those by path when the catalog has no match.
+
+```bash
+compute actions workflows acme/widgets --all --json                    # {workflows}
+compute actions workflows local/fixture --ref feature-ref --json       # {workflows, refOnly}
+compute actions workflows disable acme/widgets ci.yml -y               # owner/admin
+compute actions workflows enable acme/widgets "Nightly" -y
+compute actions workflows set acme/widgets ci.yml --order market,vercel --snapshot-cap 3 -y
+compute actions workflows set acme/widgets ci.yml --inherit-order --dynamic-snapshots -y
+```
+
+`<workflow>` is a path, name, file name or id, matched against every
+workflow of the repo (disabled ones included). `--inherit-order` makes the
+workflow follow the org order and `--dynamic-snapshots` puts it back on the
+dynamic snapshot pool; `--snapshot-cap 0` turns snapshots off. `--json` prints
+the `PATCH /api/v1/actions/workflows` result (`repoFullName, path, enabled,
+userDisabledAt, providerOrder, snapshotCap`). Enable, disable and set ask for
+confirmation on a terminal; elsewhere they need `-y` and exit 1 without it.
 
 ## Actions schedule
 

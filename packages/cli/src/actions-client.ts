@@ -96,6 +96,43 @@ export interface CiWorkflow {
   schedules: unknown[];
 }
 
+/** A row of `GET /api/v1/actions/workflows`: the dispatch picker row plus its controls and latest run. */
+export interface CiWorkflowListItem extends CiWorkflow {
+  /** Runs at all: the repo is enabled and the workflow is not user-disabled. */
+  enabled: boolean;
+  repoEnabled: boolean;
+  userDisabledAt: string | null;
+  /** Per-workflow placement order; null inherits the org order. */
+  providerOrder: string[] | null;
+  /** Per-workflow snapshot cap; null is the dynamic pool, 0 is off. */
+  snapshotCap: number | null;
+  lastRun: { id: string; conclusion: CiConclusion; queuedAt: string } | null;
+}
+
+/** A workflow file only the listed ref has: dispatched by repo and path on that ref. */
+export interface CiRefOnlyWorkflow {
+  name: string;
+  path: string;
+  inputs: CiWorkflowInput[];
+  dispatchable: boolean;
+}
+
+export interface CiWorkflowsResponse {
+  workflows: CiWorkflowListItem[];
+  /** Present when the list was asked for with `ref`. */
+  refOnly?: CiRefOnlyWorkflow[];
+}
+
+/** `PATCH /api/v1/actions/workflows`: a workflow's user-owned controls after the change. */
+export interface CiWorkflowControls {
+  repoFullName: string;
+  path: string;
+  enabled: boolean;
+  userDisabledAt: string | null;
+  providerOrder: string[] | null;
+  snapshotCap: number | null;
+}
+
 export type CiConclusion = 'passed' | 'failed' | 'running' | 'cancelled' | 'none';
 
 export interface CiScheduleWorkflow {

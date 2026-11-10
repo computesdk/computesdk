@@ -289,6 +289,120 @@
     {
       "path": [
         "actions",
+        "workflows"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "workflows"
+        ]
+      ],
+      "args": [
+        "[repo]"
+      ],
+      "flags": [
+        "--all",
+        "--ref",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List workflows with their controls (every repo, or one); --all adds disabled ones, --ref the files only a branch has"
+    },
+    {
+      "path": [
+        "actions",
+        "workflows",
+        "enable"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "workflows",
+          "enable"
+        ]
+      ],
+      "args": [
+        "<repo>",
+        "<workflow>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Turn a workflow back on (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "workflows",
+        "disable"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "workflows",
+          "disable"
+        ]
+      ],
+      "args": [
+        "<repo>",
+        "<workflow>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Turn a workflow off: no pushes, schedules or dispatches run it until enabled (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "workflows",
+        "set"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "workflows",
+          "set"
+        ]
+      ],
+      "args": [
+        "<repo>",
+        "<workflow>"
+      ],
+      "flags": [
+        "--order",
+        "--inherit-order",
+        "--snapshot-cap",
+        "--dynamic-snapshots",
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Set a workflow's provider order and snapshot cap (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
         "history"
       ],
       "aliases": [
