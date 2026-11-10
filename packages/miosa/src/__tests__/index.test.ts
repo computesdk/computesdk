@@ -625,7 +625,7 @@ describe("miosa provider", () => {
         ),
       );
       fetchMock.mockResolvedValueOnce(
-        jsonResponse({ data: [{ id: "snap-1", sandbox_id: "sb-1", status: "ready" }] }),
+        jsonResponse({ data: [{ id: "snap-1", sandbox_id: "sb-1", status: "ready", created_at: "2026-07-11T00:00:00Z" }] }),
       );
       const provider = miosa({ apiKey: API_KEY });
 
@@ -654,6 +654,12 @@ describe("miosa provider", () => {
 
     it("should declare rootfs snapshots on the firecracker runtime", () => {
       const provider = miosa({ apiKey: API_KEY });
+      expect(provider.snapshot?.listScope).toBe("instance");
+      expect(provider.snapshot?.operations).toEqual({
+        create: true,
+        list: true,
+        delete: true,
+      });
       expect(provider.snapshot?.capabilities).toEqual({
         scope: "rootfs",
         memory: true,
@@ -662,24 +668,79 @@ describe("miosa provider", () => {
       });
     });
 
-    it("list should require a sandboxId scope", async () => {
-      const provider = miosa({ apiKey: API_KEY });
-      await expect(provider.snapshot!.list()).rejects.toThrow(
-        /scoped per sandbox/,
-      );
-    });
+    it.each(["", "invalid-key", API_KEY])(
+      "list should reject missing instance scope before auth or requests with key %j",
+      async (apiKey) => {
+        const provider = miosa({ apiKey });
+        for (const options of [undefined, {}, { limit: 1 }]) {
+          await expect(provider.snapshot!.list(options)).rejects.toMatchObject({
+            code: "unsupported",
+            provider: "miosa",
+            operation: "snapshot.list without instanceId",
+          });
+        }
+        expect(fetchMock).not.toHaveBeenCalled();
+      },
+    );
 
-    it("list should GET /sandboxes/:id/snapshots", async () => {
-      fetchMock.mockResolvedValueOnce(
-        jsonResponse({ data: [{ id: "snap-1" }] }),
-      );
-      const provider = miosa({ apiKey: API_KEY });
+    it.each(["instanceId", "sandboxId"] as const)(
+      "list should GET the owning sandbox's snapshots using %s while preserving native fields",
+      async (scope) => {
+        const records = [{
+          id: "snap-1",
+          sandbox_id: "sb-1",
+          status: "ready",
+          comment: "before-upgrade",
+          created_at: "2026-07-11T00:00:00Z",
+          size_bytes: 4096,
+        }];
+        fetchMock.mockResolvedValueOnce(jsonResponse({ data: records }));
+        const provider = miosa({ apiKey: API_KEY });
 
-      const snapshots = await provider.snapshot!.list({ sandboxId: "sb-1" });
-      expect(lastRequest(fetchMock).url).toBe(
-        `${DEFAULT_BASE_URL}/sandboxes/sb-1/snapshots`,
-      );
-      expect(snapshots).toHaveLength(1);
-    });
+        const snapshots = await provider.snapshot!.list({ [scope]: "sb-1" });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const { url, init } = lastRequest(fetchMock);
+        expect(url).toBe(`${DEFAULT_BASE_URL}/sandboxes/sb-1/snapshots`);
+        expect(init.method).toBe("GET");
+        expect((init.headers as Record<string, string>).authorization).toBe(
+          `Bearer ${API_KEY}`,
+        );
+        expect(snapshots).toEqual(records.map((record) => ({
+          ...record,
+          provider: "miosa",
+          createdAt: record.created_at,
+          instanceId: "sb-1",
+          sandboxId: "sb-1",
+        })));
+      },
+    );
+
+    it.each(["instanceId", "sandboxId"] as const)(
+      "list should retain the owner for delete when a record omits sandbox_id using %s",
+      async (scope) => {
+        const snapshotId = `snap-owner-${scope}`;
+        const records = [{ id: snapshotId, status: "ready", created_at: "2026-07-11T00:00:00Z" }];
+        fetchMock.mockResolvedValueOnce(jsonResponse({ data: records }));
+        const provider = miosa({ apiKey: API_KEY });
+
+        await expect(provider.snapshot!.list({ [scope]: "sb-1" })).resolves.toEqual(
+          records.map((record) => ({
+            ...record,
+            provider: "miosa",
+            createdAt: record.created_at,
+            instanceId: "sb-1",
+            sandboxId: "sb-1",
+          })),
+        );
+        fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+        await provider.snapshot!.delete(snapshotId);
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(lastRequest(fetchMock).url).toBe(
+          `${DEFAULT_BASE_URL}/sandboxes/sb-1/snapshots/${snapshotId}`,
+        );
+        expect(lastRequest(fetchMock).init.method).toBe("DELETE");
+      },
+    );
   });
 });

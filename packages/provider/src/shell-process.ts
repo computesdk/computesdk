@@ -55,7 +55,7 @@ export class ShellProcessUnsupportedError extends Error {
 /** The instance's execs share no files or processes (e.g. a fresh container per exec), so jobs cannot outlive one exec. */
 export class ShellStateNotPersistentError extends ShellProcessUnsupportedError {
   constructor() {
-    super('persistent state', 'shell-process: unsupported — this instance does not keep files or processes between commands, so background processes cannot run on it');
+    super('persistent state', 'shell-process: unsupported — this instance does not keep files or processes between commands, so live streaming and background processes are unavailable');
     this.name = 'ShellStateNotPersistentError';
   }
 }
@@ -457,14 +457,17 @@ export async function runCommandViaShell(
 /**
  * The shell tier for one instance. The first launch is held until a confirm
  * exec proves the instance keeps state between commands; the verdict is
- * cached. On an instance that keeps none, streaming `runCommand` falls back to
- * one plain exec with its output delivered at exit, and `startProcess` throws
- * {@link ShellStateNotPersistentError}.
+ * cached. On an instance that keeps none, streaming and `startProcess` throw
+ * {@link ShellStateNotPersistentError}; buffered commands remain available.
  */
 export class ShellProcessRuntime {
   private state: 'unknown' | 'persistent' | 'ephemeral' = 'unknown';
 
   constructor(private readonly run: CommandRunner) {}
+
+  get supportsPersistentState(): boolean {
+    return this.state !== 'ephemeral';
+  }
 
   async startProcess(command: string, options: ShellProcessOptions = {}): Promise<ShellProcessHandle> {
     if (this.state === 'ephemeral') throw new ShellStateNotPersistentError();
@@ -489,11 +492,8 @@ export class ShellProcessRuntime {
         this.state = 'ephemeral';
       }
     }
-    const { onStdout, onStderr, ...plain } = options;
-    const result = await this.run(command, plain);
-    if (result.stdout) onStdout?.(result.stdout);
-    if (result.stderr) onStderr?.(result.stderr);
-    return result;
+    if (options.onStdout || options.onStderr) throw new ShellStateNotPersistentError();
+    return await this.run(command, options);
   }
 
   attachProcess(jobId: string, options: ShellProcessOptions = {}): ShellProcessHandle {

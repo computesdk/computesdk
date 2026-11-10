@@ -38,6 +38,7 @@ function makeProvider(
     },
     snapshot: snapshotHandlers
       ? {
+          listScope: snapshotHandlers.listScope,
           create:
             snapshotHandlers.create ||
             (async (sandboxId: string) => ({
@@ -345,5 +346,148 @@ describe('compute multi-provider', () => {
     const sandbox = await sdk.sandbox.create();
     expect(sandbox.provider).toBe('e2b');
     expect(e2bCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards scoped snapshot listing and does not turn unsupported inventory into empty results', async () => {
+    const list = vi.fn().mockResolvedValue([]);
+    const provider = makeProvider('scoped', {}, { list, listScope: 'instance' });
+    const sdk = compute({ provider });
+    const options = { instanceId: 'source', limit: 3 };
+    await expect(sdk.snapshot.list(options)).resolves.toEqual([]);
+    expect(list).toHaveBeenCalledWith(options);
+    const unsupported = Object.assign(new Error('snapshot.list is unsupported'), { code: 'unsupported' });
+    list.mockRejectedValueOnce(unsupported);
+    await expect(sdk.snapshot.list()).rejects.toBe(unsupported);
+  });
+
+  it('continues past unsupported deletion when the snapshot owner is unknown', async () => {
+    const unsupported = makeProvider('unsupported', {}, {
+      delete: async () => { throw new Error('snapshot.delete is unsupported'); },
+    });
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const sdk = compute({ providers: [unsupported, makeProvider('owner', {}, { delete: remove })] });
+    await sdk.snapshot.delete('unknown-snapshot');
+    expect(remove).toHaveBeenCalledWith('unknown-snapshot');
+  });
+
+  it('lists scoped snapshots only through the known instance owner', async () => {
+    const unrelated = vi.fn().mockResolvedValue([{ id: 'unrelated', provider: 'other', createdAt: new Date() }]);
+    const expected = { id: 'owned', provider: 'owner', createdAt: new Date() };
+    const scoped = vi.fn().mockResolvedValue([expected]);
+    const sdk = compute({ providers: [
+      makeProvider('other', {}, { list: unrelated }),
+      makeProvider('owner', {}, { list: scoped, listScope: 'instance' }),
+    ] });
+    await sdk.instances.create({ provider: 'owner' });
+    await expect(sdk.snapshot.list({ instanceId: 'owner-sandbox' })).resolves.toEqual([expected]);
+    expect(scoped).toHaveBeenCalledWith({ instanceId: 'owner-sandbox' });
+    expect(unrelated).not.toHaveBeenCalled();
+  });
+
+  it('rejects ambiguous scoped inventory before querying unrelated providers', async () => {
+    const list = vi.fn().mockResolvedValue([]);
+    const sdk = compute({ providers: [
+      makeProvider('one', {}, { list }),
+      makeProvider('two', {}, { list }),
+    ] });
+    await expect(sdk.snapshot.list({ instanceId: 'unknown' })).rejects.toThrow('known instance owner');
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('filters provider-wide inventories by authoritative source IDs', async () => {
+    const canonical = { id: 'canonical', instanceId: 'source', provider: 'one', createdAt: new Date() };
+    const legacy = { id: 'legacy', sandboxId: 'source', provider: 'one', createdAt: new Date() };
+    const unrelated = { id: 'unrelated', instanceId: 'other', provider: 'one', createdAt: new Date() };
+    const sdk = compute({ provider: makeProvider('one', {}, {
+      list: async () => [canonical, unrelated, legacy],
+    }) });
+    await expect(sdk.snapshot.list({ sandboxId: 'source' })).resolves.toEqual([canonical, legacy]);
+    await expect(sdk.snapshot.list({ instanceId: 'other', sandboxId: 'source' })).resolves.toEqual([unrelated]);
+  });
+
+  it('rejects scoped inventory that cannot identify snapshot sources', async () => {
+    const sdk = compute({ provider: makeProvider('one', {}, {
+      list: async () => [{ id: 'unattributed', provider: 'one', createdAt: new Date() }],
+    }) });
+    await expect(sdk.snapshot.list({ instanceId: 'source' })).rejects.toMatchObject({ code: 'unsupported' });
+  });
+
+  it('does not return empty scoped inventory for an owner without snapshots', async () => {
+    const sdk = compute({ provider: makeProvider('one') });
+    await sdk.instances.create();
+    await expect(sdk.snapshot.list({ instanceId: 'one-sandbox' })).rejects.toMatchObject({ code: 'unsupported' });
+    await expect(sdk.snapshot.list({ instanceId: '' })).rejects.toThrow('non-empty instanceId');
+  });
+
+  it('preserves unsupported errors when deleting an external snapshot through one provider', async () => {
+    const failure = Object.assign(new Error('snapshot.delete is unsupported'), { code: 'unsupported' });
+    const provider = makeProvider('unsupported', {}, { delete: async () => { throw failure; } });
+    await expect(compute({ provider }).snapshot.delete('external-snapshot')).rejects.toBe(failure);
+  });
+
+  it('enforces one total limit across providers, even when native lists ignore it', async () => {
+    const first = { id: 'first', provider: 'one', createdAt: new Date() };
+    const second = { id: 'second', provider: 'two', createdAt: new Date() };
+    const one = vi.fn().mockResolvedValue([first, { ...first, id: 'extra' }]);
+    const two = vi.fn().mockResolvedValue([second]);
+    const sdk = compute({ providers: [makeProvider('one', {}, { list: one }), makeProvider('two', {}, { list: two })] });
+    await expect(sdk.snapshot.list({ limit: 1 })).resolves.toEqual([first]);
+    expect(one).toHaveBeenCalledWith({ limit: 1 });
+    expect(two).toHaveBeenCalledWith({ limit: 1 });
+    await expect(sdk.snapshot.list({ limit: 0 })).resolves.toEqual([]);
+    await expect(sdk.snapshot.list()).resolves.toEqual([first, { ...first, id: 'extra' }, second]);
+  });
+
+  it('applies source filtering before limiting provider-wide inventory', async () => {
+    const matching = { id: 'matching', instanceId: 'source', provider: 'one', createdAt: new Date() };
+    const items = [{ ...matching, id: 'unrelated', instanceId: 'other' }, matching, { ...matching, id: 'extra' }];
+    const list = vi.fn(async (options?: { limit?: number }) => options?.limit === undefined ? items : items.slice(0, options.limit));
+    const sdk = compute({ provider: makeProvider('one', {}, { list }) });
+    await expect(sdk.snapshot.list({ instanceId: 'source', limit: 1 })).resolves.toEqual([matching]);
+    expect(list).toHaveBeenCalledWith({ instanceId: 'source', limit: undefined });
+  });
+
+  it('does not cache discarded snapshot owners or hide unsupported inventories with limits', async () => {
+    const snapshot = { id: 'same-id', provider: 'one', createdAt: new Date() };
+    const first = vi.fn().mockResolvedValue(undefined);
+    const second = vi.fn().mockResolvedValue(undefined);
+    const sdk = compute({ providers: [
+      makeProvider('one', {}, { list: async () => [snapshot], delete: first }),
+      makeProvider('two', {}, { list: async () => [{ ...snapshot, provider: 'two' }], delete: second }),
+    ] });
+    await expect(sdk.snapshot.list({ limit: 1 })).resolves.toEqual([snapshot]);
+    await sdk.snapshot.delete(snapshot.id);
+    expect(first).toHaveBeenCalledWith(snapshot.id);
+    expect(second).not.toHaveBeenCalled();
+
+    const failure = Object.assign(new Error('snapshot.list is unsupported'), { code: 'unsupported' });
+    const unsupported = compute({ providers: [
+      makeProvider('one', {}, { list: async () => [snapshot] }),
+      makeProvider('two', {}, { list: async () => { throw failure; } }),
+    ] });
+    await expect(unsupported.snapshot.list({ limit: 1 })).rejects.toBe(failure);
+    await expect(unsupported.snapshot.list({ limit: 0 })).rejects.toBe(failure);
+  });
+
+  it.each([-1, 1.5, NaN, Infinity])('rejects invalid snapshot limit %s before provider calls', async (limit) => {
+    const list = vi.fn();
+    const sdk = compute({ provider: makeProvider('one', {}, { list }) });
+    await expect(sdk.snapshot.list({ limit })).rejects.toThrow('non-negative integer');
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('preserves a known snapshot owner failure instead of claiming success through another provider', async () => {
+    const failure = Object.assign(new Error('snapshot.delete is unsupported'), { code: 'unsupported' });
+    const removeOwner = vi.fn().mockRejectedValue(failure);
+    const removeOther = vi.fn().mockResolvedValue(undefined);
+    const sdk = compute({ providers: [
+      makeProvider('owner', {}, { delete: removeOwner }),
+      makeProvider('other', {}, { delete: removeOther }),
+    ] });
+    const snapshot = await sdk.snapshot.create('source', { provider: 'owner' });
+    await expect(sdk.snapshot.delete(snapshot.id)).rejects.toBe(failure);
+    await expect(sdk.snapshot.delete(snapshot.id)).rejects.toBe(failure);
+    expect(removeOwner).toHaveBeenCalledTimes(2);
+    expect(removeOther).not.toHaveBeenCalled();
   });
 });

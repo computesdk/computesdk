@@ -134,6 +134,32 @@ interface ProviderConfig<TInstance, TConfig> {
 
 **Returns:** A factory function `(config: TConfig) => Provider`
 
+### Optional resource operations
+
+Template and snapshot managers require a `create` hook, but `list` and `delete`
+hooks are optional. Omit unsupported hooks instead of returning an empty list or
+resolving a deletion without performing it. Generated managers expose
+`operations: { create, list, delete }`; calls to omitted operations reject with
+`UnsupportedOperationError` (`code: 'unsupported'`). A supported list operation
+can still return `[]` when the inventory is genuinely empty.
+
+Snapshot providers whose inventory requires an instance must declare
+`listScope: 'instance'`. Their `snapshot.list({ instanceId, limit })` rejects
+unscoped calls before invoking the provider. The legacy `sandboxId` option remains
+supported. The default list scope is `'provider'`.
+
+`compute.snapshot.list({ instanceId })` routes only to that instance's owner.
+With multiple providers, create or resolve the instance through `compute` first,
+or use a single-provider `compute` client. Instance-scoped managers supply the
+filtered inventory; provider-wide inventories must identify each snapshot's
+`instanceId` (or legacy `sandboxId`) so the SDK can filter safely. An inventory
+with unidentifiable snapshots rejects scoped listing instead of returning unrelated
+snapshots or pretending the scoped inventory is empty.
+
+`compute.snapshot.list({ limit })` caps the combined results across providers,
+after instance filtering. Limits must be non-negative integers. A limit does not
+hide unsupported inventory operations from configured providers.
+
 ### Required Instance Methods
 
 #### Collection Operations
@@ -280,7 +306,7 @@ methods: {
 
 ## Background processes and streaming
 
-`instance.startProcess(...)` and `runCommand(cmd, { onStdout, onStderr })` work on every provider. The framework picks the runtime in this order:
+`instance.startProcess(...)` and `runCommand(cmd, { onStdout, onStderr })` use native hooks or a compatibility runtime where supported. The framework picks the runtime in this order:
 
 1. **Native** — the provider's own `streamCommand` / `startProcess` hooks on `methods.instances`.
 2. **Shell tier (default)** — POSIX-shell process records built only on the provider's plain `runCommand`. No Node, daemon or download in the instance, so it works on any image with `sh`, including Alpine and busybox.
@@ -290,7 +316,7 @@ methods: {
 const provider = e2b({ apiKey, processRuntime: 'daemond' });
 ```
 
-`instance.processRuntime` reports which tier serves each capability, e.g. `{ streaming: 'native', processes: 'shell' }`.
+`instance.processRuntime` reports which tier serves each capability, e.g. `{ streaming: 'native', processes: 'shell' }`. After the shell tier detects that an instance cannot preserve state across commands, both capabilities report `'unsupported'` unless their respective native hooks are available.
 
 ### Shell tier
 
@@ -301,7 +327,7 @@ Each job is a directory `${TMPDIR:-/tmp}/.computesdk/jobs/<jobId>/` (mode 0700).
 - **kill** signals the whole process group. A streaming `runCommand`'s `timeout` is enforced in the box by a watchdog that SIGKILLs the group (exit code 124), so the deadline holds when the client is gone. Without `timeout` nothing kills the command.
 - **Reattach**: `instance.attachProcess(jobId)` rebuilds a handle in a new client.
 - **Retention**: a job directory is removed 10 minutes after exit (60s after a kill).
-- **Instances whose execs share no state** (a fresh container per command, e.g. archil disk exec): the first launch on an instance holds the command until a second exec confirms the job directory survived, so this is detected before anything runs. On such instances a streaming `runCommand` falls back to one plain exec with its output delivered at exit, and `startProcess` throws `ShellStateNotPersistentError`.
+- **Instances whose execs share no state** (a fresh container per command, e.g. archil disk exec): the first launch on an instance holds the command until a second exec confirms the job directory survived, so this is detected before the user command runs. Callback-based streaming and `startProcess` throw `ShellStateNotPersistentError` (`code: 'unsupported'`). Plain buffered `runCommand` remains available; completed output is never replayed as live callbacks.
 - **Requirements**: `sh`, `setsid`, `mkfifo`, `kill`, `cat`, `dd`, `wc`, `tail`, `head`, `base64`, `mkdir`, `rm`, `mv`, `sleep`. A missing one fails with `ShellProcessUnsupportedError` naming it.
 
 The egress router (`CreateInstanceOptions.egress`) stays on daemond: its shim is a Node program, and daemond's bootstrap is what installs Node on images without it.

@@ -240,7 +240,7 @@ describe("lazy create", () => {
           });
         }
         if (url.endsWith("/snapshots")) {
-          return jsonResponse({ id: "snap-1", sandbox_id: REAL_ID }, 201);
+          return jsonResponse({ id: "snap-1", sandbox_id: REAL_ID, created_at: "2026-07-11T00:00:00Z" }, 201);
         }
         if (method === "DELETE" || url.endsWith("/fs/write")) {
           return jsonResponse({ data: {} });

@@ -167,8 +167,45 @@ export interface MiosaSnapshotRecord {
   sandbox_id: string;
   status: string;
   comment: string | null;
-  created_at: string;
+  created_at?: string;
   [key: string]: unknown;
+}
+
+export interface MiosaSnapshot extends MiosaSnapshotRecord {
+  provider: "miosa";
+  createdAt: string;
+  instanceId: string;
+  sandboxId: string;
+}
+
+function isSnapshotDate(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
+async function toSnapshot(
+  auth: MiosaAuth,
+  record: MiosaSnapshotRecord,
+  ownerId: string,
+): Promise<MiosaSnapshot> {
+  let createdAt = record.created_at;
+  if (!isSnapshotDate(createdAt)) {
+    const detail = await miosaRequest<{ data?: { id: string; created_at?: string } }>(
+      auth, "GET", `/snapshots/${encodeURIComponent(record.id)}`,
+    );
+    const nativeDate = detail.data?.created_at;
+    if (detail.data?.id !== record.id || !isSnapshotDate(nativeDate)) {
+      throw new Error(`MIOSA snapshot ${record.id} has no valid creation date in native metadata.`);
+    }
+    createdAt = nativeDate;
+  }
+  const instanceId = record.sandbox_id ?? ownerId;
+  return {
+    ...record,
+    provider: "miosa",
+    createdAt,
+    instanceId,
+    sandboxId: instanceId,
+  };
 }
 
 /**
@@ -2066,7 +2103,7 @@ const createMiosaProvider = defineProvider<
   MiosaSandbox,
   MiosaConfig,
   never,
-  MiosaSnapshotRecord
+  MiosaSnapshot
 >({
   name: "miosa",
   methods: {
@@ -2568,6 +2605,7 @@ const createMiosaProvider = defineProvider<
     // request; an unrecorded id's 404 gets the same remedy appended while
     // keeping its NOT_FOUND status (the sandbox may simply be missing).
     snapshot: {
+      listScope: "instance",
       // Live-verified: a restore keeps the whole ext4 rootfs (/tmp, /root,
       // /var) and memory (background processes keep running), and the
       // source keeps running. Firecracker only.
@@ -2582,7 +2620,7 @@ const createMiosaProvider = defineProvider<
         config: MiosaConfig,
         sandboxId: string,
         options?: CreateSnapshotOptions,
-      ): Promise<MiosaSnapshotRecord> => {
+      ): Promise<MiosaSnapshot> => {
         const auth = resolveAuth(config);
         sandboxId = await resolveSandboxId(auth.apiKey, sandboxId);
         if (sandboxTransport.get(sandboxId) === "regional")
@@ -2601,13 +2639,14 @@ const createMiosaProvider = defineProvider<
         const record = response.data ?? response;
         if (record?.id)
           snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), sandboxId);
-        return record?.id ? waitForSnapshotReady(auth, sandboxId, record) : record;
+        const ready = record?.id ? await waitForSnapshotReady(auth, sandboxId, record) : record;
+        return toSnapshot(auth, ready, sandboxId);
       },
 
       list: async (
         config: MiosaConfig,
         options?: { sandboxId?: string },
-      ): Promise<MiosaSnapshotRecord[]> => {
+      ): Promise<MiosaSnapshot[]> => {
         const auth = resolveAuth(config);
         if (!options?.sandboxId) {
           throw new Error(
@@ -2637,7 +2676,7 @@ const createMiosaProvider = defineProvider<
           if (record?.id && owner)
             snapshotSandboxIndex.set(snapshotIndexKey(auth, record.id), owner);
         }
-        return records;
+        return Promise.all(records.map((record) => toSnapshot(auth, record, ownerId)));
       },
 
       delete: async (

@@ -12,7 +12,7 @@
  *      (`^e2b_[0-9a-f]+$`) since v2.27; the lelantos control plane canonicalizes
  *      the alias back, so both forms resolve to the same stored key.
  *   2. `domain` / `apiUrl` are threaded into EVERY e2b SDK call (create/connect/
- *      list/kill/snapshot/template) — stock @computesdk/e2b only forwards them to
+ *      list/kill/snapshot) — stock @computesdk/e2b only forwards them to
  *      `create`, leaving lifecycle calls pointed at api.e2b.app.
  *   3. `domain` defaults to `lelantos.ai`, so the provider works out of the box
  *      without any environment configuration beyond the API key.
@@ -92,10 +92,6 @@ type E2BFileEntry = {
 type E2BSnapshotResult = string | { snapshotId?: string; id?: string; templateId?: string };
 type SnapshotCapableE2BSandbox = E2BSandbox & {
   createSnapshot: (options?: { name?: string }) => Promise<E2BSnapshotResult>;
-};
-type E2BSandboxStatics = typeof E2BSandbox & {
-  listTemplates?: (options: { apiKey?: string; domain?: string; apiUrl?: string }) => Promise<unknown[]>;
-  deleteTemplate?: (snapshotId: string, options: { apiKey?: string; domain?: string; apiUrl?: string }) => Promise<unknown>;
 };
 
 export interface LelantosConfig {
@@ -386,42 +382,6 @@ export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
         } catch (error) {
           throw new Error(`Failed to create Lelantos snapshot: ${error instanceof Error ? error.message : String(error)}`);
         }
-      },
-      list: async (config: LelantosConfig) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.listTemplates === 'function') {
-            return await e2bStatic.listTemplates(connectOpts(config));
-          }
-          return [];
-        } catch { return []; }
-      },
-      delete: async (config: LelantosConfig, snapshotId: string) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.deleteTemplate === 'function') {
-            await e2bStatic.deleteTemplate(snapshotId, connectOpts(config));
-          }
-        } catch { /* ignore */ }
-      }
-    },
-
-    template: {
-      create: async (_config: LelantosConfig, _options: { name: string }) => {
-        throw new Error('To create a template in Lelantos, create a snapshot from a running sandbox using snapshot.create(), or use the E2B-compatible template build protocol / CLI to build from a Dockerfile.');
-      },
-      list: async (config: LelantosConfig) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.listTemplates === 'function') return await e2bStatic.listTemplates(connectOpts(config));
-          return [];
-        } catch { return []; }
-      },
-      delete: async (config: LelantosConfig, templateId: string) => {
-        try {
-          const e2bStatic = E2BSandbox as E2BSandboxStatics;
-          if (typeof e2bStatic.deleteTemplate === 'function') await e2bStatic.deleteTemplate(templateId, connectOpts(config));
-        } catch { /* ignore */ }
       }
     }
   }

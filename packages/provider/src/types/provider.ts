@@ -32,7 +32,7 @@ export interface ProviderInstance<TInstance = any> extends Omit<InstanceInterfac
   /** Destroy instance and clean up resources */
   destroy(): Promise<void>;
   /** Which runtime serves streaming `runCommand` and `startProcess` on this instance. */
-  readonly processRuntime?: { streaming: ProcessTier; processes: ProcessTier };
+  readonly processRuntime?: { streaming: ProcessTier | 'unsupported'; processes: ProcessTier | 'unsupported' };
   /**
    * Rebuilds a handle for a shell-tier process from its `jobId` — e.g. in a
    * new client after a restart. Output replays from the start of the job's log.
@@ -165,6 +165,8 @@ export type ProviderSandboxManager<TInstance = any> = ProviderInstanceManager<TI
  * Provider template manager interface - handles template/blueprint lifecycle
  */
 export interface ProviderTemplateManager<TTemplate = any, TCreateOptions extends CreateTemplateOptions = CreateTemplateOptions> {
+  /** Implemented operations; absent on providers not using the generated manager. */
+  readonly operations?: { create: boolean; list: boolean; delete: boolean };
   /** Create a new template */
   create(options: TCreateOptions): Promise<TTemplate>;
   /** List all available templates */
@@ -177,6 +179,10 @@ export interface ProviderTemplateManager<TTemplate = any, TCreateOptions extends
  * Provider snapshot manager interface - handles snapshot lifecycle
  */
 export interface ProviderSnapshotManager<TSnapshot = any> {
+  /** Implemented operations; unsupported calls reject rather than returning empty results. */
+  readonly operations?: { create: boolean; list: boolean; delete: boolean };
+  /** Whether listing requires an instance ID. Defaults to provider-wide listing. */
+  readonly listScope?: 'provider' | 'instance';
   /** Create a snapshot from an instance */
   create(instanceId: string, options?: CreateSnapshotOptions): Promise<TSnapshot>;
   /** List all snapshots */

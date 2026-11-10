@@ -241,6 +241,66 @@ describe('opencomputer provider', () => {
     expect(JSON.stringify(info.metadata)).not.toContain('whsec_secret');
   });
 
+  it.each([undefined, {}, { instanceId: '' }, { sandboxId: '' }])(
+    'rejects snapshot listing without an instance scope: %j',
+    async (options) => {
+      const native = makeSandbox();
+      connectMock.mockResolvedValue(native);
+      const provider = opencomputer({ apiKey: 'osb_test' });
+
+      expect(provider.snapshot!.listScope).toBe('instance');
+      await expect(provider.snapshot!.list(options)).rejects.toMatchObject({
+        code: 'unsupported',
+        provider: 'opencomputer',
+        operation: 'snapshot.list without instanceId',
+      });
+      expect(connectMock).not.toHaveBeenCalled();
+      expect(createMock).not.toHaveBeenCalled();
+      expect(createFromCheckpointMock).not.toHaveBeenCalled();
+      expect(native.listCheckpoints).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { instanceId: 'sb_scoped' },
+    { sandboxId: 'sb_scoped' },
+    { instanceId: 'sb_scoped', sandboxId: 'sb_other' },
+  ])('lists native checkpoints for the requested instance scope: %j', async (options) => {
+    const native = makeSandbox({ sandboxId: 'sb_scoped', id: 'sb_scoped' });
+    native.listCheckpoints.mockResolvedValue([{
+      id: 'cp_scoped',
+      sandboxId: 'sb_scoped',
+      name: 'scoped snapshot',
+      status: 'ready',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }]);
+    connectMock.mockResolvedValue(native);
+    const provider = opencomputer({ apiKey: 'osb_test', apiUrl: 'https://api.example.test' });
+
+    expect(provider.snapshot!.operations).toEqual({ create: true, list: true, delete: true });
+    const listed = await provider.snapshot!.list(options);
+
+    expect(connectMock).toHaveBeenCalledTimes(1);
+    expect(connectMock).toHaveBeenCalledWith('sb_scoped', {
+      apiKey: 'osb_test',
+      apiUrl: 'https://api.example.test',
+    });
+    expect(native.listCheckpoints).toHaveBeenCalledTimes(1);
+    expect(native.listCheckpoints).toHaveBeenCalledWith();
+    expect(createMock).not.toHaveBeenCalled();
+    expect(createFromCheckpointMock).not.toHaveBeenCalled();
+    expect(listed).toEqual([expect.objectContaining({
+      id: 'sb_scoped:cp_scoped',
+      provider: 'opencomputer',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: expect.objectContaining({
+        sandboxId: 'sb_scoped',
+        name: 'scoped snapshot',
+        status: 'ready',
+      }),
+    })]);
+  });
+
   it('exposes checkpoints through the snapshot manager', async () => {
     const native = makeSandbox();
     connectMock.mockResolvedValue(native);

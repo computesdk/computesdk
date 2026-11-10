@@ -258,6 +258,7 @@ describe('Mosaic ComputeSDK provider', () => {
     expect(snapshot).toEqual({
       id: 'snap-1',
       provider: 'mosaic',
+      instanceId: 'sbx-1',
       createdAt: new Date(3),
       metadata: { name: 'my-toolchain', template: 'node-20', memoryMb: 4096, vcpu: 2 },
     });

@@ -31,6 +31,15 @@ export interface CreateSnapshotOptions {
   provider?: string;
 }
 
+export interface ComputeListSnapshotsOptions {
+  /** List only snapshots of this instance. In multi-provider mode, resolve its owner first. */
+  instanceId?: string;
+  /** @deprecated Use instanceId. */
+  sandboxId?: string;
+  /** Maximum total results across all configured providers, after instance filtering. */
+  limit?: number;
+}
+
 export interface ComputeCreateVolumeOptions extends CreateVolumeOptions {
   /** Optional provider name override (must match provider.name) */
   provider?: string;
@@ -44,8 +53,9 @@ interface ProviderInstanceManager {
 }
 
 interface ProviderSnapshotManager {
+  readonly listScope?: 'provider' | 'instance';
   create(instanceId: string, options?: { name?: string; metadata?: Record<string, any> }): Promise<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>;
-  list(): Promise<Array<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>>;
+  list(options?: ComputeListSnapshotsOptions): Promise<Array<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any>; instanceId?: string; sandboxId?: string }>>;
   delete(snapshotId: string): Promise<void>;
 }
 
@@ -253,7 +263,7 @@ class ComputeManager {
     const known = this.snapshotProviders.get(snapshotId);
     const providers = this.getProviders().filter((p) => !!p.snapshot);
     if (!known) return providers;
-    return [known, ...providers.filter((p) => p !== known)];
+    return [known];
   }
 
   private getSnapshotCreateCandidates(instanceId: string, preferredProviderName?: string): DirectProvider[] {
@@ -442,13 +452,36 @@ class ComputeManager {
       );
     },
 
-    list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
+    list: async (options?: ComputeListSnapshotsOptions): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
       const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
+      const limit = options?.limit;
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 0)) {
+        throw new RangeError('snapshot.list limit must be a non-negative integer.');
+      }
+      const instanceId = options?.instanceId ?? options?.sandboxId;
+      if (instanceId === '') throw new Error('snapshot.list requires a non-empty instanceId.');
+      const known = instanceId ? this.instanceProviders.get(instanceId) : undefined;
+      const providers = known ? [known] : this.getProviders();
+      if (instanceId && providers.length > 1) {
+        throw new Error('Scoped snapshot listing requires a known instance owner. Resolve it with compute.instances.getById or configure a single provider.');
+      }
 
-      for (const provider of this.getProviders()) {
-        if (!provider.snapshot) continue;
-        const listed = await provider.snapshot.list();
+      for (const provider of providers) {
+        if (!provider.snapshot) {
+          if (instanceId) throw Object.assign(new Error(`${provider.name}: snapshot.list is not supported`), { code: 'unsupported' });
+          continue;
+        }
+        const filtersSources = !!instanceId && provider.snapshot.listScope !== 'instance';
+        const listed = await provider.snapshot.list(filtersSources ? { ...options, limit: undefined } : options);
         for (const snapshot of listed) {
+          if (filtersSources) {
+            const sourceId = snapshot.instanceId ?? snapshot.sandboxId;
+            if (!sourceId) {
+              throw Object.assign(new Error(`${provider.name}: instance-scoped snapshot listing is not supported`), { code: 'unsupported' });
+            }
+            if (sourceId !== instanceId) continue;
+          }
+          if (limit !== undefined && snapshots.length >= limit) continue;
           this.snapshotProviders.set(snapshot.id, provider);
           snapshots.push({
             ...snapshot,
@@ -471,6 +504,7 @@ class ComputeManager {
           this.snapshotProviders.delete(snapshotId);
           return;
         } catch (error) {
+          if (candidates.length === 1) throw error;
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         }
       }

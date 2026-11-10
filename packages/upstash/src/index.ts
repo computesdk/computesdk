@@ -452,32 +452,12 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
         }
       },
 
-      list: async (_config: UpstashConfig) => {
-        return [];
-      },
-
       delete: async (config: UpstashConfig, snapshotId: string) => {
         const apiKey = config.apiKey || process.env.UPSTASH_BOX_API_KEY!;
         const result = await Box.deleteSnapshots({ apiKey, snapshotIds: [snapshotId] });
         if (result && typeof result === 'object' && 'failed' in result && Number((result as any).failed) > 0) {
           throw new Error(`Failed to delete Upstash snapshot ${snapshotId}`);
         }
-      },
-    },
-
-    template: {
-      create: async (_config: UpstashConfig, _options: { name: string }) => {
-        throw new Error(
-          'Upstash Box does not support template creation directly. Use snapshot.create() to save a box state, then Box.fromSnapshot() to restore from it.'
-        );
-      },
-
-      list: async (_config: UpstashConfig) => {
-        return [];
-      },
-
-      delete: async (_config: UpstashConfig, _templateId: string) => {
-        // No-op - Upstash uses snapshots instead of templates
       },
     },
   },
