@@ -259,6 +259,15 @@ export interface PauseCapabilities {
 export interface CreateSnapshotOptions {
   name?: string;
   metadata?: Record<string, any>;
+  /**
+   * Capture scope hint. `'full'` asks for a live capture that checkpoints
+   * memory and keeps the source running; `'disk'` asks for a disk-only
+   * capture (the source may be stopped for it). Omitted means the provider
+   * picks — typically live when supported, else disk. Providers without a
+   * live-capture mode ignore this; a provider that cannot honor `'full'`
+   * may fall back or error, see {@link SnapshotCapabilities}.
+   */
+  scope?: 'disk' | 'full';
 }
 
 /**
