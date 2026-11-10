@@ -9,6 +9,7 @@ import {
   put, 
   list as tigrisList,
   remove,
+  type PutOptions,
 } from '@tigrisdata/storage';
 import type { StorageProvider, StorageObject, UploadOptions, DownloadResult, ListOptions, ListResult } from '@computesdk/provider';
 
@@ -39,9 +40,8 @@ export interface Tigris extends StorageProvider {
 /**
  * Create a Tigris storage provider instance
  * 
- * Note: The Tigris SDK uses global environment variables for configuration.
- * This implementation sets credentials once at initialization. For concurrent
- * use with different credentials, create separate instances.
+ * Credentials and bucket are passed to the Tigris SDK on every call, so
+ * instances with different credentials can be used concurrently.
  * 
  * @param config - Tigris configuration options
  * @returns Tigris instance
@@ -89,36 +89,19 @@ export function tigris(config: TigrisConfig): Tigris {
     );
   }
 
-  // Set credentials once at initialization
-  // Note: Tigris SDK uses global env vars, so concurrent instances with different
-  // credentials will interfere. This is a limitation of the Tigris SDK.
-  process.env.TIGRIS_STORAGE_ACCESS_KEY_ID = accessKeyId;
-  process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY = secretAccessKey;
+  const sdkConfig = (bucket: string): NonNullable<PutOptions['config']> => ({ bucket, accessKeyId, secretAccessKey });
 
   return {
     async upload(bucket: string, key: string, data: Uint8Array | string, options?: UploadOptions): Promise<StorageObject> {
       try {
-        // Store previous bucket value
-        const prevBucket = process.env.TIGRIS_STORAGE_BUCKET;
-        
-        // Set bucket for this operation
-        process.env.TIGRIS_STORAGE_BUCKET = bucket;
+        const body = typeof data === 'string'
+          ? data
+          : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 
-        let result;
-        if (typeof data === 'string') {
-          result = await put(key, data, options?.contentType ? { contentType: options.contentType } : undefined);
-        } else {
-          // Pass Uint8Array as Buffer for binary data support
-          const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-          result = await put(key, buffer, options?.contentType ? { contentType: options.contentType } : undefined);
-        }
-
-        // Restore previous bucket
-        if (prevBucket !== undefined) {
-          process.env.TIGRIS_STORAGE_BUCKET = prevBucket;
-        } else {
-          delete process.env.TIGRIS_STORAGE_BUCKET;
-        }
+        const result = await put(key, body, {
+          contentType: options?.contentType,
+          config: sdkConfig(bucket),
+        });
 
         if (result.error) {
           throw new Error(result.error.message);
@@ -127,9 +110,9 @@ export function tigris(config: TigrisConfig): Tigris {
         return {
           bucket,
           key,
-          size: typeof data === 'string' ? data.length : data.byteLength,
+          size: typeof body === 'string' ? Buffer.byteLength(body, 'utf8') : body.byteLength,
           etag: undefined,
-          lastModified: new Date(),
+          lastModified: result.data.modified ? new Date(result.data.modified) : new Date(),
           metadata: options?.metadata,
         };
       } catch (error) {
@@ -141,41 +124,23 @@ export function tigris(config: TigrisConfig): Tigris {
 
     async download(bucket: string, key: string): Promise<DownloadResult> {
       try {
-        // Store previous bucket value
-        const prevBucket = process.env.TIGRIS_STORAGE_BUCKET;
-        
-        // Set bucket for this operation
-        process.env.TIGRIS_STORAGE_BUCKET = bucket;
-
-        const result = await get(key, 'stream');
-
-        // Restore previous bucket
-        if (prevBucket !== undefined) {
-          process.env.TIGRIS_STORAGE_BUCKET = prevBucket;
-        } else {
-          delete process.env.TIGRIS_STORAGE_BUCKET;
-        }
+        const result = await get(key, 'stream', { config: sdkConfig(bucket) });
 
         if (result.error) {
           throw new Error(result.error.message);
         }
 
-        // Convert stream to Uint8Array
-        const stream = result.data as ReadableStream;
-        const reader = stream.getReader();
+        const reader = result.data.getReader();
         const chunks: Uint8Array[] = [];
-        
+        let totalLength = 0;
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           chunks.push(value);
+          totalLength += value.length;
         }
-        
-        // Concatenate chunks
-        let totalLength = 0;
-        for (const chunk of chunks) {
-          totalLength += chunk.length;
-        }
+
         const data = new Uint8Array(totalLength);
         let offset = 0;
         for (const chunk of chunks) {
@@ -200,20 +165,7 @@ export function tigris(config: TigrisConfig): Tigris {
 
     async delete(bucket: string, key: string): Promise<void> {
       try {
-        // Store previous bucket value
-        const prevBucket = process.env.TIGRIS_STORAGE_BUCKET;
-        
-        // Set bucket for this operation
-        process.env.TIGRIS_STORAGE_BUCKET = bucket;
-
-        const result = await remove(key);
-
-        // Restore previous bucket
-        if (prevBucket !== undefined) {
-          process.env.TIGRIS_STORAGE_BUCKET = prevBucket;
-        } else {
-          delete process.env.TIGRIS_STORAGE_BUCKET;
-        }
+        const result = await remove(key, { config: sdkConfig(bucket) });
 
         if (result.error) {
           throw new Error(result.error.message);
@@ -227,41 +179,27 @@ export function tigris(config: TigrisConfig): Tigris {
 
     async list(bucket: string, options?: ListOptions): Promise<ListResult> {
       try {
-        // Store previous bucket value
-        const prevBucket = process.env.TIGRIS_STORAGE_BUCKET;
-        
-        // Set bucket for this operation
-        process.env.TIGRIS_STORAGE_BUCKET = bucket;
-
         const result = await tigrisList({
           prefix: options?.prefix,
           limit: options?.maxKeys,
+          paginationToken: options?.continuationToken,
+          config: sdkConfig(bucket),
         });
-
-        // Restore previous bucket
-        if (prevBucket !== undefined) {
-          process.env.TIGRIS_STORAGE_BUCKET = prevBucket;
-        } else {
-          delete process.env.TIGRIS_STORAGE_BUCKET;
-        }
 
         if (result.error) {
           throw new Error(result.error.message);
         }
 
-        // Tigris list response has different structure, adapt it
-        const responseData = result.data as any;
-        
         return {
-          objects: (responseData?.objects || []).map((obj: any) => ({
+          objects: result.data.items.map((item) => ({
             bucket,
-            key: obj.key || '',
-            size: obj.size || 0,
-            etag: obj.etag,
-            lastModified: obj.lastModified ? new Date(obj.lastModified) : undefined,
+            key: item.name,
+            size: item.size,
+            etag: undefined,
+            lastModified: item.lastModified ? new Date(item.lastModified) : undefined,
           })),
-          truncated: responseData?.truncated || false,
-          continuationToken: responseData?.nextContinuationToken,
+          truncated: result.data.hasMore,
+          continuationToken: result.data.paginationToken,
         };
       } catch (error) {
         throw new Error(

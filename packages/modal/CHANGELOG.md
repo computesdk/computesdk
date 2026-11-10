@@ -1,5 +1,106 @@
 # @computesdk/modal
 
+## 1.9.29
+
+### Patch Changes
+
+- 0198d58: Collect command stdout and stderr from Modal's native streams concurrently with process completion, avoiding temporary files and extra remote commands for output collection.
+- 0b28544: Share the Modal client, app lookup, and image preparation across provider instances with matching connection settings. Concurrent sandbox creation reuses in-flight initialization while preserving distinct sandbox options. Bound cache retention and retry failed lookups.
+
+## 1.9.28
+
+### Patch Changes
+
+- 1904e82: Look up the Modal app on first sandbox create instead of at `modal()` construction, so a missing-credentials lookup no longer surfaces as an unhandled rejection and a failed lookup is retried.
+- 1904e82: Declare snapshot capabilities (whole rootfs, no memory, source keeps running), delete snapshot images on `snapshot.delete`, and run the shared snapshot conformance tests.
+- 1904e82: Default image is now `node:22` (ships `node:sqlite`), `destroy()` waits for the sandbox to exit so mounted Volume writes are committed before the next mount, and `runCommand` env applies to every part of a compound command.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.9.27
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.9.26
+
+### Patch Changes
+
+- d4424cd: runCommand: capture output via guest files instead of streamed exec output. Provider exec transports can drop a contiguous chunk mid-stream (observed across all five providers during a CPU-bound quiet stretch) while still reporting success, silently corrupting captured stdout/stderr. Commands now redirect output to files inside the sandbox and the adapter reads them back with short-lived commands, verified against byte counts the command writes alongside. Microsandbox additionally records byte counts and re-reads through the alternate transport on a mismatch.
+
+## 1.9.25
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.9.24
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 1.9.23
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 1.9.22
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 1.9.21
+
+### Patch Changes
+
+- a3de4ae: Volume soak fixes: `withVolumeSettle` retries volume delete while the provider reports it still attached (sandbox.destroy() returns before the control plane unmounts); daytona volume get/delete resolve by id or name (`volume.get` is name-keyed); miosa create defaults size_bytes to 1 GiB (missing field 422s); sandbox0 create sends the explicit s0fs/RWO request.
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 1.9.20
+
+### Patch Changes
+
+- 1b639da: Add a unified persistent-volume surface: `CreateInstanceOptions.volumes` (create-time mounts), `compute.volume.create/get/list/delete` with multi-provider routing, and `instance.attachVolume`/`detachVolume` where the provider exposes runtime attach. Provider plumbing maps the unified `VolumeMount[]` onto each native wire shape (daytona `volumes[]`, e2b `volumeMounts`, modal `volumes` map, vercel `mounts`, namespace `volumes[]` with `persistency_kind`, northflank `volumesToAttach`, sandbox0 claim `mounts`, tenki `CreateOptions.volumes`, novita `volumeMounts`, createos `disks` attachments, plus volume managers for blaxel, declaw, beam, microsandbox, miosa).
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 1.9.19
+
+### Patch Changes
+
+- 0c30a8f: Fix `runCommand` contract violations found by the sandbox CI capabilities benchmark:
+
+  - **Timeout dropped**: modal, vercel, declaw, and tensorlake never forwarded `options.timeout` to the underlying SDK (`timeoutMs`/`timeout` fields). Beam has no native timeout option, so the adapter now kills the process when the deadline passes.
+  - **Merged stdout/stderr**: daytona, codesandbox, and sprites only expose one combined output stream; the adapters now redirect stderr to a temp file and parse it back behind a delimiter so `stderr` is populated correctly. Upstash already returns `stderr` — the adapter now forwards it.
+  - **Exit code collapsed**: codesandbox hardcoded `exitCode: 0`; it now captures the real exit code in-band.
+
 ## 1.9.18
 
 ### Patch Changes

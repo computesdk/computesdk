@@ -6,6 +6,8 @@ import {
   formatDuration,
   formatProviderRow,
   formatRunDetail,
+  formatRunResults,
+  resultsSummary,
   formatRunHistory,
   formatRunInspection,
   formatRunRow,
@@ -1112,5 +1114,92 @@ describe('vault helpers', () => {
     expect(row).toContain('revealable');
     expect(row).toContain('v2');
     expect(row).toContain('inherited');
+  });
+});
+
+describe('formatRunResults', () => {
+  const provider = (name: string, score: number | null, rate: number | null, dimensions: Record<string, unknown> = {}) => ({
+    provider: name,
+    dimensions,
+    compositeScore: score,
+    scoringVersion: 'v1',
+    successRate: rate,
+    skipped: false,
+    skipReason: null,
+    metrics: { multiCoreMBps: { median: 120.5, p95: 150, p99: 160, unit: 'MB/s' } },
+    scalars: {},
+    scalarUnits: {},
+  });
+  const result = {
+    benchmarkSlug: 'sandbox-cpu',
+    benchmarkName: 'Sandbox CPU',
+    benchmarkRunId: 'bench-run-1',
+    status: 'completed',
+    dashboardUrl: 'https://x/o/benchmarks/sandbox-cpu/runs/bench-run-1',
+    startedAt: null,
+    endedAt: null,
+    providers: [
+      provider('e2b', 1.76, 0.25),
+      provider('e2b', 7.06, 1, { phase: 'xlarge' }),
+      provider('sprites', 33.68, 1),
+      provider('sprites', 36.66, 1, { phase: 'xlarge' }),
+    ],
+  };
+
+  it('shows overall rows sorted by score and keeps dimension rows out of the table', () => {
+    const out = formatRunResults([result]);
+    const lines = out.split('\n');
+    expect(lines[0]).toContain('Sandbox CPU');
+    expect(lines.filter((l) => l.includes('sprites'))).toHaveLength(1);
+    expect(lines.filter((l) => l.includes('e2b'))).toHaveLength(1);
+    expect(lines.findIndex((l) => l.includes('sprites'))).toBeLessThan(lines.findIndex((l) => l.includes('e2b')));
+    expect(out).toContain('33.68');
+    expect(out).toContain('25%');
+    expect(out).toContain('multiCoreMBps 120.5MB/s');
+    expect(formatRunResults([{ ...result, providers: [{ ...provider('x', 1, 1), metrics: { m: { median: 3364.8500000000004, p95: 1, p99: 1, unit: 'MB/s' } } }] }])).toContain('m 3364.9MB/s');
+  });
+
+  it('distinguishes no benchmark from a benchmark that has not reported', () => {
+    expect(formatRunResults([])).toContain('no benchmark results');
+    expect(formatRunResults([{ ...result, status: 'in_progress', providers: [] }])).toContain('no results yet');
+    expect(formatRunResults([{ ...result, status: 'failed', providers: [] }])).toContain('failed before reporting');
+  });
+
+  it('digest counts providers below 100% success as failed', () => {
+    expect(resultsSummary([result])).toBe('sandbox-cpu · 2 providers · 1 failed');
+    expect(resultsSummary([{ ...result, providers: [] }])).toBe('sandbox-cpu (completed, no results yet)');
+  });
+
+  it('strips control characters from the run id and dashboard URL', () => {
+    const out = formatRunResults([
+      { ...result, benchmarkRunId: 'run\u001b[31m-x', dashboardUrl: 'https://platform.computesdk.com/r\u0007un' },
+    ]);
+    expect(out).not.toContain('\u001b');
+    expect(out).not.toContain('\u0007');
+    expect(out).toContain('https://platform.computesdk.com/r');
+  });
+
+  it('digest does not count an unreported success rate as a failure', () => {
+    const providers = result.providers.map((p) => ({ ...p, successRate: null }));
+    expect(resultsSummary([{ ...result, providers }])).toBe('sandbox-cpu · 2 providers');
+  });
+
+  it('a provider with only dimension rows still gets a row next to providers with an overall', () => {
+    const sprites = result.providers.find((p) => p.provider === 'sprites' && !('phase' in p.dimensions))!;
+    const e2b = result.providers.find((p) => p.provider === 'e2b' && 'phase' in p.dimensions)!;
+    const providers = [sprites, { ...e2b, dimensions: { phase: 'small' }, successRate: 0.25 }, e2b];
+    expect(resultsSummary([{ ...result, providers }])).toBe('sandbox-cpu · 2 providers · 1 failed');
+  });
+
+  it('a benchmark with only dimension rows counts one row per provider', () => {
+    const providers = result.providers.flatMap((p) => [
+      { ...p, dimensions: { phase: 'small' }, compositeScore: 1 },
+      { ...p, dimensions: { phase: 'large' }, compositeScore: 2 },
+    ]);
+    expect(resultsSummary([{ ...result, providers }])).toBe('sandbox-cpu · 2 providers · 1 failed');
+    const out = formatRunResults([{ ...result, providers }]);
+    for (const p of result.providers) {
+      expect(out.split('\n').filter((l) => l.includes(p.provider))).toHaveLength(1);
+    }
   });
 });

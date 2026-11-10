@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/buddy",
-  "version": "1.0.12",
+  "version": "1.0.22",
   "description": "Buddy provider for ComputeSDK - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots",
   "author": "Lucas Czulak",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@buddy-works/sandbox-sdk": "^0.1.10",
+    "@buddy-works/sandbox-sdk": "^0.3.0",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },

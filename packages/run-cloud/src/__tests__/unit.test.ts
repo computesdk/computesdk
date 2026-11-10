@@ -8,6 +8,9 @@ const getMock = vi.fn();
 const listMock = vi.fn();
 const execMock = vi.fn();
 const readFileMock = vi.fn();
+const writeFileMock = vi.fn();
+const pauseMock = vi.fn();
+const resumeMock = vi.fn();
 const destroyMock = vi.fn();
 const setTimeoutMock = vi.fn();
 const openTunnelMock = vi.fn();
@@ -36,6 +39,9 @@ vi.mock('@run-cloud/sdk', () => {
       list: listMock,
       exec: execMock,
       readFile: readFileMock,
+      writeFile: writeFileMock,
+      pause: pauseMock,
+      resume: resumeMock,
       destroy: destroyMock,
       setTimeout: setTimeoutMock,
       openTunnel: openTunnelMock,
@@ -108,6 +114,9 @@ describe('run-cloud provider', () => {
       exitCode: 0,
     });
     readFileMock.mockResolvedValue(new TextEncoder().encode('file-content'));
+    writeFileMock.mockResolvedValue(undefined);
+    pauseMock.mockResolvedValue(nativeSandbox({ state: 'paused' }));
+    resumeMock.mockResolvedValue(nativeSandbox());
     destroyMock.mockResolvedValue(undefined);
     setTimeoutMock.mockImplementation(async () =>
       nativeSandbox({ id: 'sbx_restored' }),
@@ -310,6 +319,29 @@ describe('run-cloud provider', () => {
     });
   });
 
+  it('streams command output as the exec stream delivers it', async () => {
+    const bytes = new TextEncoder().encode('tick \u00e9\n');
+    execMock.mockImplementationOnce(async (_id, _cmd, options) => {
+      options.onStdout(bytes.subarray(0, 6));
+      options.onStdout(bytes.subarray(6));
+      options.onStderr(new TextEncoder().encode('warn\n'));
+      return { stdout: 'tick \u00e9\n', stderr: 'warn\n', exit_code: 0, exitCode: 0 };
+    });
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+    const out: string[] = [];
+    const err: string[] = [];
+
+    const result = await sandbox.runCommand('echo tick', {
+      onStdout: (text) => out.push(text),
+      onStderr: (text) => err.push(text),
+    });
+
+    expect(out).toEqual(['tick ', '\u00e9\n']);
+    expect(err).toEqual(['warn\n']);
+    expect(out.join('')).toBe(result.stdout);
+    expect(result.exitCode).toBe(0);
+  });
+
   it('detaches background commands through nohup', async () => {
     const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
     const result = await sandbox.runCommand("printf 'ready'", {
@@ -382,14 +414,8 @@ describe('run-cloud provider', () => {
     });
   });
 
-  it('maps native reads and shell-backed filesystem operations', async () => {
+  it('maps native reads/writes and shell-backed filesystem operations', async () => {
     execMock
-      .mockResolvedValueOnce({
-        stdout: '',
-        stderr: '',
-        exit_code: 0,
-        exitCode: 0,
-      })
       .mockResolvedValueOnce({
         stdout:
           'app.ts\tf\t10\t1767225600.0000000000\n' +
@@ -414,11 +440,10 @@ describe('run-cloud provider', () => {
     expect(await sandbox.filesystem.exists('/tmp/a b/result.txt')).toBe(true);
 
     expect(readFileMock).toHaveBeenCalledWith('sbx_123', '/tmp/result.txt');
-    expect(execMock.mock.calls[0][1]).toContain(
-      'mkdir -p "$(dirname "/tmp/a b/result.txt")"',
-    );
-    expect(execMock.mock.calls[0][1]).toContain(
-      'printf \'%s\' "aGVsbG8=" | base64 -d',
+    expect(writeFileMock).toHaveBeenCalledWith(
+      'sbx_123',
+      '/tmp/a b/result.txt',
+      new TextEncoder().encode('hello'),
     );
     expect(entries).toEqual([
       {
@@ -434,6 +459,66 @@ describe('run-cloud provider', () => {
         modified: new Date('2026-01-01T00:00:01.000Z'),
       },
     ]);
+  });
+
+  it('stages commands too large for one exec frame through the file API', async () => {
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+    const command = `printf '%s' '${'x'.repeat(200_000)}' > /tmp/big`;
+
+    await sandbox.runCommand(command, { cwd: '/work' });
+
+    expect(writeFileMock).toHaveBeenCalledTimes(1);
+    const [, scriptPath, content] = writeFileMock.mock.calls[0];
+    expect(scriptPath).toMatch(/^\/tmp\/\.computesdk-cmd-[\w-]+\.sh$/);
+    expect(new TextDecoder().decode(content)).toBe(command);
+    expect(execMock.mock.calls[0][1]).toBe(
+      `/bin/sh ${scriptPath}; status=$?; rm -f ${scriptPath}; exit $status`,
+    );
+    expect(execMock.mock.calls[0][2]).toMatchObject({ cwd: '/work' });
+  });
+
+  it('resumes an idle-paused sandbox and retries once', async () => {
+    execMock.mockRejectedValueOnce(
+      new RunCloudError(4409, 'sandbox is paused, not running'),
+    );
+    readFileMock.mockRejectedValueOnce(
+      new RunCloudError(409, 'sandbox is paused, not running'),
+    );
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+
+    expect((await sandbox.runCommand('echo ok')).stdout).toBe('ok\n');
+    expect(await sandbox.filesystem.readFile('/tmp/a')).toBe('file-content');
+
+    expect(resumeMock).toHaveBeenCalledTimes(2);
+    expect(resumeMock).toHaveBeenCalledWith('sbx_123');
+    expect(execMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('pauses and resumes through the native lifecycle API', async () => {
+    const provider = runCloud({ apiKey: 'rc_test' });
+    const sandbox = await provider.sandbox.create();
+
+    await sandbox.pause!();
+    expect(pauseMock).toHaveBeenCalledWith('sbx_123');
+    expect(sandbox.getInstance().sandbox.state).toBe('paused');
+
+    await sandbox.resume!();
+    expect(resumeMock).toHaveBeenCalledWith('sbx_123');
+    expect(sandbox.getInstance().sandbox.state).toBe('running');
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    expect(provider.snapshot?.capabilities).toEqual({
+      scope: 'rootfs',
+      memory: false,
+      destroysSource: false,
+    });
+  });
+
+  it('does not resume on unrelated errors', async () => {
+    execMock.mockRejectedValueOnce(new RunCloudError(500, 'boom'));
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+
+    await expect(sandbox.runCommand('echo ok')).rejects.toThrow('boom');
+    expect(resumeMock).not.toHaveBeenCalled();
   });
 
   it('creates, lists, limits, and idempotently deletes snapshots', async () => {

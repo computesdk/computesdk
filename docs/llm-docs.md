@@ -7,6 +7,8 @@ ComputeSDK is the open, multi-provider benchmark harness behind [ComputeSDK Benc
 
 ## Available Files
 
+For the current SDK surface, see [Sandbox sizes](reference/sizes.md), [Instance lifecycle and processes](reference/Instance.md), [instance creation](reference/compute.instances.md), and [compute and snapshots](reference/compute.md). Provider-specific requirements are listed in the [provider pages](providers/README.md).
+
 ### [llms-small.txt](/llms-small.txt)
 A minimal version containing essential information about ComputeSDK and ComputeSDK Benchmarks, perfect for quick AI context.
 

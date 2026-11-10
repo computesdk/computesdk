@@ -80,7 +80,8 @@ const sandbox = await compute.instances.create();
 | `getUrl` | Yes | Exposes or reuses HTTP/HTTPS and TCP listeners. |
 | Filesystem | Yes | Native read, write, mkdir, list, exists, and remove. |
 | Templates | No | Configure a Sail `Image` on the provider instead. |
-| Snapshots | No | Use the native Sail SDK for checkpoint operations. |
+| Pause/resume | Yes | `pause()` holds the Sailbox in memory; files and running processes survive `resume()`. |
+| Snapshots | Yes | Checkpoints keep the whole filesystem (including `/tmp`) and memory; the source keeps running. |
 
 `getUrl` does not replace an existing listener because doing so would replace
 its allowlist. A listener with a conflicting protocol produces an error.
@@ -89,5 +90,5 @@ ComputeSDK's create `timeout` is not supported: it represents a hard sandbox
 lifetime, while Sail's autosleep only sleeps an idle Sailbox. Bound individual
 commands with `runCommand`'s timeout or explicitly call `destroy()`.
 
-Use `sandbox.getInstance()` for Sail-specific checkpoint, sleep, resume, SSH,
+Use `sandbox.getInstance()` for Sail-specific to-disk sleep, fork, SSH,
 listener allowlist, and credential-injection APIs.

@@ -2,17 +2,18 @@
  * Modal Provider - Factory-based Implementation
  */
 
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
-import { ModalClient, SandboxFilesystemNotFoundError } from 'modal';
+import { ModalClient, NotFoundError, SandboxFilesystemNotFoundError } from 'modal';
 import type { Sandbox, App, Image, SandboxCreateParams } from 'modal';
+import { createHash } from 'node:crypto';
 
 type ModalNativeSandbox = Sandbox;
 
 
-const DEFAULT_IMAGE = 'node:20';
+const DEFAULT_IMAGE = 'node:22';
 const DEFAULT_APP_NAME = 'computesdk-modal';
 const DEFAULT_DAEMON_SSE_PORT = 38989;
 
@@ -52,14 +53,57 @@ export interface ModalCreateSandboxOptions extends CreateInstanceOptions {
   daemonSsePort?: number | false;
 }
 
-/**
- * extends ModalConfig with resources initialised once at
- * factory time so they don't need to be recreated on every sandbox operation.
- */
-interface ModalInternalConfig extends ModalConfig {
+interface ModalResources {
   _client: ModalClient;
-  _appPromise: Promise<App>;
+  _getApp: () => Promise<App>;
   _imageCache: Map<string, Promise<Image>>;
+}
+
+interface ModalInternalConfig extends ModalConfig, ModalResources {}
+
+const MAX_RESOURCE_CACHE_SIZE = 32;
+const MAX_IMAGE_CACHE_SIZE = 128;
+const resourceCache = new Map<string, ModalResources>();
+
+/** Keep recently used entries without retaining every configuration or image. */
+function cached<T>(cache: Map<string, T>, key: string, limit: number, create: () => T): T {
+  let value = cache.get(key);
+  if (value === undefined) value = create();
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > limit) cache.delete(cache.keys().next().value!);
+  return value;
+}
+
+function sharedResources(config: ModalConfig, appName: string): ModalResources {
+  const key = createHash('sha256').update(JSON.stringify([
+    config.tokenId,
+    config.tokenSecret,
+    config.environment,
+    appName,
+    Object.keys(process.env).filter((name) => name.startsWith('MODAL_')).sort()
+      .map((name) => [name, process.env[name]]),
+  ])).digest('hex');
+
+  return cached(resourceCache, key, MAX_RESOURCE_CACHE_SIZE, () => {
+    const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
+    let appPromise: Promise<App> | undefined;
+    return {
+      _client: client,
+      // Start network I/O on first create. Concurrent providers share the
+      // in-flight lookup, and a rejected lookup leaves the next call retryable.
+      _getApp: () => {
+        if (!appPromise) {
+          appPromise = client.apps.fromName(appName, { createIfMissing: true }).catch((error) => {
+            appPromise = undefined;
+            throw error;
+          });
+        }
+        return appPromise;
+      },
+      _imageCache: new Map(),
+    };
+  });
 }
 
 
@@ -126,7 +170,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         try {
           const client = config._client;
 
-          const app = await config._appPromise;
+          const app = await config._getApp();
 
           const modalOptions = (options ?? {}) as ModalCreateSandboxOptions;
           const {
@@ -141,19 +185,26 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
             directory: _directory,
             ports: optPorts,
             daemonSsePort: optDaemonSsePort,
+            volumes,
             ...providerOptions
           } = modalOptions;
 
+          // `volumes` only counts as unified VolumeMount[] when every entry
+          // carries `volume`; a provider-native volumes spec stays in
+          // providerOptions and reaches the wire untouched.
+          const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+          if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
+
           const sourceId = snapshotId || templateId;
           const cacheKey = sourceId ?? DEFAULT_IMAGE;
-          let promise = config._imageCache.get(cacheKey);
-          if (!promise) {
-            promise = loadImage(client, app, sourceId).catch((err) => {
-              config._imageCache.delete(cacheKey);
+          const promise = cached(config._imageCache, cacheKey, MAX_IMAGE_CACHE_SIZE, () => {
+            const pending = loadImage(client, app, sourceId).catch((err) => {
+              // An evicted or invalidated load must not remove its replacement.
+              if (config._imageCache.get(cacheKey) === pending) config._imageCache.delete(cacheKey);
               throw err;
             });
-            config._imageCache.set(cacheKey, promise);
-          }
+            return pending;
+          });
           const image = await promise;
 
           const sandboxOptions: SandboxCreateParams = {
@@ -168,6 +219,20 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
 
           if (envs && Object.keys(envs).length > 0) sandboxOptions.env = envs;
           if (name) sandboxOptions.name = name;
+
+          // Unified mounts → modal's {mountPath: Volume} wire shape. Volume
+          // handles resolve via volumes.fromName (native Volume objects pass
+          // through directly; strings/ids get createIfMissing semantics).
+          if (unifiedVolumes) {
+            const volumeMap: Record<string, any> = {};
+            for (const m of unifiedVolumes as any[]) {
+              const ref = resolveVolumeRef(m.volume);
+              volumeMap[m.mountPath] = ref.native ?? await client.volumes.fromName(
+                ref.name ?? ref.id!, { createIfMissing: true }
+              );
+            }
+            sandboxOptions.volumes = volumeMap;
+          }
 
           const sandbox = await client.sandboxes.create(app, image, sandboxOptions);
           const sandboxId = sandbox.sandboxId;
@@ -202,7 +267,10 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         try {
           const client = config._client;
           const sandbox = await client.sandboxes.fromId(sandboxId);
-          if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate();
+          // Volume writes are only committed once the container has exited, so
+          // wait for exit: a sandbox mounting the same volume right after
+          // destroy() would otherwise see none of this sandbox's writes.
+          if (sandbox && typeof sandbox.terminate === 'function') await sandbox.terminate({ wait: true });
         } catch { /* already terminated */ }
       },
 
@@ -210,16 +278,23 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         const startTime = Date.now();
         try {
           let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(String(v))}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
           if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
-          
-          const process = await modalSandbox.instance.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe', timeoutMs: options?.timeout });
-          const [stdout, stderr, exitCode] = await Promise.all([process.stdout.readText(), process.stderr.readText(), process.wait()]);
-          return { stdout: stdout || '', stderr: stderr || '', exitCode: exitCode || 0, durationMs: Date.now() - startTime };
+          if (options?.background) fullCommand = `nohup sh -c '${fullCommand.replace(/'/g, `'\\''`)}' > /dev/null 2>&1 &`;
+          // Exported (not `K=v cmd`) so every part of a compound command sees it.
+          if (options?.env && Object.keys(options.env).length > 0) {
+            const exports = Object.entries(options.env).map(([k, v]) => `export ${k}="${escapeShellArg(String(v))}";`).join(' ');
+            fullCommand = `${exports} ${fullCommand}`;
+          }
+
+          const proc = await modalSandbox.instance.exec(['sh', '-c', fullCommand], { stdout: 'pipe', stderr: 'pipe', timeoutMs: options?.timeout });
+          // Drain both pipes while the command runs, and wait for their EOFs
+          // as well as process exit so trailing output is included.
+          const [stdout, stderr, exitCode] = await Promise.all([
+            proc.stdout.readText(),
+            proc.stderr.readText(),
+            proc.wait(),
+          ]);
+          return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
         } catch (error) {
           return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
         }
@@ -335,7 +410,35 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         }
       },
       list: async (_config: ModalConfig) => [],
-      delete: async (_config: ModalConfig, _snapshotId: string) => { /* No-op */ }
+      delete: async (config: ModalInternalConfig, snapshotId: string) => {
+        config._imageCache.delete(snapshotId);
+        try {
+          await config._client.images.delete(snapshotId);
+        } catch (error) {
+          if (error instanceof NotFoundError) return;
+          throw new Error(`Failed to delete Modal snapshot: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+      // `snapshotFilesystem` images the whole container rootfs (incl. /tmp and
+      // $HOME, not mounted volumes); processes don't carry over and the source
+      // keeps running.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
+    },
+
+    volume: {
+      create: async (config: ModalInternalConfig, options) => {
+        const volume = await config._client.volumes.fromName(options.name, { createIfMissing: true });
+        return { name: options.name, native: volume };
+      },
+      get: async (config: ModalInternalConfig, name: string) => {
+        try {
+          const volume = await config._client.volumes.fromName(name);
+          return { name, native: volume };
+        } catch { return null; }
+      },
+      delete: async (config: ModalInternalConfig, name: string) => {
+        await withVolumeSettle(() => config._client.volumes.delete(name));
+      },
     }
   }
 });
@@ -345,14 +448,9 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
  */
 export function modal(config: ModalConfig = {}): ReturnType<typeof _modal> {
   const appName = config.appName ?? DEFAULT_APP_NAME;
-  const client = new ModalClient({ tokenId: config.tokenId, tokenSecret: config.tokenSecret, environment: config.environment });
-  const appPromise = client.apps.fromName(appName, { createIfMissing: true });
-
   return _modal({
     ...config,
     appName,
-    _client: client,
-    _appPromise: appPromise,
-    _imageCache: new Map(),
+    ...sharedResources(config, appName),
   });
 }

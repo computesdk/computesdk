@@ -1,5 +1,87 @@
 # @computesdk/upstash
 
+## 0.3.28
+
+### Patch Changes
+
+- 1904e82: Apply `runCommand` env and cwd to every part of a compound command, with safe single-quote escaping (also for background commands).
+- 1904e82: Pass absolute file paths (e.g. `/tmp`) through unchanged, follow symlinks in `readFile`, chunk files larger than the files API payload limit, report raw stdout for failing commands, and implement `snapshot.delete` via `Box.deleteSnapshots`.
+- 1904e82: Expose native pause/resume as `instance.pause()`/`resume()` and declare pause and snapshot capabilities: the root filesystem survives except tmpfs mounts (`/var/tmp`, `/var/cache`, `/var/log`, `/root`, `/run`, `/dev/shm`); running processes do not.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.3.27
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.3.26
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.3.25
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 0.3.24
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 0.3.23
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 0.3.22
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 0.3.21
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 0.3.20
+
+### Patch Changes
+
+- 0c30a8f: Fix `runCommand` contract violations found by the sandbox CI capabilities benchmark:
+
+  - **Timeout dropped**: modal, vercel, declaw, and tensorlake never forwarded `options.timeout` to the underlying SDK (`timeoutMs`/`timeout` fields). Beam has no native timeout option, so the adapter now kills the process when the deadline passes.
+  - **Merged stdout/stderr**: daytona, codesandbox, and sprites only expose one combined output stream; the adapters now redirect stderr to a temp file and parse it back behind a delimiter so `stderr` is populated correctly. Upstash already returns `stderr` — the adapter now forwards it.
+  - **Exit code collapsed**: codesandbox hardcoded `exitCode: 0`; it now captures the real exit code in-band.
+
 ## 0.3.19
 
 ### Patch Changes

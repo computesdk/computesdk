@@ -16,5 +16,8 @@ runProviderTestSuite({
   // or not anything is listening yet - a port with no server answers 502
   // when it is actually fetched.
   supportsGetUrl: true,
+  // A snapshot keeps the running source's whole rootfs, memory and
+  // processes, and a fork of it is a new sandbox.
+  supportsSnapshots: true,
   skipIntegration: !process.env.GMN_TOKEN,
 })

@@ -6,6 +6,7 @@
  */
 
 import type { Provider } from './types';
+import { assertInstanceSizeSupported } from 'computesdk';
 
 /**
  * Configuration for creating a compute instance with a provider
@@ -62,9 +63,20 @@ export function createCompute<TInstance = any>(
 
   let currentConfig: CreateComputeConfig<TInstance> | null = config;
 
+  // Guard custom providers too so explicit standard requests cannot disappear in their create method.
+  const instances: Provider<TInstance>['instances'] = {
+    create: async options => {
+      assertInstanceSizeSupported(provider, options);
+      return provider.instances.create(options);
+    },
+    getById: id => provider.instances.getById(id),
+    list: () => provider.instances.list(),
+    destroy: id => provider.instances.destroy(id),
+  };
+
   return {
-    instances: provider.instances,
-    sandbox: provider.instances,
+    instances,
+    sandbox: instances,
     
     getConfig() {
       return currentConfig;

@@ -1,0 +1,80 @@
+# @computesdk/promigence
+
+## 1.0.9
+
+### Patch Changes
+
+- 1904e82: Files are read, written, checked and listed with shell commands when the Promigence API refuses the installed SDK's files API (path in the URL), so filesystem calls keep working.
+- 1904e82: Native `instance.pause()` / `instance.resume()` (files, memory and running processes kept), declared as `provider.sandbox.pause = { memory: true }`; `provider.snapshot.capabilities` declares whole-sandbox snapshots with memory that leave the source running.
+- 1904e82: `snapshot.create(sandboxId)` takes a live snapshot of a running sandbox (`sandboxes.snapshot`); restore or fan out with `create({ snapshotId })`.
+- 1904e82: Bump `@promigence/sdk` to 0.1.0-beta.15, whose files API sends paths in the request body.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 1.0.1
+
+### Patch Changes
+
+- 4d37da4: Add Promigence provider

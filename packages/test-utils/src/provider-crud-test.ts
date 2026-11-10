@@ -44,6 +44,10 @@ const CRUD_ENABLED_PROVIDERS = [
   'workpaper', // Persistent microVM computers, full create/getById/list/destroy lifecycle
   'agentcore', // AgentCore Code Interpreter sessions support full CRUD lifecycle
   'novita',   // Novita's test entry point requires explicit integration opt-in and credentials
+  'freestyle',
+  'sprites',
+  'superserve',
+  'upstash',
   // Add more providers here as they become stable for CRUD testing
   // 'e2b',      // Add when CRUD implementation is stable
   // 'vercel',   // Skip - ephemeral sandboxes don't support listing operations

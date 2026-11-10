@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createSandbox } = vi.hoisted(() => ({ createSandbox: vi.fn() }));
+const { createSandbox, appFromName, deleteImage } = vi.hoisted(() => ({ createSandbox: vi.fn(), appFromName: vi.fn(), deleteImage: vi.fn() }));
 
 const files = new Map<string, string>();
 const dirs = new Set<string>();
@@ -63,9 +63,10 @@ const fsCalls: string[][] = [];
 
 vi.mock('modal', () => ({
   SandboxFilesystemNotFoundError: class extends Error {},
+  NotFoundError: class extends Error {},
   ModalClient: class {
-    apps = { fromName: async () => ({}) };
-    images = { fromRegistry: () => ({ build: async () => ({}) }) };
+    apps = { fromName: appFromName.mockImplementation(async () => ({})) };
+    images = { fromRegistry: () => ({ build: async () => ({}) }), delete: deleteImage };
     sandboxes = {
       create: createSandbox.mockImplementation(async () => new FakeSandbox()),
       fromId: async () => new FakeSandbox(),
@@ -74,11 +75,51 @@ vi.mock('modal', () => ({
   Image: class {},
 }));
 
-import { modal } from '../index';
-import { SandboxFilesystemNotFoundError as FakeNotFoundError } from 'modal';
+import { SandboxFilesystemNotFoundError as FakeNotFoundError, NotFoundError as FakeModalNotFoundError } from 'modal';
+
+let modal: typeof import('../index').modal;
+
+beforeEach(async () => {
+  vi.resetModules();
+  ({ modal } = await import('../index'));
+});
+
+describe('modal snapshots', () => {
+  beforeEach(() => { deleteImage.mockReset(); });
+
+  it('declares whole-rootfs snapshots that keep the source running', () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    expect(provider.snapshot?.capabilities).toEqual({ scope: 'rootfs', memory: false, destroysSource: false });
+    expect(provider.sandbox.pause).toBeUndefined();
+  });
+
+  it('deletes the snapshot image and treats a missing one as deleted', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    await provider.snapshot!.delete('im-1');
+    expect(deleteImage).toHaveBeenCalledWith('im-1');
+
+    deleteImage.mockRejectedValueOnce(new FakeModalNotFoundError('Could not find image with ID im-2'));
+    await expect(provider.snapshot!.delete('im-2')).resolves.toBeUndefined();
+
+    deleteImage.mockRejectedValueOnce(new Error('boom'));
+    await expect(provider.snapshot!.delete('im-3')).rejects.toThrow(/Failed to delete Modal snapshot: boom/);
+  });
+});
 
 describe('modal sandbox creation', () => {
-  beforeEach(() => { createSandbox.mockClear(); });
+  beforeEach(() => { createSandbox.mockClear(); appFromName.mockClear(); });
+
+  it('looks up the app on first create, not at construction, and retries a failed lookup', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    expect(appFromName).not.toHaveBeenCalled();
+
+    appFromName.mockRejectedValueOnce(new Error('Profile is missing credentials'));
+    await expect(provider.sandbox.create()).rejects.toThrow(/authentication failed/);
+
+    const sandbox = await provider.sandbox.create();
+    expect(sandbox.sandboxId).toBe('sb-test');
+    expect(appFromName).toHaveBeenCalledTimes(2);
+  });
 
   it('creates sandboxes through the standard SDK API without experimental options', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's' });
@@ -165,7 +206,7 @@ describe('modal filesystem read/write', () => {
     expect(files.get('/root/a/../b.txt')).toBe('y');
 
     // The workdir is probed once (`pwd`) and cached across operations.
-    expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(1);
+    expect(execCalls.filter((c) => c[0] === 'sh' && c[2]?.includes('pwd'))).toHaveLength(1);
   });
 
   it('does not cache a failed workdir probe', async () => {
@@ -180,7 +221,7 @@ describe('modal filesystem read/write', () => {
     pwdFails = false;
     await sandbox.filesystem.writeFile('y.txt', 'y');
     expect(files.get('/root/y.txt')).toBe('y');
-    expect(execCalls.filter((c) => c[2] === 'pwd')).toHaveLength(2);
+    expect(execCalls.filter((c) => c[0] === 'sh' && c[2]?.includes('pwd'))).toHaveLength(2);
   });
 
   it('rejects ambiguous paths in remove', async () => {

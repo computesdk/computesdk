@@ -1,5 +1,87 @@
 # @computesdk/gravixlayer
 
+## 1.0.17
+
+### Patch Changes
+
+- 1904e82: Snapshots now default to `hot` (filesystem and memory), so `/tmp` contents are restored. Pass `metadata: { kind: 'cold' }` for a filesystem-only snapshot.
+- 1904e82: Native pause/resume (`instance.pause()`/`resume()`, keeping memory and running processes), declared `snapshot.capabilities` (hot rootfs snapshots that keep processes and leave the source running), and a generated snapshot name when none is given.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.0.16
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.0.15
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.0.14
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 1.0.13
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 1.0.12
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 1.0.11
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 1.0.10
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 1.0.9
+
+### Patch Changes
+
+- a0409a6: Send the create lease as `timeout` and the HTTP budget as `requestTimeoutMs`.
+  In the new SDK, `timeout` is the product duration in seconds on every call —
+  matching what ComputeSDK's own millisecond `timeout` always meant — and
+  `timeoutSeconds` was removed. The 180s boot budget moves to
+  `requestTimeoutMs`, the per-call HTTP deadline, so it can no longer be
+  mistaken for a lifetime. Floors the SDK at ^0.1.36.
+
 ## 1.0.8
 
 ### Patch Changes

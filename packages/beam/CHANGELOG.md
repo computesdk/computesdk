@@ -1,5 +1,106 @@
 # @computesdk/beam
 
+## 0.3.26
+
+### Patch Changes
+
+- 6c37daf: Resolve sandbox symlink targets rejected by Beam's download gateway before reading them through the native filesystem API. Preserve chunked large-file reads and add live snapshot-fidelity regression coverage.
+
+## 0.3.25
+
+### Patch Changes
+
+- 1904e82: `runCommand` sets `HOME` from the running user's passwd entry when Beam's exec environment leaves it unset, so `$HOME`, `~` and tools that keep state there work.
+- 1904e82: Declare snapshot capabilities: Beam memory snapshots keep running processes and the root filesystem (not the `/mnt/code` working-directory mount) and leave the source running. Snapshot conformance tests are enabled.
+- 1904e82: Add snapshots (memory + filesystem checkpoints restored with `snapshotId`), mount volumes at the requested path, move files over 8 MiB in parts below the gateway message cap, and apply `env`/`cwd` to every part of a compound command.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.3.24
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.3.23
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.3.22
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 0.3.21
+
+### Patch Changes
+
+- 5b60513: Read `err_msg`/`error_msg` alongside the camelCase spellings from beam gateway error bodies so an attached-state error reaches `withVolumeSettle`'s retry check instead of collapsing to the generic message.
+- ce95b5c: Implement `volume.delete` for beam via the gateway's transcoded DeleteVolume route (`POST /api/v1/gateway/volumes/{name}/delete`), and normalize beam `Volume.id` to the name — every beam volume op is name-keyed. Widen the attach-side settle deadline to 180s: provider attach-consistency windows run ~120s, leaving ~0 margin at the 120s default.
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 0.3.20
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 0.3.19
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 0.3.18
+
+### Patch Changes
+
+- 1b639da: Add a unified persistent-volume surface: `CreateInstanceOptions.volumes` (create-time mounts), `compute.volume.create/get/list/delete` with multi-provider routing, and `instance.attachVolume`/`detachVolume` where the provider exposes runtime attach. Provider plumbing maps the unified `VolumeMount[]` onto each native wire shape (daytona `volumes[]`, e2b `volumeMounts`, modal `volumes` map, vercel `mounts`, namespace `volumes[]` with `persistency_kind`, northflank `volumesToAttach`, sandbox0 claim `mounts`, tenki `CreateOptions.volumes`, novita `volumeMounts`, createos `disks` attachments, plus volume managers for blaxel, declaw, beam, microsandbox, miosa).
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 0.3.17
+
+### Patch Changes
+
+- f08bfc4: Follow-up to the runCommand semantics fixes:
+
+  - **daytona**: the stderr-separator wrapper always exited 0, collapsing the real exit code — the real code is now emitted in-band and parsed back out.
+  - **beam**: `exec({wait: true})` blocks server-side until the command finishes, so the timeout timer started too late. The adapter now launches with `wait: false` when a timeout is requested, starts the deadline clock before the launch call, clears the timer once the process exits, and reports exit code 124 on timeout instead of 0.
+  - **daytona, codesandbox**: in-band delimiters are now unique per call so command output containing the marker text can't mask the real delimiter.
+
+- 0c30a8f: Fix `runCommand` contract violations found by the sandbox CI capabilities benchmark:
+
+  - **Timeout dropped**: modal, vercel, declaw, and tensorlake never forwarded `options.timeout` to the underlying SDK (`timeoutMs`/`timeout` fields). Beam has no native timeout option, so the adapter now kills the process when the deadline passes.
+  - **Merged stdout/stderr**: daytona, codesandbox, and sprites only expose one combined output stream; the adapters now redirect stderr to a temp file and parse it back behind a delimiter so `stderr` is populated correctly. Upstash already returns `stderr` — the adapter now forwards it.
+  - **Exit code collapsed**: codesandbox hardcoded `exitCode: 0`; it now captures the real exit code in-band.
+
 ## 0.3.16
 
 ### Patch Changes

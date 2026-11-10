@@ -279,6 +279,49 @@ describe('compute multi-provider', () => {
     expect(modalCreate).not.toHaveBeenCalled();
   });
 
+  it('rethrows an error with fallback === false instead of trying the next provider', async () => {
+    // The platform provider marks create_outcome_unknown errors this way:
+    // a box may exist and be billing, so booting a second one is unsafe.
+    const unknownOutcome = new Error('Sandbox create outcome unknown after 6 minutes');
+    (unknownOutcome as { fallback?: boolean }).fallback = false;
+    const platformCreate = vi.fn(async () => {
+      throw unknownOutcome;
+    });
+    const platformProvider = makeProvider('platform', { create: platformCreate });
+    const modalCreate = vi.fn(async () => makeSandbox('modal-sbx', 'modal'));
+    const modal = makeProvider('modal', { create: modalCreate });
+
+    const sdk = compute({ providers: [platformProvider, modal] });
+    await expect(sdk.sandbox.create()).rejects.toBe(unknownOutcome);
+    expect(modalCreate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the original errors on .errors when every provider fails', async () => {
+    const firstError = new Error('e2b unavailable');
+    const secondError = new Error('modal unavailable');
+    const e2b = makeProvider('e2b', {
+      create: async () => {
+        throw firstError;
+      },
+    });
+    const modal = makeProvider('modal', {
+      create: async () => {
+        throw secondError;
+      },
+    });
+
+    const sdk = compute({ providers: [e2b, modal] });
+    const err = await sdk.sandbox.create().then(
+      () => {
+        throw new Error('expected create to fail');
+      },
+      (e: unknown) => e as Error & { errors?: unknown[] },
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe('AggregateError');
+    expect(err.errors).toEqual([firstError, secondError]);
+  });
+
   it('creates snapshots using snapshot-capable providers without mutating round-robin create order', async () => {
     const e2bCreate = vi.fn(async () => makeSandbox('e2b-sbx', 'e2b'));
     const e2b = makeProvider('e2b', { create: e2bCreate });

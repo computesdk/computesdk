@@ -18,16 +18,21 @@
  *  - The control plane drops per-exec env server-side (env is sandbox-level,
  *    set at create time), so per-command `env`/`cwd` are synthesised by
  *    wrapping the command in an inline `sh -c` script.
- *  - Snapshot semantics differ from running-snapshot providers (e2b/tensorlake):
- *    `snapshot.create` *pauses* the sandbox (the source VM stops), and the
- *    paused sandbox id IS the snapshot id. `create({ snapshotId })` forks that
- *    paused bundle into a fresh sandbox.
+ *  - createos has no standalone snapshot object; a paused sandbox is the
+ *    forkable artifact. `snapshot.create` pauses the source, forks it into a
+ *    paused copy (the snapshot, with its own id) and resumes the source.
+ *    `create({ snapshotId })` forks that paused copy into a fresh sandbox;
+ *    `snapshot.delete` destroys it.
+ *  - Pause and paused forks keep memory: files (including /tmp and /dev/shm)
+ *    and running processes survive `pause`/`resume` and snapshot restores.
  *
  * Error policy: provider operations fail loudly when the provider boundary is
  * broken. Only a genuine 404 (`CreateosSandboxNotFoundError`) is mapped to the
  * idempotent "absent" outcome (`getById` → null, `destroy`/`delete` → no-op).
  * Auth, network, validation, and server errors propagate.
  */
+
+import { randomUUID } from "node:crypto";
 
 import { CreateosSandboxClient, CreateosSandboxNotFoundError, Sandbox } from "@nodeops-createos/sandbox";
 import type {
@@ -36,7 +41,7 @@ import type {
   SandboxStatus,
   Shape,
 } from "@nodeops-createos/sandbox";
-import { defineProvider } from "@computesdk/provider";
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from "@computesdk/provider";
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -167,7 +172,7 @@ export interface CreateosCreateOptions extends CreateInstanceOptions {
   cpus?: number;
   /** Overlay disk size (MiB). 0 / omitted = the shape's default disk. */
   ephemeralDiskMb?: number;
-  /** Enable public ingress. Defaults to false. */
+  /** Enable public ingress at create. Defaults to false; `getUrl` enables it on demand. */
   ingressEnabled?: boolean;
   /** SSH public keys to inject at boot. */
   sshPubkeys?: string[];
@@ -267,6 +272,19 @@ async function resolveShape(
   return picked;
 }
 
+/** Public URL for a port. Sandboxes are created with ingress off, so asking
+ *  for a URL turns it on (PATCH) first; a handle that has ingress on but no
+ *  URL template (e.g. a stale view) is refreshed before building the URL. */
+export async function ingressUrl(
+  sandbox: Pick<Sandbox, "data" | "setIngress" | "refresh" | "previewUrl">,
+  options: { port: number; protocol?: string },
+): Promise<string> {
+  const scheme = options.protocol === "http" ? "http" : "https";
+  if (!sandbox.data.ingress_enabled) await sandbox.setIngress(true);
+  else if (!sandbox.data.ingress_url_template) await sandbox.refresh();
+  return sandbox.previewUrl(options.port, { scheme });
+}
+
 /** Map an createos-sandbox lifecycle state onto ComputeSDK's running|stopped|error. */
 export function mapStatus(status: SandboxStatus): InstanceInfo["status"] {
   if (status === "running") return "running";
@@ -322,7 +340,40 @@ export function toCreateRequest(
   if (ssh) req.ssh_pubkeys = ssh;
   const egress = strArray(opts.egress);
   if (egress) req.egress = egress;
+
+  // Unified mounts → createos disk attachments {disk_id, mount_path, sub_path}.
+  if (isUnifiedVolumeMounts(opts.volumes)) {
+    req.disks = opts.volumes.map((m) => {
+      const ref = resolveVolumeRef(m.volume);
+      const subPath = (m as { subPath?: string }).subPath;
+      return { disk_id: ref.id ?? ref.name!, mount_path: m.mountPath, ...(subPath ? { sub_path: subPath } : {}) };
+    });
+  }
   return req;
+}
+
+/**
+ * Disks mount asynchronously — an in-VM agent transitions each attachment
+ * pending → mounted|error. Returning before "mounted" hands callers a dir
+ * that isn't the disk yet, so every attach path polls `listDisks()` until
+ * the attachment settles (bounded, ~90s). `mount_error` surfaces on failure.
+ */
+async function waitForDiskMounted(sandbox: Sandbox, mountPath: string, deadlineMs = 90_000): Promise<void> {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const disks = await sandbox.listDisks();
+    const att = disks.find((d) => d.mount_path === mountPath);
+    if (att?.mount_status === "mounted") return;
+    if (att?.mount_status === "error") {
+      throw new Error(`createos disk mount failed at ${mountPath}: ${att.mount_error ?? "unknown"}`);
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `createos disk mount at ${mountPath} still ${att?.mount_status ?? "absent"} after ${deadlineMs}ms`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
 }
 
 /** Wrap a command so per-call cwd/env/background work despite the server dropping
@@ -385,6 +436,23 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
           // (or hits a terminal state) must not be reported as success.
           await forked.waitUntilRunning();
           sandboxConfig.set(forked, config);
+          // ForkSandboxRequest carries no `disks` field — attach requested
+          // volumes post-fork through the runtime disk API instead. Destroy
+          // the fork on failure — it is already running, and the caller gets
+          // no instance handle to clean up with.
+          if (isUnifiedVolumeMounts(opts.volumes)) {
+            try {
+              for (const m of opts.volumes) {
+                const ref = resolveVolumeRef(m.volume);
+                const subPath = (m as { subPath?: string }).subPath;
+                await forked.attachDisk({ diskId: ref.id ?? ref.name!, mountPath: m.mountPath, ...(subPath ? { subPath } : {}) });
+                await waitForDiskMounted(forked, m.mountPath);
+              }
+            } catch (err) {
+              await forked.destroy().catch(() => {});
+              throw err;
+            }
+          }
           return { instance: forked, instanceId: forked.id };
         }
 
@@ -392,6 +460,18 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const rootfs = opts.image ?? opts.runtime ?? config.rootfs ?? "devbox:1";
         const sandbox = await client.createSandbox(toCreateRequest(opts, shape, rootfs));
         sandboxConfig.set(sandbox, config);
+        // Disks attach at create but mount asynchronously in the guest —
+        // wait for every requested mount before handing back the instance.
+        // Destroy the sandbox on failure — the caller gets no handle to
+        // clean it up with (same contract as the fork path above).
+        if (Array.isArray(opts.volumes)) {
+          try {
+            for (const m of opts.volumes) await waitForDiskMounted(sandbox, m.mountPath);
+          } catch (err) {
+            await sandbox.destroy().catch(() => {});
+            throw err;
+          }
+        }
         return { instance: sandbox, instanceId: sandbox.id };
       },
 
@@ -438,18 +518,59 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         // `sh -c` (not `bash -lc`): POSIX-portable so bare rootfses without
         // bash still run. buildScript only emits POSIX constructs. Transport /
         // auth errors propagate; a command that ran reports its own exit code.
+        //
+        // The control plane streams stdout as events — a transport hiccup
+        // during a quiet stretch drops a contiguous chunk while the exec
+        // still reports success. Redirect to guest files so the long-lived
+        // exec carries nothing worth losing, then read them back with short
+        // execs and verify byte counts (same pattern as microsandbox).
+        const base = `/tmp/.createos-exec-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+        // The closing paren sits on its own line: a command ending in a
+        // comment or heredoc would otherwise swallow `) > ...` into itself.
+        const wrapped =
+          `( ${buildScript(command, options)}\n) > ${base}.out 2> ${base}.err;` +
+          ` C=$?;` +
+          ` wc -c < ${base}.out > ${base}.outlen 2>/dev/null;` +
+          ` wc -c < ${base}.err > ${base}.errlen 2>/dev/null;` +
+          ` printf '%s' "$C" > ${base}.code`;
         const execOpts = options?.timeout ? { timeoutMs: options.timeout } : undefined;
-        const { result, exec_ms } = await sandbox.runCommand("sh", [
-          "-c",
-          buildScript(command, options),
-        ], execOpts);
-        const stderr = result.error ? `${result.stderr}${result.error}` : result.stderr;
-        return {
-          stdout: result.stdout,
-          stderr,
-          exitCode: result.exit_code,
-          durationMs: exec_ms,
-        };
+        const { result, exec_ms } = await sandbox.runCommand("sh", ["-c", wrapped], execOpts);
+
+        try {
+          const readFile = async (path: string): Promise<string> => {
+            const r = await sandbox.runCommand("cat", [path]);
+            return r.result.stdout;
+          };
+          const readVerified = async (path: string, lenPath: string): Promise<string> => {
+            const expected = Number.parseInt((await readFile(lenPath)).trim(), 10);
+            const first = await readFile(path);
+            if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
+            const second = await readFile(path);
+            return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+          };
+
+          const stdout = await readVerified(`${base}.out`, `${base}.outlen`);
+          const capturedStderr = await readVerified(`${base}.err`, `${base}.errlen`);
+          const codeText = await readFile(`${base}.code`).catch(() => "");
+
+          const fileExit = Number.parseInt(codeText.trim(), 10);
+          const stderr = result.error ? `${capturedStderr}${result.error}` : capturedStderr;
+          return {
+            stdout,
+            stderr,
+            exitCode: Number.isInteger(fileExit) ? fileExit : result.exit_code,
+            durationMs: exec_ms,
+          };
+        } finally {
+          void sandbox.runCommand("rm", [
+            "-f",
+            `${base}.out`,
+            `${base}.err`,
+            `${base}.outlen`,
+            `${base}.errlen`,
+            `${base}.code`,
+          ]).catch(() => undefined);
+        }
       },
 
       getInfo: async (sandbox: Sandbox): Promise<InstanceInfo> => {
@@ -474,14 +595,42 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         };
       },
 
-      getUrl: async (sandbox: Sandbox, options: { port: number; protocol?: string }) => {
-        const scheme = options.protocol === "http" ? "http" : "https";
-        return sandbox.previewUrl(options.port, { scheme });
-      },
+      getUrl: async (sandbox: Sandbox, options: { port: number; protocol?: string }) =>
+        ingressUrl(sandbox, options),
 
       // Escape hatch: the bare native @nodeops-createos/sandbox handle
       // (pause/resume/fork/disks/...).
       getInstance: (sandbox: Sandbox): Sandbox => sandbox,
+
+      // Native pause returns while still `pausing`, and resume 409s until the
+      // pause settles, so both wait for the terminal state.
+      pause: async (sandbox: Sandbox): Promise<void> => {
+        await sandbox.refresh();
+        if (sandbox.status !== "paused") {
+          if (sandbox.status !== "pausing") await sandbox.pause();
+          await sandbox.waitUntilPaused();
+        }
+      },
+      resume: async (sandbox: Sandbox): Promise<void> => {
+        await sandbox.refresh();
+        if (sandbox.status === "pausing") await sandbox.waitUntilPaused();
+        if (sandbox.status !== "running") {
+          if (sandbox.status !== "resuming") await sandbox.resume();
+          await sandbox.waitUntilRunning();
+        }
+      },
+      pauseCapabilities: { memory: true },
+
+      attachVolume: async (sandbox: Sandbox, volume, mountPath) => {
+        const ref = resolveVolumeRef(volume);
+        const subPath = (volume as { subPath?: string }).subPath;
+        await sandbox.attachDisk({ diskId: ref.id ?? ref.name!, mountPath, ...(subPath ? { subPath } : {}) });
+        await waitForDiskMounted(sandbox, mountPath);
+      },
+      detachVolume: async (sandbox: Sandbox, volume, mountPath) => {
+        const ref = resolveVolumeRef(volume);
+        await sandbox.detachDisk({ diskId: ref.id ?? ref.name!, mountPath: mountPath! });
+      },
 
       filesystem: {
         readFile: async (sandbox: Sandbox, path: string, runCommand: CommandRunner): Promise<string> => {
@@ -526,24 +675,48 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
     },
 
     snapshot: {
+      // Paused forks are full VM snapshots: the whole rootfs (tmpfs included)
+      // and running processes come back in the restore.
+      capabilities: { scope: "rootfs", memory: true, destroysSource: false },
       create: async (
         config: CreateosConfig,
         sandboxId: string,
         options?: CreateSnapshotOptions,
       ) => {
         const client = resolveClient(config);
-        const sandbox = await client.getSandbox(sandboxId);
-        // createos-sandbox has no decoupled snapshot object: pausing IS the snapshot,
-        // and the paused sandbox id is the snapshot id. This stops the source VM.
-        await sandbox.pause();
-        // The success claim is "it paused" — surface a pause that timed out or
-        // entered a terminal state rather than returning a phantom snapshot.
-        await sandbox.waitUntilPaused();
+        const source = await client.getSandbox(sandboxId);
+        // createos forks only from a paused sandbox, so the snapshot is a
+        // paused fork (`start_paused`): a point-in-time copy with its own id
+        // that outlives the source. The source is paused just long enough to
+        // fork, then resumed — it keeps running like on other providers.
+        const wasPaused = source.status === "paused";
+        if (!wasPaused) {
+          await source.pause();
+          await source.waitUntilPaused();
+        }
+        let snapshot: Sandbox | undefined;
+        try {
+          snapshot = await source.fork({ start_paused: true });
+          await snapshot.waitUntilPaused();
+        } catch (err) {
+          if (snapshot) await snapshot.destroy().catch(() => {});
+          if (!wasPaused) await source.resume().catch(() => {});
+          throw err;
+        }
+        if (!wasPaused) {
+          try {
+            await source.resume();
+            await source.waitUntilRunning();
+          } catch (err) {
+            await snapshot.destroy().catch(() => {});
+            throw err;
+          }
+        }
         return {
-          id: sandboxId,
+          id: snapshot.id,
           provider: PROVIDER_NAME,
           createdAt: new Date(),
-          metadata: { name: options?.name, ...options?.metadata },
+          metadata: { name: options?.name, sourceSandboxId: sandboxId, ...options?.metadata },
         };
       },
       list: async (config: CreateosConfig, _options?: ListSnapshotsOptions) => {
@@ -569,6 +742,68 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         }
       },
     },
+
+    volume: {
+      // Createos disks are registered S3 buckets: "creating" a volume means
+      // registering bucket config + credentials server-side. The S3 details
+      // don't fit the universal CreateVolumeOptions shape, so they come from
+      // options.s3 ({bucket, endpoint, region?, accessKey, secretKey,
+      // pathStyle?}) or the CREATEOS_S3_* env vars.
+      create: async (config: CreateosConfig, options) => {
+        const client = resolveClient(config);
+        const s3 = (options as { s3?: Record<string, unknown> }).s3 ?? {};
+        const pick = (k: string, ...envs: string[]) =>
+          (s3 as Record<string, unknown>)[k] ?? envs.map((e) => env(e)).find((v) => v);
+        const bucket = pick("bucket", "CREATEOS_S3_BUCKET");
+        const endpoint = pick("endpoint", "CREATEOS_S3_ENDPOINT");
+        const accessKey = pick("accessKey", "CREATEOS_S3_ACCESS_KEY", "CREATEOS_S3_ACCESS_KEY_ID");
+        const secretKey = pick("secretKey", "CREATEOS_S3_SECRET_KEY", "CREATEOS_S3_SECRET_ACCESS_KEY");
+        if (!bucket || !endpoint || !accessKey || !secretKey) {
+          throw new Error(
+            "Createos volumes are registered S3 buckets: pass options.s3 = " +
+            "{bucket, endpoint, accessKey, secretKey} or set CREATEOS_S3_BUCKET/" +
+            "ENDPOINT/ACCESS_KEY/SECRET_KEY.",
+          );
+        }
+        const disk = await client.disks.create({
+          name: options.name,
+          kind: "s3",
+          config: {
+            bucket: String(bucket),
+            endpoint: String(endpoint),
+            ...(pick("region", "CREATEOS_S3_REGION") ? { region: String(pick("region", "CREATEOS_S3_REGION")) } : {}),
+            ...(pick("pathStyle", "CREATEOS_S3_PATH_STYLE") ? { use_path_style: true } : {}),
+          },
+          credentials: { access_key: String(accessKey), secret_key: String(secretKey) },
+        });
+        return { id: disk.id, name: disk.name, native: disk };
+      },
+      get: async (config: CreateosConfig, volumeIdOrName: string) => {
+        const client = resolveClient(config);
+        try {
+          const disk = await client.disks.get(volumeIdOrName);
+          return disk ? { id: disk.id, name: disk.name, native: disk } : null;
+        } catch (e) {
+          if (isNotFound(e)) return null;
+          throw e;
+        }
+      },
+      list: async (config: CreateosConfig) => {
+        const client = resolveClient(config);
+        const disks: Array<{ id: string; name: string; native: unknown }> = [];
+        for await (const d of client.disks.iterate()) disks.push({ id: d.id, name: d.name, native: d });
+        return disks;
+      },
+      delete: async (config: CreateosConfig, volumeIdOrName: string) => {
+        const client = resolveClient(config);
+        try {
+          await withVolumeSettle(() => client.disks.delete(volumeIdOrName));
+        } catch (e) {
+          if (isNotFound(e)) return;
+          throw e;
+        }
+      },
+    }
   },
 });
 

@@ -11,6 +11,7 @@
 * [Providers](providers/README.md)
   * [AWS Bedrock AgentCore](providers/agentcore.md)
   * [AWS EC2](providers/aws-ec2.md)
+  * [Agent37](providers/agent37.md)
   * [Agentuity](providers/agentuity.md)
   * [Archil](providers/archil.md)
   * [Beam](providers/beam.md)
@@ -23,9 +24,9 @@
   * [Collimate](providers/collimate.md)
   * [CreateOS](providers/createos-sandbox.md)
   * [Daytona](providers/daytona.md)
-  * [Declaw](providers/declaw.md)
   * [Docker](providers/docker.md)
   * [E2B](providers/e2b.md)
+  * [EC2 Firecrab](providers/ec2-firecrab.md)
   * [Freestyle](providers/freestyle.md)
   * [givemeanode](providers/givemeanode.md)
   * [GravixLayer](providers/gravixlayer.md)
@@ -36,6 +37,7 @@
   * [Leap0](providers/leap0.md)
   * [Lelantos](providers/lelantos.md)
   * [Lightning](providers/lightning.md)
+  * [Lizard](providers/lizard.md)
   * [Modal](providers/modal.md)
   * [Microsandbox](providers/microsandbox.md)
   * [MIOSA](providers/miosa.md)
@@ -45,6 +47,7 @@
   * [Northflank](providers/northflank.md)
   * [Novita](providers/novita.md)
   * [OpenComputer](providers/opencomputer.md)
+  * [Promigence](providers/promigence.md)
   * [Quilt](providers/quilt.md)
   * [Railway](providers/railway.md)
   * [Run Cloud](providers/run-cloud.md)
@@ -57,6 +60,7 @@
   * [Superserve](providers/superserve.md)
   * [Tenki](providers/tenki.md)
   * [Tensorlake](providers/tensorlake.md)
+  * [Uno](providers/uno.md)
   * [Upstash](providers/upstash.md)
   * [Vercel](providers/vercel.md)
   * [Workpaper](providers/workpaper.md)
@@ -67,6 +71,7 @@
 * [CLI reference](platform/cli.md)
 * [Actions](platform/actions.md)
 * [Benchmarks](platform/benchmarks.md)
+* [Sandboxes](platform/sandboxes.md)
 * [API reference](platform/api-reference.md)
 
 ## Reference
@@ -74,7 +79,8 @@
 * [Instance (interface)](reference/Instance.md)
 * [compute](reference/compute.md)
 * [compute.instances](reference/compute.instances.md)
+* [Sandbox sizes](reference/sizes.md)
 
 ***
 
-* [LLM Documentation Files](<README (1).md>)
+* [LLM Documentation Files](llm-docs.md)

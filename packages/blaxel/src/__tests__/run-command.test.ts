@@ -270,3 +270,92 @@ describe('blaxel runCommand output capture', () => {
 		expect(result.stderr).toBe('bad');
 	});
 });
+
+describe('blaxel runCommand request shape', () => {
+	async function connect(sandbox: SandboxInstance) {
+		const { SandboxInstance: MockedInstance } = await import('@blaxel/core');
+		vi.mocked(MockedInstance.get).mockResolvedValue(sandbox);
+		const sbx = await blaxel({}).sandbox.getById('test-sandbox');
+		expect(sbx).not.toBeNull();
+		return sbx!;
+	}
+
+	it('passes env and cwd as native process fields, leaving the command untouched', async () => {
+		const sandbox = makeSandbox(async () => ({ status: 'completed', exitCode: 0, pid: 'p1', stdout: 'ok\n' }));
+		const sbx = await connect(sandbox);
+
+		await sbx.runCommand('echo "$A" && pwd', { env: { A: 'x y' }, cwd: '/tmp' });
+
+		const request = vi.mocked(sandbox.process.exec).mock.calls[0][0] as Record<string, unknown>;
+		expect(request.command).toBe('echo "$A" && pwd');
+		expect(request.env).toEqual({ A: 'x y' });
+		expect(request.workingDir).toBe('/tmp');
+	});
+
+	it('starts background commands without waiting for completion', async () => {
+		const sandbox = makeSandbox(async () => ({ status: 'running', pid: 'p1' }));
+		const sbx = await connect(sandbox);
+
+		const result = await sbx.runCommand('sleep 5', { background: true });
+
+		const request = vi.mocked(sandbox.process.exec).mock.calls[0][0] as Record<string, unknown>;
+		expect(request).toMatchObject({ command: 'sleep 5', waitForCompletion: false });
+		expect(result.exitCode).toBe(0);
+		expect(sandbox.process.wait).not.toHaveBeenCalled();
+	});
+
+	it('streams exec chunks to the caller callbacks', async () => {
+		const sandbox = makeSandbox(async (opts) => {
+			opts.onStdout?.('a');
+			opts.onStderr?.('b');
+			return { status: 'completed', exitCode: 0, pid: 'p1' };
+		});
+		const sbx = await connect(sandbox);
+		const out: string[] = [];
+		const err: string[] = [];
+
+		const result = await sbx.runCommand('x', { onStdout: (c) => out.push(c), onStderr: (c) => err.push(c) });
+
+		expect(sbx.processRuntime?.streaming).toBe('native');
+		expect(out).toEqual(['a']);
+		expect(err).toEqual(['b']);
+		expect(result.stdout).toBe('a');
+	});
+
+	it('streams live log lines when exec returns a still-running process', async () => {
+		const sandbox = makeSandbox(
+			async () => ({ status: 'running', pid: 'p1' }),
+			undefined,
+			async () => ({ status: 'completed', exitCode: 0 }),
+			(_pid, opts) => {
+				opts.onStdout?.('line1');
+				opts.onStdout?.('line2');
+				return { close: () => {}, wait: async () => {} };
+			}
+		);
+		const sbx = await connect(sandbox);
+		const out: string[] = [];
+
+		const result = await sbx.runCommand('x', { onStdout: (c) => out.push(c) });
+
+		expect(out).toEqual(['line1\n', 'line2\n']);
+		expect(result.stdout).toBe('line1\nline2\n');
+	});
+});
+
+describe('blaxel runCommand deadline', () => {
+	it('kills the named process and fails when exec outruns the timeout', async () => {
+		const sandbox = makeSandbox(() => new Promise(() => {}));
+		const { SandboxInstance: MockedInstance } = await import('@blaxel/core');
+		vi.mocked(MockedInstance.get).mockResolvedValue(sandbox);
+		const sbx = (await blaxel({}).sandbox.getById('test-sandbox'))!;
+
+		const result = await sbx.runCommand('sleep 60', { timeout: 50, onStdout: () => {} });
+
+		const request = vi.mocked(sandbox.process.exec).mock.calls[0][0] as Record<string, unknown>;
+		expect(request.timeout).toBe(1);
+		expect(sandbox.process.kill).toHaveBeenCalledWith(request.name);
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain('timed out');
+	});
+});

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/cli",
-  "version": "2.5.2",
+  "version": "2.6.3",
   "description": "ComputeSDK CLI - Cloud-native workspace management",
   "author": "ComputeSDK",
   "license": "MIT",
@@ -41,12 +41,14 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@benchsdk/cli": "^0.7.1",
-    "@benchsdk/runner": "^0.6.0",
+    "@benchsdk/cli": "^0.9.3",
+    "@benchsdk/runner": "^0.8.3",
     "@clack/prompts": "^0.7.0",
+    "@computesdk/platform": "workspace:*",
     "commander": "^11.1.0",
     "computesdk": "workspace:*",
     "picocolors": "^1.0.0",
+    "tar": "^7.4.3",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {

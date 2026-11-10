@@ -1,5 +1,139 @@
 # @computesdk/namespace
 
+## 1.6.41
+
+### Patch Changes
+
+- 28d5f17: Report a failing command's real exit code. Namespace returns exit code 1 for every failure and puts the real code in a trailing `exec failed with exit code N` stderr line, which is now stripped.
+- 1904e82: Enable the shared filesystem conformance suite for Namespace (backed by the provider shell filesystem).
+- 1904e82: Declare snapshot capabilities: volume snapshots keep `/workspace` only, need `snapshotVolume: true` on the source, and destroy the source when taken. Snapshot conformance tests now run live.
+- 1904e82: Send `env` and `cwd` in CommandService's own `Command.envVars` / `Command.cwd` fields instead of a shell prefix, so they apply to the whole command line (`echo $FOO`, `a && b` previously saw no env past the first word), and run `background` commands under `nohup sh -c` so compound commands detach as a whole.
+- 11c511e: Add native `streamCommand` using Namespace's server-streaming `CommandService/RunCommand` (Connect JSON envelopes), so streaming `runCommand` (`onStdout`/`onStderr`) no longer falls back to the daemond bootstrap. Honors `timeout` (`Connect-Timeout-Ms` + client abort, exit 124), `cwd`, `env`, and `background`; a dropped stream keeps streamed output and reports exit `-1`.
+- 1904e82: Support on-demand snapshots via persistent volumes. Opt in with `snapshotVolume: true` (provider config or create option) to attach a persistent volume at `/workspace` (also the default cwd). `snapshot.create` shuts the sandbox down and waits for the volume snapshot to commit; `create({ snapshotId })` restores it into the container (fanout supported). `snapshot.list`/`delete` work against the committed volume snapshots. Only the volume is preserved, not the rootfs.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.6.40
+
+### Patch Changes
+
+- b9711e9: Fixed `snapshot.list` and `snapshot.delete` against the real StorageService contract. `ListPersistentVolumeSnapshots` ignores its `id` filter and answers the workspace's full record set in camelCase, so listing now makes one call and joins each record to its volume (the record `id` is the volume id, `completedSnapshot` the generation) instead of re-fetching per volume and emitting duplicates. Listed snapshots are id'd `tag/<gen>` — the form `create({ snapshotId })` restores. `delete` now addresses the artifact by its volume (`{id: volumeId, tag}`) as the RPC requires, accepting `tag/<gen>` or a bare generation, and no-ops when the volume or generation is already gone.
+- 24803d6: Add additive standard CPU/RAM sizeClass requests, immutable pure provider capability resolution and request metadata, with typed pre-create failures instead of silently ignored or default-sized requests. Initially map sm/md/lg/xl for Namespace Linux amd64 and new Archil persistent VMs; preserve every legacy create path without sizeClass. Other mappings remain explicitly unknown; no builds, live availability checks, or consumer migrations are performed.
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.6.39
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.6.38
+
+### Patch Changes
+
+- e3f821f: Honor `runCommand`'s `options.timeout` server-side. The Namespace CommandService runs each `RunCommandSync` call inside a single RPC, so the caller's timeout is now sent as the Connect `Connect-Timeout-Ms` deadline header — the server aborts the command when it expires instead of the request running away. A client-side abort at timeout + 10s remains as a fallback if the server ignores the deadline. Previously `options.timeout` was accepted but silently ignored.
+- e3f821f: fix(namespace): attach volumes at VM level + bind into container — nsc recipe
+
+  Runtime-attached volumes were mounted directly at the requested `mountPath` on
+  the instance's VM namespace, which the CommandService container never sees —
+  and instances whose volumes can't provision that way are destroyed while
+  waiting for readiness. Mirrors nsc's `cluster run --volume` recipe: the volume
+  mounts VM-side at `/volumes/volumeN` and an `experimental.host_mount` bind
+  exposes it inside the container at the requested `mountPath`.
+
+- e3f821f: Allow per-create shape overrides via `instanceOptions.shape` (virtual_cpu, memory_megabytes, machine_arch, os), previously only settable at provider construction.
+
+## 1.6.37
+
+### Patch Changes
+
+- d24737a: fix(namespace): attach volumes at VM level + bind into container — nsc recipe
+
+  Runtime-attached volumes were mounted directly at the requested `mountPath` on
+  the instance's VM namespace, which the CommandService container never sees —
+  and instances whose volumes can't provision that way are destroyed while
+  waiting for readiness. Mirrors nsc's `cluster run --volume` recipe: the volume
+  mounts VM-side at `/volumes/volumeN` and an `experimental.host_mount` bind
+  exposes it inside the container at the requested `mountPath`.
+
+- d24737a: Allow per-create shape overrides via `instanceOptions.shape` (virtual_cpu, memory_megabytes, machine_arch, os), previously only settable at provider construction.
+
+## 1.6.36
+
+### Patch Changes
+
+- 7668bf8: namespace: send size_mb on runtime volume attaches — a fresh persistent volume with no size can't be provisioned and the instance is destroyed while waiting for readiness. createos: wait for mount_status=mounted after create/attachDisk (the in-VM agent mounts asynchronously); mount_error surfaces on failure.
+
+## 1.6.35
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 1.6.34
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 1.6.33
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 1.6.32
+
+### Patch Changes
+
+- a3de4ae: Volume soak fixes: `withVolumeSettle` retries volume delete while the provider reports it still attached (sandbox.destroy() returns before the control plane unmounts); daytona volume get/delete resolve by id or name (`volume.get` is name-keyed); miosa create defaults size_bytes to 1 GiB (missing field 422s); sandbox0 create sends the explicit s0fs/RWO request.
+- 3d44808: Volume fixes round 3: namespace delete paginates the id→tag lookup and tolerates list outages (falls back to the given tag); createos forks destroy themselves when a post-fork volume attach fails instead of leaking a running sandbox.
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 1.6.31
+
+### Patch Changes
+
+- d7d8efc: Volume surface review fixes: list() no longer swallows real provider failures (only the not-supported stub), delete() only targets the known owning provider, novita create-mounts resolve the volume name (not the native object), namespace delete resolves id→tag, and createos snapshot forks attach requested volumes post-fork.
+- 1b639da: Add a unified persistent-volume surface: `CreateInstanceOptions.volumes` (create-time mounts), `compute.volume.create/get/list/delete` with multi-provider routing, and `instance.attachVolume`/`detachVolume` where the provider exposes runtime attach. Provider plumbing maps the unified `VolumeMount[]` onto each native wire shape (daytona `volumes[]`, e2b `volumeMounts`, modal `volumes` map, vercel `mounts`, namespace `volumes[]` with `persistency_kind`, northflank `volumesToAttach`, sandbox0 claim `mounts`, tenki `CreateOptions.volumes`, novita `volumeMounts`, createos `disks` attachments, plus volume managers for blaxel, declaw, beam, microsandbox, miosa).
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 1.6.30
+
+### Patch Changes
+
+- e94c06a: Namespace API errors now include Namespace's error body, and transient failures retry: any call when the connection never opened, idempotent calls (describe/list/destroy) on any 5xx or dropped connection. Not-found detection keys on the response status, not a `404` in the message.
+
+## 1.6.29
+
+### Patch Changes
+
+- 3315930: `create()` accepts `containerOptions` and `instanceOptions`, raw Namespace API fields merged into the ContainerRequest and CreateInstanceRequest (e.g. `containerOptions: { nsc_state_path: '/var/run/nsc' }` to inject the workload token). Provider-set fields take precedence.
+
 ## 1.6.28
 
 ### Patch Changes

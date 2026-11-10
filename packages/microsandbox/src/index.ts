@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { defineProvider, createConfigGate } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, createConfigGate, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -47,7 +47,7 @@ export interface MicrosandboxConfig {
    * installed on the calling machine.
    */
   backend?: 'cloud' | 'local';
-  /** Cloud API key. Falls back to the microsandbox SDK's `MSB_API_KEY` resolution. */
+  /** Cloud API key. Falls back to `MSB_API_KEY` (and `MSB_API_URL`). */
   apiKey?: string;
   /** Hosted API endpoint override. Requires `apiKey`. */
   apiUrl?: string;
@@ -103,6 +103,7 @@ export interface MicrosandboxSnapshot {
 
 interface RecoveredConfig {
   labels?: Record<string, string>;
+  lifecycle?: { ephemeral?: boolean };
   network?: {
     ports?: Array<{
       host?: number;
@@ -218,7 +219,18 @@ function selectBackend(config: MicrosandboxConfig): BackendSelection {
     };
   }
 
-  // Let the SDK resolve MSB_API_KEY, MSB_PROFILE, or the active profile, then
+  // The SDK only reads MSB_API_KEY under MSB_BACKEND=cloud; on its own the key
+  // would leave the SDK on its local default, so install it explicitly.
+  const envApiKey = process.env.MSB_API_KEY;
+  if (envApiKey && !process.env.MSB_BACKEND && !process.env.MSB_PROFILE) {
+    const envApiUrl = process.env.MSB_API_URL;
+    return {
+      kind,
+      override: { kind: 'cloud', apiKey: envApiKey, ...(envApiUrl ? { url: envApiUrl } : {}) },
+    };
+  }
+
+  // Let the SDK resolve MSB_BACKEND, MSB_PROFILE, or the active profile, then
   // enforce cloud so an unconfigured machine does not silently fall back local.
   return { kind };
 }
@@ -364,7 +376,7 @@ async function connectedSandbox(sandbox: MicrosandboxSandbox): Promise<NativeSan
 
 function mapStatus(status: string): InstanceInfo['status'] {
   if (status === 'running' || status === 'draining') return 'running';
-  if (status === 'stopped') return 'stopped';
+  if (status === 'stopped' || status === 'paused') return 'stopped';
   return 'error';
 }
 
@@ -386,6 +398,162 @@ function backgroundScript(command: string): string {
   return `nohup /bin/sh -c ${quoted} >/dev/null 2>&1 &`;
 }
 
+function shellSingleQuote(text: string): string {
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+/** The agent's exec stream closed before sending an exit event — a
+ *  channel-level flake, not a command outcome. Worth one transparent
+ *  retry: runCommand has no exactly-once contract, and the alternative is
+ *  losing everything the command already emitted. */
+function isExecSessionDrop(error: unknown): boolean {
+  return error instanceof Error && /exec session ended without exit event/i.test(error.message);
+}
+
+/**
+ * Cloud relay drops long-lived exec sessions (~2min observed); no exec
+ * channel survives a multi-minute command. Detached mode sidesteps the cap:
+ * the command runs under setsid writing exit state to files, and every
+ * subsequent poll is a sub-second exec the relay can't age out.
+ */
+interface DetachedPaths {
+  pid: string;
+  out: string;
+  err: string;
+  outLen: string;
+  errLen: string;
+  code: string;
+}
+
+function detachedPaths(id: string): DetachedPaths {
+  const base = `/tmp/.csdk-exec-${id}`;
+  return {
+    pid: `${base}.pid`,
+    out: `${base}.out`,
+    err: `${base}.err`,
+    outLen: `${base}.outlen`,
+    errLen: `${base}.errlen`,
+    code: `${base}.code`,
+  };
+}
+
+/** Worker: claim the run by recording its pid, run the command capturing
+ *  out/err, write the exit code sentinel. The pid write is noclobber so a
+ *  duplicate launch (a drop-probe relaunch racing a slow first worker)
+ *  loses the claim and exits without running the command twice. Launched
+ *  under setsid so the exec session's process-group cleanup can't take
+ *  the worker down with it. */
+function detachedLaunchScript(command: string, paths: DetachedPaths): string {
+  const inner =
+    `( set -C; echo $$ > ${paths.pid} 2>/dev/null ) || exit 0;` +
+    // The closing paren sits on its own line: a command ending in a
+    // comment or heredoc would otherwise swallow `) > ...` into itself.
+    ` ( ${command}\n) > ${paths.out} 2> ${paths.err};` +
+    // Byte counts land BEFORE the exit sentinel so a poll that sees .code
+    // already has the lengths the readers verify against.
+    ` C=$?;` +
+    ` wc -c < ${paths.out} > ${paths.outLen} 2>/dev/null;` +
+    ` wc -c < ${paths.err} > ${paths.errLen} 2>/dev/null;` +
+    ` printf '%s' "$C" > ${paths.code}`;
+  return `setsid /bin/sh -c ${shellSingleQuote(inner)} </dev/null >/dev/null 2>&1 &`;
+}
+
+/** One short exec per poll. exit 0 = done, 3 = worker never started (no
+ *  sentinel files — the launch dropped before it ran, or it was reaped
+ *  before its first write), 2 = worker died before writing its exit code
+ *  (provider reaps detached processes — an honest limit we fail fast on
+ *  instead of burning the timeout), 1 = still running. */
+function detachedStatusScript(paths: DetachedPaths): string {
+  return (
+    `test -f ${paths.code} && exit 0;` +
+    ` test -f ${paths.pid} || exit 3;` +
+    ` P=$(cat ${paths.pid});` +
+    ` [ -n "$P" ] && ! kill -0 "$P" 2>/dev/null && { test -f ${paths.code} && exit 0; exit 2; };` +
+    ` exit 1`
+  );
+}
+
+/** How many consecutive never-started polls the wait tolerates before
+ *  concluding the worker was reaped before writing its pid sentinel —
+ *  without a bound the poll loop spins to the caller's timeout, or forever
+ *  when none was set. ~2s per poll. */
+const DETACHED_NEVER_STARTED_POLL_LIMIT = 15;
+
+function detachedKillScript(paths: DetachedPaths): string {
+  return (
+    `P=$(cat ${paths.pid} 2>/dev/null);` +
+    ` [ -n "$P" ] && { kill -TERM -"$P" 2>/dev/null || kill -TERM "$P" 2>/dev/null; };` +
+    ` sleep 1;` +
+    ` [ -n "$P" ] && { kill -KILL -"$P" 2>/dev/null || kill -KILL "$P" 2>/dev/null; };` +
+    ` true`
+  );
+}
+
+function detachedCleanupScript(paths: DetachedPaths): string {
+  return `rm -f ${paths.pid} ${paths.out} ${paths.err} ${paths.outLen} ${paths.errLen} ${paths.code}`;
+}
+
+/** The cloud relay closes the channel on a single fs write of ~1 MiB, so
+ *  larger payloads are streamed in chunks well under that limit. */
+const FS_WRITE_CHUNK_BYTES = 256 * 1024;
+
+async function writeGuestFile(fs: ReturnType<NativeSandbox['fs']>, path: string, content: string): Promise<void> {
+  const data = Buffer.from(content);
+  if (data.byteLength <= FS_WRITE_CHUNK_BYTES) {
+    await fs.write(path, data);
+    return;
+  }
+  const sink = await fs.writeStream(path);
+  try {
+    for (let offset = 0; offset < data.byteLength; offset += FS_WRITE_CHUNK_BYTES) {
+      await sink.write(data.subarray(offset, offset + FS_WRITE_CHUNK_BYTES));
+    }
+  } finally {
+    await sink.close();
+  }
+}
+
+/** A one-shot read of a large file (~64 MiB) drops the relay channel; the
+ *  streamed read does not. */
+async function readGuestFileStreamed(fs: ReturnType<NativeSandbox['fs']>, path: string): Promise<string> {
+  const stream = await fs.readStream(path);
+  return new TextDecoder().decode(await stream.collect());
+}
+
+async function execShort(native: NativeSandbox, script: string) {
+  return native.execWith('/bin/sh', (builder) => builder.args(['-c', script]));
+}
+
+async function readGuestFile(native: NativeSandbox, path: string): Promise<string> {
+  try {
+    return await native.fs().readToString(path);
+  } catch {
+    const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
+    return output.stdout();
+  }
+}
+
+/** The relay can drop a chunk mid-read on either path (fs API and exec
+ *  stdout alike) — a truncated read returns successfully and is
+ *  indistinguishable from real output. The worker records the byte count
+ *  next to each output file, so compare and retry once through the other
+ *  transport before trusting the result. */
+async function readGuestFileChecked(
+  native: NativeSandbox,
+  path: string,
+  lenPath: string,
+): Promise<string> {
+  const lenText = await readGuestFile(native, lenPath).catch(() => '');
+  const expected = Number.parseInt(lenText.trim(), 10);
+  const first = await readGuestFile(native, path);
+  if (Number.isNaN(expected) || Buffer.byteLength(first) === expected) return first;
+  const output = await execShort(native, `cat ${shellSingleQuote(path)} 2>/dev/null`);
+  const second = output.stdout();
+  // A second bad read is still better than dropping the whole result —
+  // return whichever capture got more bytes.
+  return Buffer.byteLength(second) >= Buffer.byteLength(first) ? second : first;
+}
+
 async function runCommand(
   sandbox: MicrosandboxSandbox,
   command: string,
@@ -393,14 +561,115 @@ async function runCommand(
 ): Promise<CommandResult> {
   const startedAt = performance.now();
   const native = await connectedSandbox(sandbox);
-  const script = options?.background ? backgroundScript(command) : command;
-  const output = await native.execWith('/bin/sh', (builder) => configureExec(builder, script, options));
-  return {
-    stdout: output.stdout(),
-    stderr: output.stderr(),
-    exitCode: output.code,
-    durationMs: performance.now() - startedAt,
-  };
+
+  if (options?.background) {
+    const output = await native.execWith('/bin/sh', (builder) =>
+      configureExec(builder, backgroundScript(command), options));
+    return {
+      stdout: output.stdout(),
+      stderr: output.stderr(),
+      exitCode: output.code,
+      durationMs: performance.now() - startedAt,
+    };
+  }
+
+  const paths = detachedPaths(randomUUID().slice(0, 8));
+  const launch = detachedLaunchScript(command, paths);
+
+  // The launch exec returns in well under the channel's lifetime cap. If it
+  // drops anyway, probe before relaunching — the worker may have started.
+  let launched = false;
+  let staleClaim = false;
+  for (let attempt = 0; attempt < 2 && !launched; attempt++) {
+    try {
+      // A worker the probe proved dead (status 2) leaves its pid claim
+      // behind; remove it so the relaunch can claim. A still-absent pid
+      // (status 3) is left alone — a slow first worker may still be coming,
+      // and the relaunch's own noclobber claim loses that race instead of
+      // running the command twice.
+      const script = staleClaim ? `rm -f ${paths.pid}; ${launch}` : launch;
+      await native.execWith('/bin/sh', (builder) => configureExec(builder, script, options, false));
+      launched = true;
+    } catch (error) {
+      if (!isExecSessionDrop(error) || attempt === 1) throw error;
+      for (let probe = 0; probe < 3 && !launched; probe++) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        const status = await execShort(native, detachedStatusScript(paths)).catch(() => null);
+        // 0/1 = worker running or already finished; 2 = started then died
+        // (relaunch after clearing its stale pid); 3 = nothing started yet —
+        // keep probing, it may be mid-launch, and fall through to the retry
+        // if it stays absent.
+        if (status && (status.code === 0 || status.code === 1)) launched = true;
+        else if (status?.code === 2) {
+          staleClaim = true;
+          break;
+        }
+      }
+    }
+  }
+
+  const deadline =
+    options?.timeout != null ? startedAt + options.timeout : Number.POSITIVE_INFINITY;
+  let pollErrors = 0;
+  let neverStartedPolls = 0;
+  for (;;) {
+    let status;
+    try {
+      status = await execShort(native, detachedStatusScript(paths));
+      pollErrors = 0;
+    } catch (error) {
+      if (++pollErrors >= 3) throw error;
+      status = null;
+    }
+    if (status?.code === 0) break;
+    if (status?.code === 2) {
+      throw new Error(
+        `microsandbox detached command died before completing (pid ${paths.pid} gone, no exit sentinel)`,
+      );
+    }
+    if (status?.code === 3) {
+      if (++neverStartedPolls >= DETACHED_NEVER_STARTED_POLL_LIMIT) {
+        throw new Error(
+          `microsandbox detached command never started (no sentinel files after ~${Math.round((neverStartedPolls * 2_000) / 1000)}s)`,
+        );
+      }
+    } else {
+      neverStartedPolls = 0;
+    }
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) {
+      await execShort(native, detachedKillScript(paths)).catch(() => undefined);
+      const [stdout, stderr] = await Promise.all([
+        readGuestFileChecked(native, paths.out, paths.outLen).catch(() => ''),
+        readGuestFileChecked(native, paths.err, paths.errLen).catch(() => ''),
+      ]);
+      await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
+      return {
+        stdout,
+        stderr,
+        exitCode: 124,
+        durationMs: performance.now() - startedAt,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(2_000, Math.max(remaining, 1))));
+  }
+
+  try {
+    const [stdout, stderr, codeText] = await Promise.all([
+      readGuestFileChecked(native, paths.out, paths.outLen),
+      readGuestFileChecked(native, paths.err, paths.errLen),
+      readGuestFile(native, paths.code),
+    ]);
+    const exitCode = Number.parseInt(codeText.trim(), 10);
+    return {
+      stdout,
+      stderr,
+      exitCode: Number.isNaN(exitCode) ? 1 : exitCode,
+      durationMs: performance.now() - startedAt,
+    };
+  } finally {
+    await execShort(native, detachedCleanupScript(paths)).catch(() => undefined);
+  }
 }
 
 async function streamCommand(
@@ -476,6 +745,17 @@ async function retry<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+async function retrySourceDisk<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!/snapshot_source_disk_unavailable/.test(errorMessage(error)) || attempt === 11) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+  }
+}
+
 async function removeSandbox(handle: NativeSandboxHandle): Promise<void> {
   if (handle.status !== 'stopped' && handle.status !== 'crashed') {
     await retry(() => handle.stopWithTimeout(10_000));
@@ -486,12 +766,13 @@ async function removeSandbox(handle: NativeSandboxHandle): Promise<void> {
 function snapshotFromNative(snapshot: {
   digest: string;
   name: string | null;
+  reference?: string;
   createdAt: Date;
   imageRef?: string;
   sizeBytes?: bigint | null;
 }, sandboxId?: string): MicrosandboxSnapshot {
   return {
-    id: snapshot.name ?? snapshot.digest,
+    id: snapshot.reference ?? snapshot.name ?? snapshot.digest,
     provider: PROVIDER,
     createdAt: snapshot.createdAt,
     metadata: {
@@ -501,6 +782,55 @@ function snapshotFromNative(snapshot: {
       ...(snapshot.sizeBytes != null ? { sizeBytes: snapshot.sizeBytes } : {}),
     },
   };
+}
+
+/**
+ * Disk restore keeps the snapshot's own config: the restore builder takes no
+ * image, labels, envs or workdir, so only host-side settings apply here.
+ */
+async function restoreFromSnapshot(
+  sdk: MicrosandboxModule,
+  config: MicrosandboxConfig,
+  options: CreateInstanceOptions,
+  snapshotId: string,
+  name: string,
+  timeoutMs: number,
+  ports: MicrosandboxPort[],
+): Promise<{ instance: MicrosandboxSandbox; instanceId: string }> {
+  const backendKind = sdk.defaultBackendKind();
+  let builder = sdk.Sandbox.restore(snapshotId)
+    .name(name)
+    .idleTimeout(Math.max(1, Math.ceil(timeoutMs / 1000)));
+  try {
+    const snapshot = await (await sdk.Snapshot.get(snapshotId)).open();
+    // Full-scope snapshots carry memory/CPU state; request copy-on-write
+    // memory so the restore resumes the captured execution.
+    if (snapshot.scope === 'full') builder = builder.cowMemory();
+  } catch {
+    // Scope lookup failed (older backend or remote reference) — restore as-is.
+  }
+  if (config.networkEnabled === false) builder = builder.disableNetwork();
+  if (backendKind === 'local') {
+    for (const port of ports) {
+      builder = port.bind
+        ? builder.portBind(port.bind, port.host, port.guest)
+        : builder.port(port.host, port.guest);
+    }
+  }
+  const native = await builder.restore();
+  const sandbox: MicrosandboxSandbox = {
+    name,
+    backendKind: native.backendKind,
+    sandbox: native,
+    handle: null,
+    createdAt: new Date(),
+    timeoutMs,
+    metadata: options.metadata ?? {},
+    ports: new Map(ports.map((port) => [port.guest, port.host])),
+  };
+  sandboxBackends.set(sandbox, selectBackend(config));
+  sandboxPortBinds.set(sandbox, bindAddressesFor(ports));
+  return { instance: sandbox, instanceId: name };
 }
 
 const _microsandbox = defineProvider<
@@ -523,13 +853,11 @@ const _microsandbox = defineProvider<
         let builder = sdk.Sandbox.builder(name);
 
         if (options?.snapshotId) {
-          requireLocal(backendKind, 'disk snapshots');
-          builder = builder.fromSnapshot(options.snapshotId);
-        } else {
-          builder = builder.image(options?.image ?? options?.templateId ?? config.image ?? DEFAULT_IMAGE);
-          const rootDiskMib = options?.rootDiskMib ?? config.rootDiskMib;
-          if (rootDiskMib !== undefined) builder = builder.rootDisk(rootDiskMib);
+          return restoreFromSnapshot(sdk, config, options, options.snapshotId, name, timeoutMs, ports);
         }
+        builder = builder.image(options?.image ?? options?.templateId ?? config.image ?? DEFAULT_IMAGE);
+        const rootDiskMib = options?.rootDiskMib ?? config.rootDiskMib;
+        if (rootDiskMib !== undefined) builder = builder.rootDisk(rootDiskMib);
 
         builder = builder
           .cpus(cpusFor(config, options))
@@ -553,6 +881,18 @@ const _microsandbox = defineProvider<
             builder = port.bind
               ? builder.portBind(port.bind, port.host, port.guest)
               : builder.port(port.host, port.guest);
+          }
+        }
+
+        // Unified mounts → builder.volume(path, b => b.named(name)). The
+        // 'ensure-exists' flag is rejected by the backend, and the bench
+        // pre-creates the volume anyway.
+        // `named` binds an existing volume — ensure-create lives in
+        // volume.create, which callers run before mounting.
+        if (isUnifiedVolumeMounts(options?.volumes)) {
+          for (const m of options!.volumes! as any[]) {
+            const ref = resolveVolumeRef(m.volume);
+            builder = builder.volume(m.mountPath, (b: any) => b.named(ref.name ?? ref.id));
           }
         }
 
@@ -700,13 +1040,24 @@ const _microsandbox = defineProvider<
 
       getInstance: (sandbox) => sandbox,
 
+      // Resident VM suspend; the cloud backend rejects it as unsupported.
+      pause: async (sandbox) => {
+        requireLocal(sandbox.backendKind, 'pause/resume');
+        await (await nativeHandle(sandbox)).pause();
+      },
+      resume: async (sandbox) => {
+        requireLocal(sandbox.backendKind, 'pause/resume');
+        await (await nativeHandle(sandbox)).resume();
+      },
+      pauseCapabilities: { memory: true },
+
       filesystem: {
-        readFile: async (sandbox, path) => (await connectedSandbox(sandbox)).fs().readToString(path),
+        readFile: async (sandbox, path) => readGuestFileStreamed((await connectedSandbox(sandbox)).fs(), path),
         writeFile: async (sandbox, path, content) => {
           const fs = (await connectedSandbox(sandbox)).fs();
           const parent = posixPath.dirname(path);
           if (parent !== '.' && parent !== '/' && !(await fs.exists(parent))) await fs.mkdir(parent);
-          await fs.write(path, content);
+          await writeGuestFile(fs, path, content);
         },
         mkdir: async (sandbox, path) => (await connectedSandbox(sandbox)).fs().mkdir(path),
         readdir: async (sandbox, path): Promise<FileEntry[]> => {
@@ -729,27 +1080,88 @@ const _microsandbox = defineProvider<
     },
 
     snapshot: {
+      // A live full-scope capture is tried first (source keeps running,
+      // memory checkpointed); where the backend rejects it we fall back to
+      // stopping the source for a disk-only capture, so files survive but
+      // processes do not. Declared capabilities stay on the conservative
+      // disk-only contract; a live capture leaves the source untouched.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false, createOptions: { ephemeral: false } },
+
       create: async (config, sandboxId, options?: CreateSnapshotOptions) => withBackend(selectBackend(config), async (sdk) => {
-        requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const handle = await sdk.Sandbox.get(sandboxId);
         const wasRunning = handle.status === 'running' || handle.status === 'draining';
-        if (wasRunning) await retry(() => handle.stopWithTimeout(10_000));
 
         const name = options?.name ?? `csdk-snapshot-${Date.now().toString(36)}`;
-        let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId);
         const labels = {
           [SNAPSHOT_LABEL_MARKER]: 'true',
           [SNAPSHOT_LABEL_SANDBOX]: sandboxId,
           ...encodeMetadata(options?.metadata ?? {}),
         };
-        for (const [key, value] of Object.entries(labels)) {
-          builder = builder.label(key, value);
+
+        // Prefer a live full-scope capture: the guest flushes writes itself,
+        // memory and processes are checkpointed, and the source keeps running.
+        // scope: 'full' requires it (errors propagate); the default auto mode
+        // falls back to the disk-only path only when the backend reports the
+        // live capture unsupported; scope: 'disk' skips it entirely.
+        if (wasRunning && options?.scope !== 'disk') {
+          try {
+            let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId).full().guestFlush('auto');
+            for (const [key, value] of Object.entries(labels)) {
+              builder = builder.label(key, value);
+            }
+            const snapshot = await builder.create();
+            return {
+              id: snapshot.reference ?? name,
+              provider: PROVIDER,
+              createdAt: new Date(snapshot.createdAt ?? Date.now()),
+              metadata: {
+                name,
+                sandboxId,
+                ...(snapshot.scope ? { scope: snapshot.scope } : {}),
+                ...(snapshot.imageRef ? { imageRef: snapshot.imageRef } : {}),
+                ...(snapshot.sizeBytes != null ? { sizeBytes: snapshot.sizeBytes } : {}),
+                labels: Object.fromEntries(snapshot.labels ?? []),
+              },
+            };
+          } catch (liveError) {
+            // Only fall back when the backend says the operation is
+            // unsupported — a transient failure must not silently stop a
+            // live source for a disk-only capture instead.
+            const code = (liveError as { code?: string }).code;
+            const unsupported =
+              code === 'unsupported' ||
+              code === 'unsupportedOperation' ||
+              /unsupported|not supported|unimplemented/i.test(errorMessage(liveError));
+            if (!unsupported || options?.scope === 'full') throw liveError;
+          }
         }
 
+        // Snapshots need a stopped sandbox, and stopping an ephemeral one removes it.
+        if (wasRunning && (handle.config() as RecoveredConfig).lifecycle?.ephemeral) {
+          throw new Error(
+            `Microsandbox sandbox ${sandboxId} is ephemeral and would be removed by the stop a snapshot requires. ` +
+            `Create it with ephemeral: false to snapshot it.`,
+          );
+        }
+        if (wasRunning) {
+          await retry(() => handle.stopWithTimeout(10_000));
+          // Cloud reports the source disk unavailable until the stop settles.
+          await handle.waitUntilStopped();
+        }
+
+        // A builder is single-use, so each capture attempt builds its own.
+        const capture = () => {
+          let builder = sdk.Snapshot.builder(name).fromSandbox(sandboxId);
+          for (const [key, value] of Object.entries(labels)) {
+            builder = builder.label(key, value);
+          }
+          return builder.create();
+        };
+
         let snapshotError: unknown;
-        let snapshot: Awaited<ReturnType<typeof builder.create>> | undefined;
+        let snapshot: Awaited<ReturnType<typeof capture>> | undefined;
         try {
-          snapshot = await builder.create();
+          snapshot = await retrySourceDisk(capture);
         } catch (error) {
           snapshotError = error;
         }
@@ -768,10 +1180,9 @@ const _microsandbox = defineProvider<
         if (snapshotError) throw snapshotError;
 
         return {
-          // ComputeSDK feeds this id back to create({ snapshotId }). The SDK's
-          // restore builder resolves snapshot names and paths, so return the
-          // stable name rather than the content digest used by its index.
-          id: name,
+          // ComputeSDK feeds this id back to create({ snapshotId }); cloud
+          // restores resolve only the snapshot reference, never its name.
+          id: snapshot?.reference ?? name,
           provider: PROVIDER,
           createdAt: new Date(snapshot?.createdAt ?? Date.now()),
           metadata: {
@@ -785,10 +1196,9 @@ const _microsandbox = defineProvider<
       }),
 
       list: async (config, options?: ListSnapshotsOptions) => withBackend(selectBackend(config), async (sdk) => {
-        requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         const snapshots: MicrosandboxSnapshot[] = [];
         for (const handle of await sdk.Snapshot.list()) {
-          const live = await sdk.Snapshot.get(handle.digest);
+          const live = await sdk.Snapshot.get(sdk.defaultBackendKind() === 'cloud' ? handle.reference : handle.digest);
           const snapshot = await live.open();
           const labels = Object.fromEntries(snapshot.labels);
           if (labels[SNAPSHOT_LABEL_MARKER] !== 'true') continue;
@@ -807,10 +1217,31 @@ const _microsandbox = defineProvider<
       }),
 
       delete: async (config, snapshotId) => withBackend(selectBackend(config), async (sdk) => {
-        requireLocal(sdk.defaultBackendKind(), 'disk snapshots');
         await sdk.Snapshot.remove(snapshotId);
       }),
     },
+
+    volume: {
+      create: async (config, options) => withBackend(selectBackend(config), async (sdk) => {
+        let b = sdk.Volume.builder(options.name);
+        if (options.sizeBytes) b = b.size(Math.ceil(options.sizeBytes / (1024 * 1024)));
+        const volume = await b.create();
+        return { name: volume.name, native: volume };
+      }),
+      get: async (config, name: string) => withBackend(selectBackend(config), async (sdk) => {
+        try {
+          const handle = await sdk.Volume.get(name);
+          return { name, native: handle };
+        } catch { return null; }
+      }),
+      list: async (config) => withBackend(selectBackend(config), async (sdk) => {
+        const handles = await sdk.Volume.list();
+        return (handles ?? []).map((h: any) => ({ name: h.name, native: h }));
+      }),
+      delete: async (config, name: string) => withBackend(selectBackend(config), async (sdk) => {
+        await withVolumeSettle(() => sdk.Volume.remove(name));
+      }),
+    }
   },
 });
 

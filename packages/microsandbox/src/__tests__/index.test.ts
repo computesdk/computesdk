@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({
   backendKind: 'local' as 'local' | 'cloud',
@@ -11,6 +11,13 @@ const mock = vi.hoisted(() => ({
   execEvents: [] as Array<Record<string, unknown>>,
   execEventDelayMs: 0,
   execKilled: false,
+  detachedDies: false,
+  detachedNeverDone: false,
+  detachedNeverStarted: false,
+  detachedLaunchDrops: false,
+  detachedLateClaim: false,
+  detachedLaunches: 0,
+  detachedCommandRuns: 0,
   removeError: null as Error | null,
   stopFailures: 0,
   stopAttempts: 0,
@@ -38,8 +45,25 @@ vi.mock('microsandbox', () => {
       if (value == null) throw new Error(`missing ${path}`);
       return value;
     }
+    writes: Array<{ path: string; bytes: number }> = [];
     async write(path: string, value: string | Uint8Array) {
+      this.writes.push({ path, bytes: typeof value === 'string' ? Buffer.byteLength(value) : value.byteLength });
       this.files.set(path, typeof value === 'string' ? value : new TextDecoder().decode(value));
+    }
+    async writeStream(path: string) {
+      const chunks: Uint8Array[] = [];
+      return {
+        write: async (chunk: Uint8Array) => {
+          this.writes.push({ path, bytes: chunk.byteLength });
+          chunks.push(chunk);
+        },
+        close: async () => { this.files.set(path, Buffer.concat(chunks).toString('utf8')); },
+      };
+    }
+    async readStream(path: string) {
+      const value = this.files.get(path);
+      if (value == null) throw new Error(`missing ${path}`);
+      return { collect: async () => new TextEncoder().encode(value) };
     }
     async list(path: string) {
       return [...this.files.keys()]
@@ -62,6 +86,57 @@ vi.mock('microsandbox', () => {
     async execWith(_command: string, configure: (builder: ExecBuilder) => ExecBuilder) {
       const builder = configure(new ExecBuilder());
       const script = (builder.options.args as string[])[1];
+      // Detached-exec protocol: launch writes pid/out/err/code files; status
+      // probes return 0 once the code sentinel exists; cleanup removes them.
+      const base = script.match(/\/tmp\/\.csdk-exec-[a-z0-9]+/)?.[0];
+      if (base) {
+        const [pid, out, err, code] = [`${base}.pid`, `${base}.out`, `${base}.err`, `${base}.code`];
+        // Relaunch after a proven-dead worker prefixes `rm -f <pid>;`.
+        const rm = script.match(/^rm -f ([^;]+);/);
+        if (rm) for (const path of rm[1].trim().split(/\s+/)) this.fsOps.files.delete(path);
+        if (script.includes('setsid ')) {
+          mock.detachedLaunches++;
+          const firstLaunch = mock.detachedLaunches === 1;
+          const dropped = mock.detachedLaunchDrops && firstLaunch;
+          // A slow first worker may claim the sentinel just as the relaunch
+          // lands; whichever claims first runs the command, the other must
+          // exit without running it again.
+          if (mock.detachedLateClaim && !firstLaunch && !this.fsOps.files.has(pid)) {
+            this.fsOps.files.set(pid, '9999');
+            this.fsOps.files.set(out, 'late-worker\n');
+            this.fsOps.files.set(err, '');
+            this.fsOps.files.set(code, '0');
+            mock.detachedCommandRuns++;
+          }
+          // The worker's pid write is noclobber: an existing sentinel means
+          // a competing worker owns the run.
+          if (!this.fsOps.files.has(pid) && !mock.detachedNeverStarted && !(dropped && !mock.detachedDies)) {
+            this.fsOps.files.set(pid, '4242');
+            const failed = script.includes('missing-command');
+            this.fsOps.files.set(out, script.includes('echo hello') ? 'hello\n' : '');
+            this.fsOps.files.set(err, failed ? 'not found\n' : '');
+            if (!mock.detachedNeverDone) this.fsOps.files.set(code, failed ? '127' : '0');
+            if (mock.detachedDies && firstLaunch) this.fsOps.files.delete(code);
+            mock.detachedCommandRuns++;
+          }
+          if (dropped) throw new Error('exec session ended without exit event');
+          return { code: 0, stdout: () => '', stderr: () => '' };
+        }
+        if (script.includes('test -f')) {
+          if (this.fsOps.files.has(code)) return { code: 0, stdout: () => '', stderr: () => '' };
+          if (!this.fsOps.files.has(pid)) return { code: 3, stdout: () => '', stderr: () => '' };
+          if (mock.detachedDies) return { code: 2, stdout: () => '', stderr: () => '' };
+          return { code: 1, stdout: () => '', stderr: () => '' };
+        }
+        if (script.startsWith('cat ')) {
+          const target = script.match(/'([^']+)'/)?.[1] ?? '';
+          return { code: 0, stdout: () => this.fsOps.files.get(target) ?? '', stderr: () => '' };
+        }
+        if (script.startsWith('rm -f') || script.includes('kill')) {
+          for (const path of [pid, out, err, code]) this.fsOps.files.delete(path);
+          return { code: 0, stdout: () => '', stderr: () => '' };
+        }
+      }
       return {
         code: script.includes('missing-command') ? 127 : 0,
         stdout: () => script.includes('echo hello') ? 'hello\n' : '',
@@ -105,6 +180,9 @@ vi.mock('microsandbox', () => {
     async connect() { return this.native; }
     async startDetached() { this.status = 'running'; return this.native; }
     async stopWithTimeout() { await this.native.stopWithTimeout(); this.status = 'stopped'; }
+    async waitUntilStopped() { return { name: this.name, status: this.status }; }
+    async pause() { this.status = 'paused'; }
+    async resume() { this.status = 'running'; }
     async remove() {
       mock.removeAttempts++;
       if (mock.removeAttempts <= mock.removeFailures) throw new Error('temporary deletion failure');
@@ -126,7 +204,6 @@ vi.mock('microsandbox', () => {
       this.config = { name, ports: [] };
     }
     image(value: string) { this.config.image = value; return this; }
-    fromSnapshot(value: string) { this.config.snapshot = value; return this; }
     rootDisk(value: number) { this.config.rootDisk = value; return this; }
     cpus(value: number) { this.config.cpus = value; return this; }
     memory(value: number) { this.config.memory = value; return this; }
@@ -172,6 +249,22 @@ vi.mock('microsandbox', () => {
     },
     Sandbox: {
       builder: (name: string) => new FakeSandboxBuilder(name),
+      restore: (snapshot: string) => {
+        let name = '';
+        const builder = {
+          name(value: string) { name = value; return builder; },
+          idleTimeout() { return builder; },
+          disableNetwork() { return builder; },
+          port() { return builder; },
+          portBind() { return builder; },
+          async restore() {
+            const fake = new FakeSandboxBuilder(name);
+            fake.config.snapshot = snapshot;
+            return fake.create();
+          },
+        };
+        return builder;
+      },
       get: async (name: string) => {
         const handle = mock.handles.get(name);
         if (!handle) throw Object.assign(new Error('not found'), { code: 'sandboxNotFound' });
@@ -184,7 +277,9 @@ vi.mock('microsandbox', () => {
       },
     },
     Snapshot: {
-      builder: () => { throw new Error('not implemented in unit mock'); },
+      // Mimic a backend without snapshot support: the adapter treats an
+      // "unsupported" failure as its cue to use the disk-only fallback path.
+      builder: () => { throw new Error('unsupported: snapshot capture is not implemented in unit mock'); },
       list: async () => [],
       get: async () => { throw new Error('not implemented in unit mock'); },
       remove: async () => {},
@@ -194,7 +289,12 @@ vi.mock('microsandbox', () => {
 
 let microsandbox: typeof import('../index.js').microsandbox;
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 beforeEach(async () => {
+  for (const name of ['MSB_API_KEY', 'MSB_API_URL', 'MSB_BACKEND', 'MSB_PROFILE']) vi.stubEnv(name, '');
   vi.resetModules();
   ({ microsandbox } = await import('../index.js'));
   mock.backendKind = 'local';
@@ -207,6 +307,13 @@ beforeEach(async () => {
   mock.execEvents.length = 0;
   mock.execEventDelayMs = 0;
   mock.execKilled = false;
+  mock.detachedDies = false;
+  mock.detachedNeverDone = false;
+  mock.detachedNeverStarted = false;
+  mock.detachedLaunchDrops = false;
+  mock.detachedLateClaim = false;
+  mock.detachedLaunches = 0;
+  mock.detachedCommandRuns = 0;
   mock.removeError = null;
   mock.stopFailures = 0;
   mock.stopAttempts = 0;
@@ -297,7 +404,8 @@ describe('microsandbox provider', () => {
     expect(instance).not.toHaveProperty('apiKey');
     expect(await sandbox.getInfo()).toMatchObject({ id: 'cloud-box', status: 'running' });
     await expect(sandbox.getUrl({ port: 3000 })).rejects.toThrow(/cloud does not currently support published ports/);
-    await expect(provider.snapshot?.list()).rejects.toThrow(/cloud does not currently support disk snapshots/);
+    await expect(provider.snapshot?.list()).resolves.toEqual([]);
+    await expect(sandbox.pause!()).rejects.toThrow(/cloud does not currently support pause\/resume/);
   });
 
   it('defaults to a cloud backend resolved by the microsandbox SDK', async () => {
@@ -306,6 +414,28 @@ describe('microsandbox provider', () => {
     await microsandbox().sandbox.create({ name: 'default-cloud' });
 
     expect(mock.created[0]).toMatchObject({ name: 'default-cloud', backend: 'cloud' });
+    expect(mock.backendSelections).toEqual([]);
+  });
+
+  it('uses MSB_API_KEY and MSB_API_URL from the environment for the cloud backend', async () => {
+    vi.stubEnv('MSB_API_KEY', 'env-key');
+    vi.stubEnv('MSB_API_URL', 'https://env.example.test');
+
+    await microsandbox().sandbox.create({ name: 'env-cloud' });
+
+    expect(mock.backendSelections).toEqual([
+      { kind: 'cloud', apiKey: 'env-key', url: 'https://env.example.test' },
+    ]);
+    expect(mock.created[0]).toMatchObject({ name: 'env-cloud', backend: 'cloud' });
+  });
+
+  it('leaves MSB_BACKEND and MSB_PROFILE resolution to the microsandbox SDK', async () => {
+    vi.stubEnv('MSB_API_KEY', 'env-key');
+    vi.stubEnv('MSB_BACKEND', 'cloud');
+    mock.backendKind = 'cloud';
+
+    await microsandbox().sandbox.create({ name: 'sdk-env-cloud' });
+
     expect(mock.backendSelections).toEqual([]);
   });
 
@@ -563,6 +693,116 @@ describe('microsandbox provider', () => {
     expect(result.exitCode).toBe(124);
   });
 
+  it('fails fast when the provider reaps the detached worker', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'reaped-box' });
+    mock.detachedDies = true;
+
+    await expect(sandbox.runCommand('echo hello')).rejects.toThrow(/detached command died/);
+  });
+
+  it('fails fast when the detached worker never starts', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'never-box' });
+    mock.detachedNeverStarted = true;
+
+    vi.useFakeTimers();
+    try {
+      const pending = sandbox.runCommand('echo hello');
+      const assertion = expect(pending).rejects.toThrow(/never started/);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs the command once when a late first worker races the relaunch', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'racy-box' });
+    mock.detachedLaunchDrops = true;
+    mock.detachedLateClaim = true;
+
+    vi.useFakeTimers();
+    try {
+      const pending = sandbox.runCommand('echo hello');
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+
+      // The slow first worker claimed the sentinel as the relaunch landed;
+      // the relaunched worker must defer to it, not run the command again.
+      expect(result.stdout).toBe('late-worker\n');
+      expect(result.exitCode).toBe(0);
+      expect(mock.detachedLaunches).toBe(2);
+      expect(mock.detachedCommandRuns).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the stale pid claim before relaunching a dead worker', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'dead-worker-box' });
+    mock.detachedLaunchDrops = true;
+    mock.detachedDies = true;
+
+    vi.useFakeTimers();
+    try {
+      const pending = sandbox.runCommand('echo hello');
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+
+      // The dropped launch's worker claimed the pid then died; the relaunch
+      // must remove that stale claim or its own noclobber claim can never
+      // succeed.
+      expect(result.stdout).toBe('hello\n');
+      expect(result.exitCode).toBe(0);
+      expect(mock.detachedLaunches).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out detached commands with partial output and exit 124', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'slow-box' });
+    mock.detachedNeverDone = true;
+
+    const result = await sandbox.runCommand('sleep 60', { timeout: 5 });
+
+    expect(result.exitCode).toBe(124);
+  });
+
+  it('pauses and resumes a local sandbox through the unified lifecycle', async () => {
+    const provider = microsandbox({ backend: 'local' });
+    const sandbox = await provider.sandbox.create({ name: 'pause-box' });
+
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    await sandbox.pause!();
+    expect(mock.handles.get('pause-box')!.status).toBe('paused');
+    await sandbox.resume!();
+    expect(mock.handles.get('pause-box')!.status).toBe('running');
+  });
+
+  it('declares disk snapshots of a persistent source and restores by reference', async () => {
+    const provider = microsandbox({ backend: 'local' });
+
+    expect(provider.snapshot?.capabilities).toEqual({
+      scope: 'rootfs',
+      memory: false,
+      destroysSource: false,
+      createOptions: { ephemeral: false },
+    });
+    await provider.sandbox.create({ name: 'restored-box', snapshotId: 'snap-ref' } as any);
+    expect(mock.created[0]).toMatchObject({ name: 'restored-box', snapshot: 'snap-ref' });
+  });
+
+  it('refuses to snapshot a running ephemeral sandbox instead of stopping it away', async () => {
+    const provider = microsandbox({ backend: 'local' });
+    const sandbox = await provider.sandbox.create({ name: 'ephemeral-box' });
+    const handle = mock.handles.get('ephemeral-box');
+    handle.configValue.lifecycle = { ephemeral: true };
+
+    await expect(provider.snapshot!.create(sandbox.sandboxId)).rejects.toThrow(/ephemeral.*ephemeral: false/);
+    expect(handle.status).toBe('running');
+    expect(mock.stopAttempts).toBe(0);
+  });
+
   it('uses the native filesystem surface', async () => {
     const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'fs-box' });
     await sandbox.filesystem.mkdir('/workspace');
@@ -575,5 +815,17 @@ describe('microsandbox provider', () => {
     ]);
     await sandbox.filesystem.remove('/workspace/hello.txt');
     expect(await sandbox.filesystem.exists('/workspace/hello.txt')).toBe(false);
+  });
+
+  it('streams large file writes in chunks under the relay frame limit', async () => {
+    const sandbox = await microsandbox({ backend: 'local' }).sandbox.create({ name: 'fs-large-box' });
+    const content = 'x'.repeat(1024 * 1024 + 7);
+    await sandbox.filesystem.writeFile('/large.txt', content);
+
+    const fsOps = (sandbox.getInstance() as any).sandbox.fsOps;
+    const writes = fsOps.writes.filter((w: { path: string }) => w.path === '/large.txt');
+    expect(writes.length).toBe(5);
+    expect(Math.max(...writes.map((w: { bytes: number }) => w.bytes))).toBeLessThanOrEqual(256 * 1024);
+    expect(await sandbox.filesystem.readFile('/large.txt')).toBe(content);
   });
 });

@@ -1,5 +1,89 @@
 # @computesdk/mosaic
 
+## 0.1.23
+
+### Patch Changes
+
+- 1904e82: `runCommand({ background: true })` launches the command detached through the shell process tier instead of Mosaic's durable process API, so `pause()` no longer refuses with 409 `sandbox_busy` while it runs; the process survives pause/resume. The returned `stdout` is the shell job id.
+- 1904e82: Mosaic instances expose native `pause()`/`resume()` (memory and processes survive), and snapshots declare their capabilities: whole rootfs plus memory, source keeps running. The shared conformance suite now runs live against Mosaic.
+- 1904e82: Read and write files of any size through ranged and staged files-API requests instead of oversized exec bodies, read through symlinks, and expose native `pause()`/`resume()` on the sandbox handle.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.22
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.1.21
+
+### Patch Changes
+
+- d6bcf42: Forward `memoryMb`/`vcpu` in `template.create` so sized environments (e.g. the 16384 MiB / 8 vCPU build shape) can be built through the SDK. The gateway validates the pair against the supported shapes published by `GET /v1/limits`.
+
+## 0.1.20
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.1.19
+
+### Patch Changes
+
+- e3f821f: Recognize the full stock template list the API serves (`base`, `node-20/22/26`, `node-22-agents`, `python-3.11/3.14`) instead of only `node-20`/`python-3.11`. Stock ids other than those two were mis-routed to `snapshot_id` at create time, so `templateId: 'node-22-agents'` (the image with pinned coding agents) and the other public templates could not be booted.
+
+## 0.1.18
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 0.1.17
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 0.1.16
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 0.1.15
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 0.1.14
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
 ## 0.1.13
 
 ### Patch Changes

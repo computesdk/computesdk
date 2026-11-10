@@ -31,6 +31,10 @@ Blaxel provider for ComputeSDK
 
 {% embed url="https://www.computesdk.com/benchmarks/sandboxes/blaxel/" %}
 
+## Lifecycle
+
+Snapshots declare whole-rootfs and memory preservation with the source kept. Restore with `snapshotId`; see [snapshot semantics and cleanup](../reference/compute.md#snapshot-capabilities).
+
 ## Installation & Setup
 
 ```bash

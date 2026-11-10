@@ -113,6 +113,12 @@ export interface Ec2Config {
    * and read back in chunks. Each stream keeps at most its last `maxOutputBytes` bytes (default 4 MiB).
    */
   maxOutputBytes?: number;
+  /**
+   * Ingress seam: resolves a public URL for a port on the instance. EC2 boxes accept no inbound
+   * traffic, so without this `getUrl` throws; an ingress layer (e.g. a tunnel the box dials out
+   * to) plugs in here.
+   */
+  getUrl?: (sandbox: Ec2Sandbox, options: { port: number; protocol?: string }) => Promise<string>;
 }
 
 export type Ec2Lifecycle = 'spot' | 'on-demand';
@@ -503,8 +509,12 @@ async function createSandbox(config: Ec2Config, options?: CreateInstanceOptions)
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** The single shell script handed to AWS-RunShellScript. */
+const HOME_DEFAULT =
+  'if [ -z "${HOME:-}" ]; then HOME=$(getent passwd "$(id -u)" | cut -d: -f6); export HOME="${HOME:-/root}"; fi';
+
 export function buildScript(command: string, options?: RunCommandOptions): string {
-  const lines: string[] = [];
+  // SSM's agent runs commands with no HOME; tools like act refuse to start without one.
+  const lines: string[] = [HOME_DEFAULT];
   for (const [key, value] of Object.entries(options?.env ?? {})) {
     if (!ENV_NAME.test(key)) throw new Error(`Invalid environment variable name: ${JSON.stringify(key)}`);
     lines.push(`export ${key}="${escapeShellArg(value)}"`);
@@ -759,7 +769,11 @@ async function runCommand(sandbox: Ec2Sandbox, command: string, options?: RunCom
         ({ stdout, stderr } = await readSpilledOutput(context, sandbox, spillId, await spilledSizes(context, sandbox, spillId)));
       } catch {
         // keep the (empty) inline output
+        await removeSpilled(context, sandbox, spillId);
       }
+    } else if (invocation.Status === 'Cancelled') {
+      // Cancelled outside this call: the script never reached its own cleanup.
+      await removeSpilled(context, sandbox, spillId);
     }
   } else if (config.outputS3Bucket) {
     [stdout, stderr] = await Promise.all([
@@ -856,8 +870,12 @@ export const ec2 = defineProvider<Ec2Sandbox, Ec2Config>({
         };
       },
 
-      getUrl: async () => {
-        throw new Error('aws-ec2 does not support getUrl: instances accept no inbound traffic (commands run over SSM).');
+      getUrl: async (sandbox, options) => {
+        const resolve = contextForSandbox(sandbox).config.getUrl;
+        if (!resolve) {
+          throw new Error('aws-ec2 does not support getUrl: instances accept no inbound traffic (commands run over SSM).');
+        }
+        return resolve(sandbox, options);
       },
 
       getInstance: (sandbox) => sandbox,

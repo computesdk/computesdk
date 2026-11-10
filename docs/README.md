@@ -38,7 +38,6 @@ Providers are platforms that provide sandboxes. Each package under `@computesdk/
 | `@computesdk/codesandbox`      | CodeSandbox  |
 | `@computesdk/createos-sandbox` | CreateOS     |
 | `@computesdk/daytona`          | Daytona      |
-| `@computesdk/declaw`           | Declaw       |
 | `@computesdk/e2b`              | E2B          |
 | `@computesdk/hopx`             | HopX         |
 | `@computesdk/isorun`           | Isorun       |

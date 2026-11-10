@@ -1,5 +1,95 @@
 # @computesdk/sprites
 
+## 0.1.34
+
+### Patch Changes
+
+- 1904e82: Sprites: pass env/cwd through the exec API's native `env`/`dir` fields (env now reaches every part of a compound command, values kept verbatim), parse the exec response's stdout/stderr/exit frames instead of stripping control characters, stream `onStdout`/`onStderr` natively from those frames, and read `sprites[]` with pagination in `list()`.
+
+  `runCommand(..., { background: true })` now launches through the shell process tier and returns once the command starts, instead of waiting for it to exit.
+
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.33
+
+### Patch Changes
+
+- b63030e: fix(sprites): suffix the default sandbox name with a uuid so concurrent `sandbox.create()` calls no longer collide — `sprite-${Date.now()}` produced identical names within the same millisecond and the API returned 409 "already exists"
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.1.32
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.1.31
+
+### Patch Changes
+
+- e3f821f: Retry sandbox create on HTTP 429 honoring the body's retry_after_seconds — payg-tier accounts are creation rate-limited (10/min) and transient throttling should not surface as a create failure.
+
+## 0.1.30
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 0.1.29
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 0.1.28
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 0.1.27
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 0.1.26
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 0.1.25
+
+### Patch Changes
+
+- 0c30a8f: Fix `runCommand` contract violations found by the sandbox CI capabilities benchmark:
+
+  - **Timeout dropped**: modal, vercel, declaw, and tensorlake never forwarded `options.timeout` to the underlying SDK (`timeoutMs`/`timeout` fields). Beam has no native timeout option, so the adapter now kills the process when the deadline passes.
+  - **Merged stdout/stderr**: daytona, codesandbox, and sprites only expose one combined output stream; the adapters now redirect stderr to a temp file and parse it back behind a delimiter so `stderr` is populated correctly. Upstash already returns `stderr` — the adapter now forwards it.
+  - **Exit code collapsed**: codesandbox hardcoded `exitCode: 0`; it now captures the real exit code in-band.
+
 ## 0.1.24
 
 ### Patch Changes

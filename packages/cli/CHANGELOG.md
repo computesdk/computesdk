@@ -1,5 +1,85 @@
 # @computesdk/cli
 
+## 2.6.3
+
+### Patch Changes
+
+- 74f256d: Add `compute agents run <agent> --resume <sessionId>` to restore a stopped conversation on a replacement sandbox with its persistent agent disk.
+
+## 2.6.2
+
+### Patch Changes
+
+- b897c18: Add `compute agents` (alias `ag`): managed agents on the platform's `/api/v1/agents` API — `list`, `create`, `describe`, `update`, `delete`, `sessions`, `run`, `session`, `send`, `events` (`--follow` polls), `stop`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - computesdk@4.1.16
+  - @computesdk/platform@0.2.2
+
+## 2.6.1
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/platform@0.2.1
+
+## 2.6.0
+
+### Minor Changes
+
+- 0a54571: New `@computesdk/platform` provider: hosted ComputeSDK Platform sandboxes behind the same `compute`/`sandbox` interface — market placement, own-keys provider orders, quotes and org billing handled server-side. The shared transport (`PlatformClient`, `PlatformApiError`, `PlatformClientError`, `resolvePlatformAuth`, SSE readers) moved out of the CLI into this package; the CLI imports it and keeps the old `actions-client` names re-exported for one release. `compute sandboxes exec` gains `--cwd` and `-e/--env` like `spawn`. In `computesdk`, `createWithFallback` now rethrows immediately on an error flagged `fallback: false`, and the all-failed error keeps the original errors on `.errors`.
+
+### Patch Changes
+
+- Updated dependencies [0a54571]
+  - @computesdk/platform@0.2.0
+  - computesdk@4.1.14
+
+## 2.5.8
+
+### Patch Changes
+
+- 4e05572: `compute actions benchmarks <run-id>` — the benchmark runs an Actions run produced (per-provider composite score, success rate, metrics; `--json` for agents), and `compute actions run` shows a one-line `benchmarks:` digest when the run carried a benchmark.
+
+## 2.5.7
+
+### Patch Changes
+
+- 854e118: `run -d`/Ctrl-C-`d` summary: print the full instance id and a bare `destroy` hint (the short `3f2a…` form was not accepted back by the command). `snapshot-delete <id>` on the implicit instance now logs the resolved id instead of "undefined".
+- e5e1bea: instances UX: compact human output for create/get/list (`--verbose` for the old detail view), `-q/--quiet` for script-friendly IDs and URLs, a per-directory current instance (`use`, `COMPUTE_INSTANCE`, implicit ID resolution across all commands), and `run` (create + spawn + wait + destroy in one command, with `--keep` and `-d` modes and an interactive Ctrl-C prompt).
+- 81c38d5: `compute instances cp` — copy files and directories between the local filesystem and a sandbox through the platform transfers API (`POST /sandboxes/{id}/transfers` + `/complete`). Remote side is `[id:]/abs/path` (omitted id = current instance); upload tars locally, PUTs to a presigned URL, and the box extracts; download reverses it. Prints `copied N files (size) → dest` (`-q` prints nothing; TTY progress past 10 MB).
+- f22f0a8: `compute instances serve` — spawn a server, wait for its port to listen on a public address (via the platform `/ports` endpoint), and print the provider URL. Loopback-only binds fail with the 0.0.0.0 bind hint; a server that exits first reports its exit code and last log lines. `-q` prints only the URL.
+
+## 2.5.6
+
+### Patch Changes
+
+- c50c46e: `compute actions dispatch --with-changes`: a workflow file that exists only in your working tree can now be dispatched. The CLI computes the diff before the catalog lookup and, when the diff creates the requested workflow, dispatches it by `repoFullName + workflowPath` so the platform builds the run from the diff. Dispatching a missing `.github/workflows/*` path from a dirty tree without the flag now hints at `--with-changes`.
+- c93d05b: `compute market` now covers the buyer side: `cap` (show/set/clear the org market cap), `bids`, `bid`, `cancel-bid`, `purchases`, `credits`, `ledger`, and `topup` (prints a Stripe checkout link).
+
+## 2.5.5
+
+### Patch Changes
+
+- 7028949: `compute actions dispatch --with-changes`: run your local changes without committing. Everything the working tree has beyond `origin/<ref>` (local commits, edits, untracked files) is sent as a unified diff via `POST /api/v1/actions/patches` and applied after checkout; `--ref` defaults to the current branch. Dispatching from a dirty tree without the flag prints a hint.
+- cfbe401: `compute actions dispatch --with-changes`: fix untracked files being dropped or misplaced when run from a subdirectory — `ls-files --others` and the `diff --no-index` for each untracked file now run from the repository root so patch paths stay repo-relative.
+
+## 2.5.4
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+
+## 2.5.3
+
+### Patch Changes
+
+- 90bbdd1: Add `compute actions repos sync`: re-reads the GitHub App installation so repos granted after install show up.
+
 ## 2.5.2
 
 ### Patch Changes

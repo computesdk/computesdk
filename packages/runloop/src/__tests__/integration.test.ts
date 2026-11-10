@@ -1,7 +1,10 @@
 import { expect, it } from "vitest";
+import { failIfIntegrationRequired } from "@computesdk/test-utils";
 import { runloop } from "../index";
 
 const runLive = process.env.RUNLOOP_INTEGRATION === "1" && Boolean(process.env.RUNLOOP_API_KEY);
+
+failIfIntegrationRequired("runloop", !runLive);
 
 it.runIf(runLive)("runs the modernized adapter against one shared Runloop devbox", async () => {
   const provider = runloop({

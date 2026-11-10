@@ -2,7 +2,8 @@
  * Daytona Provider - Factory-based Implementation
  */
 
-import { Daytona, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
+import { Daytona, DaytonaNotFoundError, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
+import { resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, errorText } from '@computesdk/provider';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
@@ -18,6 +19,61 @@ export interface DaytonaConfig {
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function isNotFound(err: unknown): boolean {
+  return err instanceof DaytonaNotFoundError
+    || (err as { statusCode?: number }).statusCode === 404
+    || (err as { status?: number }).status === 404
+    || /not found|no such file/i.test(errorText(err));
+}
+
+/**
+ * Resolve a volume by id OR name — `d.volume.get()` looks up by name only,
+ * so an id falls back to a list scan. Returns null when nothing matches
+ * (the SDK throws on a name miss).
+ */
+async function resolveDaytonaVolume(d: Daytona, idOrName: string) {
+  try {
+    return await d.volume.get(idOrName);
+  } catch (err) {
+    // Only a real "not found" means the arg wasn't a name — anything else
+    // (auth, 5xx) must propagate, else delete silently no-ops.
+    if (!isNotFound(err)) throw err;
+  }
+  const volumes = await d.volume.list();
+  return (volumes ?? []).find((v: any) => v.id === idOrName) ?? null;
+}
+
+/** Poll until the volume leaves pending_create — mounts and deletes both
+ *  reject the transitional state, so callers get a usable handle. Returns
+ *  null only when the volume never resolves at all (treat as gone); throws
+ *  when it stays pending past the deadline. Callers decide whether the
+ *  'error' state is acceptable (it is deletable, not mountable). */
+async function waitDaytonaVolumeReady(d: Daytona, idOrName: string, deadlineMs = 60_000) {
+  const deadline = Date.now() + deadlineMs;
+  let lastState: string | null = null;
+  for (;;) {
+    const volume = await resolveDaytonaVolume(d, idOrName);
+    // 'creating' is a second transitional state (soak-3) — only ready/error
+    // are terminal enough to act on.
+    if (volume && (volume.state === 'ready' || volume.state === 'error')) return volume;
+    if (volume) lastState = volume.state;
+    if (Date.now() >= deadline) {
+      if (lastState === null) return null;
+      throw new Error(`Daytona volume ${idOrName} stuck in state ${lastState}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+}
+
+/** Stop/start can outlast the SDK's 60s default. */
+const LIFECYCLE_TIMEOUT_S = 300;
+/** Filesystem snapshots of a fresh default sandbox take ~5-8 minutes. */
+const SNAPSHOT_TIMEOUT_S = 900;
 
 /**
  * Create a Daytona provider instance using the factory pattern
@@ -51,12 +107,26 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             sandboxId: _sandboxId,
             namespace: _namespace,
             directory: _directory,
+            volumes,
             ...providerOptions
           } = options || {};
+
+          // `volumes` only counts as unified VolumeMount[] when every entry
+          // carries `volume`; a provider-native volumes spec stays in
+          // providerOptions and reaches the wire untouched.
+          const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+          if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
 
           const createParams: Record<string, any> = {
             language: runtime === 'python' ? 'python' : 'javascript',
             ...providerOptions,
+            // Unified mounts → daytona's [{volumeId, mountPath}] wire shape.
+            ...(unifiedVolumes && {
+              volumes: unifiedVolumes.map((m: any) => ({
+                volumeId: resolveVolumeRef(m.volume).id ?? resolveVolumeRef(m.volume).name,
+                mountPath: m.mountPath,
+              })),
+            }),
           };
 
           if (envs && Object.keys(envs).length > 0) {
@@ -148,36 +218,42 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
       runCommand: async (sandbox: DaytonaSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         const startTime = Date.now();
         try {
+          // env/cwd go through executeCommand's native fields so every part of
+          // a compound command sees them.
           let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env)
-              .map(([k, v]) => `${k}="${escapeShellArg(v)}"`)
-              .join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          if (options?.cwd) fullCommand = `cd "${escapeShellArg(options.cwd)}" && ${fullCommand}`;
-          if (options?.background) fullCommand = `nohup ${fullCommand} > /dev/null 2>&1 &`;
+          if (options?.background) fullCommand = `nohup sh -c ${shellQuote(command)} > /dev/null 2>&1 &`;
 
           // executeCommand returns one merged `result` — separate stderr by
           // redirecting it to a file and cat'ing it back behind a delimiter.
           const errFile = `/tmp/.computesdk-stderr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          const delim = '__COMPUTESDK_STDERR__';
-          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; echo "${delim}"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
+          const delim = `__COMPUTESDK_STDERR_${Date.now()}_${Math.random().toString(36).slice(2)}__`;
+          // Capture the real exit code in-band — the wrapper's own exit code is
+          // always the cleanup's (0), not the command's.
+          const wrapped = `{ ${fullCommand} ; } 2>${escapeShellArg(errFile)}; __dy_ec=$?; echo "${delim}$__dy_ec"; cat ${escapeShellArg(errFile)} 2>/dev/null; rm -f ${escapeShellArg(errFile)}`;
 
+          const env = options?.env && Object.keys(options.env).length > 0 ? options.env : undefined;
           const response = await sandbox.process.executeCommand(
             wrapped,
-            undefined,
-            undefined,
+            options?.cwd,
+            env,
             options?.timeout !== undefined ? Math.max(1, Math.ceil(options.timeout / 1000)) : undefined,
           );
           const merged = response.result || '';
           const delimIdx = merged.lastIndexOf(delim);
-          const stdout = delimIdx === -1 ? merged : merged.substring(0, delimIdx);
-          const stderr = delimIdx === -1 ? '' : merged.substring(delimIdx + delim.length).replace(/^\n/, '');
+          let stdout = merged;
+          let stderr = '';
+          let exitCode = response.exitCode || 0;
+          if (delimIdx !== -1) {
+            stdout = merged.substring(0, delimIdx).replace(/\n$/, '');
+            const after = merged.substring(delimIdx + delim.length);
+            const newlineIdx = after.indexOf('\n');
+            exitCode = parseInt(newlineIdx === -1 ? after : after.substring(0, newlineIdx), 10) || 0;
+            stderr = newlineIdx === -1 ? '' : after.substring(newlineIdx + 1);
+          }
           return {
             stdout,
             stderr,
-            exitCode: response.exitCode || 0,
+            exitCode,
             durationMs: Date.now() - startTime
           };
         } catch (error) {
@@ -211,54 +287,67 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         }
       },
 
+      // Native toolbox file API: bytes travel as multipart uploads/downloads
+      // instead of base64 inside a shell command line.
       filesystem: {
         readFile: async (sandbox: DaytonaSandbox, path: string): Promise<string> => {
-          const response = await sandbox.process.executeCommand(`cat "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`File not found or cannot be read: ${path}`);
-          return response.result || '';
+          try {
+            const data = await sandbox.fs.downloadFile(path);
+            return Buffer.isBuffer(data) ? data.toString('utf8') : String(data ?? '');
+          } catch (error) {
+            throw new Error(`File not found or cannot be read: ${path} (${errorText(error)})`);
+          }
         },
         writeFile: async (sandbox: DaytonaSandbox, path: string, content: string): Promise<void> => {
-          const encoded = Buffer.from(content).toString('base64');
-          const response = await sandbox.process.executeCommand(`echo "${encoded}" | base64 -d > "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`Failed to write to file: ${path}`);
+          // A string source is read as a local path by the SDK — always pass bytes.
+          await sandbox.fs.uploadFile(Buffer.from(content, 'utf8'), path);
         },
         mkdir: async (sandbox: DaytonaSandbox, path: string): Promise<void> => {
-          const response = await sandbox.process.executeCommand(`mkdir -p "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`Failed to create directory: ${path}`);
+          await sandbox.fs.createFolder(path, '755');
         },
         readdir: async (sandbox: DaytonaSandbox, path: string): Promise<FileEntry[]> => {
-          const response = await sandbox.process.executeCommand(`ls -la "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`Directory not found or cannot be read: ${path}`);
-          const lines = response.result.split('\n').filter((l: string) => l.trim());
-          const entries: FileEntry[] = [];
-          for (const line of lines) {
-            if (line.startsWith('total ') || line.endsWith(' .') || line.endsWith(' ..')) continue;
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 9) {
-              entries.push({
-                name: parts.slice(8).join(' '),
-                type: parts[0].startsWith('d') ? 'directory' as const : 'file' as const,
-                size: parseInt(parts[4]) || 0,
-                modified: new Date()
-              });
-            }
-          }
-          return entries;
+          const files = await sandbox.fs.listFiles(path);
+          return (files ?? []).map((f) => ({
+            name: f.name,
+            type: f.isDir ? 'directory' as const : 'file' as const,
+            size: f.size || 0,
+            modified: new Date(f.modifiedAt || f.modTime || Date.now()),
+          }));
         },
         exists: async (sandbox: DaytonaSandbox, path: string): Promise<boolean> => {
-          const response = await sandbox.process.executeCommand(`test -e "${path}"`);
-          return response.exitCode === 0;
+          try {
+            await sandbox.fs.getFileDetails(path);
+            return true;
+          } catch (error) {
+            if (isNotFound(error)) return false;
+            throw error;
+          }
         },
         remove: async (sandbox: DaytonaSandbox, path: string): Promise<void> => {
-          const response = await sandbox.process.executeCommand(`rm -rf "${path}"`);
-          if (response.exitCode !== 0) throw new Error(`Failed to remove: ${path}`);
+          try {
+            await sandbox.fs.deleteFile(path, true);
+          } catch (error) {
+            if (!isNotFound(error)) throw error;
+          }
         }
       },
 
       getInstance: (sandbox: DaytonaSandbox): DaytonaSandbox => sandbox,
+
+      // Daytona's memory-preserving `pause()` is rejected for container
+      // sandboxes ("Pausing is not supported"), so pause is a stop: the whole
+      // rootfs (home, /tmp) survives, running processes do not.
+      pause: async (sandbox: DaytonaSandbox): Promise<void> => {
+        await sandbox.stop(LIFECYCLE_TIMEOUT_S);
+      },
+      resume: async (sandbox: DaytonaSandbox): Promise<void> => {
+        await sandbox.start(LIFECYCLE_TIMEOUT_S);
+      },
+      pauseCapabilities: { memory: false },
     },
 
     snapshot: {
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: false },
       create: async (config: DaytonaConfig, sandboxId: string, options?: { name?: string }) => {
         const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
         const daytona = new Daytona({ apiKey: apiKey });
@@ -268,7 +357,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           // Image definition, not the filesystem of a running sandbox — the
           // runtime-FS capture lives on the Sandbox instance.
           const sandbox = await daytona.get(sandboxId);
-          await sandbox.createSnapshot(name);
+          await sandbox.createSnapshot(name, SNAPSHOT_TIMEOUT_S);
           return { id: name, provider: 'daytona', createdAt: new Date(), metadata: { name } };
         } catch (error) {
           throw new Error(`Failed to create Daytona snapshot: ${error instanceof Error ? error.message : String(error)}`);
@@ -310,6 +399,42 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         const daytona = new Daytona({ apiKey: apiKey });
         try { await (daytona as any).snapshot.delete(templateId); } catch { /* ignore */ }
       }
+    },
+
+    volume: {
+      create: async (config: DaytonaConfig, options) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const d = new Daytona({ apiKey });
+        const created = await d.volume.create(options.name);
+        // A fresh volume sits in pending_create — mounting it immediately
+        // 400s "not in a ready state", so hand callers a ready handle.
+        const volume = await waitDaytonaVolumeReady(d, created.id);
+        if (!volume || volume.state !== 'ready') {
+          throw new Error(
+            `Daytona volume ${options.name} is not mountable (state: ${volume?.state ?? 'unresolvable'})`
+          );
+        }
+        return { id: volume.id, name: volume.name, native: volume };
+      },
+      get: async (config: DaytonaConfig, idOrName: string) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const d = new Daytona({ apiKey });
+        const volume = await resolveDaytonaVolume(d, idOrName);
+        return volume ? { id: volume.id, name: volume.name, native: volume } : null;
+      },
+      list: async (config: DaytonaConfig) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const d = new Daytona({ apiKey });
+        const volumes = await d.volume.list();
+        return (volumes ?? []).map((v: any) => ({ id: v.id, name: v.name, native: v }));
+      },
+      delete: async (config: DaytonaConfig, idOrName: string) => {
+        const apiKey = config.apiKey || process.env.DAYTONA_API_KEY!;
+        const d = new Daytona({ apiKey });
+        // Delete only accepts ready/error — wait out pending_create first.
+        const volume = await waitDaytonaVolumeReady(d, idOrName);
+        if (volume) await withVolumeSettle(() => d.volume.delete(volume));
+      },
     }
   }
 });

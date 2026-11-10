@@ -25,6 +25,7 @@ import { getProviderStatus } from './providers.js';
 import { registerActionsCommands } from './actions.js';
 import { registerMarketCommands } from './market.js';
 import { registerSandboxesCommands } from './sandboxes.js';
+import { registerAgentsCommands } from './agents.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -294,6 +295,12 @@ registerMarketCommands(program);
 // (create/exec/processes/files/urls). Same auth as actions.
 
 registerSandboxesCommands(program);
+
+// ─── agents ──────────────────────────────────────────────────────────────────
+// `compute agents` (alias `ag`) drives /api/v1/agents — managed agents:
+// durable configs whose sessions run inside routed sandboxes. Same auth.
+
+registerAgentsCommands(program);
 
 // ─── bench ───────────────────────────────────────────────────────────────────
 // `compute bench` is the benchmarks-platform CLI (@benchsdk/runner's `bench`

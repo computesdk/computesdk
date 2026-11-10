@@ -2,8 +2,8 @@
  * Vercel Provider - Factory-based Implementation
  */
 
-import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot } from '@vercel/sandbox';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive } from '@vercel/sandbox';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
@@ -58,18 +58,73 @@ function validateCredentials(creds: ResolvedCredentials): void {
   if (!creds.projectId) throw new Error(`Missing Vercel project ID. Provide 'projectId' in config or set VERCEL_PROJECT_ID.`);
 }
 
-function getUtf8Sink() {
+function getUtf8Sink(onChunk?: (data: string) => void) {
   const chunks: string[] = [];
   const sink = new Writable({
+    decodeStrings: false,
     write(chunk, _enc, cb) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk));
+      const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+      chunks.push(text);
+      if (text && onChunk) onChunk(text);
       cb();
     },
   });
   return { sink, value: () => chunks.join("") };
 }
 
-export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSnapshot>({
+function credentialParams(creds: ResolvedCredentials) {
+  return creds.useOidc ? {} : { token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+}
+
+// The credentials each handle was fetched with, so `resume` can fetch the
+// fresh session handle the same way.
+const handleCredentials = new WeakMap<VercelSandbox, ResolvedCredentials>();
+
+function track(sandbox: VercelSandbox, creds: ResolvedCredentials): VercelSandbox {
+  handleCredentials.set(sandbox, creds);
+  return sandbox;
+}
+
+// `setsid` gives the command its own process group, so the watchdog can kill
+// the whole tree, not just the outer shell.
+const DEADLINE_WRAPPER = 'if command -v setsid >/dev/null 2>&1; then setsid sh -c "$1" & else sh -c "$1" & fi; pid=$!; (sleep "$0"; kill -KILL -"$pid" || kill -KILL "$pid") >/dev/null 2>&1 & w=$!; wait "$pid"; rc=$?; kill "$w" 2>/dev/null; exit $rc';
+
+// Runs through the SDK's native env/cwd fields; stdout/stderr arrive on the
+// sinks while the command runs, so the same path serves streamCommand.
+async function execCommand(sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> {
+  const startTime = Date.now();
+  try {
+    const env = options?.env && Object.keys(options.env).length > 0 ? options.env : undefined;
+    const stdout = options?.background ? undefined : getUtf8Sink(options?.onStdout);
+    const stderr = options?.background ? undefined : getUtf8Sink(options?.onStderr);
+    const deadline = options?.timeout && !options.background ? options.timeout : undefined;
+    // A watchdog in the box kills the command's whole process group at the
+    // deadline; the abort is a backstop so the caller still returns on time.
+    const args = deadline ? ['-c', DEADLINE_WRAPPER, String(deadline / 1000), command] : ['-c', command];
+    const controller = deadline ? new AbortController() : undefined;
+    const timer = deadline ? setTimeout(() => controller!.abort(), deadline + 3000) : undefined;
+    try {
+      const result = await sandbox.runCommand({
+        cmd: 'sh', args,
+        cwd: options?.cwd, env, detached: options?.background,
+        stdout: stdout?.sink, stderr: stderr?.sink,
+        signal: controller?.signal,
+      });
+      return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
+    } catch (error) {
+      if (controller?.signal.aborted) {
+        return { stdout: stdout?.value() ?? '', stderr: `${stderr?.value() ?? ''}Command timed out after ${deadline}ms`, exitCode: 124, durationMs: Date.now() - startTime };
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch (error) {
+    return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
+  }
+}
+
+export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
   methods: {
     instances: {
@@ -79,16 +134,24 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
         const timeout = options?.timeout ?? config.timeout ?? 300000;
         try {
           const {
-            timeout: _timeout, envs: _envs, name: _name, metadata: _metadata,
+            timeout: _timeout, envs, name, metadata: _metadata,
             templateId, snapshotId: optSnapshotId, sandboxId: _sandboxId,
             namespace: _namespace, directory: _directory,
+            volumes,
             ...providerOptions
           } = options || {};
+          // `volumes` only counts as unified VolumeMount[] when every entry
+          // carries `volume`; a provider-native volumes spec stays in
+          // providerOptions and reaches the wire untouched.
+          const unifiedVolumes = isUnifiedVolumeMounts(volumes) ? volumes : undefined;
+          if (volumes !== undefined && !unifiedVolumes) (providerOptions as any).volumes = volumes;
           const optRuntime = (options as any)?.runtime;
           const optPorts = (options as any)?.ports;
           const optSource = (options as any)?.source;
 
           const params: any = { timeout, ...providerOptions };
+          if (envs && Object.keys(envs).length > 0) params.env = { ...envs, ...(providerOptions as any).env };
+          if (name) params.name = name;
           // Vercel sandboxes are persistent by default, which auto-snapshots the
           // filesystem on every stop() and accrues Snapshot Storage. ComputeSDK
           // sandboxes default to non-persistent unless the caller opts in via
@@ -113,13 +176,24 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
             params.source = optSource;
           }
 
+          // Unified mounts → vercel's {path: {drive, mode}} wire shape.
+          if (unifiedVolumes) {
+            params.mounts = Object.fromEntries((unifiedVolumes as any[]).map((m) => {
+              const ref = resolveVolumeRef(m.volume);
+              // The `drive` field serializes verbatim and the API resolves it
+              // by NAME (a Drive object mounts as mount.name) — sending
+              // driveId yields "Drive not found".
+              return [m.mountPath, { drive: ref.name ?? ref.id, mode: m.readOnly ? 'snapshot' : 'read-write' }];
+            }));
+          }
+
           if (!creds.useOidc) {
             params.token = creds.token;
             params.teamId = creds.teamId;
             params.projectId = creds.projectId;
           }
 
-          const sandbox = await VercelSandbox.create(params);
+          const sandbox = track(await VercelSandbox.create(params), creds);
           return { instance: sandbox, instanceId: sandbox.name };
         } catch (error) {
           if (error instanceof Error) {
@@ -140,54 +214,85 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           const sandbox = creds.useOidc
             ? await VercelSandbox.get({ name: sandboxId })
             : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          return { instance: sandbox, instanceId: sandboxId };
+          return { instance: track(sandbox, creds), instanceId: sandboxId };
         } catch { return null; }
       },
 
-      list: async (_config: VercelConfig) => {
-        throw new Error(`Vercel provider does not support listing sandboxes.`);
+      list: async (config: VercelConfig) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const page = await VercelSandbox.list({ ...credentialParams(creds), sortBy: 'createdAt', sortOrder: 'desc' } as any);
+        // Paused (stopped) persistent sandboxes stay listed so callers can resume them.
+        const live = (page.sandboxes ?? []).filter((s: any) => s.status === 'running' || s.status === 'pending'
+          || (s.persistent && (s.status === 'stopping' || s.status === 'stopped' || s.status === 'snapshotting')));
+        const sandboxes = await Promise.all(live.map((s: any) =>
+          VercelSandbox.get({ name: s.name, ...credentialParams(creds) } as any).catch(() => null)));
+        return sandboxes
+          .filter((s): s is VercelSandbox => s !== null)
+          .map((sandbox) => ({ instance: track(sandbox, creds), instanceId: sandbox.name }));
       },
 
+      // Deletes the named sandbox. Persistent sandboxes snapshot themselves on
+      // every stop; those automatic snapshots go too, snapshots taken with
+      // snapshot.create stay.
       destroy: async (config: VercelConfig, sandboxId: string) => {
         const creds = resolveCredentials(config);
+        let sandbox: VercelSandbox;
         try {
-          const sandbox = creds.useOidc
-            ? await VercelSandbox.get({ name: sandboxId })
-            : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-          await sandbox.stop();
-        } catch { /* already destroyed or doesn't exist */ }
-      },
-
-      runCommand: async (sandbox: VercelSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
-        const startTime = Date.now();
-        try {
-          let fullCommand = command;
-          if (options?.env && Object.keys(options.env).length > 0) {
-            const envPrefix = Object.entries(options.env).map(([k, v]) => `${k}="${escapeShellArg(v)}"`).join(' ');
-            fullCommand = `${envPrefix} ${fullCommand}`;
-          }
-          const stdout = options?.background ? undefined : getUtf8Sink();
-          const stderr = options?.background ? undefined : getUtf8Sink();
-          const result = await sandbox.runCommand({
-            cmd: 'sh', args: ['-c', fullCommand],
-            cwd: options?.cwd, detached: options?.background,
-            stdout: stdout?.sink, stderr: stderr?.sink,
-            timeoutMs: options?.timeout,
-          });
-          return { stdout: stdout?.value() ?? '', stderr: stderr?.value() ?? '', exitCode: result.exitCode ?? 0, durationMs: Date.now() - startTime };
-        } catch (error) {
-          return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 127, durationMs: Date.now() - startTime };
+          sandbox = await VercelSandbox.get({ name: sandboxId, ...credentialParams(creds) } as any);
+        } catch { return; /* already destroyed or doesn't exist */ }
+        await sandbox.stop().catch(() => { /* already stopped */ });
+        const automatic: string[] = [];
+        if (sandbox.persistent) {
+          try {
+            for await (const snap of await sandbox.listSnapshots()) {
+              if (snap.creationMethod === 'automatic' && snap.status === 'created') automatic.push(snap.id);
+            }
+          } catch { /* nothing to clean up */ }
         }
+        await sandbox.delete().catch(() => { /* already deleted */ });
+        await Promise.all(automatic.map(async (snapshotId) => {
+          try {
+            await (await VercelSnapshot.get({ snapshotId, ...credentialParams(creds) } as any)).delete();
+          } catch { /* expired or already deleted */ }
+        }));
       },
 
-      getInfo: async (_sandbox: VercelSandbox): Promise<InstanceInfo> => ({
-        id: 'vercel-unknown',
-        provider: 'vercel',
-        status: 'running',
-        createdAt: new Date(),
-        timeout: 300000,
-        metadata: { vercelSandboxId: 'vercel-unknown' }
-      }),
+      // Vercel's pause is a stop: a persistent sandbox snapshots its whole
+      // filesystem on stop and restores it in the next session. Processes do
+      // not survive, and a non-persistent sandbox would lose its files.
+      pause: async (sandbox: VercelSandbox) => {
+        if (!sandbox.persistent) {
+          throw new Error(`Vercel can only pause persistent sandboxes; create the sandbox with { persistent: true }.`);
+        }
+        await sandbox.stop();
+      },
+
+      resume: async (sandbox: VercelSandbox) => {
+        const creds = handleCredentials.get(sandbox) ?? resolveCredentials({});
+        const resumed = await VercelSandbox.get({ name: sandbox.name, resume: true, ...credentialParams(creds) } as any);
+        return track(resumed, creds);
+      },
+
+      pauseCapabilities: { memory: false, createOptions: { persistent: true } },
+
+      runCommand: (sandbox: VercelSandbox, command: string, options?: RunCommandOptions) => execCommand(sandbox, command, options),
+
+      streamCommand: (sandbox: VercelSandbox, command: string, options: RunCommandOptions) => execCommand(sandbox, command, options),
+
+      getInfo: async (sandbox: VercelSandbox): Promise<InstanceInfo> => {
+        const status = sandbox.status;
+        return {
+          id: sandbox.name,
+          provider: 'vercel',
+          status: status === 'failed' || status === 'aborted' ? 'error'
+            : status === 'stopping' || status === 'stopped' ? 'stopped'
+            : 'running',
+          createdAt: sandbox.createdAt,
+          timeout: sandbox.timeout ?? 300000,
+          metadata: { vercelSandboxName: sandbox.name, vercelStatus: status },
+        };
+      },
 
       getUrl: async (sandbox: VercelSandbox, options: { port: number; protocol?: string }): Promise<string> => {
         try {
@@ -236,21 +341,45 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
     },
 
     snapshot: {
-      create: async (config: VercelConfig, sandboxId: string) => {
+      create: async (config: VercelConfig, sandboxId: string, options?: { name?: string }) => {
         const creds = resolveCredentials(config);
         const sandbox = creds.useOidc
           ? await VercelSandbox.get({ name: sandboxId })
           : await VercelSandbox.get({ name: sandboxId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
-        return await sandbox.snapshot();
+        const snapshot = await sandbox.snapshot();
+        // @vercel/sandbox's Snapshot class exposes `snapshotId`, not `id` —
+        // map it to the ComputeSDK Snapshot shape ({ id }) consumers rely on.
+        return {
+          id: snapshot.snapshotId,
+          provider: 'vercel',
+          createdAt: snapshot.createdAt,
+          metadata: { name: options?.name, sourceSessionId: snapshot.sourceSessionId },
+        };
       },
-      list: async (_config: VercelConfig) => { throw new Error(`Vercel provider does not support listing snapshots.`); },
+      list: async (config: VercelConfig) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const page = await VercelSnapshot.list(credentialParams(creds) as any);
+        return (page.snapshots ?? [])
+          .filter((snap: any) => snap.status === 'created')
+          .map((snap: any) => ({
+            id: snap.id,
+            provider: 'vercel',
+            createdAt: new Date(snap.createdAt),
+            metadata: { sourceSessionId: snap.sourceSessionId, sizeBytes: snap.sizeBytes, region: snap.region },
+          }));
+      },
       delete: async (config: VercelConfig, snapshotId: string) => {
         const creds = resolveCredentials(config);
         const snapshot = creds.useOidc
           ? await VercelSnapshot.get({ snapshotId })
           : await VercelSnapshot.get({ snapshotId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
         await snapshot.delete();
-      }
+      },
+      // The whole rootfs (/tmp, $HOME, /etc, ...) is restored; processes are
+      // not. Snapshotting stops the source (it still exists and needs
+      // destroying); its next call starts a new session from the snapshot.
+      capabilities: { scope: 'rootfs', memory: false, destroysSource: true, source: 'stopped' },
     },
 
     template: {
@@ -265,6 +394,51 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig, any, VercelSna
           : await VercelSnapshot.get({ snapshotId: templateId, token: creds.token, teamId: creds.teamId, projectId: creds.projectId });
         await snapshot.delete();
       }
+    },
+
+    volume: {
+      create: async (config: VercelConfig, options) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const params = creds.useOidc
+          ? { name: options.name }
+          : { name: options.name, token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+        const drive = await VercelDrive.getOrCreate(params as any);
+        return { id: drive.driveId, name: drive.name, native: drive };
+      },
+      get: async (config: VercelConfig, name: string) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        try {
+          const params = creds.useOidc
+            ? { name }
+            : { name, token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+          const drive = await VercelDrive.get(params as any);
+          return { id: drive.driveId, name: drive.name, native: drive };
+        } catch { return null; }
+      },
+      list: async (config: VercelConfig) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const params = creds.useOidc
+          ? {}
+          : { token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+        const page = await VercelDrive.list(params as any);
+        const out: any[] = [];
+        for await (const drive of page as any) {
+          out.push({ id: drive.driveId, name: drive.name, native: drive });
+        }
+        return out;
+      },
+      delete: async (config: VercelConfig, name: string) => {
+        const creds = resolveCredentials(config);
+        validateCredentials(creds);
+        const params = creds.useOidc
+          ? { name }
+          : { name, token: creds.token, teamId: creds.teamId, projectId: creds.projectId };
+        const drive = await VercelDrive.get(params as any);
+        await withVolumeSettle(() => drive.delete());
+      },
     }
   }
 });
