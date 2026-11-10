@@ -83,7 +83,8 @@ is repeatable. `--event` and `--status` accept multiple values. Status filters
 are conclusions (`passed`, `failed`, `running`, `cancelled`, `none`) and exclude
 upcoming fires. `--limit` pages actual runs (default 100, maximum 500).
 When another page exists, copy the printed `--cursor` command: it preserves the
-resolved window, timezone and filters. Credentials are never printed; reuse the
+resolved window, timezone and filters, including a leading `compute --org <slug>`
+override (a command-local `--org` takes precedence). Credentials are never printed; reuse the
 same API-key environment or supply the same `--api-key` separately.
 
 `--json` returns the complete API response, including `days`, `runs`, `upcoming`,

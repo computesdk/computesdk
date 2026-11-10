@@ -1143,6 +1143,7 @@ export function registerActionsCommands(program: Command): void {
       .option('--limit <n>', 'past-run page size (default 100, max 500)')
       .option('--cursor <cursor>', 'nextCursor from a prior page; keep the window and filters unchanged'),
   ).action(async (opts: ScheduleOpts) => {
+    opts.org ??= program.opts<CommonOpts>().org;
     try {
       const query = scheduleQuery(opts);
       const data = await (await client(opts)).get<CiSchedule>('/api/v1/actions/schedule', query);

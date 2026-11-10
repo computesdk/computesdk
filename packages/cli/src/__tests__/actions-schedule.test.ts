@@ -32,7 +32,7 @@ describe('compute actions schedule', () => {
     vi.spyOn(console, 'log').mockImplementation(log);
     vi.spyOn(process.stdout, 'write').mockImplementation(stdout);
   });
-  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
   it('defaults to now through seven days later in the local time zone and returns the complete JSON response', async () => {
     await run('--json');
@@ -68,6 +68,25 @@ describe('compute actions schedule', () => {
   it('uses seven days after an explicit from when to is omitted', async () => {
     await run('--from', '2026-11-01T00:00:00Z');
     expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('to')).toBe('2026-11-08T00:00:00.000Z');
+  });
+
+  it.each([undefined, 'other-org'])('preserves a leading root org, with local override %s, in the next-page command', async (localOrg) => {
+    const program = new Command().exitOverride().option('--org <slug>');
+    program.hook('preAction', (root) => {
+      if (root.opts().org) vi.stubEnv('COMPUTE_ORG', root.opts().org);
+    });
+    registerActionsCommands(program);
+    await program.parseAsync(['--org', 'acme', 'actions', 'schedule', '--api-key', 'test-key',
+      '--base-url', 'http://localhost:3000', ...(localOrg ? ['--org', localOrg] : [])], { from: 'user' });
+    const hint = log.mock.calls.flat().join('\n').split('\n').find((line) => line.startsWith('compute actions schedule'));
+    expect(hint).toContain(`--org ${localOrg ?? 'acme'}`);
+    const copied = new Command().exitOverride().option('--org <slug>');
+    registerActionsCommands(copied);
+    log.mockClear();
+    vi.unstubAllEnvs();
+    const copiedArgs = String(hint).replace(/^compute /, '').match(/'[^']*'|\S+/g)!.map((arg) => arg.replace(/^'|'$/g, ''));
+    await copied.parseAsync([...copiedArgs, '--api-key', 'test-key'], { from: 'user' });
+    expect(log.mock.calls.flat().join('\n')).toContain(`--org ${localOrg ?? 'acme'}`);
   });
 
   it('passes the reliability-only view option with empty JSON results', async () => {
