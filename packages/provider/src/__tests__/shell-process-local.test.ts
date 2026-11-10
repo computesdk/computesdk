@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import { defineProvider } from '../factory.js'
 import {
   ShellProcessRuntime,
   attachShellProcess,
@@ -122,19 +123,37 @@ describe('shell process tier (host sh)', () => {
         child.on('error', reject)
         child.on('close', (code) => resolve({ stdout, stderr, exitCode: code ?? -1, durationMs: Date.now() - started }))
       })
-    const runtime = new ShellProcessRuntime(ephemeral)
+    const provider = defineProvider({
+      name: 'ephemeral',
+      methods: {
+        instances: {
+          create: async () => ({ instance: {}, instanceId: 'ephemeral-1' }),
+          getById: async () => null,
+          list: async () => [],
+          destroy: async () => {},
+          runCommand: (_instance, command, options) => ephemeral(command, options),
+          getInfo: async () => { throw new Error('unused') },
+          getUrl: async () => '',
+        },
+      },
+    })({})
+    const instance = await provider.instances.create()
+    expect(instance.processRuntime?.streaming).toBe('shell')
     const chunks: string[] = []
-    await expect(runtime.runCommand(`echo x >> ${counter}; echo hi`, { onStdout: (c) => chunks.push(c) }))
+    await expect(instance.runCommand(`echo x >> ${counter}; echo hi`, { onStdout: (c) => chunks.push(c) }))
       .rejects.toMatchObject({ code: 'unsupported' })
-    expect(runtime.supportsStreaming).toBe(false)
+    expect(instance.processRuntime?.streaming).toBe('unsupported')
     expect(chunks).toEqual([])
     expect(fs.existsSync(counter)).toBe(false)
-    const result = await runtime.runCommand(`echo x >> ${counter}; echo hi`, {})
+    await expect(instance.runCommand(`echo unexpected >> ${counter}`, { onStderr: (c) => chunks.push(c) }))
+      .rejects.toMatchObject({ code: 'unsupported' })
+    expect(fs.existsSync(counter)).toBe(false)
+    const result = await instance.runCommand(`echo x >> ${counter}; echo hi`)
     expect(result).toMatchObject({ exitCode: 0, stdout: 'hi\n' })
     expect(chunks).toEqual([])
     await new Promise((r) => setTimeout(r, 1000))
     expect(fs.readFileSync(counter, 'utf8')).toBe('x\n')
-    await expect(runtime.startProcess('echo hi')).rejects.toMatchObject({ code: 'unsupported' })
+    await expect(instance.startProcess('echo hi')).rejects.toMatchObject({ code: 'unsupported' })
   }, 30_000)
 
   it('confirms state once, then launches without the hold', async () => {

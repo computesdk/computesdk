@@ -31,6 +31,13 @@ export interface CreateSnapshotOptions {
   provider?: string;
 }
 
+export interface ComputeListSnapshotsOptions {
+  instanceId?: string;
+  /** @deprecated Use instanceId. */
+  sandboxId?: string;
+  limit?: number;
+}
+
 export interface ComputeCreateVolumeOptions extends CreateVolumeOptions {
   /** Optional provider name override (must match provider.name) */
   provider?: string;
@@ -45,7 +52,7 @@ interface ProviderInstanceManager {
 
 interface ProviderSnapshotManager {
   create(instanceId: string, options?: { name?: string; metadata?: Record<string, any> }): Promise<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>;
-  list(): Promise<Array<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>>;
+  list(options?: ComputeListSnapshotsOptions): Promise<Array<{ id: string; provider: string; createdAt: Date | string; metadata?: Record<string, any> }>>;
   delete(snapshotId: string): Promise<void>;
 }
 
@@ -253,7 +260,7 @@ class ComputeManager {
     const known = this.snapshotProviders.get(snapshotId);
     const providers = this.getProviders().filter((p) => !!p.snapshot);
     if (!known) return providers;
-    return [known, ...providers.filter((p) => p !== known)];
+    return [known];
   }
 
   private getSnapshotCreateCandidates(instanceId: string, preferredProviderName?: string): DirectProvider[] {
@@ -442,12 +449,12 @@ class ComputeManager {
       );
     },
 
-    list: async (): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
+    list: async (options?: ComputeListSnapshotsOptions): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
       const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
 
       for (const provider of this.getProviders()) {
         if (!provider.snapshot) continue;
-        const listed = await provider.snapshot.list();
+        const listed = await provider.snapshot.list(options);
         for (const snapshot of listed) {
           this.snapshotProviders.set(snapshot.id, provider);
           snapshots.push({
@@ -471,6 +478,7 @@ class ComputeManager {
           this.snapshotProviders.delete(snapshotId);
           return;
         } catch (error) {
+          if (this.snapshotProviders.has(snapshotId)) throw error;
           errors.push(`${getProviderLabel(provider, index)}: ${getProviderErrorDetail(error)}`);
         }
       }

@@ -55,7 +55,7 @@ export class ShellProcessUnsupportedError extends Error {
 /** The instance's execs share no files or processes (e.g. a fresh container per exec), so jobs cannot outlive one exec. */
 export class ShellStateNotPersistentError extends ShellProcessUnsupportedError {
   constructor() {
-    super('persistent state', 'shell-process: unsupported — this instance does not keep files or processes between commands, so background processes cannot run on it');
+    super('persistent state', 'shell-process: unsupported — this instance does not keep files or processes between commands, so live streaming and background processes are unavailable');
     this.name = 'ShellStateNotPersistentError';
   }
 }
@@ -457,9 +457,8 @@ export async function runCommandViaShell(
 /**
  * The shell tier for one instance. The first launch is held until a confirm
  * exec proves the instance keeps state between commands; the verdict is
- * cached. On an instance that keeps none, streaming `runCommand` falls back to
- * one plain exec with its output delivered at exit, and `startProcess` throws
- * {@link ShellStateNotPersistentError}.
+ * cached. On an instance that keeps none, streaming and `startProcess` throw
+ * {@link ShellStateNotPersistentError}; buffered commands remain available.
  */
 export class ShellProcessRuntime {
   private state: 'unknown' | 'persistent' | 'ephemeral' = 'unknown';

@@ -565,9 +565,6 @@ export const beam = defineProvider<SandboxInstance, BeamConfig>({
             throw new Error(`Failed to create Beam snapshot: ${error instanceof Error ? error.message : String(error)}`);
           }
         }),
-      // beam-js exposes no checkpoint list or delete RPC.
-      list: async (_config: BeamConfig) => [],
-      delete: async (_config: BeamConfig, _snapshotId: string) => { /* no delete API */ },
     },
 
     volume: {

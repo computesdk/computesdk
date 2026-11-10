@@ -13,7 +13,7 @@ import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOp
 /** Which runtime served streaming and background processes in a conformance run. */
 export interface ProcessRuntimeCoverage {
   provider: string;
-  streaming: ProcessTier | 'unknown';
+  streaming: ProcessTier | 'unsupported' | 'unknown';
   processes: ProcessTier | 'unknown';
 }
 
@@ -59,7 +59,7 @@ export interface ProviderTestConfig {
    * The suite always records coverage in {@link processRuntimeCoverage}; with
    * this set it also fails when a provider silently changes tier.
    */
-  expectProcessRuntime?: { streaming?: ProcessTier; processes?: ProcessTier };
+  expectProcessRuntime?: { streaming?: ProcessTier | 'unsupported'; processes?: ProcessTier };
   /**
    * Whether to exercise `instance.pause()`/`resume()`. Sources are created
    * with the provider's declared `sandbox.pause.createOptions`. Defaults to

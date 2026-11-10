@@ -409,7 +409,6 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           throw new Error(`Failed to create Modal snapshot: ${error instanceof Error ? error.message : String(error)}`);
         }
       },
-      list: async (_config: ModalConfig) => [],
       delete: async (config: ModalInternalConfig, snapshotId: string) => {
         config._imageCache.delete(snapshotId);
         try {

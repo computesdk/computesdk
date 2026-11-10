@@ -377,6 +377,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
     },
 
     snapshot: {
+      listScope: 'instance',
       // Snapshots hold memory and disk: restores keep the whole filesystem,
       // tmpfs /tmp included, and running processes. The source keeps running.
       capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
@@ -391,14 +392,10 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
           rethrowFriendly(error, 'Failed to create Superserve snapshot');
         }
       },
-      list: async (config: SuperserveConfig, options?: { sandboxId?: string; limit?: number }) => {
-        // Snapshots are listed per sandbox. Callers that aggregate across
-        // providers pass no options, so an unscoped call returns nothing
-        // instead of throwing and failing their whole listing.
-        if (!options?.sandboxId) return [];
+      list: async (config: SuperserveConfig, options: { sandboxId?: string; limit?: number } = {}) => {
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
-        const infos = await SuperserveSnapshot.list(options.sandboxId, { apiKey, baseUrl, limit: options.limit });
+        const infos = await SuperserveSnapshot.list(options.sandboxId!, { apiKey, baseUrl, limit: options.limit });
         return infos.map(toSnapshot);
       },
       delete: async (config: SuperserveConfig, snapshotId: string) => {

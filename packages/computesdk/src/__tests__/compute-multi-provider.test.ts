@@ -346,4 +346,41 @@ describe('compute multi-provider', () => {
     expect(sandbox.provider).toBe('e2b');
     expect(e2bCreate).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards scoped snapshot listing and does not turn unsupported inventory into empty results', async () => {
+    const list = vi.fn().mockResolvedValue([]);
+    const provider = makeProvider('scoped', {}, { list });
+    const sdk = compute({ provider });
+    const options = { instanceId: 'source', limit: 3 };
+    await expect(sdk.snapshot.list(options)).resolves.toEqual([]);
+    expect(list).toHaveBeenCalledWith(options);
+    const unsupported = Object.assign(new Error('snapshot.list is unsupported'), { code: 'unsupported' });
+    list.mockRejectedValueOnce(unsupported);
+    await expect(sdk.snapshot.list()).rejects.toBe(unsupported);
+  });
+
+  it('continues past unsupported deletion when the snapshot owner is unknown', async () => {
+    const unsupported = makeProvider('unsupported', {}, {
+      delete: async () => { throw new Error('snapshot.delete is unsupported'); },
+    });
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const sdk = compute({ providers: [unsupported, makeProvider('owner', {}, { delete: remove })] });
+    await sdk.snapshot.delete('unknown-snapshot');
+    expect(remove).toHaveBeenCalledWith('unknown-snapshot');
+  });
+
+  it('preserves a known snapshot owner failure instead of claiming success through another provider', async () => {
+    const failure = Object.assign(new Error('snapshot.delete is unsupported'), { code: 'unsupported' });
+    const removeOwner = vi.fn().mockRejectedValue(failure);
+    const removeOther = vi.fn().mockResolvedValue(undefined);
+    const sdk = compute({ providers: [
+      makeProvider('owner', {}, { delete: removeOwner }),
+      makeProvider('other', {}, { delete: removeOther }),
+    ] });
+    const snapshot = await sdk.snapshot.create('source', { provider: 'owner' });
+    await expect(sdk.snapshot.delete(snapshot.id)).rejects.toBe(failure);
+    await expect(sdk.snapshot.delete(snapshot.id)).rejects.toBe(failure);
+    expect(removeOwner).toHaveBeenCalledTimes(2);
+    expect(removeOther).not.toHaveBeenCalled();
+  });
 });
