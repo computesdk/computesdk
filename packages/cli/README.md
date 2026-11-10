@@ -245,14 +245,28 @@ error. The rate table needs the org's sandboxes feature.
 entry). Both repeat, and the CLI checks only their syntax; the platform checks
 provider and preset names. `compute instances settings` prints the resulting
 `resources` and `warm pool` rows.
+
 ## compute bench
 
 `compute bench …` runs the benchmarks CLI (`bench`) in-process: the same
-commands, flags and output as `bench …`. This release bundles
-`@benchsdk/runner` 0.8.3 with `@benchsdk/cli` 0.9.3 (`compute bench --version`
-prints the bench CLI version), which adds `bench fork`, `bench runs run-again`
+commands, flags and output as `bench …`; `compute bench --version` prints the
+version of the bench CLI it runs. The last release bundles `@benchsdk/runner`
+0.8.3 with `@benchsdk/cli` 0.9.3, which adds `bench fork`, `bench runs run-again`
 and the result filters `--participant`, `--since`, `--until`, `--day`, `--tz`
 and `--source-org`.
+
+This branch also links the benchmarks branch build (see "Developing against a
+bench branch build" below), so `compute bench` has the newer bench commands:
+
+```bash
+compute bench benchmarks archive|restore|describe|mute|unmute|pause|resume <slug>
+compute bench benchmarks list --status active|archived|all
+compute bench runs archive|unarchive <runId...> -y
+compute bench runs feed | runs days | runs day <YYYY-MM-DD> [--all]
+compute bench reliability <slug> | reliability cards
+compute bench activity [--days N]
+compute bench run-again <slug> [--wait] | run-again status <slug>   # daily Run again; needs a user login
+```
 
 compute's settings are forwarded to bench:
 
@@ -292,6 +306,45 @@ pnpm --filter @computesdk/cli run manifest   # builds, then writes cli-manifest.
 
 `src/__tests__/manifest.test.ts` fails when the committed file differs from
 the built CLI's output.
+
+### Developing against a bench branch build
+
+`@benchsdk/cli` and `@benchsdk/runner` can be pointed at a local checkout of
+[computesdk/benchmarks](https://github.com/computesdk/benchmarks) with a pnpm
+`link:` override in the root `package.json`, so `compute bench` runs bench
+commands that are not published yet:
+
+```json
+"pnpm": {
+  "overrides": {
+    "@benchsdk/cli": "link:../benchmarks-surface-parity/packages/benchsdk-cli",
+    "@benchsdk/runner": "link:../benchmarks-surface-parity/packages/benchsdk-runner"
+  }
+}
+```
+
+The paths are relative to the repository root, so the benchmarks checkout must
+sit next to it (`../benchmarks-surface-parity`, branch `droid/surface-parity`)
+and be installed and built first (`pnpm install && pnpm build` there; the
+linked packages use that checkout's own `node_modules` and `dist/`). Then run
+`pnpm install` here; the override is recorded in `pnpm-lock.yaml`, and
+`pnpm install --frozen-lockfile` accepts it. Without the sibling checkout pnpm
+still installs, with a "non-existent directory" warning and a dangling
+symlink, but typecheck and the CLI tests fail because `@benchsdk/cli` cannot
+be resolved. The override also covers `@computesdk/platform`'s optional
+`@benchsdk/cli` peer, so the workspace has one bench CLI.
+
+While the bench packages resolve to a checkout rather than to an npm install,
+`cli-manifest.json` marks them `"linked": true, "released": false` under
+`passthrough.bench.runner` and `passthrough.bench.cli`: the checkout's version
+number (still `0.9.3` / `0.8.3` until bench is released) does not tell which
+commands it has, so consumers of the manifest should treat every bench
+command as present but unreleased.
+
+Before a release, publish the bench packages, remove the `pnpm.overrides`
+block, set `@benchsdk/cli` / `@benchsdk/runner` in `packages/cli/package.json`
+to the published caret ranges, run `pnpm install`, and regenerate the
+manifest (the `linked` / `released` fields disappear).
 
 ## Migrating from @computesdk/cli 1.x
 

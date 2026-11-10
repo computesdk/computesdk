@@ -8,8 +8,8 @@
 
 import type { Command, Option } from 'commander';
 import { createRequire } from 'module';
-import { existsSync, readFileSync } from 'fs';
-import { dirname, join } from 'path';
+import { existsSync, readFileSync, realpathSync } from 'fs';
+import { dirname, join, sep } from 'path';
 import { BENCH_COMMANDS } from './bench.js';
 
 export const MANIFEST_COMMAND = '__manifest';
@@ -26,6 +26,13 @@ export interface ManifestCommand {
 export interface PackageVersion {
   package: string;
   version: string;
+  /**
+   * Set when the package resolves to a checkout (a `link:` override to a
+   * branch build) rather than an npm install: its version number may not be
+   * published, or may predate the commands it carries.
+   */
+  linked?: true;
+  released?: false;
 }
 
 export interface CliManifest {
@@ -60,13 +67,27 @@ export function resolvedPackage(name: string, fromDir: string): { dir: string; v
   }
 }
 
+/** An installed package's real path always runs through node_modules; a linked checkout's does not. */
+export function isLinkedPackage(realDir: string): boolean {
+  return !realDir.split(sep).includes('node_modules');
+}
+
+function packageVersion(name: string, resolved: { dir: string; version: string }): PackageVersion {
+  const entry: PackageVersion = { package: name, version: resolved.version };
+  if (isLinkedPackage(realpathSync(resolved.dir))) {
+    entry.linked = true;
+    entry.released = false;
+  }
+  return entry;
+}
+
 /** The bench versions `compute bench` runs: the runner, and the @benchsdk/cli the runner itself loads. */
 export function bundledBench(fromDir: string): { runner: PackageVersion; cli: PackageVersion } {
   const runner = resolvedPackage('@benchsdk/runner', fromDir);
   const cli = resolvedPackage('@benchsdk/cli', runner.dir);
   return {
-    runner: { package: '@benchsdk/runner', version: runner.version },
-    cli: { package: '@benchsdk/cli', version: cli.version },
+    runner: packageVersion('@benchsdk/runner', runner),
+    cli: packageVersion('@benchsdk/cli', cli),
   };
 }
 

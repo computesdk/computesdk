@@ -203,4 +203,56 @@ describe.skipIf(!existsSync(distEntry))('compute bench (built CLI)', () => {
     expect(out).not.toContain('platform.computesdk.com');
     expect(out).not.toContain('No credentials found');
   });
+
+  // The bench commands added on the benchmarks branch (since @benchsdk/cli
+  // 0.9.4) reach compute only through the linked branch build; published
+  // 0.9.3 prints the generic usage for them (it already has `reliability`).
+  it('exposes `bench reliability`', () => {
+    const res = compute(['bench', 'reliability', '--help']);
+    expect(res.status).toBe(0);
+    expect(res.stdout.split('\n')[0]).toMatch(/^Usage: bench reliability <benchmark-slug>/);
+  });
+
+  it('exposes `bench retrigger` with --wait, --timeout and status', () => {
+    const res = compute(['bench', 'retrigger', '--help']);
+    expect(res.status).toBe(0);
+    expect(res.stdout.split('\n')[0]).toMatch(/^Usage: bench retrigger <benchmark-slug>/);
+    for (const text of ['--wait', '--timeout', 'bench retrigger status']) expect(res.stdout).toContain(text);
+  });
+
+  it('exposes the benchmark management commands', () => {
+    const res = compute(['bench', 'benchmarks', 'pause', '--help']);
+    expect(res.status).toBe(0);
+    expect(res.stdout).toMatch(/bench benchmarks pause <benchmark-slug> \[--start <iso>\] \[--end <iso>\]/);
+    expect(res.stdout).toContain('bench benchmarks describe <benchmark-slug>');
+  });
+
+  it('lists the run feed, reliability cards, activity and run archive commands', () => {
+    const res = compute(['bench', '--help']);
+    for (const text of ['runs feed', 'runs days', 'runs day <YYYY-MM-DD>', 'runs archive|unarchive', 'reliability cards', 'activity [--days N]', 'retrigger <benchmark-slug>']) {
+      expect(res.stdout).toContain(text);
+    }
+  });
+
+  it('`compute bench --version` is the version of the bench build it runs', () => {
+    const runner = packageJsonOf('@benchsdk/runner', pkgDir);
+    const runnerCli = packageJsonOf('@benchsdk/cli', dirname(runner.path));
+    const bin = join(dirname(runner.path), 'dist', 'bin.cjs');
+    const own = execFileSync(process.execPath, [distEntry, 'bench', '--version'], { encoding: 'utf-8', env: cleanEnv() }).trim();
+    const direct = execFileSync(process.execPath, [bin, '--version'], { encoding: 'utf-8', env: cleanEnv() }).trim();
+    expect(own).toBe(runnerCli.version);
+    expect(own).toBe(direct);
+  });
+
+  it('`compute bench __manifest` is the bundled bench manifest', () => {
+    const runner = packageJsonOf('@benchsdk/runner', pkgDir);
+    const bin = join(dirname(runner.path), 'dist', 'bin.cjs');
+    const own = execFileSync(process.execPath, [distEntry, 'bench', '__manifest'], { encoding: 'utf-8', env: cleanEnv() });
+    const direct = execFileSync(process.execPath, [bin, '__manifest'], { encoding: 'utf-8', env: cleanEnv() });
+    expect(own).toBe(direct);
+    const paths = (JSON.parse(own) as { commands: Array<{ path: string[] }> }).commands.map((c) => c.path.join(' '));
+    expect(paths).toEqual(
+      expect.arrayContaining(['benchmarks pause', 'runs feed', 'runs day', 'reliability cards', 'activity', 'retrigger status']),
+    );
+  });
 });

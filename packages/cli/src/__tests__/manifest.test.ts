@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { bundledBench, type CliManifest } from '../manifest.js';
+import { bundledBench, isLinkedPackage, type CliManifest } from '../manifest.js';
 
 // `pretest` builds dist/, so this exercises the real `compute` binary.
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -60,7 +60,7 @@ describe('compute __manifest', () => {
       aliases: [['benchmark']],
       ...bundledBench(pkgDir),
     });
-    expect(manifest.passthrough.bench.cli).toEqual({ package: '@benchsdk/cli', version: expect.any(String) });
+    expect(manifest.passthrough.bench.cli).toMatchObject({ package: '@benchsdk/cli', version: expect.any(String) });
   });
 
   it('lists nested commands by canonical path, with every alias spelling', () => {
@@ -110,6 +110,28 @@ describe('compute __manifest', () => {
     );
     expect(failures).toEqual([]);
   }, 120_000);
+
+  it('marks a bench linked from a branch build (not installed from npm) as unreleased', () => {
+    const manifest = JSON.parse(computeManifest()) as CliManifest;
+    const root = JSON.parse(readFileSync(join(pkgDir, '..', '..', 'package.json'), 'utf-8')) as {
+      pnpm?: { overrides?: Record<string, string> };
+    };
+    for (const key of ['runner', 'cli'] as const) {
+      const entry = manifest.passthrough.bench[key];
+      const override = root.pnpm?.overrides?.[entry.package];
+      if (override?.startsWith('link:')) {
+        expect(entry).toMatchObject({ linked: true, released: false });
+      } else {
+        expect(entry).not.toHaveProperty('linked');
+        expect(entry).not.toHaveProperty('released');
+      }
+    }
+  });
+
+  it('isLinkedPackage tells an npm install from a linked checkout', () => {
+    expect(isLinkedPackage('/repo/node_modules/.pnpm/@benchsdk+cli@0.9.1/node_modules/@benchsdk/cli')).toBe(false);
+    expect(isLinkedPackage('/work/benchmarks/packages/benchsdk-cli')).toBe(true);
+  });
 
   it('stamps source.released with --released', () => {
     expect(JSON.parse(computeManifest('--released')).source.released).toBe(true);

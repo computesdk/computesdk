@@ -4,6 +4,10 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@benchsdk/cli': link:../benchmarks-surface-parity/packages/benchsdk-cli
+  '@benchsdk/runner': link:../benchmarks-surface-parity/packages/benchsdk-runner
+
 importers:
 
   .:
@@ -745,11 +749,11 @@ importers:
   packages/cli:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.9.3
-        version: 0.9.3
+        specifier: link:../../../benchmarks-surface-parity/packages/benchsdk-cli
+        version: link:../../../benchmarks-surface-parity/packages/benchsdk-cli
       '@benchsdk/runner':
-        specifier: ^0.8.3
-        version: 0.8.3
+        specifier: link:../../../benchmarks-surface-parity/packages/benchsdk-runner
+        version: link:../../../benchmarks-surface-parity/packages/benchsdk-runner
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
@@ -2192,8 +2196,8 @@ importers:
   packages/platform:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.9.3
-        version: 0.9.3
+        specifier: link:../../../benchmarks-surface-parity/packages/benchsdk-cli
+        version: link:../../../benchmarks-surface-parity/packages/benchsdk-cli
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -3461,23 +3465,6 @@ packages:
     resolution: {integrity: sha512-C7ABDsYtpCImgHdM5tOer2N+Mjc/hpiEFkxEX0XGMn5A7UOHvifncxuLh2vBntEp9nu0v+B6JR/jC1e5sChxbg==}
     peerDependencies:
       typescript: ^5.0.0
-
-  '@benchsdk/api@0.11.1':
-    resolution: {integrity: sha512-yoT00Fm/V531uCK2/1SHSjFL2/AvxfnW2AV3ZZunBSilP1K2O6ehWWnFRA2Klux7xR5kM0BOhi0XKDXDYtPKaw==}
-    engines: {node: '>=18.0.0'}
-
-  '@benchsdk/cli@0.9.3':
-    resolution: {integrity: sha512-RhVAWctAuPFnJfZ86megoWFlqhiYGWzIdhrbaS+I9hN3N+/1qoCHHnsH4FiACwmRz2vKaEDUGvajJ86FgqfwBA==}
-    engines: {node: '>=18.0.0'}
-
-  '@benchsdk/runner@0.8.3':
-    resolution: {integrity: sha512-yZGMS/zLvx7vS3bBk6Y+dvhUeyphFK3xqNmqM/pOr4YvGjazOMU9G6vgHBTd5kq/vsUKJTPgmjq/EYKMmLg4ng==}
-    engines: {node: '>=18.0.0'}
-    hasBin: true
-
-  '@benchsdk/worker@0.4.1':
-    resolution: {integrity: sha512-IBll4ycysv48EuWxdiy3saIFPA4wa3fYKoiWElYgxic1d310jdGJ0NUqgY9JEsjQNesmN86wLysc1KHE+mhWPQ==}
-    engines: {node: '>=18.0.0'}
 
   '@blaxel/core@0.3.21':
     resolution: {integrity: sha512-a+JxiT1I6OKcm+6mxPcVjWo9u1LjBwPf8hmspnrGU73UbJYzvG6YeYz7VLQubf+rKocDpiqhzkMjasG/I77b8Q==}
@@ -10371,22 +10358,6 @@ snapshots:
       - debug
       - supports-color
       - utf-8-validate
-
-  '@benchsdk/api@0.11.1': {}
-
-  '@benchsdk/cli@0.9.3':
-    dependencies:
-      '@benchsdk/api': 0.11.1
-
-  '@benchsdk/runner@0.8.3':
-    dependencies:
-      '@benchsdk/api': 0.11.1
-      '@benchsdk/cli': 0.9.3
-      '@benchsdk/worker': 0.4.1
-
-  '@benchsdk/worker@0.4.1':
-    dependencies:
-      '@benchsdk/api': 0.11.1
 
   '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:

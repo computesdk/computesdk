@@ -2982,11 +2982,15 @@
       ],
       "runner": {
         "package": "@benchsdk/runner",
-        "version": "0.8.1"
+        "version": "0.8.1",
+        "linked": true,
+        "released": false
       },
       "cli": {
         "package": "@benchsdk/cli",
-        "version": "0.9.1"
+        "version": "0.9.1",
+        "linked": true,
+        "released": false
       }
     }
   }
