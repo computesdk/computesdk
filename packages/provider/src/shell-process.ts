@@ -465,7 +465,7 @@ export class ShellProcessRuntime {
 
   constructor(private readonly run: CommandRunner) {}
 
-  get supportsStreaming(): boolean {
+  get supportsPersistentState(): boolean {
     return this.state !== 'ephemeral';
   }
 

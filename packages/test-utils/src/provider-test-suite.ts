@@ -14,7 +14,7 @@ import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOp
 export interface ProcessRuntimeCoverage {
   provider: string;
   streaming: ProcessTier | 'unsupported' | 'unknown';
-  processes: ProcessTier | 'unknown';
+  processes: ProcessTier | 'unsupported' | 'unknown';
 }
 
 /** Coverage recorded by every suite run in this process, for reporting. */
@@ -59,7 +59,7 @@ export interface ProviderTestConfig {
    * The suite always records coverage in {@link processRuntimeCoverage}; with
    * this set it also fails when a provider silently changes tier.
    */
-  expectProcessRuntime?: { streaming?: ProcessTier | 'unsupported'; processes?: ProcessTier };
+  expectProcessRuntime?: { streaming?: ProcessTier | 'unsupported'; processes?: ProcessTier | 'unsupported' };
   /**
    * Whether to exercise `instance.pause()`/`resume()`. Sources are created
    * with the provider's declared `sandbox.pause.createOptions`. Defaults to

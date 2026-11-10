@@ -32,7 +32,7 @@ export interface ProviderInstance<TInstance = any> extends Omit<InstanceInterfac
   /** Destroy instance and clean up resources */
   destroy(): Promise<void>;
   /** Which runtime serves streaming `runCommand` and `startProcess` on this instance. */
-  readonly processRuntime?: { streaming: ProcessTier | 'unsupported'; processes: ProcessTier };
+  readonly processRuntime?: { streaming: ProcessTier | 'unsupported'; processes: ProcessTier | 'unsupported' };
   /**
    * Rebuilds a handle for a shell-tier process from its `jobId` — e.g. in a
    * new client after a restart. Output replays from the start of the job's log.

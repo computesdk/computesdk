@@ -486,7 +486,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   readonly extendLifetime?: (ms: number) => Promise<void>;
   private daemonStreamState?: DaemonStreamState;
   /** Which runtime serves streaming `runCommand` and `startProcess`. */
-  readonly processRuntime: { streaming: ProcessTier | 'unsupported'; processes: ProcessTier };
+  readonly processRuntime: { streaming: ProcessTier | 'unsupported'; processes: ProcessTier | 'unsupported' };
   /** The shell process tier, built on the provider's plain `runCommand`. */
   private readonly shell: ShellProcessRuntime;
   constructor(
@@ -504,9 +504,11 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     const shell = this.shell = new ShellProcessRuntime((command, options) => this.methods.runCommand(this.instance, command, options));
     this.processRuntime = {
       get streaming() {
-        return methods.streamCommand ? 'native' : fallback === 'shell' && !shell.supportsStreaming ? 'unsupported' : fallback;
+        return methods.streamCommand ? 'native' : fallback === 'shell' && !shell.supportsPersistentState ? 'unsupported' : fallback;
       },
-      processes: methods.startProcess ? 'native' : fallback,
+      get processes() {
+        return methods.startProcess ? 'native' : fallback === 'shell' && !shell.supportsPersistentState ? 'unsupported' : fallback;
+      },
     };
     this.sandboxId = instanceId;
     this.provider = providerName;

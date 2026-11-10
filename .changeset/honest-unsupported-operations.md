@@ -15,4 +15,5 @@ failures rather than trying a different provider.
 
 Reject callback-based streaming on stateless shell runtimes instead of replaying
 completed output as live callbacks. Buffered commands remain supported; detected
-stateless instances report streaming as unsupported.
+stateless instances report shell streaming and background processes as unsupported,
+without disabling either operation when the provider implements its native hook.

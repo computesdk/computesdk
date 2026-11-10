@@ -316,7 +316,7 @@ methods: {
 const provider = e2b({ apiKey, processRuntime: 'daemond' });
 ```
 
-`instance.processRuntime` reports which tier serves each capability, e.g. `{ streaming: 'native', processes: 'shell' }`. After the shell tier detects that an instance cannot preserve state across commands, `streaming` reports `'unsupported'` unless native streaming is available.
+`instance.processRuntime` reports which tier serves each capability, e.g. `{ streaming: 'native', processes: 'shell' }`. After the shell tier detects that an instance cannot preserve state across commands, both capabilities report `'unsupported'` unless their respective native hooks are available.
 
 ### Shell tier
 
