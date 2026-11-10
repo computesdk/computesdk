@@ -36,6 +36,7 @@ export interface ComputeListSnapshotsOptions {
   instanceId?: string;
   /** @deprecated Use instanceId. */
   sandboxId?: string;
+  /** Maximum total results across all configured providers, after instance filtering. */
   limit?: number;
 }
 
@@ -453,6 +454,10 @@ class ComputeManager {
 
     list: async (options?: ComputeListSnapshotsOptions): Promise<Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }>> => {
       const snapshots: Array<{ id: string; provider: string; createdAt: Date; metadata?: Record<string, any> }> = [];
+      const limit = options?.limit;
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 0)) {
+        throw new RangeError('snapshot.list limit must be a non-negative integer.');
+      }
       const instanceId = options?.instanceId ?? options?.sandboxId;
       if (instanceId === '') throw new Error('snapshot.list requires a non-empty instanceId.');
       const known = instanceId ? this.instanceProviders.get(instanceId) : undefined;
@@ -476,6 +481,7 @@ class ComputeManager {
             }
             if (sourceId !== instanceId) continue;
           }
+          if (limit !== undefined && snapshots.length >= limit) continue;
           this.snapshotProviders.set(snapshot.id, provider);
           snapshots.push({
             ...snapshot,

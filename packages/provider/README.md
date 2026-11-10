@@ -153,8 +153,12 @@ With multiple providers, create or resolve the instance through `compute` first,
 or use a single-provider `compute` client. Instance-scoped managers supply the
 filtered inventory; provider-wide inventories must identify each snapshot's
 `instanceId` (or legacy `sandboxId`) so the SDK can filter safely. An inventory
-without source identities rejects scoped listing instead of returning unrelated
+with unidentifiable snapshots rejects scoped listing instead of returning unrelated
 snapshots or pretending the scoped inventory is empty.
+
+`compute.snapshot.list({ limit })` caps the combined results across providers,
+after instance filtering. Limits must be non-negative integers. A limit does not
+hide unsupported inventory operations from configured providers.
 
 ### Required Instance Methods
 
