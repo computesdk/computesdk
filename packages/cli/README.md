@@ -405,8 +405,8 @@ be resolved. The override also covers `@computesdk/platform`'s optional
 While the bench packages resolve to a checkout rather than to an npm install,
 `cli-manifest.json` marks them `"linked": true, "released": false` under
 `passthrough.bench.runner` and `passthrough.bench.cli`: the checkout's version
-number (still `0.9.3` / `0.8.3` until bench is released) does not tell which
-commands it has, so consumers of the manifest should treat every bench
+number (`0.9.4` / `0.8.4`, the last bench release, until the branch is
+released as `@benchsdk/cli` 0.9.5) does not tell which commands it has, so consumers of the manifest should treat every bench
 command as present but unreleased.
 
 Before a release, publish the bench packages, remove the `pnpm.overrides`

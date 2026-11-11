@@ -3245,13 +3245,13 @@
       ],
       "runner": {
         "package": "@benchsdk/runner",
-        "version": "0.8.3",
+        "version": "0.8.4",
         "linked": true,
         "released": false
       },
       "cli": {
         "package": "@benchsdk/cli",
-        "version": "0.9.3",
+        "version": "0.9.4",
         "linked": true,
         "released": false
       }

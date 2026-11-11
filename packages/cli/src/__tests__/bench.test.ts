@@ -147,15 +147,15 @@ describe('benchInvocation', () => {
 });
 
 describe('bundled bench versions', () => {
-  it('@benchsdk/runner is 0.8.3 or later', () => {
-    expect(atLeast(packageJsonOf('@benchsdk/runner', pkgDir).version, '0.8.3')).toBe(true);
+  it('@benchsdk/runner is 0.8.4 or later', () => {
+    expect(atLeast(packageJsonOf('@benchsdk/runner', pkgDir).version, '0.8.4')).toBe(true);
   });
 
-  it('the runner’s @benchsdk/cli is 0.9.3 or later and the same copy compute imports', () => {
+  it('the runner’s @benchsdk/cli is 0.9.4 or later and the same copy compute imports', () => {
     const runner = packageJsonOf('@benchsdk/runner', pkgDir);
     const runnerCli = packageJsonOf('@benchsdk/cli', dirname(runner.path));
     const ownCli = packageJsonOf('@benchsdk/cli', pkgDir);
-    expect(atLeast(runnerCli.version, '0.9.3')).toBe(true);
+    expect(atLeast(runnerCli.version, '0.9.4')).toBe(true);
     expect(realpathSync(runnerCli.path)).toBe(realpathSync(ownCli.path));
   });
 });
@@ -177,7 +177,7 @@ describe.skipIf(!existsSync(distEntry))('compute bench (built CLI)', () => {
       encoding: 'utf-8',
       env: cleanEnv(),
     }).trim();
-    expect(atLeast(version, '0.9.3')).toBe(true);
+    expect(atLeast(version, '0.9.4')).toBe(true);
   });
 
   it('exposes `bench fork`', () => {
@@ -205,8 +205,8 @@ describe.skipIf(!existsSync(distEntry))('compute bench (built CLI)', () => {
   });
 
   // The bench commands added on the benchmarks branch (since @benchsdk/cli
-  // 0.9.4) reach compute only through the linked branch build; published
-  // 0.9.3 prints the generic usage for them (it already has `reliability`).
+  // 0.9.5) reach compute only through the linked branch build; published
+  // 0.9.4 prints the generic usage for them (it already has `reliability`).
   it('exposes `bench reliability`', () => {
     const res = compute(['bench', 'reliability', '--help']);
     expect(res.status).toBe(0);
