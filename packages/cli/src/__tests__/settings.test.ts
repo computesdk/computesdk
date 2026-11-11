@@ -357,3 +357,86 @@ describe('compute sandboxes settings set --resources / --warm-pool', () => {
     expect(out).toMatch(/warm pool:\s*\n?\s*blaxel {2}1/);
   });
 });
+
+describe('compute actions settings set --resources / --warm-pool / --snapshot-pool', () => {
+  async function rejects(args: string[], build: () => Command = buildActions, lane = 'actions'): Promise<string> {
+    let errText = '';
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('exit');
+    });
+    const err = vi.spyOn(console, 'error').mockImplementation((...a) => void (errText += a.join(' ')));
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      errText += String(chunk);
+      return true;
+    });
+    try {
+      await build().parseAsync([lane, 'settings', 'set', ...args], { from: 'user' });
+    } catch {
+      /* exit */
+    } finally {
+      exit.mockRestore();
+      err.mockRestore();
+      stderr.mockRestore();
+    }
+    expect(patch).not.toHaveBeenCalled();
+    return errText;
+  }
+
+  it('PATCHes sizes and both pools on the actions lane in one call', async () => {
+    patch.mockImplementation(async () => ACTIONS_SETTINGS);
+    await buildActions().parseAsync(
+      [
+        'actions', 'settings', 'set',
+        '--resources', 'blaxel=large', '--resources', 'e2b=none',
+        '--warm-pool', 'blaxel:us-pdx-1=2', '--warm-pool', 'e2b=0',
+        '--snapshot-pool', 'blaxel=8',
+      ],
+      { from: 'user' },
+    );
+    expect(patch).toHaveBeenCalledWith('/api/v1/actions/settings', {
+      providerResources: { blaxel: 'large', e2b: null },
+      warmPool: { 'blaxel:us-pdx-1': 2, e2b: 0 },
+      snapshotPool: { blaxel: 8 },
+    });
+  });
+
+  it('rejects a snapshot pool above 32 and a malformed entry', async () => {
+    expect(await rejects(['--snapshot-pool', 'blaxel=33'])).toMatch(/0\.\.32/);
+    expect(await rejects(['--snapshot-pool', 'blaxel'])).toMatch(/--snapshot-pool/);
+  });
+
+  it('keeps --snapshot-pool off the sandboxes lane', async () => {
+    expect(await rejects(['--snapshot-pool', 'blaxel=1'], buildSandboxes, 'sandboxes')).toMatch(/unknown option/);
+  });
+
+  it('names every actions flag when nothing is passed', async () => {
+    expect(await rejects([])).toMatch(/--resources, --warm-pool, or --snapshot-pool/);
+  });
+
+  it('prints the default order, preset names and the snapshot summary', async () => {
+    get.mockImplementation(async () => ({
+      ...ACTIONS_SETTINGS,
+      providerOrder: [],
+      defaultProviderOrder: ['vercel'],
+      providerResources: { blaxel: { cpus: 4, memoryMb: 8192 } },
+      providerResourcePresets: { blaxel: 'large' },
+      snapshotPool: { blaxel: 4 },
+      snapshotSummary: {
+        workflows: [
+          { repoFullName: 'ada/app', path: '.github/workflows/ci.yml', name: 'CI', snapshotCap: 3 },
+          { repoFullName: 'ada/app', path: '.github/workflows/off.yml', name: 'Off', snapshotCap: 0 },
+          { repoFullName: 'ada/app', path: '.github/workflows/dyn.yml', name: 'Dyn', snapshotCap: null },
+        ],
+        live: [{ repoFullName: 'ada/app', workflowPath: '.github/workflows/ci.yml', count: 2 }],
+      },
+    }));
+    const out = await captureStdout(() => buildActions().parseAsync(['actions', 'settings'], { from: 'user' }));
+    expect(out).toContain('default (vercel)');
+    expect(out).toContain('blaxel  large (4 vCPU / 8192 MB)');
+    expect(out).toMatch(/snapshot pool:\s*\n?\s*blaxel {2}4/);
+    expect(out).toContain('ada/app  .github/workflows/ci.yml  3');
+    expect(out).toContain('ada/app  .github/workflows/off.yml  off');
+    expect(out).not.toContain('dyn.yml');
+    expect(out).toMatch(/live snapshots:\s*\n?\s*ada\/app {2}\.github\/workflows\/ci\.yml {2}2/);
+  });
+});

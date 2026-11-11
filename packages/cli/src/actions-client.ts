@@ -460,6 +460,52 @@ export interface CiProviderInfo {
   usable: boolean;
   /** 1-based position in the effective provider order, null when absent. */
   position: number | null;
+  /** The stored key's last verification; absent from servers that predate it. */
+  status?: 'connected' | 'error' | 'unconfigured';
+  statusDetail?: string | null;
+  /** The stored key's masked hint — never the key. */
+  keyHint?: string | null;
+  lastCheckedAt?: string | null;
+}
+
+/** A GitHub App installation on `GET /api/v1/actions/installations` — never a token. */
+export interface CiInstallation {
+  githubInstallationId: number;
+  account: string;
+  accountType: string | null;
+  accountAvatarUrl: string | null;
+  appSlug: string;
+  repoSelection: 'all' | 'selected';
+  suspended: boolean;
+  suspendedAt: string | null;
+  installedAt: string;
+  configureUrl: string | null;
+  repos: { granted: number; enabled: number };
+}
+
+export interface CiInstallationsResponse {
+  installations: CiInstallation[];
+}
+
+/**
+ * Where a signed-in owner/admin starts an install in their browser. The
+ * platform never mints the signed install link for an API credential.
+ */
+export interface CiInstallLink {
+  configured: boolean;
+  url: string | null;
+  /** GitHub only. */
+  appSlug?: string | null;
+}
+
+/** The org's Slack connection on `GET /api/v1/actions/slack` — never the bot token. */
+export interface CiSlackConnection {
+  installed: boolean;
+  teamName: string | null;
+  channelId: string | null;
+  channelName: string | null;
+  notifyOn: 'all' | 'failure';
+  brief: { enabled: boolean; times: string[]; timeZone: string; categories: string[] };
 }
 
 export interface CiProvidersResponse {

@@ -473,6 +473,22 @@ describe('formatProviderRow', () => {
     expect(row).toContain('no region choice');
     expect(row).toContain('not in provider order');
   });
+
+  it('shows a stored key\'s verification state and hint, never for ambient providers', () => {
+    const keyed = formatProviderRow({
+      ...base,
+      provider: 'blaxel',
+      credential: 'configured',
+      status: 'error',
+      statusDetail: 'provider rejected the key',
+      keyHint: '…wxyz',
+      lastCheckedAt: '2026-01-01T00:00:00.000Z',
+    });
+    expect(keyed).toContain('error');
+    expect(keyed).toContain('…wxyz');
+    expect(keyed).toContain('provider rejected the key');
+    expect(formatProviderRow({ ...base, status: 'connected', keyHint: null })).not.toContain('connected');
+  });
 });
 
 describe('formatVerifyResult', () => {
