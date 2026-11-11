@@ -25,6 +25,18 @@ import type {
 const DEFAULT_IMAGE = 'runcloud/agent-base';
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const DEFAULT_TUNNEL_TTL_SECONDS = 3_600;
+/**
+ * create() can return a sandbox still in `building_image`; every other
+ * operation rejects it with `4409: sandbox is building_image, not running`
+ * until the image is ready, so creates poll for `running` first.
+ */
+const SANDBOX_READY_TIMEOUT_MS = 600_000;
+const SANDBOX_READY_POLL_MS = 1_000;
+const SANDBOX_TERMINAL_STATES = new Set([
+  'interrupted',
+  'failed',
+  'destroyed',
+]);
 /** Refresh a cached tunnel slightly before it expires. */
 const TUNNEL_REFRESH_MARGIN_MS = 30_000;
 /**
@@ -277,6 +289,66 @@ function makeHandle(
   };
 }
 
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortError(signal!));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Polls a just-created sandbox until the control plane reports `running`.
+ * Destroys the sandbox before throwing on terminal states, timeout, or abort,
+ * matching the post-create abort cleanup in createSandbox.
+ */
+async function waitForRunning(
+  client: Client,
+  sandbox: NativeSandbox,
+  signal?: AbortSignal,
+): Promise<NativeSandbox> {
+  const deadline = Date.now() + SANDBOX_READY_TIMEOUT_MS;
+  let current = sandbox;
+  try {
+    while (current.state !== 'running') {
+      if (SANDBOX_TERMINAL_STATES.has(current.state)) {
+        throw new Error(
+          `Run Cloud sandbox ${current.id} reached ${current.state} while waiting for running.`,
+        );
+      }
+      throwIfAborted(signal);
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Run Cloud sandbox ${current.id} was still ${current.state} after ` +
+            `${SANDBOX_READY_TIMEOUT_MS}ms.`,
+        );
+      }
+      if (current.state === 'paused') {
+        // Idle-pause can fire before the first running observation; resume and
+        // keep polling instead of letting the deadline destroy the sandbox.
+        current = await client.sandboxes
+          .resume(current.id)
+          .catch(() => current);
+      }
+      await sleep(SANDBOX_READY_POLL_MS, signal);
+      current = await client.sandboxes.get(current.id);
+    }
+    return current;
+  } catch (error) {
+    // The caller never sees the sandbox id, so clean up whatever the poll left
+    // behind on any failure — terminal state, timeout, abort, or a get()
+    // rejection.
+    await client.sandboxes.destroy(current.id).catch(() => undefined);
+    throw error;
+  }
+}
+
 function rejectSandboxEnvs(options?: CreateInstanceOptions): void {
   if (!options?.envs || Object.keys(options.envs).length === 0) return;
   throw new Error(
@@ -435,6 +507,10 @@ async function createSandbox(
     await client.sandboxes.destroy(sandbox.id).catch(() => undefined);
     throw abortError(options.signal);
   }
+
+  // create()/restore() can return while the sandbox is still building_image;
+  // every subsequent call would fail with 4409 until it reaches running.
+  sandbox = await waitForRunning(client, sandbox, options?.signal);
 
   return { instance: makeHandle(client, sandbox, config), instanceId: sandbox.id,
   };
