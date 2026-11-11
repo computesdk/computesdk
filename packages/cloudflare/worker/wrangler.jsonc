@@ -25,7 +25,8 @@
       "scheduling_policy": "durable_object",
       "images": {
         "default": { "dockerfile": "./Dockerfile" },
-        "builder": { "dockerfile": "./images/builder/Dockerfile" }
+        "builder": { "dockerfile": "./images/builder/Dockerfile" },
+        "ubuntu2404": { "dockerfile": "./images/ubuntu2404/Dockerfile" }
       }
     }
   ],
