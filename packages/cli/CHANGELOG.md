@@ -1,5 +1,39 @@
 # @computesdk/cli
 
+## 2.6.5
+
+### Patch Changes
+
+- 9e83843: Actions parity with the dashboard:
+
+  - `compute actions runs` works without a repo argument (every repo the org has) and takes the platform's run filters: `--event`, `--workflow` (path, name or file name), `--search`, `--archived` and `--reliability`. `--day <YYYY-MM-DD>` lists one day's runs page by page (`--time-zone`, `--cursor`, `--all` to follow every page). New `compute actions runs days` prints how many runs each day holds, and `compute actions runs archive|unarchive <run-id...>` archives or restores runs.
+  - New `compute actions workflows [repo]` lists workflows with their controls (on/off, provider order, snapshot cap) and latest run; `--all` adds user-disabled workflows and those on disabled repos, and `--ref <ref>` lists the workflow files only that branch or tag has, with their inputs. `compute actions workflows enable|disable|set <repo> <workflow>` changes a workflow's controls. `compute actions dispatch --ref <ref>` now also finds a workflow that exists only on that ref and dispatches it by path.
+  - `compute actions repos` rows show each repo's run count, latest run and next poll. New `compute actions branches <repo>` lists a repo's refs (`--search`, `--archived`), `compute actions repos poll <repo>` polls it now (one poll per 30 s; a second prints when to retry), and `compute actions repos set <repo> --fork-prs allow|refuse` sets whether fork pull requests run CI.
+
+  Archive/unarchive, workflow enable/disable/set, repos poll and repos set need an owner or admin, ask for confirmation on a terminal, and need `-y` elsewhere (they exit 1 without it).
+
+- b122dd2: Depend on `@benchsdk/cli` ^0.9.5 and `@benchsdk/runner` ^0.8.6, the releases carrying the bench commands `compute bench` now bundles (benchmark management, the org run feed, daily run again, run analytics) and the `providers` login scopes `compute byok` needs.
+- ccbe8e4: `compute bench` forwards `COMPUTE_PLATFORM_URL`, `COMPUTE_API_KEY` and `COMPUTE_ORG` (or a leading `compute --org <slug> bench …`) to bench as `BENCHMARKS_PLATFORM_URL`, `BENCHMARKS_PLATFORM_API_KEY` and `--org`, without overriding bench's own settings, and a refused connection names the URL it tried. `compute whoami` and `compute org current` read `COMPUTE_API_KEY`; with an org API key they print the key's organization and no user instead of "No credentials found".
+- 27a2166: `compute bench` exposes the newer bench commands: `benchmarks archive|restore|describe|mute|unmute|pause|resume`, `benchmarks list --status`, `runs archive|unarchive`, `runs feed|days|day`, `reliability`, `reliability cards`, `activity`, and `run-again [--wait]` / `run-again status` (the daily Run again, next to the released `runs run-again`). `cli-manifest.json` marks the bundled `@benchsdk/runner` / `@benchsdk/cli` with `"linked": true, "released": false` while they resolve to a local benchmarks checkout instead of an npm install.
+- 3ab2f31: New `compute byok` commands for the org's BYOK providers over `/api/v1/providers`: `compute byok [list]`, `show`, `configure [--verify]`, `verify`, `remove [-y]`, and `rate set <provider> <usd> [--per]` / `rate clear` for custom rates. A custom rate is for the org's own cost reporting only — it never changes billing. `compute actions providers configure|verify|remove` are deprecated in favour of `compute byok`. User logins need `compute login` once more to pick up the `providers` scopes.
+- 02f2189: Add a hidden `compute __manifest` command that prints the CLI's command tree (commands, aliases, arguments, flags, global flags, and the bundled `@benchsdk/runner` / `@benchsdk/cli` versions behind `compute bench`) as JSON. The package now ships the generated `cli-manifest.json`; regenerate it with `pnpm --filter @computesdk/cli run manifest`.
+- 280c4b4: `compute instances list` takes the dashboard's filters and sort: `--customer-only` (leave out idle platform sandboxes), `--search <text>` (label, id, provider, provider sandbox id or product), `--sort created|name|cost|runtime` and `--direction asc|desc`. `--status` help now names `active` (every status but destroyed), which the API already accepted.
+- d9949d5: Sandbox spend and routing on the CLI:
+
+  - New `compute instances costs [--customer-only]` shows the org's sandbox spend (running, settled, total and per provider) from `GET /api/v1/sandboxes/costs`.
+  - `compute instances settings set` takes `--resources <provider>=<preset|none>` and `--warm-pool <provider[:region]>=<0..16>` (both repeatable), and `compute instances settings` prints the resources and warm-pool rows (a provider's size shows only the fields it sets, e.g. `blaxel  2048 MB`).
+
+- 19fcf13: Org members and invitations on the CLI:
+
+  - New `compute org members` lists the organization's members (email, role, name, member id); `--org <slug>` picks the org for a user login.
+  - New `compute org invitations` lists pending invitations with their links, and `compute org invitations cancel <invitationId>` cancels one.
+  - New `compute org invite <email> [--role member|admin]` creates an invitation and prints its link, noting when the email was not sent. Owner invitations are refused (they stay in the web app).
+  - New `compute org member set-role <member> <member|admin>` and `compute org member remove <member>` take a member id or email.
+  - New `compute org leave` leaves the organization; it needs a user login (`compute login`).
+  - New `compute invitations` lists your own pending invitations, with `show <id>`, `accept <id>` and `decline <id>`; they need a user login, and an org API key is refused with `user_credential_required`.
+  - Invite, cancel, set-role, remove, leave and decline ask for confirmation on a terminal and need `-y` elsewhere (they exit 1 without it); accept does not ask.
+  - These commands call `/api/v1/organizations/current/{members,invitations,leave}`, `/api/v1/me/invitations` and `/api/v1/invitations/{id}[/accept|/decline]`, and print the platform's error `hint`.
+
 ## 2.6.4
 
 ### Patch Changes
