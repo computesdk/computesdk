@@ -154,7 +154,7 @@ export function printMembers(res: { members: OrgMember[] }): void {
   }
   printTable(
     ['EMAIL', 'ROLE', 'NAME', 'MEMBER ID', 'JOINED'],
-    res.members.map((m) => [safeTerm(m.email), safeTerm(m.role), safeTerm(m.name ?? '—'), m.id, m.createdAt]),
+    res.members.map((m) => [safeTerm(m.email), safeTerm(m.role), safeTerm(m.name ?? '—'), safeTerm(m.id), safeTerm(m.createdAt)]),
   );
 }
 
@@ -165,7 +165,7 @@ export function printOrgInvitations(res: { invitations: OrgInvitation[] }): void
   }
   printTable(
     ['ID', 'EMAIL', 'ROLE', 'EXPIRES', 'LINK'],
-    res.invitations.map((i) => [i.id, safeTerm(i.email), safeTerm(i.role), i.expiresAt, safeTerm(i.url)]),
+    res.invitations.map((i) => [safeTerm(i.id), safeTerm(i.email), safeTerm(i.role), safeTerm(i.expiresAt), safeTerm(i.url)]),
   );
 }
 
@@ -177,10 +177,10 @@ export function printUserInvitations(res: { invitations: UserInvitation[] }): vo
   printTable(
     ['ID', 'ORG', 'ROLE', 'EXPIRES', 'ORG NAME'],
     res.invitations.map((i) => [
-      i.id,
+      safeTerm(i.id),
       safeTerm(i.organization.slug),
       safeTerm(i.role),
-      i.expiresAt,
+      safeTerm(i.expiresAt),
       safeTerm(i.organization.name),
     ]),
   );
@@ -189,12 +189,12 @@ export function printUserInvitations(res: { invitations: UserInvitation[] }): vo
 
 function printInvitationDetail(inv: UserInvitation): void {
   const rows: Array<[string, string]> = [
-    ['invitation', inv.id],
+    ['invitation', safeTerm(inv.id)],
     ['org', `${safeTerm(inv.organization.slug)} (${safeTerm(inv.organization.name)})`],
     ['email', safeTerm(inv.email)],
     ['role', safeTerm(inv.role)],
     ['status', safeTerm(inv.status)],
-    ['expires', inv.expiresAt],
+    ['expires', safeTerm(inv.expiresAt)],
     ['link', safeTerm(inv.url)],
   ];
   for (const [k, v] of rows) console.log(`${k.padEnd(10)}  ${v}`);
@@ -202,7 +202,7 @@ function printInvitationDetail(inv: UserInvitation): void {
 
 function printInvite(res: InviteResponse): void {
   const inv = res.invitation;
-  console.log(`Invited ${safeTerm(inv.email)} as ${safeTerm(inv.role)} (invitation ${inv.id}, expires ${inv.expiresAt}).`);
+  console.log(`Invited ${safeTerm(inv.email)} as ${safeTerm(inv.role)} (invitation ${safeTerm(inv.id)}, expires ${safeTerm(inv.expiresAt)}).`);
   if (res.emailSent) {
     console.log(`Emailed ${safeTerm(inv.email)} the invitation link.`);
   } else {

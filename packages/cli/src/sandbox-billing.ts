@@ -7,6 +7,7 @@ import type { Command } from 'commander';
 import type { ActionsClient } from './actions-client.js';
 import type { CommonOpts } from './actions.js';
 import { formatMoney } from './rate-display.js';
+import { safeTerm } from './term.js';
 
 /** Injected by `sandboxes.ts`, matching the settings commands. */
 export interface BillingDeps {
@@ -54,7 +55,7 @@ export function printCosts(c: SandboxCosts, customerOnly: boolean): void {
         formatMoney(c.totalUsd),
       ],
       ...c.byProvider.map((p) => [
-        p.provider,
+        safeTerm(p.provider),
         String(p.count),
         p.running ? String(p.running.count) : '—',
         p.running ? formatMoney(p.running.costUsd) : '—',
@@ -63,7 +64,7 @@ export function printCosts(c: SandboxCosts, customerOnly: boolean): void {
       ]),
     ],
   );
-  if (c.currency !== 'USD') console.log(`currency: ${c.currency}`);
+  if (c.currency !== 'USD') console.log(`currency: ${safeTerm(c.currency)}`);
 }
 
 export function registerBillingCommands(

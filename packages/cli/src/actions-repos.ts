@@ -97,7 +97,7 @@ export function formatBranchRow(b: CiBranch, now: number = Date.now(), defaultBr
     b.watched ? pc.green('watched') : pc.dim('history only'),
     plural(b.runCount, 'run'),
     ...(at ? [b.runCount > 0 ? `last ${at}` : pc.dim(`moved ${at}`)] : []),
-    ...(b.latestRunId ? [pc.dim(b.latestRunId)] : []),
+    ...(b.latestRunId ? [pc.dim(safeTerm(b.latestRunId))] : []),
   ].join('  ');
 }
 

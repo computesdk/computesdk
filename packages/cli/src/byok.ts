@@ -85,15 +85,15 @@ function rateText(p: ByokProvider): string {
 export function formatByokRow(p: ByokProvider): string {
   const ready = p.key.status === 'connected';
   const icon = ready ? pc.green('●') : pc.gray('○');
-  const name = ready ? pc.white(p.provider) : pc.gray(p.provider);
+  const name = ready ? pc.white(safeTerm(p.provider)) : pc.gray(safeTerm(p.provider));
   return `  ${icon} ${name}  ${keyText(p.key)}  ${rateText(p)}`;
 }
 
 export function formatByokDetail(p: ByokProvider): string {
   const lines = [
-    `${pc.white(p.provider)}  ${keyText(p.key)}`,
-    `  regions        ${p.regions.length > 0 ? p.regions.join(', ') : 'account default'}`,
-    `  last tested    ${p.key.lastCheckedAt ?? '—'}`,
+    `${pc.white(safeTerm(p.provider))}  ${keyText(p.key)}`,
+    `  regions        ${p.regions.length > 0 ? p.regions.map(safeTerm).join(', ') : 'account default'}`,
+    `  last tested    ${p.key.lastCheckedAt === null ? '—' : safeTerm(p.key.lastCheckedAt)}`,
     `  platform rate  ${formatRateAllUnits(p.platformRate.rateUsd)}`,
     `  custom rate    ${p.customRate ? formatRateAllUnits(p.customRate.rateUsd) : pc.dim('none (costs report at the platform rate)')}`,
   ];
@@ -105,7 +105,7 @@ export function formatByokVerify(r: ByokKeyResponse): string {
   const head = r.verified === true ? pc.green('verified') : pc.red('not verified');
   const detail = r.key.statusDetail ? pc.dim(`  ${safeTerm(r.key.statusDetail)}`) : '';
   const act = r.key.actCapable ? pc.green('  act-capable') : '';
-  return `${head}  ${r.key.provider}${act}${detail}`;
+  return `${head}  ${safeTerm(r.key.provider)}${act}${detail}`;
 }
 
 /** `<usd>` and `--per` as the rate route takes them; refuses what the server would. */
@@ -185,7 +185,7 @@ export function registerByokCommands(program: Command): void {
       const saved = await c.put<ByokKeyResponse>(providerPath(provider, '/key'), keyBody(opts));
       const verification = opts.verify ? await c.post<ByokKeyResponse>(providerPath(provider, '/verify')) : undefined;
       output(opts, verification ? { key: saved.key, verification } : saved, () => {
-        console.log(`saved  ${saved.key.provider}  ${pc.dim(saved.key.keyHint ?? '')}  ${saved.key.status}`);
+        console.log(`saved  ${safeTerm(saved.key.provider)}  ${pc.dim(safeTerm(saved.key.keyHint ?? ''))}  ${safeTerm(saved.key.status)}`);
         if (verification) console.log(formatByokVerify(verification));
       });
       if (verification?.verified === false) process.exitCode = 1;
@@ -220,7 +220,7 @@ export function registerByokCommands(program: Command): void {
     try {
       await confirmWrite(`Remove the ${provider} key? Sandboxes and Actions jobs stop placing on ${provider}.`, opts);
       const result = await (await client(opts)).del<{ provider: string; deleted: boolean }>(providerPath(provider, '/key'));
-      output(opts, result, (r) => console.log(`deleted  ${r.provider}`));
+      output(opts, result, (r) => console.log(`deleted  ${safeTerm(r.provider)}`));
     } catch (e) {
       fail(e, opts);
     }
@@ -242,7 +242,7 @@ export function registerByokCommands(program: Command): void {
       const body = parseRateArgs(usd, opts.per);
       const data = await (await client(opts)).put<{ provider: ByokProvider }>(providerPath(provider, '/rate'), body);
       output(opts, data, (d) => {
-        console.log(`${d.provider.provider} costs now report at ${formatRateAllUnits(d.provider.rate.rateUsd)}`);
+        console.log(`${safeTerm(d.provider.provider)} costs now report at ${formatRateAllUnits(d.provider.rate.rateUsd)}`);
         console.log(pc.dim('Reporting only: billing is unchanged. Applies to sandboxes created from now on.'));
       });
     } catch (e) {
@@ -259,7 +259,7 @@ export function registerByokCommands(program: Command): void {
     try {
       const data = await (await client(opts)).del<{ provider: ByokProvider }>(providerPath(provider, '/rate'));
       output(opts, data, (d) =>
-        console.log(`${d.provider.provider} costs now report at the platform rate, ${formatRateAllUnits(d.provider.platformRate.rateUsd)}`),
+        console.log(`${safeTerm(d.provider.provider)} costs now report at the platform rate, ${formatRateAllUnits(d.provider.platformRate.rateUsd)}`),
       );
     } catch (e) {
       fail(e, opts);
