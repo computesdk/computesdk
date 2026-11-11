@@ -1298,7 +1298,7 @@ export function registerSandboxesCommands(program: Command): void {
     sub.option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)');
   }
 
-  // Registered after the --org pass so `settings`, `costs`, `rates` and their subcommands declare
+  // Registered after the --org pass so `settings`, `costs` and their subcommands declare
   // their own full option set (the loop above only covers direct children).
   const nestedCommon = (sub: Command) =>
     sub
