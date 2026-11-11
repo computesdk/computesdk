@@ -83,6 +83,12 @@ describe('promigence provider (unit, fake client)', () => {
     expect(client.names()).toContain('runs.waitReady');
   });
 
+  it('create options: waitTimeoutMs bounds the readiness wait', async () => {
+    const { client, c } = setup({ readyLater: true });
+    await c.instances.create({ waitTimeoutMs: 180_000 });
+    expect(arg(client.last('runs.waitReady'), 1)).toMatchObject({ waitTimeoutMs: 180_000 });
+  });
+
   it('filesystem: write, read, exists, mkdir, readdir, remove', async () => {
     const { client, c } = setup();
     const sandbox = await c.instances.create();

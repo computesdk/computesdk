@@ -80,6 +80,8 @@ interface PromigenceCreateOptions {
   allowInternetAccess?: boolean;
   allowHosts?: string[];
   registrySecret?: string;
+  /** Bound on waiting for a queued sandbox to become ready (default: the Promigence SDK's 100s). */
+  waitTimeoutMs?: number;
 }
 
 const PROVIDER = 'promigence';
@@ -427,6 +429,7 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
           ...(o.allowInternetAccess === undefined ? {} : { allowInternetAccess: o.allowInternetAccess }),
           ...(Array.isArray(o.allowHosts) && o.allowHosts.length > 0 ? { allowHosts: o.allowHosts } : {}),
           ...(optimizeFor === undefined ? {} : { optimizeFor }),
+          ...(o.waitTimeoutMs === undefined ? {} : { waitTimeoutMs: o.waitTimeoutMs }),
         };
         if (o.image !== undefined) {
           // Passing an image asks for its snapshot: built on first use, reused after.
