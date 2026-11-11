@@ -21,6 +21,7 @@ import {
 } from './actions-client.js';
 import type { CommonOpts } from './actions.js';
 import { confirmWrite } from './confirm.js';
+import { safeTerm } from './term.js';
 
 /** Injected by `actions.ts`, which imports this module (a runtime import back would be a cycle). */
 export interface RunsDeps {
@@ -144,7 +145,12 @@ async function listDayRuns(
 
 export function formatRunDays(days: CiRunDay[]): string {
   if (days.length === 0) return 'No runs found.';
-  return days.map((d) => `${d.day}  ${plural(d.count, 'run')}`).join('\n');
+  return days.map((d) => `${safeTerm(d.day)}  ${plural(d.count, 'run')}`).join('\n');
+}
+
+/** The hint after a day page: the `--cursor` that continues it. */
+export function formatDayCursor(cursor: { startedAt: string; id: string }): string {
+  return `more: --cursor ${safeTerm(cursor.startedAt)},${safeTerm(cursor.id)}`;
 }
 
 function archiveQuestion(count: number, archived: boolean): string {
@@ -204,7 +210,7 @@ export function registerRunsCommands(
         const page = await listDayRuns(c, opts.day, { ...query, timeZone: opts.timeZone }, { all: opts.all === true, cursor });
         deps.output(opts, page, (p) => {
           printRuns(p.runs);
-          if (p.nextCursor) console.log(pc.dim(`more: --cursor ${p.nextCursor.startedAt},${p.nextCursor.id}`));
+          if (p.nextCursor) console.log(pc.dim(formatDayCursor(p.nextCursor)));
         });
         return;
       }

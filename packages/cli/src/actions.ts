@@ -28,7 +28,7 @@ import { registerReposCommands } from './actions-repos.js';
 import { registerIntegrationsCommands } from './actions-integrations.js';
 import { registerRunsCommands } from './actions-runs.js';
 import { matchRefOnly, registerWorkflowsCommands, workflowChoices } from './actions-workflows.js';
-import { conclusionLabel, safeTerm } from './term.js';
+import { conclusionLabel, safeTerm, safeTermText } from './term.js';
 import { basename, join } from 'path';
 import {
   ActionsApiError,
@@ -250,9 +250,10 @@ export function fail(error: unknown, opts: JsonOpts = {}): never {
   if (opts.json) {
     process.stderr.write(JSON.stringify(toErrorEnvelope(error)) + '\n');
   } else if (error instanceof ActionsApiError) {
-    console.error(pc.red(`Error (${error.status}): ${error.message}`));
+    // The message is the server's, or quotes server values: no control sequences.
+    console.error(pc.red(`Error (${error.status}): ${safeTermText(error.message)}`));
   } else {
-    console.error(pc.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+    console.error(pc.red(`Error: ${safeTermText(error instanceof Error ? error.message : String(error))}`));
   }
   process.exit(1);
 }
