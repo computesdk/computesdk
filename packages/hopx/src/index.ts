@@ -284,7 +284,7 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           return {
             id: sandbox.sandboxId,
             provider: 'hopx',
-            status: (info.status as 'running' | 'stopped' | 'error') || 'running',
+            status: info.status === 'paused' || info.status === 'stopped' ? 'stopped' : info.status === 'error' ? 'error' : 'running',
             createdAt: info.createdAt ? new Date(info.createdAt) : new Date(),
             timeout: info.timeoutSeconds ? info.timeoutSeconds * 1000 : 300000,
             metadata: {
@@ -324,6 +324,15 @@ export const hopx = defineProvider<HopxSandbox, HopxConfig>({
           );
         }
       },
+
+      pause: async (sandbox: HopxSandbox): Promise<void> => {
+        await sandbox.pause();
+      },
+      resume: async (sandbox: HopxSandbox): Promise<HopxSandbox> => {
+        await sandbox.resume();
+        return sandbox;
+      },
+      pauseCapabilities: { memory: true },
 
       /**
        * Native filesystem operations using HopX's files API
