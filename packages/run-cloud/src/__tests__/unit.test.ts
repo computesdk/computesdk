@@ -211,6 +211,26 @@ describe('run-cloud provider', () => {
     expect(sandbox.getInstance().sandbox.id).toBe('sbx_123');
   });
 
+  it('polls a building_image sandbox until it reports running', async () => {
+    createMock.mockResolvedValue(nativeSandbox({ state: 'building_image' }));
+    getMock.mockResolvedValue(nativeSandbox());
+
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+
+    expect(getMock).toHaveBeenCalledWith('sbx_123');
+    expect(sandbox.sandboxId).toBe('sbx_123');
+    expect(destroyMock).not.toHaveBeenCalled();
+  });
+
+  it('destroys and rejects when a sandbox fails while building', async () => {
+    createMock.mockResolvedValue(nativeSandbox({ state: 'failed' }));
+
+    await expect(
+      runCloud({ apiKey: 'rc_test' }).sandbox.create(),
+    ).rejects.toThrow('reached failed while waiting for running');
+    expect(destroyMock).toHaveBeenCalledWith('sbx_123');
+  });
+
   it('uses the agent base image and Run Cloud defaults by default', async () => {
     await runCloud({ apiKey: 'rc_test' }).sandbox.create();
     expect(createMock).toHaveBeenCalledWith({
