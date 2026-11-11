@@ -315,35 +315,38 @@ async function waitForRunning(
 ): Promise<NativeSandbox> {
   const deadline = Date.now() + SANDBOX_READY_TIMEOUT_MS;
   let current = sandbox;
-  while (current.state !== 'running') {
-    if (SANDBOX_TERMINAL_STATES.has(current.state)) {
-      await client.sandboxes.destroy(current.id).catch(() => undefined);
-      throw new Error(
-        `Run Cloud sandbox ${current.id} reached ${current.state} while waiting for running.`,
-      );
-    }
-    try {
+  try {
+    while (current.state !== 'running') {
+      if (SANDBOX_TERMINAL_STATES.has(current.state)) {
+        throw new Error(
+          `Run Cloud sandbox ${current.id} reached ${current.state} while waiting for running.`,
+        );
+      }
       throwIfAborted(signal);
-    } catch (error) {
-      await client.sandboxes.destroy(current.id).catch(() => undefined);
-      throw error;
-    }
-    if (Date.now() >= deadline) {
-      await client.sandboxes.destroy(current.id).catch(() => undefined);
-      throw new Error(
-        `Run Cloud sandbox ${current.id} was still ${current.state} after ` +
-          `${SANDBOX_READY_TIMEOUT_MS}ms.`,
-      );
-    }
-    try {
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Run Cloud sandbox ${current.id} was still ${current.state} after ` +
+            `${SANDBOX_READY_TIMEOUT_MS}ms.`,
+        );
+      }
+      if (current.state === 'paused') {
+        // Idle-pause can fire before the first running observation; resume and
+        // keep polling instead of letting the deadline destroy the sandbox.
+        current = await client.sandboxes
+          .resume(current.id)
+          .catch(() => current);
+      }
       await sleep(SANDBOX_READY_POLL_MS, signal);
-    } catch (error) {
-      await client.sandboxes.destroy(current.id).catch(() => undefined);
-      throw error;
+      current = await client.sandboxes.get(current.id);
     }
-    current = await client.sandboxes.get(current.id);
+    return current;
+  } catch (error) {
+    // The caller never sees the sandbox id, so clean up whatever the poll left
+    // behind on any failure — terminal state, timeout, abort, or a get()
+    // rejection.
+    await client.sandboxes.destroy(current.id).catch(() => undefined);
+    throw error;
   }
-  return current;
 }
 
 function rejectSandboxEnvs(options?: CreateInstanceOptions): void {

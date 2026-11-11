@@ -222,6 +222,29 @@ describe('run-cloud provider', () => {
     expect(destroyMock).not.toHaveBeenCalled();
   });
 
+  it('resumes a sandbox that idle-pauses while building', async () => {
+    createMock.mockResolvedValue(nativeSandbox({ state: 'building_image' }));
+    getMock.mockResolvedValueOnce(nativeSandbox({ state: 'paused' }));
+    resumeMock.mockResolvedValue(nativeSandbox({ state: 'building_image' }));
+    getMock.mockResolvedValue(nativeSandbox());
+
+    const sandbox = await runCloud({ apiKey: 'rc_test' }).sandbox.create();
+
+    expect(resumeMock).toHaveBeenCalledWith('sbx_123');
+    expect(sandbox.sandboxId).toBe('sbx_123');
+    expect(destroyMock).not.toHaveBeenCalled();
+  });
+
+  it('destroys the sandbox when the readiness poll itself fails', async () => {
+    createMock.mockResolvedValue(nativeSandbox({ state: 'building_image' }));
+    getMock.mockRejectedValue(new Error('connection reset'));
+
+    await expect(
+      runCloud({ apiKey: 'rc_test' }).sandbox.create(),
+    ).rejects.toThrow('connection reset');
+    expect(destroyMock).toHaveBeenCalledWith('sbx_123');
+  });
+
   it('destroys and rejects when a sandbox fails while building', async () => {
     createMock.mockResolvedValue(nativeSandbox({ state: 'failed' }));
 
