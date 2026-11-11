@@ -1135,6 +1135,98 @@
     {
       "path": [
         "actions",
+        "installations"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "installations"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List the org's GitHub App installations (account, repo selection and counts, suspension)"
+    },
+    {
+      "path": [
+        "actions",
+        "installations",
+        "install-url"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "installations",
+          "install-url"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Print where an owner/admin installs the GitHub App into another account"
+    },
+    {
+      "path": [
+        "actions",
+        "slack"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "slack"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the org's Slack connection (workspace, channel, notify rule, daily brief; owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "slack",
+        "install-url"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "slack",
+          "install-url"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Print where an owner/admin connects a Slack workspace"
+    },
+    {
+      "path": [
+        "actions",
         "vault"
       ],
       "aliases": [
@@ -1417,6 +1509,9 @@
         "--org",
         "--allow-untrusted-host",
         "--json",
+        "--resources",
+        "--warm-pool",
+        "--snapshot-pool",
         "--help"
       ],
       "summary": "Update the org's actions routing policy"

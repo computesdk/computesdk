@@ -25,6 +25,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { spawnSync } from 'child_process';
 import { registerSettingsCommands } from './settings.js';
 import { registerReposCommands } from './actions-repos.js';
+import { registerIntegrationsCommands } from './actions-integrations.js';
 import { registerRunsCommands } from './actions-runs.js';
 import { matchRefOnly, registerWorkflowsCommands, workflowChoices } from './actions-workflows.js';
 import { conclusionLabel, safeTerm } from './term.js';
@@ -666,6 +667,14 @@ export function formatRunHistory(history: CiRunHistory): string {
   return lines.join('\n');
 }
 
+/** A stored key's verification state: `connected …abcd`, `error (detail)`, `unconfigured`. */
+function keyStatusText(p: CiProviderInfo): string {
+  const status = p.status === 'connected' ? pc.green('connected') : p.status === 'error' ? pc.red('error') : pc.gray('unconfigured');
+  const hint = p.keyHint ? ` ${pc.dim(safeTerm(p.keyHint))}` : '';
+  const detail = p.status === 'error' && p.statusDetail ? ` ${pc.dim(`(${safeTerm(p.statusDetail)})`)}` : '';
+  return `${status}${hint}${detail}`;
+}
+
 export function formatProviderRow(p: CiProviderInfo): string {
   const icon = p.usable ? pc.green('●') : pc.gray('○');
   const name = p.usable ? pc.white(p.provider) : pc.gray(p.provider);
@@ -674,6 +683,7 @@ export function formatProviderRow(p: CiProviderInfo): string {
     p.actCapable ? pc.green('act') : pc.gray('no-act'),
     p.regions.length > 0 ? `regions: ${p.regions.join(',')}` : 'no region choice',
     p.position === null ? pc.gray('not in provider order') : `order #${p.position}`,
+    ...(p.credential !== 'ambient' && p.status !== undefined ? [keyStatusText(p)] : []),
   ].join('  ');
   return `  ${icon} ${name}  ${flags}`;
 }
@@ -1372,6 +1382,7 @@ export function registerActionsCommands(program: Command): void {
   });
 
   registerReposCommands(actions, common, { client, fail, output });
+  registerIntegrationsCommands(actions, common, { client, fail, output });
 
   const vault = actions
     .command('vault')

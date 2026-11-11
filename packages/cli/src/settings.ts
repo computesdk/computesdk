@@ -3,7 +3,8 @@
  * routing policy for one consumer lane over `GET/PATCH /api/v1/{lane}/settings`.
  * Both lanes print the same shape and take the same flags; the sandbox lane
  * adds the inherit semantics (its order/cap/order type fall back to the
- * Actions values when unset).
+ * Actions values when unset), the Actions lane its snapshot pool
+ * (`--snapshot-pool`) and the snapshot summary.
  *
  * `--cap`/`--general-cap` prices use the same parser as `--max-price` — a
  * unit is required (`0.12/hour`), so a bare dollar amount never silently
@@ -51,6 +52,15 @@ export interface LaneSettings {
   providerResourcePresets?: Record<string, string | null>;
   warmPool?: Record<string, number>;
   snapshotPool?: Record<string, number>;
+  /** Actions lane: the order an org with no providerOrder stored places on. */
+  defaultProviderOrder?: string[];
+  /** Actions lane: each provider's size presets, the names --resources takes. */
+  sizePresets?: Record<string, { name: string; label: string }[]>;
+  /** Actions lane: which workflows cap snapshots and which hold live ones. */
+  snapshotSummary?: {
+    workflows: { repoFullName: string; path: string; name: string; snapshotCap: number | null }[];
+    live: { repoFullName: string; workflowPath: string | null; count: number }[];
+  };
 }
 
 /**
@@ -109,8 +119,11 @@ function parseSizeCap(entry: string): { size: string; cap: Rate | null } {
   return { size, cap };
 }
 
-/** Mirrors MAX_WARM_POOL_SIZE in benchmarks-platform lib/providers/provider-order.ts. */
+/** Mirrors MAX_WARM_POOL_SIZE in benchmarks-platform lib/providers/org-settings.ts. */
 export const MAX_WARM_POOL_SIZE = 16;
+
+/** Mirrors MAX_SNAPSHOT_POOL_SIZE in benchmarks-platform lib/providers/org-settings.ts. */
+export const MAX_SNAPSHOT_POOL_SIZE = 32;
 
 /** One `<provider>=<preset>` or `<provider>=none` `--resources` value; the server checks the names. */
 export function parseResourcesFlag(entry: string): { provider: string; preset: string | null } {
@@ -126,19 +139,39 @@ export function parseResourcesFlag(entry: string): { provider: string; preset: s
   return { provider, preset: preset === 'none' ? null : preset };
 }
 
-/** One `<provider[:region]>=<n>` `--warm-pool` value, n in 0..16 (0 clears the entry). */
-export function parseWarmPoolFlag(entry: string): { key: string; size: number } {
+/** One `<provider[:region]>=<n>` pool-flag value, n in 0..max (0 clears the entry). */
+function parsePoolFlag(flag: string, entry: string, max: number): { key: string; size: number } {
   const eq = entry.indexOf('=');
   const key = eq === -1 ? '' : entry.slice(0, eq).trim();
   const value = eq === -1 ? '' : entry.slice(eq + 1).trim();
   const size = Number(value);
-  if (key === '' || !/^\d+$/.test(value) || size > MAX_WARM_POOL_SIZE) {
+  if (key === '' || !/^\d+$/.test(value) || size > max) {
     throw new ActionsCliError(
       'invalid_argument',
-      `Invalid --warm-pool "${entry}" — expected <provider>[:<region>]=<n> with n in 0..${MAX_WARM_POOL_SIZE} (0 clears it).`,
+      `Invalid ${flag} "${entry}" — expected <provider>[:<region>]=<n> with n in 0..${max} (0 clears it).`,
     );
   }
   return { key, size };
+}
+
+/** One `<provider[:region]>=<n>` `--warm-pool` value, n in 0..16 (0 clears the entry). */
+export function parseWarmPoolFlag(entry: string): { key: string; size: number } {
+  return parsePoolFlag('--warm-pool', entry, MAX_WARM_POOL_SIZE);
+}
+
+/** One `<provider[:region]>=<n>` `--snapshot-pool` value, n in 0..32 (0 clears the entry). */
+export function parseSnapshotPoolFlag(entry: string): { key: string; size: number } {
+  return parsePoolFlag('--snapshot-pool', entry, MAX_SNAPSHOT_POOL_SIZE);
+}
+
+/** Repeated pool flags as the settings patch: entry → size. */
+function poolPatch(entries: string[], parse: (entry: string) => { key: string; size: number }): Record<string, number> {
+  const pool: Record<string, number> = {};
+  for (const entry of entries) {
+    const { key, size } = parse(entry);
+    pool[key] = size;
+  }
+  return pool;
 }
 
 function formatResources(r: { cpus?: number; memoryMb?: number; ephemeralDiskMb?: number }): string {
@@ -183,7 +216,9 @@ export function printLaneSettings(
       ? s.providerOrder.join(', ')
       : sandbox
         ? pc.dim(`inherit (Actions: ${(s.actionsProviderOrder ?? []).join(', ') || '—'})`)
-        : '—';
+        : s.defaultProviderOrder && s.defaultProviderOrder.length > 0
+          ? pc.dim(`default (${s.defaultProviderOrder.join(', ')})`)
+          : '—';
   console.log(`provider order: ${orderText}`);
   const resources = Object.entries(s.providerResources ?? {});
   console.log('resources:');
@@ -201,6 +236,23 @@ export function printLaneSettings(
     console.log('snapshot pool:');
     if (snap.length === 0) console.log('  —');
     for (const [entry, cap] of snap) console.log(`  ${entry}  ${cap}`);
+  }
+  if (s.snapshotSummary !== undefined) printSnapshotSummary(s.snapshotSummary);
+}
+
+/** Workflows carrying their own snapshot cap, then the workflows holding live snapshots. */
+function printSnapshotSummary(summary: NonNullable<LaneSettings['snapshotSummary']>): void {
+  const capped = summary.workflows.filter((w) => w.snapshotCap !== null);
+  console.log('workflow snapshot caps:');
+  if (capped.length === 0) console.log(`  ${pc.dim('— (every workflow uses the dynamic pool)')}`);
+  for (const w of capped) {
+    const cap = w.snapshotCap === 0 ? 'off' : String(w.snapshotCap);
+    console.log(`  ${w.repoFullName}  ${w.path}  ${cap}`);
+  }
+  console.log('live snapshots:');
+  if (summary.live.length === 0) console.log('  —');
+  for (const row of summary.live) {
+    console.log(`  ${row.repoFullName}  ${row.workflowPath ?? pc.dim('(no workflow)')}  ${row.count}`);
   }
 }
 
@@ -275,20 +327,26 @@ export function registerSettingsCommands(
           : 'provider order, comma-separated (e.g. "market,blaxel,vercel"); "default" restores the platform default',
       ),
   );
-  if (lane === 'sandboxes') {
-    set
-      .option(
-        '--resources <provider=preset>',
-        'per-provider size preset (e.g. blaxel=large); <provider>=none clears it (repeatable)',
-        (v, a: string[]) => a.concat(v),
-        [] as string[],
-      )
-      .option(
-        '--warm-pool <provider[:region]=n>',
-        `warm pool size per placement entry, 0..${MAX_WARM_POOL_SIZE}; 0 clears it (repeatable)`,
-        (v, a: string[]) => a.concat(v),
-        [] as string[],
-      );
+  set
+    .option(
+      '--resources <provider=preset>',
+      'per-provider size preset (e.g. blaxel=large); <provider>=none clears it (repeatable)',
+      (v, a: string[]) => a.concat(v),
+      [] as string[],
+    )
+    .option(
+      '--warm-pool <provider[:region]=n>',
+      `warm pool size per placement entry, 0..${MAX_WARM_POOL_SIZE}; 0 clears it (repeatable)`,
+      (v, a: string[]) => a.concat(v),
+      [] as string[],
+    );
+  if (lane === 'actions') {
+    set.option(
+      '--snapshot-pool <provider[:region]=n>',
+      `snapshot cap per placement entry, 0..${MAX_SNAPSHOT_POOL_SIZE}; 0 clears it (repeatable)`,
+      (v, a: string[]) => a.concat(v),
+      [] as string[],
+    );
   }
   set.action(async (opts: CommonOpts & {
     cap: string[];
@@ -297,6 +355,7 @@ export function registerSettingsCommands(
     order?: string;
     resources?: string[];
     warmPool?: string[];
+    snapshotPool?: string[];
   }) => {
     try {
       const body: Record<string, unknown> = {};
@@ -352,18 +411,16 @@ export function registerSettingsCommands(
         body.providerResources = resources;
       }
       if (opts.warmPool && opts.warmPool.length > 0) {
-        const pool: Record<string, number> = {};
-        for (const entry of opts.warmPool) {
-          const { key, size } = parseWarmPoolFlag(entry);
-          pool[key] = size;
-        }
-        body.warmPool = pool;
+        body.warmPool = poolPatch(opts.warmPool, parseWarmPoolFlag);
+      }
+      if (opts.snapshotPool && opts.snapshotPool.length > 0) {
+        body.snapshotPool = poolPatch(opts.snapshotPool, parseSnapshotPoolFlag);
       }
       if (Object.keys(body).length === 0) {
         throw new Error(
           lane === 'sandboxes'
             ? 'Nothing to change — pass --cap, --general-cap, --order-type, --order, --resources, or --warm-pool.'
-            : 'Nothing to change — pass --cap, --general-cap, --order-type, or --order.',
+            : 'Nothing to change — pass --cap, --general-cap, --order-type, --order, --resources, --warm-pool, or --snapshot-pool.',
         );
       }
       const c = await deps.client(opts);
