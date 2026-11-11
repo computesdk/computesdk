@@ -6,6 +6,7 @@
  */
 
 import type { CliAuth } from '@benchsdk/cli';
+import { DEFAULT_BASE_URL, isSecurePlatformTransport, isTrustedPlatformHost } from '@computesdk/platform';
 import { describeFetchFailure, isFetchFailure } from './net.js';
 
 export function envBaseUrl(env: NodeJS.ProcessEnv = process.env): string | undefined {
@@ -13,15 +14,39 @@ export function envBaseUrl(env: NodeJS.ProcessEnv = process.env): string | undef
 }
 
 /**
+ * `@benchsdk/cli` doesn't check where it sends a key, so compute applies its
+ * own rule before handing COMPUTE_API_KEY over (as `resolvePlatformAuth`
+ * does for every other command): a computesdk.com or loopback host, over
+ * HTTPS off loopback. A key the user gives bench directly
+ * (BENCHMARKS_PLATFORM_API_KEY) is bench's business and isn't checked here.
+ */
+export function assertComputeKeyDestination(baseUrl: string): void {
+  const url = baseUrl.replace(/\/+$/, '');
+  if (!isTrustedPlatformHost(url)) {
+    throw new Error(
+      `Refusing to send COMPUTE_API_KEY to ${url}: it is not a computesdk.com or localhost host. ` +
+        'To use a key with a host you trust, set BENCHMARKS_PLATFORM_API_KEY for it instead.',
+    );
+  }
+  if (!isSecurePlatformTransport(url)) {
+    throw new Error(`Refusing to send COMPUTE_API_KEY over plaintext HTTP to ${url}; use https://.`);
+  }
+}
+
+/**
  * `@benchsdk/cli` `resolveAuth` overrides. COMPUTE_API_KEY goes in as an
  * explicit key, so it wins over the stored login (as for every other compute
- * command); BENCHMARKS_PLATFORM_API_KEY still works through bench's own env.
+ * command), but only to a host compute itself would send it to;
+ * BENCHMARKS_PLATFORM_API_KEY still works through bench's own env.
  */
 export function benchAuthOverrides(
   opts: { baseUrl?: string } = {},
   env: NodeJS.ProcessEnv = process.env,
 ): { baseUrl?: string; apiKey?: string } {
-  return { baseUrl: opts.baseUrl ?? envBaseUrl(env), apiKey: env.COMPUTE_API_KEY || undefined };
+  const baseUrl = opts.baseUrl ?? envBaseUrl(env);
+  const apiKey = env.COMPUTE_API_KEY || undefined;
+  if (apiKey) assertComputeKeyDestination(baseUrl ?? DEFAULT_BASE_URL);
+  return { baseUrl, apiKey };
 }
 
 export async function benchAuth(opts: { baseUrl?: string } = {}): Promise<CliAuth> {

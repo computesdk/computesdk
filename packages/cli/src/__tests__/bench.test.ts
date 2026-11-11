@@ -83,6 +83,22 @@ describe('benchInvocation', () => {
     expect(inv.env).toEqual({});
   });
 
+  it('never hands COMPUTE_API_KEY to a host compute would not send it to', () => {
+    const key = { COMPUTE_API_KEY: 'bp_k' };
+    // An untrusted URL from any source bench reads: its --base-url, its env, compute's env.
+    expect(() => benchInvocation(['runs', 'list'], { ...key, COMPUTE_PLATFORM_URL: 'https://evil.example' })).toThrow(/Refusing to send COMPUTE_API_KEY to https:\/\/evil\.example/);
+    expect(() => benchInvocation(['runs', 'list'], { ...key, BENCHMARKS_PLATFORM_URL: 'https://evil.example' })).toThrow(/Refusing/);
+    expect(() => benchInvocation(['runs', 'list', '--base-url', 'https://evil.example'], key)).toThrow(/Refusing/);
+    expect(() => benchInvocation(['runs', 'list', '--base-url=https://evil.example'], key)).toThrow(/Refusing/);
+    // Plaintext off loopback, even to a trusted name.
+    expect(() => benchInvocation(['runs', 'list'], { ...key, COMPUTE_PLATFORM_URL: 'http://platform.computesdk.com' })).toThrow(/plaintext HTTP/);
+    // The default host and a key the user gives bench directly are fine.
+    expect(benchInvocation(['runs', 'list'], key).env).toEqual({ BENCHMARKS_PLATFORM_API_KEY: 'bp_k' });
+    expect(benchInvocation(['runs', 'list'], { ...key, BENCHMARKS_PLATFORM_API_KEY: 'bp_b', COMPUTE_PLATFORM_URL: 'https://evil.example' }).env).toEqual({
+      BENCHMARKS_PLATFORM_URL: 'https://evil.example',
+    });
+  });
+
   it('treats empty variables as unset', () => {
     const inv = benchInvocation(['benchmarks', 'list'], {
       COMPUTE_API_KEY: '',

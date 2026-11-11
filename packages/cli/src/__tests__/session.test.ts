@@ -47,6 +47,13 @@ describe('benchAuthOverrides', () => {
     expect(benchAuthOverrides({}, { COMPUTE_API_KEY: 'bp_k' })).toEqual({ apiKey: 'bp_k', baseUrl: undefined });
   });
 
+  it('refuses to hand COMPUTE_API_KEY to an untrusted or plaintext host (whoami, org list)', () => {
+    expect(() => benchAuthOverrides({ baseUrl: 'https://evil.example' }, { COMPUTE_API_KEY: 'bp_k' })).toThrow(/Refusing to send COMPUTE_API_KEY/);
+    expect(() => benchAuthOverrides({}, { COMPUTE_API_KEY: 'bp_k', COMPUTE_PLATFORM_URL: 'http://platform.computesdk.com' })).toThrow(/plaintext HTTP/);
+    // Without a key there is nothing to protect.
+    expect(benchAuthOverrides({ baseUrl: 'https://evil.example' }, {}).baseUrl).toBe('https://evil.example');
+  });
+
   it('treats an empty COMPUTE_API_KEY as unset', () => {
     expect(benchAuthOverrides({}, { COMPUTE_API_KEY: '' }).apiKey).toBeUndefined();
   });

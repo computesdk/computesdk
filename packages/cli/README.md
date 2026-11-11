@@ -378,7 +378,7 @@ compute's settings are forwarded to bench:
 | compute | bench | |
 |---|---|---|
 | `COMPUTE_PLATFORM_URL` | `BENCHMARKS_PLATFORM_URL` | only when `BENCHMARKS_PLATFORM_URL` is unset |
-| `COMPUTE_API_KEY` | `BENCHMARKS_PLATFORM_API_KEY` | only when `BENCHMARKS_PLATFORM_API_KEY` is unset |
+| `COMPUTE_API_KEY` | `BENCHMARKS_PLATFORM_API_KEY` | only when `BENCHMARKS_PLATFORM_API_KEY` is unset, and only to a computesdk.com or localhost host over HTTPS (bench's `--base-url`, else its URL env, else `COMPUTE_PLATFORM_URL`); anything else is refused |
 | `compute --org <slug> bench …`, else `COMPUTE_ORG` | `--org <slug>` | only when the bench command has no `--org` of its own; not added to `run` / `check` |
 
 ```bash
@@ -386,7 +386,7 @@ COMPUTE_API_KEY=bp_… compute bench runs list my-benchmark --json
 COMPUTE_ORG=acme compute bench auth status --json      # same as: compute bench --org acme auth status
 ```
 
-`compute whoami` and `compute org current` also read `COMPUTE_API_KEY`. An
+`compute whoami` and `compute org current` also read `COMPUTE_API_KEY`, under the same host rule. To use a key with a self-hosted platform, set `BENCHMARKS_PLATFORM_API_KEY` for it yourself. An
 org API key has no user, so they print the key's organization and
 `API key (no user identity)` (with `--json`: `"user": null`,
 `"credential": "api_key"`).

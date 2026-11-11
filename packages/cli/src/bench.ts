@@ -5,7 +5,9 @@
  * same key and org, as the rest of `compute`.
  */
 
+import { DEFAULT_BASE_URL } from '@computesdk/platform';
 import { withFetchFailureContext } from './net.js';
+import { assertComputeKeyDestination } from './session.js';
 
 /** The canonical name first; the rest are dispatch aliases. */
 export const BENCH_COMMANDS = new Set(['bench', 'benchmark']);
@@ -38,6 +40,17 @@ export function parseBenchDispatch(args: string[]): { argv: string[]; org?: stri
   return org ? { argv, org } : { argv };
 }
 
+/** bench's own `--base-url <url>` / `--base-url=<url>`, which wins over its env. */
+function baseUrlFlag(argv: string[]): string | undefined {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--') return undefined;
+    if (arg === '--base-url') return argv[i + 1];
+    if (arg.startsWith('--base-url=')) return arg.slice('--base-url='.length);
+  }
+  return undefined;
+}
+
 function hasOrgFlag(argv: string[]): boolean {
   for (const arg of argv) {
     if (arg === '--') return false;
@@ -51,7 +64,10 @@ function hasOrgFlag(argv: string[]): boolean {
  * already has: COMPUTE_PLATFORM_URL → BENCHMARKS_PLATFORM_URL,
  * COMPUTE_API_KEY → BENCHMARKS_PLATFORM_API_KEY, and the org (compute's
  * leading `--org`, else COMPUTE_ORG) → a leading `--org` unless bench's argv
- * already has one. Empty variables count as unset.
+ * already has one. Empty variables count as unset. COMPUTE_API_KEY is only
+ * handed over for a host compute would send it to (bench checks none): the
+ * URL bench will use — its `--base-url`, else BENCHMARKS_PLATFORM_URL, else
+ * COMPUTE_PLATFORM_URL — must be computesdk.com or loopback, over HTTPS.
  */
 export function benchInvocation(
   argv: string[],
@@ -63,6 +79,9 @@ export function benchInvocation(
     out.BENCHMARKS_PLATFORM_URL = env.COMPUTE_PLATFORM_URL;
   }
   if (env.COMPUTE_API_KEY && !env.BENCHMARKS_PLATFORM_API_KEY) {
+    assertComputeKeyDestination(
+      baseUrlFlag(argv) || env.BENCHMARKS_PLATFORM_URL || env.COMPUTE_PLATFORM_URL || DEFAULT_BASE_URL,
+    );
     out.BENCHMARKS_PLATFORM_API_KEY = env.COMPUTE_API_KEY;
   }
   const org = computeOrg || env.COMPUTE_ORG;
