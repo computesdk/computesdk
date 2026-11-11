@@ -2158,8 +2158,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@opencomputer/sdk':
-        specifier: latest
-        version: 3.0.0
+        specifier: ^2.3.1
+        version: 2.3.1
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2193,7 +2193,7 @@ importers:
     dependencies:
       '@benchsdk/cli':
         specifier: ^0.9.3
-        version: 0.9.5
+        version: 0.9.3
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -3462,8 +3462,16 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
+  '@benchsdk/api@0.11.1':
+    resolution: {integrity: sha512-yoT00Fm/V531uCK2/1SHSjFL2/AvxfnW2AV3ZZunBSilP1K2O6ehWWnFRA2Klux7xR5kM0BOhi0XKDXDYtPKaw==}
+    engines: {node: '>=18.0.0'}
+
   '@benchsdk/api@0.11.3':
     resolution: {integrity: sha512-zmfPO/kRWq3kxwAiI0QObHUmd2EIzR9U5CrgSeiRiGUZNOeqo94AmACFtVUGFuDAX+qbFz6PyLDkiNSpskE5FA==}
+    engines: {node: '>=18.0.0'}
+
+  '@benchsdk/cli@0.9.3':
+    resolution: {integrity: sha512-RhVAWctAuPFnJfZ86megoWFlqhiYGWzIdhrbaS+I9hN3N+/1qoCHHnsH4FiACwmRz2vKaEDUGvajJ86FgqfwBA==}
     engines: {node: '>=18.0.0'}
 
   '@benchsdk/cli@0.9.5':
@@ -4784,8 +4792,8 @@ packages:
   '@onkernel/sdk@0.49.0':
     resolution: {integrity: sha512-nsq5OfkaNKxRTCdXQF8BSTj/Wl0iBIqyWoI/ATgQt15pV+59E22MsZ+IHPiVwwb33tXLtnOqUe5ffOxm7l3GHg==}
 
-  '@opencomputer/sdk@3.0.0':
-    resolution: {integrity: sha512-15IhOu/ft4bfOcWUDduxrccmNbOLILPf7n8flXElEYas+UKBmWQt563X2rQk26X2i04ueJV3RrQW15Ee4sxWgw==}
+  '@opencomputer/sdk@2.3.1':
+    resolution: {integrity: sha512-1oCGDqsrsp7aJXNwvOzP7bAwQ3kKI05uxx7AbTpKRGYQ/4NgYidwFYmhf++lK+mjPlp19YHenKeZRniu2tqnjA==}
     engines: {node: '>=18'}
 
   '@opentelemetry/api-logs@0.214.0':
@@ -10378,7 +10386,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@benchsdk/api@0.11.1': {}
+
   '@benchsdk/api@0.11.3': {}
+
+  '@benchsdk/cli@0.9.3':
+    dependencies:
+      '@benchsdk/api': 0.11.1
 
   '@benchsdk/cli@0.9.5':
     dependencies:
@@ -11602,7 +11616,9 @@ snapshots:
 
   '@onkernel/sdk@0.49.0': {}
 
-  '@opencomputer/sdk@3.0.0': {}
+  '@opencomputer/sdk@2.3.1':
+    dependencies:
+      undici: 7.29.1
 
   '@opentelemetry/api-logs@0.214.0':
     dependencies:
