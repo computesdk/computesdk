@@ -3414,15 +3414,11 @@
       ],
       "runner": {
         "package": "@benchsdk/runner",
-        "version": "0.8.5",
-        "linked": true,
-        "released": false
+        "version": "0.8.6"
       },
       "cli": {
         "package": "@benchsdk/cli",
-        "version": "0.9.4",
-        "linked": true,
-        "released": false
+        "version": "0.9.5"
       }
     }
   }

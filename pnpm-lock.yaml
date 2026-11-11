@@ -4,10 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@benchsdk/cli': link:../benchmarks-surface-parity/packages/benchsdk-cli
-  '@benchsdk/runner': link:../benchmarks-surface-parity/packages/benchsdk-runner
-
 importers:
 
   .:
@@ -310,7 +306,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.51(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.69)(@computesdk/modal@1.9.27)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.53(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.72)(@computesdk/modal@1.9.30)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -749,11 +745,11 @@ importers:
   packages/cli:
     dependencies:
       '@benchsdk/cli':
-        specifier: link:../../../benchmarks-surface-parity/packages/benchsdk-cli
-        version: link:../../../benchmarks-surface-parity/packages/benchsdk-cli
+        specifier: ^0.9.5
+        version: 0.9.5
       '@benchsdk/runner':
-        specifier: link:../../../benchmarks-surface-parity/packages/benchsdk-runner
-        version: link:../../../benchmarks-surface-parity/packages/benchsdk-runner
+        specifier: ^0.8.6
+        version: 0.8.6
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
@@ -2163,7 +2159,7 @@ importers:
         version: link:../provider
       '@opencomputer/sdk':
         specifier: latest
-        version: 2.3.1
+        version: 3.0.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2196,8 +2192,8 @@ importers:
   packages/platform:
     dependencies:
       '@benchsdk/cli':
-        specifier: link:../../../benchmarks-surface-parity/packages/benchsdk-cli
-        version: link:../../../benchmarks-surface-parity/packages/benchsdk-cli
+        specifier: ^0.9.3
+        version: 0.9.5
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -3466,6 +3462,23 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
+  '@benchsdk/api@0.11.3':
+    resolution: {integrity: sha512-zmfPO/kRWq3kxwAiI0QObHUmd2EIzR9U5CrgSeiRiGUZNOeqo94AmACFtVUGFuDAX+qbFz6PyLDkiNSpskE5FA==}
+    engines: {node: '>=18.0.0'}
+
+  '@benchsdk/cli@0.9.5':
+    resolution: {integrity: sha512-8k9dNtKmyb/AAnlUx47TKerwvJJb5mtpw+jywO3PsjgwZZdDJZ77thi2aLi8tbyoHSbmara/B2xidzDjNjco/w==}
+    engines: {node: '>=18.0.0'}
+
+  '@benchsdk/runner@0.8.6':
+    resolution: {integrity: sha512-f6hEsBcq04a0ERnBP2Tt2357VIq0xXzCNnKZbPyNuNYe67gAlyUC3TxXRH/vRF/gyi1E1DHow3plqslAqb+fQg==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@benchsdk/worker@0.4.3':
+    resolution: {integrity: sha512-QJ36YkXwVdKWtQdaz7p6dKT+8tEcLYYuKPsNycxzdJJPi9YAZf2quXeG2eDYhrfVhJIlGxU6L+01oPxpTezxCQ==}
+    engines: {node: '>=18.0.0'}
+
   '@blaxel/core@0.3.21':
     resolution: {integrity: sha512-a+JxiT1I6OKcm+6mxPcVjWo9u1LjBwPf8hmspnrGU73UbJYzvG6YeYz7VLQubf+rKocDpiqhzkMjasG/I77b8Q==}
     engines: {node: '>=18'}
@@ -3648,17 +3661,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.51':
-    resolution: {integrity: sha512-A1ft4QjjYvrxk+Anj6iQwnr6qv/z7QEDLNvXFxphaBDQjz8B3TmLQFGQwUKV7ivpcr0vyzkCag2/bVDLkIbhZg==}
+  '@computesdk/daytona@1.7.53':
+    resolution: {integrity: sha512-/oRa+jTq1u+SvRgsxbOMzyDkEPgOF3ZHHkgAjUHJucuR23PDcQss6RBes0nWQHqFSGotlXnopOCLGJkJICbsiw==}
 
-  '@computesdk/e2b@1.7.69':
-    resolution: {integrity: sha512-E+yyQHKr/aRkzxx3GNTfjCdDao2jUZDhTyA2sdECLA7ha4egLZ6U320uKlv4+50Fp3m/66bC4UkpceeJp1Gj6Q==}
+  '@computesdk/e2b@1.7.72':
+    resolution: {integrity: sha512-k62lqsJFaIThzAnSmqzfTCwYaPvP1ZiJABhISrNAVI0ZxyNGoN8Lz0KL6TJcZO/7Cf6FLBTnMMyr5apM0si9pg==}
 
-  '@computesdk/modal@1.9.27':
-    resolution: {integrity: sha512-5ijVq/XjnjgroSOCFdoPqJUYkWtetOq2CSj8gL1IRuC1ATWDHiVR0p+bKorsxEXXTFyAc14FFniNq5O8rTBF1Q==}
+  '@computesdk/modal@1.9.30':
+    resolution: {integrity: sha512-QWz/L2qOONNUKg/gg+/G2OG6d6TGJ9MV1wsAKDygkRSe1zDjaMHaE+kkNdqKnMJu0hCTLWIMpGB2Q7COg9ZGcQ==}
 
-  '@computesdk/provider@2.1.21':
-    resolution: {integrity: sha512-gjqedh7SfXnACoP9xmrqQaU6cOVpt6TLyWhkQxInfK2gwHtyrkLDrkhZIAXxmELhxnAIWx0L3oSJo43eOsL66A==}
+  '@computesdk/provider@2.1.23':
+    resolution: {integrity: sha512-6V6a6E+VGf33PTbvLIMleliZSI2QZIb5A5iLMfy3z6UEbWEViXUvb6mxBVQyd6CF7M9D9Ilgk7e+2HC25EOYCA==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -4771,8 +4784,8 @@ packages:
   '@onkernel/sdk@0.49.0':
     resolution: {integrity: sha512-nsq5OfkaNKxRTCdXQF8BSTj/Wl0iBIqyWoI/ATgQt15pV+59E22MsZ+IHPiVwwb33tXLtnOqUe5ffOxm7l3GHg==}
 
-  '@opencomputer/sdk@2.3.1':
-    resolution: {integrity: sha512-1oCGDqsrsp7aJXNwvOzP7bAwQ3kKI05uxx7AbTpKRGYQ/4NgYidwFYmhf++lK+mjPlp19YHenKeZRniu2tqnjA==}
+  '@opencomputer/sdk@3.0.0':
+    resolution: {integrity: sha512-15IhOu/ft4bfOcWUDduxrccmNbOLILPf7n8flXElEYas+UKBmWQt563X2rQk26X2i04ueJV3RrQW15Ee4sxWgw==}
     engines: {node: '>=18'}
 
   '@opentelemetry/api-logs@0.214.0':
@@ -5597,17 +5610,23 @@ packages:
   '@smithy/core@3.24.1':
     resolution: {integrity: sha512-3mT7o4qQyUWttYnVK3A0Z/u3Xha3E81tXn32Tz6vjZiUXhBrkEivpw1hBYfh84iFF9CSzkBU9Y1DJ3Q6RQ231g==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.29.0':
     resolution: {integrity: sha512-sEvpvkBVoMxjoek35XyJFn2ZD3EJ1RpiZrT47WaZodxzAIWS44zkdvbqGE/ZlugtjiQp62cffYZ9ldyRkjAGnA==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.35.2':
     resolution: {integrity: sha512-ejTukBuP/Pg3t9N8Ux+0zKsXeHWm7p6W3HbXFOyltKasSxZwCFmvTut7kBdZSCF3m9y1bXXyVu6p2xuMFcsTyQ==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.4.5':
     resolution: {integrity: sha512-LnjUTNG0GgQlKIq7IioeOrPaEmC5xOd1WtAz24TLSiYQnWX2uHr53GrFuQhkrJBktPYCMga/NbUOW7hFbSA2Cg==}
@@ -6552,8 +6571,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.15:
-    resolution: {integrity: sha512-Ns+Nwtdgme0p8RnSrxkiLmiu4/7q2hm+woTuGTay2dPtuOdSy/7iJnWKt01y3vrAiQsJ8o6sW4FIO5tGHhr76w==}
+  computesdk@4.1.17:
+    resolution: {integrity: sha512-0Ua3oOkmaOi6uc5P6pLgurz2qU8WUl39k+N6KjQlTYExv51MITwzWqzlOS/dCv5yPqJw5uaEQifoGPK+8KRH3Q==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -9872,15 +9891,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.51(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.69)(@computesdk/modal@1.9.27)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.53(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.72)(@computesdk/modal@1.9.30)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.51(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      '@computesdk/e2b': 1.7.69
-      '@computesdk/modal': 1.9.27
+      '@computesdk/daytona': 1.7.53(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@computesdk/e2b': 1.7.72
+      '@computesdk/modal': 1.9.30
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10359,6 +10378,22 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@benchsdk/api@0.11.3': {}
+
+  '@benchsdk/cli@0.9.5':
+    dependencies:
+      '@benchsdk/api': 0.11.3
+
+  '@benchsdk/runner@0.8.6':
+    dependencies:
+      '@benchsdk/api': 0.11.3
+      '@benchsdk/cli': 0.9.5
+      '@benchsdk/worker': 0.4.3
+
+  '@benchsdk/worker@0.4.3':
+    dependencies:
+      '@benchsdk/api': 0.11.3
+
   '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))
@@ -10656,11 +10691,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.51(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@computesdk/daytona@1.7.53(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      '@computesdk/provider': 2.1.21
+      '@computesdk/provider': 2.1.23
       '@daytonaio/sdk': 0.224.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      computesdk: 4.1.15
+      computesdk: 4.1.17
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -10668,24 +10703,24 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@computesdk/e2b@1.7.69':
+  '@computesdk/e2b@1.7.72':
     dependencies:
-      '@computesdk/provider': 2.1.21
-      computesdk: 4.1.15
+      '@computesdk/provider': 2.1.23
+      computesdk: 4.1.17
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.27':
+  '@computesdk/modal@1.9.30':
     dependencies:
-      '@computesdk/provider': 2.1.21
-      computesdk: 4.1.15
+      '@computesdk/provider': 2.1.23
+      computesdk: 4.1.17
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.21':
+  '@computesdk/provider@2.1.23':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.15
+      computesdk: 4.1.17
       daemond: 0.1.8
     optional: true
 
@@ -11567,9 +11602,7 @@ snapshots:
 
   '@onkernel/sdk@0.49.0': {}
 
-  '@opencomputer/sdk@2.3.1':
-    dependencies:
-      undici: 7.28.0
+  '@opencomputer/sdk@3.0.0': {}
 
   '@opentelemetry/api-logs@0.214.0':
     dependencies:
@@ -13772,7 +13805,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.15:
+  computesdk@4.1.17:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.8
