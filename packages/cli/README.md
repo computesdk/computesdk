@@ -28,7 +28,8 @@ compute actions …               # Actions API — repos, workflows, dispatch, 
 compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
 compute bench …                 # benchmarks CLI (run, auth, org, results, …)
-compute providers               # sandbox provider credential status
+compute providers               # SDK provider credentials in this environment
+compute byok …                  # the org's BYOK provider keys and custom rates (see below)
 compute org list                # your organizations (* = active)
 compute org use <slug>          # switch the stored login's active org
 compute org current / whoami    # current user + active org (an API key: its org)
@@ -255,6 +256,35 @@ in those columns.
 entry). Both repeat, and the CLI checks only their syntax; the platform checks
 provider and preset names. `compute instances settings` prints the resulting
 `resources` and `warm pool` rows.
+
+## compute byok
+
+The org's BYOK providers (`/api/v1/providers`): the providers it brings its
+own key for, each key's state, and the rate sandbox costs are reported at.
+Keys and custom rates serve every product that places sandboxes — Actions
+jobs and sandbox creates alike. Reads are open to members; writes need an
+owner/admin.
+
+```bash
+compute byok                                # every BYOK provider: key state, rate
+compute byok show blaxel                    # one provider's key, platform and custom rate
+compute byok configure blaxel --field apiKey=… workspace=… --verify
+compute byok verify blaxel                  # test the stored key with a real sandbox
+compute byok remove blaxel -y               # delete the key
+compute byok rate set blaxel 0.09 --per hour
+compute byok rate clear blaxel
+```
+
+A custom rate is for your own cost reporting (typically what you pay the
+provider): sandbox costs on that provider are reported at it instead of the
+platform rate. It doesn't change what you're billed, and it applies to
+sandboxes created after you set it.
+
+With a user login, run `compute login` again once to pick up the `providers`
+scopes these commands need. `compute actions providers configure|verify|remove`
+still work but are deprecated in favour of `compute byok`;
+`compute actions providers` itself stays the Actions placement inventory
+(order, act capability).
 
 ## compute org members and invitations
 

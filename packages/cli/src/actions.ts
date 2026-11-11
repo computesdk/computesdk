@@ -1295,7 +1295,7 @@ export function registerActionsCommands(program: Command): void {
 
   const providers = actions
     .command('providers')
-    .description('List the org\'s registered compute providers (regions, act/usable status)');
+    .description('List the providers Actions can place on (order, act/usable, key status); keys and rates: compute byok');
   common(providers).action(async (opts: CommonOpts) => {
     try {
       const data = await (await client(opts)).get<CiProvidersResponse>('/api/v1/actions/providers');
@@ -1307,10 +1307,13 @@ export function registerActionsCommands(program: Command): void {
     }
   });
 
+  // configure/verify/remove predate `compute byok` and stay on the
+  // /api/v1/actions/providers aliases, which keep the actions OAuth scopes, so
+  // logins made before the providers scopes existed keep working.
   common(
     providers
       .command('configure')
-      .description('Save the org\'s credential for a provider (owner/admin API key)')
+      .description('Deprecated: use `compute byok configure`. Save the org\'s credential for a provider (owner/admin)')
       .argument('<provider>', 'provider id (e.g. tensorlake, blaxel)')
       .option('--key <key>', 'provider API key (single-field credentials)')
       .option('--field <pair...>', 'credential fields as name=value (multi-field providers)')
@@ -1349,7 +1352,7 @@ export function registerActionsCommands(program: Command): void {
   common(
     providers
       .command('verify')
-      .description('Probe the stored provider key with a real sandbox ("Test" in Settings)')
+      .description('Deprecated: use `compute byok verify`. Probe the stored provider key with a real sandbox')
       .argument('<provider>', 'provider id'),
   ).action(async (provider: string, opts: CommonOpts) => {
     try {
@@ -1366,7 +1369,7 @@ export function registerActionsCommands(program: Command): void {
   common(
     providers
       .command('remove')
-      .description('Delete the org\'s stored credential for a provider')
+      .description('Deprecated: use `compute byok remove`. Delete the org\'s stored credential for a provider')
       .argument('<provider>', 'provider id'),
   ).action(async (provider: string, opts: CommonOpts) => {
     try {

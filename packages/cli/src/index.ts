@@ -6,7 +6,8 @@
  * Usage:
  *   compute login                        # OAuth device login (benchsdk-cli)
  *   compute logout                       # clear stored credentials
- *   compute providers                    # list configured providers
+ *   compute providers                    # SDK provider credentials in this environment
+ *   compute byok …                       # the org's BYOK provider keys and custom rates
  *   compute org …                        # active org, members, invitations
  *   compute invitations …                # your own invitations (show/accept/decline)
  *   compute actions …                    # Actions API
@@ -25,6 +26,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { getProviderStatus } from './providers.js';
 import { registerActionsCommands } from './actions.js';
+import { registerByokCommands } from './byok.js';
 import { registerMarketCommands } from './market.js';
 import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
@@ -285,6 +287,12 @@ registerInvitationsCommands(program);
 // ─── actions ─────────────────────────────────────────────────────────────────
 
 registerActionsCommands(program);
+
+// ─── byok ────────────────────────────────────────────────────────────────────
+// `compute byok` drives /api/v1/providers — the org's BYOK provider keys and
+// custom rates, shared by Actions and sandboxes (src/byok.ts).
+
+registerByokCommands(program);
 
 // ─── market ──────────────────────────────────────────────────────────────────
 // `compute market` is the sell side of the compute market — same platform

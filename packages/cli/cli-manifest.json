@@ -833,7 +833,7 @@
         "--json",
         "--help"
       ],
-      "summary": "List the org's registered compute providers (regions, act/usable status)"
+      "summary": "List the providers Actions can place on (order, act/usable, key status); keys and rates: compute byok"
     },
     {
       "path": [
@@ -862,7 +862,7 @@
         "--json",
         "--help"
       ],
-      "summary": "Save the org's credential for a provider (owner/admin API key)"
+      "summary": "Deprecated: use `compute byok configure`. Save the org's credential for a provider (owner/admin)"
     },
     {
       "path": [
@@ -888,7 +888,7 @@
         "--json",
         "--help"
       ],
-      "summary": "Probe the stored provider key with a real sandbox (\"Test\" in Settings)"
+      "summary": "Deprecated: use `compute byok verify`. Probe the stored provider key with a real sandbox"
     },
     {
       "path": [
@@ -914,7 +914,7 @@
         "--json",
         "--help"
       ],
-      "summary": "Delete the org's stored credential for a provider"
+      "summary": "Deprecated: use `compute byok remove`. Delete the org's stored credential for a provider"
     },
     {
       "path": [
@@ -1515,6 +1515,183 @@
         "--help"
       ],
       "summary": "Update the org's actions routing policy"
+    },
+    {
+      "path": [
+        "byok"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "The org's BYOK providers: their keys and custom rates, shared by Actions and sandboxes"
+    },
+    {
+      "path": [
+        "byok",
+        "list"
+      ],
+      "aliases": [
+        [
+          "byok",
+          "ls"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Every provider the org may bring a key for, with key state and rate"
+    },
+    {
+      "path": [
+        "byok",
+        "show"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "One provider's key state, platform rate and custom rate"
+    },
+    {
+      "path": [
+        "byok",
+        "configure"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--key",
+        "--field",
+        "--verify",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Save the org's key for a provider; untested until verified (owner/admin)"
+    },
+    {
+      "path": [
+        "byok",
+        "verify"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Test the stored key by placing a real sandbox with it (\"Test\" in Settings; owner/admin)"
+    },
+    {
+      "path": [
+        "byok",
+        "remove"
+      ],
+      "aliases": [
+        [
+          "byok",
+          "rm"
+        ]
+      ],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Delete the org's stored key for a provider; nothing places on it until a new key passes (owner/admin)"
+    },
+    {
+      "path": [
+        "byok",
+        "rate"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Custom rates: report sandbox costs at your own price. Reporting only; billing is unchanged"
+    },
+    {
+      "path": [
+        "byok",
+        "rate",
+        "set"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>",
+        "<usd>"
+      ],
+      "flags": [
+        "--per",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Report a provider's sandbox costs at your own rate, e.g. what you pay it (owner/admin). Doesn't change what you're billed"
+    },
+    {
+      "path": [
+        "byok",
+        "rate",
+        "clear"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Drop a provider's custom rate; its costs report at the platform rate again (owner/admin)"
     },
     {
       "path": [
