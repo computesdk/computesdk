@@ -124,6 +124,8 @@ const API_ENDPOINTS = {
   CREATE_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/CreateInstance',
   DESCRIBE_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/DescribeInstance',
   LIST_INSTANCES: '/namespace.cloud.compute.v1beta.ComputeService/ListInstances',
+  SUSPEND_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/SuspendInstance',
+  WAKE_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/WakeInstance',
   DESTROY_INSTANCE: '/namespace.cloud.compute.v1beta.ComputeService/DestroyInstance'
 };
 
@@ -1046,6 +1048,37 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
 
       getInstance: (sandbox: NamespaceSandbox): NamespaceSandbox => sandbox,
+
+      // SuspendInstance snapshots RAM and disks; WakeInstance restores the
+      // same instance id without a restart, so pause/resume keep processes
+      // and memory.
+      pause: async (sandbox: NamespaceSandbox): Promise<void> => {
+        try {
+          await fetchNamespace(sandbox.token, API_ENDPOINTS.SUSPEND_INSTANCE, {
+            method: 'POST',
+            body: JSON.stringify({ instance_id: sandbox.instanceId })
+          });
+          sandbox.status = 'suspended';
+        } catch (error) {
+          throw new Error(
+            `Failed to suspend Namespace instance: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+      resume: async (sandbox: NamespaceSandbox): Promise<void> => {
+        try {
+          await fetchNamespace(sandbox.token, API_ENDPOINTS.WAKE_INSTANCE, {
+            method: 'POST',
+            body: JSON.stringify({ instance_id: sandbox.instanceId })
+          });
+          sandbox.status = 'running';
+        } catch (error) {
+          throw new Error(
+            `Failed to wake Namespace instance: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      },
+      pauseCapabilities: { memory: true },
     },
 
     // Namespace snapshots are volume-backed: a PERSISTENT volume is
