@@ -2089,6 +2089,10 @@
       "args": [],
       "flags": [
         "--status",
+        "--customer-only",
+        "--search",
+        "--sort",
+        "--direction",
         "--limit",
         "--cursor",
         "--quiet",
