@@ -311,3 +311,49 @@ describe('compute instances --help', () => {
     expect(rates.commands.map((c) => c.name()).sort()).toEqual(['rm', 'set']);
   });
 });
+
+describe('compute instances list', () => {
+  const PAGE = { sandboxes: [], nextCursor: null };
+
+  it('sends no filters by default', async () => {
+    fetchMock.mockResolvedValueOnce(json(PAGE));
+    expect(await cli('list', '--json')).toBe(0);
+    expect(requests()).toEqual([{ method: 'GET', url: '/api/v1/sandboxes', body: undefined }]);
+  });
+
+  it('--customer-only, --status active, --search, --sort and --direction reach the query', async () => {
+    fetchMock.mockResolvedValueOnce(json(PAGE));
+    expect(
+      await cli('list', '--customer-only', '--status', 'active', '--search', 'e2b box', '--sort', 'cost', '--direction', 'asc', '--limit', '5', '--json'),
+    ).toBe(0);
+    const url = new URL(requests()[0].url, 'https://platform.test');
+    expect(url.pathname).toBe('/api/v1/sandboxes');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      status: 'active',
+      customerOnly: 'true',
+      q: 'e2b box',
+      sort: 'cost',
+      direction: 'asc',
+      limit: '5',
+    });
+  });
+
+  it('passes a sorted page cursor back with the sort', async () => {
+    fetchMock.mockResolvedValueOnce(json(PAGE));
+    expect(await cli('list', '--sort', 'name', '--cursor', 's1.abc', '--json')).toBe(0);
+    const url = new URL(requests()[0].url, 'https://platform.test');
+    expect(Object.fromEntries(url.searchParams)).toEqual({ sort: 'name', cursor: 's1.abc' });
+  });
+
+  it('refuses an unknown --sort or --direction before calling the API', async () => {
+    expect(await cli('list', '--sort', 'size', '--json')).toBe(1);
+    expect(await cli('list', '--direction', 'up', '--json')).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(stderr + stdout).toContain('--sort must be one of created, name, cost, runtime');
+  });
+
+  it('documents active in --status help', () => {
+    const list = program().commands.find((c) => c.name() === 'instances')!.commands.find((c) => c.name() === 'list')!;
+    expect(list.options.find((o) => o.long === '--status')?.description).toContain('active');
+  });
+});

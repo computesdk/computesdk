@@ -209,6 +209,26 @@ Only one session per agent can be active at a time. Legacy sessions without
 persistent state cannot be recovered retroactively. Requires the platform's
 managed-volume/resume API; no account storage credentials are needed in the CLI.
 
+## compute instances list
+
+`compute instances list` (`GET /api/v1/sandboxes`) takes the filters and the
+sort of the dashboard's sandboxes table:
+
+```bash
+compute instances list --customer-only --status active      # what the dashboard lists as running
+compute instances list --search e2b                         # label, id, provider, provider sandbox id or product
+compute instances list --sort cost --direction desc --limit 20
+compute instances list --sort name --cursor <nextCursor>    # next page: repeat --sort/--direction
+```
+
+`--status` is `active` (every status but `destroyed`), `creating`, `running`
+or `destroyed`. `--customer-only` leaves out idle platform sandboxes (warm
+pool, CI sync, snapshot builds); sandboxes running an Actions job stay.
+`--sort` is `created` (default, newest first), `name`, `cost` or `runtime`;
+`--direction` defaults to `asc` for `name` and `desc` for the others. A page
+ends with `nextCursor`; pass it to `--cursor` with the same `--sort` and
+`--direction` (the server refuses a cursor from another sort).
+
 ## compute instances costs, rates and settings
 
 `compute instances` (aliases `sandboxes`, `sbx`) also reads and sets the org's
