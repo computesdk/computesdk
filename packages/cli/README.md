@@ -24,18 +24,21 @@ tokens renew automatically.
 ## Commands
 
 ```
-compute actions …               # Actions API — repos, dispatch, runs, schedule, logs, vault
+compute actions …               # Actions API — repos, workflows, dispatch, runs, schedule, logs, vault (see below)
 compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
 compute bench …                 # benchmarks CLI (run, auth, org, results, …)
-compute providers               # sandbox provider credential status
+compute providers               # SDK provider credentials in this environment
+compute byok …                  # the org's BYOK provider keys and custom rates (see below)
 compute org list                # your organizations (* = active)
 compute org use <slug>          # switch the stored login's active org
-compute org current / whoami    # current user + active org
+compute org current / whoami    # current user + active org (an API key: its org)
+compute org members|invitations|invite|member|leave   # members and invitations (see below)
+compute invitations …           # your own invitations: show, accept, decline
 ```
 
 All platform commands accept `--api-key` / `COMPUTE_API_KEY` and fall back to
-the stored OAuth credentials.
+the stored OAuth credentials. `COMPUTE_PLATFORM_URL` sets the platform URL.
 
 The active org comes from the stored login (`compute org use` changes it —
 it's per user, so every CLI on every machine sees the switch). For a one-off
@@ -54,6 +57,106 @@ a bare `--` before the command is optional but supported.
 compute sandboxes exec sb1 uname -a
 compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
 ```
+
+## compute actions runs
+
+`compute actions runs` lists the newest 100 runs across every repo, or one
+repo with `compute actions runs <owner/repo>`. Archived and reliability runs
+are hidden unless asked for. The filters map onto the
+`/api/v1/actions/runs` query and work on every view below:
+
+| Flag | Query |
+|---|---|
+| `--status <s...>` | `status` (passed, failed, running, cancelled, none) |
+| `--branch <b...>` | `branch` |
+| `--event <e...>` | `event` (push, pull_request, schedule, workflow_dispatch) |
+| `--workflow <path\|name...>` | `workflow`; names and file names (`ci.yml`) resolve to paths through the workflow catalog |
+| `--search <text>` | `q` (title, ref, SHA prefix, workflow, `#run` or `#PR` number) |
+| `--archived` | `archived=only` |
+| `--reliability` | `reliability=1` |
+
+```bash
+compute actions runs --event pull_request --archived --json
+compute actions runs days --status failed                 # 2026-09-21  3 runs, newest day first
+compute actions runs --day 2026-09-21 --time-zone UTC     # one page; prints the --cursor for the next
+compute actions runs --day 2026-09-21 --all --json        # every page: {runs, nextCursor: null}
+compute actions runs archive <run-id> <run-id> -y         # owner/admin; all or nothing
+compute actions runs unarchive <run-id> -y
+```
+
+`--json` prints the run array, `{runs, nextCursor}` with `--day`, `{days}`
+for `runs days`, and `{archived, archivedAt}` for archive and unarchive.
+Archive and unarchive ask for confirmation on a terminal; elsewhere they need
+`-y` and exit 1 without it. When an id is unknown or another org's, nothing
+changes and the command prints the ids it could not find and exits 1.
+
+## compute actions workflows
+
+`compute actions workflows` lists the workflows that can run now, across every
+repo or one (`compute actions workflows <owner/repo>`), with each one's
+controls and latest run:
+
+```
+● enabled  acme/widgets  .github/workflows/ci.yml (CI)  order: inherits  snapshots: dynamic  last: passed 3h ago
+○ disabled (user)  acme/widgets  .github/workflows/nightly.yml (Nightly)  order: vercel  snapshots: 3  last: never
+○ repo disabled  acme/legacy  .github/workflows/build.yml (Build)  order: inherits  snapshots: dynamic  last: never
+```
+
+`--all` adds the workflows that cannot run now (user-disabled, or on a
+disabled repo). `--ref <ref>` (with a repo) also lists the workflow files only
+that branch or tag has, with their inputs (`target* (required)`,
+`suite default=dax`); `compute actions dispatch <repo> --workflow <path> --ref <ref>`
+dispatches one of those by path when the catalog has no match.
+
+```bash
+compute actions workflows acme/widgets --all --json                    # {workflows}
+compute actions workflows local/fixture --ref feature-ref --json       # {workflows, refOnly}
+compute actions workflows disable acme/widgets ci.yml -y               # owner/admin
+compute actions workflows enable acme/widgets "Nightly" -y
+compute actions workflows set acme/widgets ci.yml --order market,vercel --snapshot-cap 3 -y
+compute actions workflows set acme/widgets ci.yml --inherit-order --dynamic-snapshots -y
+```
+
+`<workflow>` is a path, name, file name or id, matched against every
+workflow of the repo (disabled ones included). `--inherit-order` makes the
+workflow follow the org order and `--dynamic-snapshots` puts it back on the
+dynamic snapshot pool; `--snapshot-cap 0` turns snapshots off. `--json` prints
+the `PATCH /api/v1/actions/workflows` result (`repoFullName, path, enabled,
+userDisabledAt, providerOrder, snapshotCap`). Enable, disable and set ask for
+confirmation on a terminal; elsewhere they need `-y` and exit 1 without it.
+
+## compute actions repos
+
+`compute actions repos` lists the org's repositories with their run counts,
+latest run and poll state (from `GET /api/v1/actions/repos`):
+
+```
+enabled  computesdk/computesdk  github-app · main · 3 workflows · 12 runs · last passed 3h ago · next poll in 2m
+enabled  local/fixture  token · main · 1 workflow · 0 runs · not polled yet · fork PRs on
+disabled  acme/legacy  github-app · main · no workflows yet · 4 runs · last failed 9d ago
+```
+
+```bash
+compute actions repos --json                                     # {repos}, the v1 body
+compute actions branches computesdk/computesdk --search 482      # refs containing "482"
+compute actions branches computesdk/computesdk --archived --json # {repo, defaultBranch, branches}; counts archived runs
+compute actions repos poll local/fixture -y                      # owner/admin; at most every 30 s
+compute actions repos set computesdk/ref-heavy --fork-prs refuse -y   # or allow; owner/admin
+```
+
+`compute actions branches <repo>` lists the watched branches and open pull
+requests, then the refs that only have run history, each with its run count
+and latest run. `repos poll` fetches the repo's refs now and starts the runs
+new commits call for; the platform allows one poll every 30 seconds per repo
+(shared with the dashboard's "Poll now"), so a second poll inside that window
+exits 1 with `retry after <time>`. A poll that ran but failed against the
+remote prints the error and exits 1. `repos set --fork-prs allow|refuse`
+decides whether pull requests from forks run CI (isolated: no org secrets, no
+GitHub token); private repositories refuse them. `--repo-id` picks one row when
+two installations grant the same name. `--json` prints the v1 body: the poll
+result `{fullName, repoId, polled, error, createdRunIds, repo}` and the
+`PATCH /api/v1/actions/repos` result for `set`. Poll and set ask for
+confirmation on a terminal; elsewhere they need `-y` and exit 1 without it.
 
 ## Actions schedule
 
@@ -106,6 +209,247 @@ Resume preserves the session ID and event journal but acquires a new sandbox.
 Only one session per agent can be active at a time. Legacy sessions without
 persistent state cannot be recovered retroactively. Requires the platform's
 managed-volume/resume API; no account storage credentials are needed in the CLI.
+
+## compute instances list
+
+`compute instances list` (`GET /api/v1/sandboxes`) takes the filters and the
+sort of the dashboard's sandboxes table:
+
+```bash
+compute instances list --customer-only --status active      # what the dashboard lists as running
+compute instances list --search e2b                         # label, id, provider, provider sandbox id or product
+compute instances list --sort cost --direction desc --limit 20
+compute instances list --sort name --cursor <nextCursor>    # next page: repeat --sort/--direction
+```
+
+`--status` is `active` (every status but `destroyed`), `creating`, `running`
+or `destroyed`. `--customer-only` leaves out idle platform sandboxes (warm
+pool, CI sync, snapshot builds); sandboxes running an Actions job stay.
+`--sort` is `created` (default, newest first), `name`, `cost` or `runtime`;
+`--direction` defaults to `asc` for `name` and `desc` for the others. A page
+ends with `nextCursor`; pass it to `--cursor` with the same `--sort` and
+`--direction` (the server refuses a cursor from another sort).
+
+## compute instances costs and settings
+
+`compute instances` (aliases `sandboxes`, `sbx`) also reads and sets the org's
+sandbox spend and routing policy. Each command takes `--org`, `--api-key`,
+`--base-url`, `--allow-untrusted-host` and `--json` (the v1 body).
+
+```bash
+compute instances costs                      # spend: running, settled, per provider
+compute instances costs --customer-only      # without idle platform sandboxes (warm pool, CI sync, snapshot builds)
+compute instances settings set --resources blaxel=large --warm-pool blaxel=1
+compute instances settings set --resources blaxel=none --warm-pool blaxel=0
+```
+
+`costs` calls `GET /api/v1/sandboxes/costs` (`?customerOnly=true` with
+`--customer-only`); `--json` prints `{currency, running, settled, totalUsd,
+byProvider}`. The `all` row and each provider row split running and settled;
+against older servers without the per-provider split, provider rows show `—`
+in those columns.
+
+`settings set` (`PATCH /api/v1/sandboxes/settings`, owner/admin) takes
+`--resources <provider>=<preset>` (the provider's size preset, such as
+`small`, `medium`, `large` or `xlarge`; `none` clears it) and
+`--warm-pool <provider>[:<region>]=<n>` (`n` from 0 to 16; 0 clears the
+entry). Both repeat, and the CLI checks only their syntax; the platform checks
+provider and preset names. `compute instances settings` prints the resulting
+`resources` and `warm pool` rows.
+
+## compute byok
+
+The org's BYOK providers (`/api/v1/providers`): the providers it brings its
+own key for, each key's state, and the rate sandbox costs are reported at.
+Keys and custom rates serve every product that places sandboxes — Actions
+jobs and sandbox creates alike. Reads are open to members; writes need an
+owner/admin.
+
+```bash
+compute byok                                # every BYOK provider: key state, rate
+compute byok show blaxel                    # one provider's key, platform and custom rate
+compute byok configure blaxel --field apiKey=… workspace=… --verify
+compute byok verify blaxel                  # test the stored key with a real sandbox
+compute byok remove blaxel -y               # delete the key
+compute byok rate set blaxel 0.09 --per hour
+compute byok rate clear blaxel
+```
+
+A custom rate is for your own cost reporting (typically what you pay the
+provider): sandbox costs on that provider are reported at it instead of the
+platform rate. It doesn't change what you're billed, and it applies to
+sandboxes created after you set it.
+
+With a user login, run `compute login` again once to pick up the `providers`
+scopes these commands need. `compute actions providers configure|verify|remove`
+still work but are deprecated in favour of `compute byok`;
+`compute actions providers` itself stays the Actions placement inventory
+(order, act capability).
+
+## compute org members and invitations
+
+`compute org` also manages who is in the organization, and `compute
+invitations` answers your own invitations. Every command takes `--api-key`,
+`--base-url`, `--org`, `--allow-untrusted-host` and `--json` (the v1 body on
+stdout; on failure the `{ok:false, error:{code, message, httpStatus, hint}}`
+envelope on stderr).
+
+```bash
+compute org members                                # email, role, name, member id (any member)
+compute org invitations                            # pending invitations with their links (owner/admin)
+compute org invite bob@example.com --role admin    # member (default) or admin; prints the link
+compute org invitations cancel <invitationId> -y
+compute org member set-role bob@example.com admin -y   # <member id|email> <member|admin>
+compute org member remove bob@example.com -y
+compute org leave -y                               # needs a user login
+compute invitations                                # your pending invitations (org slug, role)
+compute invitations show <invitationId>
+compute invitations accept <invitationId>          # no confirmation
+compute invitations decline <invitationId> -y
+```
+
+The org commands call `/api/v1/organizations/current/…`: the server resolves
+`current` to the credential's org. An org API key always acts on its own org;
+for a user login `--org <slug>` (or `COMPUTE_ORG`) picks the org through
+`X-Org-Slug`, and without it the login's active org is used.
+
+| Command | Route |
+|---|---|
+| `org members` | `GET /api/v1/organizations/current/members` |
+| `org invitations` | `GET /api/v1/organizations/current/invitations` |
+| `org invite <email> [--role member\|admin]` | `POST /api/v1/organizations/current/invitations` `{email, role}` |
+| `org invitations cancel <invitationId>` | `DELETE /api/v1/organizations/current/invitations/{invitationId}` |
+| `org member set-role <member> <member\|admin>` | `GET …/members` to resolve the member, then `PATCH …/members/{memberId}` `{role}` |
+| `org member remove <member>` | `GET …/members`, then `DELETE …/members/{memberId}` |
+| `org leave` | `POST /api/v1/organizations/current/leave` |
+| `invitations` | `GET /api/v1/me/invitations` |
+| `invitations show <invitationId>` | `GET /api/v1/invitations/{invitationId}` |
+| `invitations accept <invitationId>` | `POST /api/v1/invitations/{invitationId}/accept` |
+| `invitations decline <invitationId>` | `POST /api/v1/invitations/{invitationId}/decline` |
+
+**Confirmation.** `invite`, `invitations cancel`, `member set-role`, `member
+remove`, `leave` and `invitations decline` ask for confirmation on a terminal
+(the prompt names the email, role or org); elsewhere they need `-y`/`--yes`
+and exit 1 with a "Pass -y to confirm" hint, changing nothing. `invitations
+accept` never asks (it is your own answer); it takes `-y` so scripts can pass
+the same flags as `decline`.
+
+**Owners stay in the web app.** `invite --role owner` and `set-role … owner`
+are refused locally ("Owner invitations require the web app" / "Owner role
+changes require the web app"), and the platform refuses any role change or
+removal that targets an owner with 403, which the CLI prints. Members are
+named by member id or email; an unknown one exits 1 ("No member …").
+
+**User login.** `org leave`, `invitations`, `invitations show|accept|decline`
+need a user login (`compute login`). With an org API key (`bp_…`/`csdk_…`) the
+CLI refuses before sending anything; for any other credential without a user
+the platform's 403 `user_credential_required` is printed with a `compute
+login` hint. Leaving an org also revokes your login's grant for it: if you
+logged in for that org, run `compute login` again.
+
+`invite` prints the invitation link and whether the email went out; when the
+platform has no email configured (`emailSent: false`), share the link
+yourself.
+
+## compute bench
+
+`compute bench …` runs the benchmarks CLI (`bench`) in-process: the same
+commands, flags and output as `bench …`; `compute bench --version` prints the
+version of the bench CLI it runs. The last release bundles `@benchsdk/runner`
+0.8.3 with `@benchsdk/cli` 0.9.3, which adds `bench fork`, `bench runs run-again`
+and the result filters `--participant`, `--since`, `--until`, `--day`, `--tz`
+and `--source-org`.
+
+This branch also links the benchmarks branch build (see "Developing against a
+bench branch build" below), so `compute bench` has the newer bench commands:
+
+```bash
+compute bench benchmarks archive|restore|describe|mute|unmute|pause|resume <slug>
+compute bench benchmarks list --status active|archived|all
+compute bench runs archive|unarchive <runId...> -y
+compute bench runs feed | runs days | runs day <YYYY-MM-DD> [--all]
+compute bench reliability <slug> | reliability cards
+compute bench activity [--days N]
+compute bench run-again <slug> [--wait] | run-again status <slug>   # daily Run again; needs a user login
+```
+
+compute's settings are forwarded to bench:
+
+| compute | bench | |
+|---|---|---|
+| `COMPUTE_PLATFORM_URL` | `BENCHMARKS_PLATFORM_URL` | only when `BENCHMARKS_PLATFORM_URL` is unset |
+| `COMPUTE_API_KEY` | `BENCHMARKS_PLATFORM_API_KEY` | only when `BENCHMARKS_PLATFORM_API_KEY` is unset, and only to a computesdk.com or localhost host over HTTPS (bench's `--base-url`, else its URL env, else `COMPUTE_PLATFORM_URL`); anything else is refused |
+| `compute --org <slug> bench …`, else `COMPUTE_ORG` | `--org <slug>` | only when the bench command has no `--org` of its own; not added to `run` / `check` |
+
+```bash
+COMPUTE_API_KEY=bp_… compute bench runs list my-benchmark --json
+COMPUTE_ORG=acme compute bench auth status --json      # same as: compute bench --org acme auth status
+```
+
+`compute whoami` and `compute org current` also read `COMPUTE_API_KEY`, under the same host rule. To use a key with a self-hosted platform, set `BENCHMARKS_PLATFORM_API_KEY` for it yourself. An
+org API key has no user, so they print the key's organization and
+`API key (no user identity)` (with `--json`: `"user": null`,
+`"credential": "api_key"`).
+
+## Command manifest
+
+`cli-manifest.json` (shipped in the package) lists every `compute` command:
+its canonical path, alias spellings, arguments and flags, plus the global
+flags and the `@benchsdk/runner` / `@benchsdk/cli` versions behind
+`compute bench …`. The bench commands themselves are described by the bench
+manifest in `@benchsdk/runner`. The benchmarks platform vendors both files
+to check that the commands its API surface map names exist.
+
+The hidden `compute __manifest` command prints the manifest (`--released`
+marks it as describing a published version; `--check <file>` exits 1 when
+`<file>` is out of date, ignoring a vendored `source.ref`). After adding,
+renaming or removing commands or flags, regenerate the committed file:
+
+```bash
+pnpm --filter @computesdk/cli run manifest   # builds, then writes cli-manifest.json
+```
+
+`src/__tests__/manifest.test.ts` fails when the committed file differs from
+the built CLI's output.
+
+### Developing against a bench branch build
+
+`@benchsdk/cli` and `@benchsdk/runner` can be pointed at a local checkout of
+[computesdk/benchmarks](https://github.com/computesdk/benchmarks) with a pnpm
+`link:` override in the root `package.json`, so `compute bench` runs bench
+commands that are not published yet:
+
+```json
+"pnpm": {
+  "overrides": {
+    "@benchsdk/cli": "link:../benchmarks-surface-parity/packages/benchsdk-cli",
+    "@benchsdk/runner": "link:../benchmarks-surface-parity/packages/benchsdk-runner"
+  }
+}
+```
+
+The paths are relative to the repository root, so the benchmarks checkout must
+sit next to it (`../benchmarks-surface-parity`, branch `droid/surface-parity`)
+and be installed and built first (`pnpm install && pnpm build` there; the
+linked packages use that checkout's own `node_modules` and `dist/`). Then run
+`pnpm install` here; the override is recorded in `pnpm-lock.yaml`, and
+`pnpm install --frozen-lockfile` accepts it. Without the sibling checkout pnpm
+still installs, with a "non-existent directory" warning and a dangling
+symlink, but typecheck and the CLI tests fail because `@benchsdk/cli` cannot
+be resolved. The override also covers `@computesdk/platform`'s optional
+`@benchsdk/cli` peer, so the workspace has one bench CLI.
+
+While the bench packages resolve to a checkout rather than to an npm install,
+`cli-manifest.json` marks them `"linked": true, "released": false` under
+`passthrough.bench.runner` and `passthrough.bench.cli`: the checkout's version
+number (`0.9.4` / `0.8.4`, the last bench release, until the branch is
+released as `@benchsdk/cli` 0.9.5) does not tell which commands it has, so consumers of the manifest should treat every bench
+command as present but unreleased.
+
+Before a release, publish the bench packages, remove the `pnpm.overrides`
+block, set `@benchsdk/cli` / `@benchsdk/runner` in `packages/cli/package.json`
+to the published caret ranges, run `pnpm install`, and regenerate the
+manifest (the `linked` / `released` fields disappear).
 
 ## Migrating from @computesdk/cli 1.x
 

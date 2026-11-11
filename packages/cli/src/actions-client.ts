@@ -96,6 +96,43 @@ export interface CiWorkflow {
   schedules: unknown[];
 }
 
+/** A row of `GET /api/v1/actions/workflows`: the dispatch picker row plus its controls and latest run. */
+export interface CiWorkflowListItem extends CiWorkflow {
+  /** Runs at all: the repo is enabled and the workflow is not user-disabled. */
+  enabled: boolean;
+  repoEnabled: boolean;
+  userDisabledAt: string | null;
+  /** Per-workflow placement order; null inherits the org order. */
+  providerOrder: string[] | null;
+  /** Per-workflow snapshot cap; null is the dynamic pool, 0 is off. */
+  snapshotCap: number | null;
+  lastRun: { id: string; conclusion: CiConclusion; queuedAt: string } | null;
+}
+
+/** A workflow file only the listed ref has: dispatched by repo and path on that ref. */
+export interface CiRefOnlyWorkflow {
+  name: string;
+  path: string;
+  inputs: CiWorkflowInput[];
+  dispatchable: boolean;
+}
+
+export interface CiWorkflowsResponse {
+  workflows: CiWorkflowListItem[];
+  /** Present when the list was asked for with `ref`. */
+  refOnly?: CiRefOnlyWorkflow[];
+}
+
+/** `PATCH /api/v1/actions/workflows`: a workflow's user-owned controls after the change. */
+export interface CiWorkflowControls {
+  repoFullName: string;
+  path: string;
+  enabled: boolean;
+  userDisabledAt: string | null;
+  providerOrder: string[] | null;
+  snapshotCap: number | null;
+}
+
 export type CiConclusion = 'passed' | 'failed' | 'running' | 'cancelled' | 'none';
 
 export interface CiScheduleWorkflow {
@@ -194,6 +231,8 @@ export interface CiRun {
   cancellationReason: string | null;
   /** `provider[:region]` the dispatch pinned this run to, else null. */
   providerOverride?: string | null;
+  /** When the run was archived (hidden from the default lists), else null. */
+  archivedAt?: string | null;
   jobs: CiJob[];
   logTail: string[];
   /**
@@ -202,6 +241,30 @@ export interface CiRun {
    * with `providers: []` until its summary is uploaded.
    */
   benchmarks?: CiRunBenchmarkResult[];
+}
+
+/** The `(startedAt, id)` position after a day page's last row. */
+export interface CiRunsCursor {
+  startedAt: string;
+  id: string;
+}
+
+/** `GET /api/v1/actions/runs/day/{day}`: one page; `nextCursor` is null on the last. */
+export interface CiRunsPage {
+  runs: CiRun[];
+  nextCursor?: CiRunsCursor | null;
+}
+
+/** One row of `GET /api/v1/actions/run-days`. */
+export interface CiRunDay {
+  day: string;
+  count: number;
+}
+
+/** `POST /api/v1/actions/runs/archive`: how many runs changed, and the stamp (null when unarchiving). */
+export interface CiRunArchiveResponse {
+  archived: number;
+  archivedAt: string | null;
 }
 
 /** One benchmark run linked to an Actions run, from `GET /api/v1/actions/runs/{id}`. */
@@ -397,6 +460,52 @@ export interface CiProviderInfo {
   usable: boolean;
   /** 1-based position in the effective provider order, null when absent. */
   position: number | null;
+  /** The stored key's last verification; absent from servers that predate it. */
+  status?: 'connected' | 'error' | 'unconfigured';
+  statusDetail?: string | null;
+  /** The stored key's masked hint — never the key. */
+  keyHint?: string | null;
+  lastCheckedAt?: string | null;
+}
+
+/** A GitHub App installation on `GET /api/v1/actions/installations` — never a token. */
+export interface CiInstallation {
+  githubInstallationId: number;
+  account: string;
+  accountType: string | null;
+  accountAvatarUrl: string | null;
+  appSlug: string;
+  repoSelection: 'all' | 'selected';
+  suspended: boolean;
+  suspendedAt: string | null;
+  installedAt: string;
+  configureUrl: string | null;
+  repos: { granted: number; enabled: number };
+}
+
+export interface CiInstallationsResponse {
+  installations: CiInstallation[];
+}
+
+/**
+ * Where a signed-in owner/admin starts an install in their browser. The
+ * platform never mints the signed install link for an API credential.
+ */
+export interface CiInstallLink {
+  configured: boolean;
+  url: string | null;
+  /** GitHub only. */
+  appSlug?: string | null;
+}
+
+/** The org's Slack connection on `GET /api/v1/actions/slack` — never the bot token. */
+export interface CiSlackConnection {
+  installed: boolean;
+  teamName: string | null;
+  channelId: string | null;
+  channelName: string | null;
+  notifyOn: 'all' | 'failure';
+  brief: { enabled: boolean; times: string[]; timeZone: string; categories: string[] };
 }
 
 export interface CiProvidersResponse {
@@ -483,7 +592,54 @@ export interface CiRepo {
 }
 
 export interface CiReposResponse {
-  repos: CiRepo[];
+  repos: CiApiRepo[];
+}
+
+export type CiPollSchedule = 'disabled' | 'never' | 'scheduled';
+
+/**
+ * A repo on `GET /api/v1/actions/repos` since the platform added poll state
+ * and run counts. Older deployments send only the `CiRepo` fields.
+ */
+export interface CiApiRepo extends CiRepo {
+  pollIntervalSeconds: number;
+  /** `disabled`: repo off; `never`: enabled but not polled yet; `scheduled`: `nextPollDueAt` is set. */
+  pollSchedule: CiPollSchedule;
+  nextPollDueAt: string | null;
+  lastPollErrorAt: string | null;
+  lastPollSucceededAt: string | null;
+  lastChangeAt: string | null;
+  /** Unarchived runs (reliability runs included), as the repository index counts them. */
+  runs: { total: number; lastRunState: CiConclusion | null; lastRunQueuedAt: string | null };
+}
+
+/** `POST /api/v1/actions/repos/poll`: a poll that failed against the remote still answers with `error` set. */
+export interface CiRepoPollResponse {
+  fullName: string;
+  repoId: string;
+  polled: true;
+  error: string | null;
+  createdRunIds: string[];
+  repo: CiApiRepo;
+}
+
+/** One ref of `GET /api/v1/actions/repos/branches`: a watched cursor, or run history alone. */
+export interface CiBranch {
+  /** Fully qualified: refs/heads/…, refs/pull/<n>/head, refs/tags/… */
+  ref: string;
+  prNumber: number | null;
+  /** True while a live ref cursor polls the ref; false: run history only. */
+  watched: boolean;
+  runCount: number;
+  /** "" when the ref has no run in view. */
+  latestRunId: string;
+  lastRunAt: string;
+}
+
+export interface CiBranchesResponse {
+  repo: string;
+  defaultBranch: string;
+  branches: CiBranch[];
 }
 
 /** What an enable/remote-connect discovered before answering. */

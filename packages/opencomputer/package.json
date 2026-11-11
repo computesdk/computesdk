@@ -39,7 +39,7 @@
   ],
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@opencomputer/sdk": "latest",
+    "@opencomputer/sdk": "^2.3.1",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

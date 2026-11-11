@@ -11,6 +11,7 @@
   "files": [
     "dist",
     "bootstrap.sh",
+    "cli-manifest.json",
     "README.md"
   ],
   "scripts": {
@@ -18,6 +19,8 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "start": "node dist/index.js",
+    "manifest": "tsup && node dist/index.js __manifest > cli-manifest.json",
+    "pretest": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -41,8 +44,8 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "@benchsdk/cli": "^0.9.3",
-    "@benchsdk/runner": "^0.8.3",
+    "@benchsdk/cli": "^0.9.5",
+    "@benchsdk/runner": "^0.8.6",
     "@clack/prompts": "^0.7.0",
     "@computesdk/platform": "workspace:*",
     "commander": "^11.1.0",

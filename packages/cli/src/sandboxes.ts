@@ -40,6 +40,7 @@ import {
 } from './current-instance.js';
 import { formatMoney, formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits } from './rate-display.js';
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
+import { registerBillingCommands } from './sandbox-billing.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
 // The definitions moved to @computesdk/platform in cli 2.x — re-exported here
@@ -472,6 +473,37 @@ function fmtTimeout(ms: number): string {
 /** Mirrors DEFAULT_SANDBOX_TIMEOUT_MS in benchmarks-platform lib/sandboxes/acquire.ts. */
 const PLATFORM_DEFAULT_TIMEOUT_MS = 30 * 60_000;
 
+type ListOpts = {
+  status?: string;
+  customerOnly?: boolean;
+  search?: string;
+  sort?: string;
+  direction?: string;
+  limit?: string;
+  cursor?: string;
+};
+
+const LIST_SORTS = ['created', 'name', 'cost', 'runtime'];
+
+/** The `GET /api/v1/sandboxes` query for `compute instances list`. */
+export function listQuery(opts: ListOpts): Record<string, string | undefined> {
+  if (opts.sort !== undefined && !LIST_SORTS.includes(opts.sort)) {
+    throw new Error(`--sort must be one of ${LIST_SORTS.join(', ')}`);
+  }
+  if (opts.direction !== undefined && opts.direction !== 'asc' && opts.direction !== 'desc') {
+    throw new Error('--direction must be asc or desc');
+  }
+  return {
+    status: opts.status,
+    customerOnly: opts.customerOnly ? 'true' : undefined,
+    q: opts.search,
+    sort: opts.sort,
+    direction: opts.direction,
+    limit: opts.limit,
+    cursor: opts.cursor,
+  };
+}
+
 export function registerSandboxesCommands(program: Command): void {
   const cmd = program
     .command('instances')
@@ -563,20 +595,24 @@ export function registerSandboxesCommands(program: Command): void {
   cmd
     .command('list')
     .description('List sandboxes')
-    .option('--status <status>', 'creating | running | destroyed')
+    .option('--status <status>', 'active (not destroyed) | creating | running | destroyed')
+    .option('--customer-only', 'exclude idle platform sandboxes (warm pool, CI sync, snapshot builds); Actions job sandboxes stay')
+    .option('--search <text>', 'match label, id, provider, provider sandbox id or product (Sandboxes, Actions)')
+    .option('--sort <column>', 'created (default, newest first) | name | cost | runtime')
+    .option('--direction <dir>', 'asc | desc (default: asc for name, desc for the others)')
     .option('--limit <n>', 'page size')
-    .option('--cursor <cursor>', 'page cursor from a previous response')
+    .option('--cursor <cursor>', 'page cursor from a previous response (pass the same --sort and --direction)')
     .option('-q, --quiet', 'print only instance IDs, one per line')
     .option('--verbose', 'print the full instance details')
     .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
     .option('--json', 'print the raw response')
-    .action(async (opts: QuietOpts & { status?: string; limit?: string; cursor?: string }) => {
+    .action(async (opts: QuietOpts & ListOpts) => {
       try {
         checkQuietJson(opts);
         const c = await client(opts);
         const res = await c.get<{ sandboxes: SandboxSummary[]; nextCursor: string | null }>(
           '/api/v1/sandboxes',
-          { status: opts.status, limit: opts.limit, cursor: opts.cursor },
+          listQuery(opts),
         );
         emitResult(
           opts,
@@ -1262,17 +1298,17 @@ export function registerSandboxesCommands(program: Command): void {
     sub.option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)');
   }
 
-  // Registered after the --org pass so `settings`/`settings set` declare
+  // Registered after the --org pass so `settings`, `costs` and their subcommands declare
   // their own full option set (the loop above only covers direct children).
-  registerSettingsCommands(cmd, 'sandboxes', (sub) =>
+  const nestedCommon = (sub: Command) =>
     sub
       .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
       .option('--base-url <url>', 'platform base URL')
       .option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)')
       .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
-      .option('--json', 'print the raw response'),
-    { client, fail, output, usageErrorOutput },
-  );
+      .option('--json', 'print the raw response');
+  registerSettingsCommands(cmd, 'sandboxes', nestedCommon, { client, fail, output, usageErrorOutput });
+  registerBillingCommands(cmd, nestedCommon, { client, fail, output });
 }
 
 /** Streams a process's daemon-buffered output to the console until `exit`. */
