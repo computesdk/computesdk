@@ -33,7 +33,7 @@ import { registerAgentsCommands } from './agents.js';
 import { parseBenchDispatch, runBench } from './bench.js';
 import { registerManifestCommand } from './manifest.js';
 import { registerInvitationsCommands, registerOrgMemberCommands } from './org-members.js';
-import { benchAuth, benchAuthOverrides, envBaseUrl, fetchWhoami, formatWhoami } from './session.js';
+import { benchAuth, envBaseUrl, fetchWhoami, formatWhoami } from './session.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -235,7 +235,9 @@ org
     const { loadCredentials, saveCredentials, createApiClient, setActiveOrganization } =
       await import('@benchsdk/cli');
     const credentials = (await loadCredentials()) ?? {};
-    const { auth } = await createApiClient(benchAuthOverrides());
+    // The switch belongs to the stored user login: COMPUTE_API_KEY (an org
+    // key, no user) must not stand in for it, so only the URL is overridden.
+    const { auth } = await createApiClient({ baseUrl: envBaseUrl() });
     const result = await setActiveOrganization(auth, slug);
     if (!result.organization) {
       throw new Error(`Could not set active organization to ${slug}`);

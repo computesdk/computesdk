@@ -102,9 +102,22 @@ export function formatRefOnlyRow(w: CiRefOnlyWorkflow): string {
   ].join('  ');
 }
 
-/** Match a dispatch `--workflow` against the files only the ref has: path, then name. */
+/**
+ * Match a dispatch `--workflow` against the files only the ref has: an exact
+ * path first, then the name. A name two files share is refused with their
+ * paths rather than guessed, as the control commands do.
+ */
 export function matchRefOnly(refOnly: CiRefOnlyWorkflow[], selector: string): CiRefOnlyWorkflow | undefined {
-  return refOnly.find((w) => w.path === selector) ?? refOnly.find((w) => w.name === selector);
+  const byPath = refOnly.find((w) => w.path === selector);
+  if (byPath) return byPath;
+  const byName = refOnly.filter((w) => w.name === selector);
+  if (byName.length > 1) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `"${selector}" matches ${byName.length} workflows only on this ref: ${byName.map((w) => safeTerm(w.path)).join(', ')}. Pass the path.`,
+    );
+  }
+  return byName[0];
 }
 
 /** `path (name)` choices for a not-found message. */

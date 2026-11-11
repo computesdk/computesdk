@@ -439,4 +439,18 @@ describe('compute actions settings set --resources / --warm-pool / --snapshot-po
     expect(out).not.toContain('dyn.yml');
     expect(out).toMatch(/live snapshots:\s*\n?\s*ada\/app {2}\.github\/workflows\/ci\.yml {2}2/);
   });
+
+  it('strips terminal control sequences from workflow paths in the snapshot summary', async () => {
+    const evil = '.github/workflows/\u001b]0;pwned\u0007ci.yml';
+    get.mockImplementation(async () => ({
+      ...ACTIONS_SETTINGS,
+      snapshotSummary: {
+        workflows: [{ repoFullName: 'ada/app', path: evil, name: 'CI', snapshotCap: 3 }],
+        live: [{ repoFullName: 'ada/app', workflowPath: evil, count: 1 }],
+      },
+    }));
+    const out = await captureStdout(() => buildActions().parseAsync(['actions', 'settings'], { from: 'user' }));
+    expect(out).not.toContain('\u001b]0;');
+    expect(out).not.toContain('\u0007');
+  });
 });

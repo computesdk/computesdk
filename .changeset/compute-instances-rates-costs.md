@@ -1,5 +1,5 @@
 ---
-'@computesdk/cli': minor
+'@computesdk/cli': patch
 ---
 
 Sandbox spend and routing on the CLI:

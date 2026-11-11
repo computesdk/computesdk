@@ -15,7 +15,7 @@
 
 import type { Command } from 'commander';
 import pc from 'picocolors';
-import { output, client, fail, parseInputs, usageErrorOutput, type CommonOpts } from './actions.js';
+import { output, client, fail, parseInputs, secretValueClient, usageErrorOutput, type CommonOpts } from './actions.js';
 import { confirmWrite } from './confirm.js';
 import { formatRateAllUnits, type RateAllUnits, type RatePer } from './rate-display.js';
 import { safeTerm } from './term.js';
@@ -180,7 +180,8 @@ export function registerByokCommands(program: Command): void {
       .option('--verify', 'test the key with a real sandbox after saving'),
   ).action(async (provider: string, opts: CommonOpts & { key?: string; field?: string[]; verify?: boolean }) => {
     try {
-      const c = await client(opts);
+      // A provider key is a local secret: trusted hosts only, even with --allow-untrusted-host.
+      const c = await secretValueClient(opts, 'provider keys');
       const saved = await c.put<ByokKeyResponse>(providerPath(provider, '/key'), keyBody(opts));
       const verification = opts.verify ? await c.post<ByokKeyResponse>(providerPath(provider, '/verify')) : undefined;
       output(opts, verification ? { key: saved.key, verification } : saved, () => {

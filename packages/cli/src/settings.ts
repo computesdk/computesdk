@@ -15,6 +15,7 @@ import { Command } from 'commander';
 import pc from 'picocolors';
 import { ActionsApiError, ActionsCliError, type ActionsClient } from './actions-client.js';
 import { formatUsdPer } from './rate-display.js';
+import { safeTerm } from './term.js';
 import type { CommonOpts } from './actions.js';
 
 /**
@@ -235,7 +236,7 @@ export function printLaneSettings(
     const snap = Object.entries(s.snapshotPool);
     console.log('snapshot pool:');
     if (snap.length === 0) console.log('  —');
-    for (const [entry, cap] of snap) console.log(`  ${entry}  ${cap}`);
+    for (const [entry, cap] of snap) console.log(`  ${safeTerm(entry)}  ${cap}`);
   }
   if (s.snapshotSummary !== undefined) printSnapshotSummary(s.snapshotSummary);
 }
@@ -247,12 +248,12 @@ function printSnapshotSummary(summary: NonNullable<LaneSettings['snapshotSummary
   if (capped.length === 0) console.log(`  ${pc.dim('— (every workflow uses the dynamic pool)')}`);
   for (const w of capped) {
     const cap = w.snapshotCap === 0 ? 'off' : String(w.snapshotCap);
-    console.log(`  ${w.repoFullName}  ${w.path}  ${cap}`);
+    console.log(`  ${safeTerm(w.repoFullName)}  ${safeTerm(w.path)}  ${cap}`);
   }
   console.log('live snapshots:');
   if (summary.live.length === 0) console.log('  —');
   for (const row of summary.live) {
-    console.log(`  ${row.repoFullName}  ${row.workflowPath ?? pc.dim('(no workflow)')}  ${row.count}`);
+    console.log(`  ${safeTerm(row.repoFullName)}  ${row.workflowPath === null ? pc.dim('(no workflow)') : safeTerm(row.workflowPath)}  ${row.count}`);
   }
 }
 

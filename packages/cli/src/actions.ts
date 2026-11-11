@@ -1320,7 +1320,8 @@ export function registerActionsCommands(program: Command): void {
       .option('--verify', 'run the placement probe after saving'),
   ).action(async (provider: string, opts: CommonOpts & { key?: string; field?: string[]; verify?: boolean }) => {
     try {
-      const c = await client(opts);
+      // A provider key is a local secret: trusted hosts only, even with --allow-untrusted-host.
+      const c = await secretValueClient(opts, 'provider keys');
       let body: Record<string, unknown>;
       if (opts.field !== undefined) {
         if (opts.key !== undefined) throw new Error('Pass either --key or --field, not both.');

@@ -9,7 +9,7 @@ vi.mock('../actions-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../actions-client.js')>();
   return {
     ...actual,
-    resolveActionsAuth: vi.fn(async () => ({ apiKey: 'test', baseUrl: 'https://platform.test', orgSlug: null })),
+    resolveActionsAuth: vi.fn(async () => ({ apiKey: 'test', baseUrl: 'https://platform.computesdk.com', orgSlug: null })),
     ActionsClient: vi.fn(function ActionsClient(auth: ConstructorParameters<typeof actual.ActionsClient>[0]) {
       return new actual.ActionsClient(auth, fetchMock as unknown as typeof fetch);
     }),
@@ -17,6 +17,7 @@ vi.mock('../actions-client.js', async (importOriginal) => {
 });
 
 const { registerByokCommands, parseRateArgs, keyBody } = await import('../byok.js');
+const { resolveActionsAuth } = await import('../actions-client.js');
 
 class Exit extends Error {
   constructor(public code: number | undefined) {
@@ -64,7 +65,7 @@ let stderr: string;
 const requests = () =>
   fetchMock.mock.calls.map(([url, init]) => ({
     method: init?.method ?? 'GET',
-    url: String(url).replace('https://platform.test', ''),
+    url: String(url).replace('https://platform.computesdk.com', ''),
     body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
   }));
 
@@ -123,6 +124,13 @@ describe('compute byok keys', () => {
       { method: 'PUT', url: '/api/v1/providers/blaxel/key', body: { fields: { apiKey: 'k', workspace: 'w' } } },
       { method: 'POST', url: '/api/v1/providers/blaxel/verify', body: {} },
     ]);
+  });
+
+  it('configure never sends a key to an untrusted host, even with --allow-untrusted-host', async () => {
+    vi.mocked(resolveActionsAuth).mockResolvedValueOnce({ apiKey: 'test', baseUrl: 'https://evil.example', orgSlug: null } as never);
+    expect(await cli('configure', 'blaxel', '--key', 'k', '--allow-untrusted-host', '--json')).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(stderr).toContain('untrusted_host');
   });
 
   it('verify exits 1 when the test fails', async () => {

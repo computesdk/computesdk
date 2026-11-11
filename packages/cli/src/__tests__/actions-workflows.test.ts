@@ -439,6 +439,13 @@ describe('compute actions dispatch: ref-only fallback', () => {
     expect(matchRefOnly([REF_ONLY], 'ci.yml')).toBeUndefined();
   });
 
+  it('matchRefOnly refuses a name two ref-only files share, but an exact path still wins', () => {
+    const linux = { ...REF_ONLY, path: '.github/workflows/build-linux.yml', name: 'Build' };
+    const macos = { ...REF_ONLY, path: '.github/workflows/build-macos.yml', name: 'Build' };
+    expect(() => matchRefOnly([linux, macos], 'Build')).toThrow(/matches 2 workflows.*build-linux\.yml.*build-macos\.yml.*Pass the path/);
+    expect(matchRefOnly([linux, macos], '.github/workflows/build-macos.yml')).toBe(macos);
+  });
+
   it('dispatchBody applies the --manual rules to a path-addressed push-only target', () => {
     const target = { repoFullName: 'local/fixture', workflowPath: REF_ONLY.path, dispatchable: false };
     expect(() => dispatchBody(target, { ref: 'feature-ref' })).toThrow('--manual');

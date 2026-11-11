@@ -1,5 +1,5 @@
 ---
-'@computesdk/cli': minor
+'@computesdk/cli': patch
 ---
 
 Org members and invitations on the CLI:
