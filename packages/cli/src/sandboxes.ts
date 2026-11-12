@@ -674,7 +674,7 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
           }
         }
         emitResult(opts, res.sandbox, (s) => s.id, (s) => printSandbox(s, opts.verbose));
-        if (!opts.json && !opts.quiet) printNextSteps(res.sandbox.id, opts.use !== false);
+        if (!opts.json && !opts.quiet) printNextSteps(res.sandbox.id, opts);
       } catch (e) {
         fail(e, opts);
       }
@@ -719,21 +719,23 @@ async function previewPlacement(c: Awaited<ReturnType<typeof client>>, opts: Cre
 }
 
 /**
- * After a create: how to use the sandbox. With it current for this
- * directory the commands need no id; otherwise they name it. On stderr, so
- * stdout stays the sandbox line.
+ * After a create: how to use the sandbox. The commands always name it (and
+ * repeat a one-off --org / --base-url): an id-free command would follow
+ * COMPUTE_INSTANCE or another org's pick, and `destroy` could hit a
+ * different sandbox while this one keeps billing. On stderr, so stdout stays
+ * the sandbox line.
  */
-function printNextSteps(id: string, current: boolean): void {
-  const target = current ? '' : ` ${id}`;
+function printNextSteps(id: string, opts: { org?: string; baseUrl?: string }): void {
+  const context = `${opts.org ? ` --org ${opts.org}` : ''}${opts.baseUrl ? ` --base-url ${opts.baseUrl}` : ''}`;
   const steps: [string, string][] = [
-    [`compute sandboxes exec${target} -- node -v`, 'run a command'],
-    [`compute sandboxes spawn${target} -- npm run dev`, 'start a server'],
-    [`compute sandboxes url${target} --port 3000`, 'get its public URL'],
-    [`compute sandboxes destroy${target}`, 'stop billing'],
+    [`compute sandboxes exec ${id}${context} -- node -v`, 'run a command'],
+    [`compute sandboxes spawn ${id}${context} -- npm run dev`, 'start a server'],
+    [`compute sandboxes url ${id}${context} --port 3000`, 'get its public URL'],
+    [`compute sandboxes destroy ${id}${context}`, 'stop billing'],
   ];
   const width = Math.max(...steps.map(([command]) => command.length));
   console.error('');
-  console.error(current ? 'Use it (current for this directory):' : 'Use it:');
+  console.error('Use it:');
   for (const [command, does] of steps) console.error(`  ${command.padEnd(width)}  ${pc.dim(does)}`);
   console.error(pc.dim('It runs and bills until it times out or is destroyed.'));
 }
