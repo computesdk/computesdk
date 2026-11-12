@@ -58,6 +58,18 @@ interface UpstashConfig {
 
 ## Features
 
+Pass Upstash's native `size` option when creating a box or restoring a snapshot:
+
+```typescript
+const sandbox = await compute.instances.create({ size: 'medium' });
+const restored = await compute.instances.create({ snapshotId: 'snap_...', size: 'medium' });
+```
+
+The [official Box sizes](https://upstash.com/docs/box/overall/how-it-works#box-size)
+are `small` (2 cores / 4 GB), `medium` (4 / 8 GB), and `large` (8 / 16 GB).
+These native names differ from ComputeSDK standard size classes. Omitting
+`size` leaves the choice to Upstash. The option also applies to ephemeral boxes.
+
 - **Command Execution** - Run shell commands in sandbox (Python/Node.js available)
 - **Filesystem Operations** - Full file system access
 - **Preview URLs** - Get publicly accessible URLs for running services
