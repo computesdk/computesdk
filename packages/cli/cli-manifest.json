@@ -1692,6 +1692,60 @@
     },
     {
       "path": [
+        "credits"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Your prepaid credit — managed accounts bill from it: balance, ledger, top-ups"
+    },
+    {
+      "path": [
+        "credits",
+        "ledger"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--limit",
+        "--cursor",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Credit history, newest first: top-ups, grants, holds, charges, refunds"
+    },
+    {
+      "path": [
+        "credits",
+        "topup"
+      ],
+      "aliases": [],
+      "args": [
+        "<usd>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Add credit — prints a Stripe checkout link to pay in your browser (owner/admin)"
+    },
+    {
+      "path": [
         "instances"
       ],
       "aliases": [

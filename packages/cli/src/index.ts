@@ -11,6 +11,7 @@
  *   compute org …                        # active org, members, invitations
  *   compute invitations …                # your own invitations (show/accept/decline)
  *   compute actions …                    # Actions API
+ *   compute credits [ledger | topup <usd>] # prepaid credit, which managed accounts bill from
  *   compute market …                     # not generally available (hidden from help)
  *   compute new [vercel | --vercel]      # create a sandbox (short for `compute sandboxes create`)
  *   compute instances …                  # platform compute-instance control plane
@@ -29,6 +30,7 @@ import { getProviderStatus } from './providers.js';
 import { registerActionsCommands } from './actions.js';
 import { registerByokCommands } from './byok.js';
 import { registerMarketCommands } from './market.js';
+import { registerCreditsCommands } from './credits.js';
 import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
 import { parseBenchDispatch, runBench } from './bench.js';
@@ -302,6 +304,11 @@ registerByokCommands(program);
 // API and auth as `compute actions`, for orgs flagged `market_provider`.
 
 registerMarketCommands(program);
+
+// ─── credits ─────────────────────────────────────────────────────────────────
+// `compute credits` — prepaid credit (balance, ledger, top-ups), which managed
+// accounts bill from (src/credits.ts).
+registerCreditsCommands(program);
 
 // ─── sandboxes ───────────────────────────────────────────────────────────────
 // `compute instances` (alias `compute sandboxes`/`sbx`) drives
