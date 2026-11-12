@@ -1806,6 +1806,32 @@
     {
       "path": [
         "instances",
+        "options"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "options"
+        ],
+        [
+          "sbx",
+          "options"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List what you can create sandboxes on: managed accounts with prices per size, and your BYOK providers, in router order"
+    },
+    {
+      "path": [
+        "instances",
         "route"
       ],
       "aliases": [
@@ -2690,6 +2716,7 @@
         "--base-url",
         "--allow-untrusted-host",
         "--json",
+        "--list",
         "--help"
       ],
       "summary": "Create a sandbox (short for `compute sandboxes create`); `compute new vercel` or `--vercel` picks the provider"

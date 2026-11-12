@@ -355,6 +355,56 @@ describe('quiet and verbose output', () => {
     }
   });
 
+  it('sandboxes options and new --list show what you can create on, in router order', async () => {
+    const options = {
+      byokMode: 'fallback',
+      options: [
+        { account: 'managed', provider: 'daytona', sizes: [
+          { name: 'small', label: '1 vCPU', rate: null },
+          { name: 'medium', label: '2 vCPU', rate: { usd: 0.1, per: 'hour' } },
+        ] },
+        { account: 'managed', provider: 'superserve', sizes: [{ name: 'default', label: "the provider's default size", rate: { usd: 0.08, per: 'hour' } }] },
+        { account: 'byok', provider: 'tensorlake', region: null, ready: true },
+        { account: 'byok', provider: 'blaxel', region: null, ready: false },
+      ],
+    };
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      fakeClient.get.mockResolvedValueOnce(options);
+      await buildProgram().parseAsync(['sandboxes', 'options'], { from: 'user' });
+      expect(fakeClient.get).toHaveBeenLastCalledWith('/api/v1/sandboxes/options');
+      const text = out.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(text).toMatch(/daytona\s+managed\s+—\s+\$0\.1\/h/);
+      expect(text).toContain('default size $0.08/h');
+      expect(text).toContain('billed by tensorlake to your account');
+      expect(text).toContain('key not tested');
+      expect(text.indexOf('daytona')).toBeLessThan(text.indexOf('tensorlake'));
+      expect(text).toContain('A plain `compute new` lands on daytona');
+
+      post.mockClear();
+      out.mockClear();
+      fakeClient.get.mockResolvedValueOnce(options);
+      await buildProgram().parseAsync(['new', '--list'], { from: 'user' });
+      expect(post).not.toHaveBeenCalled();
+      expect(out.mock.calls.map((c) => String(c[0])).join('\n')).toContain('Router: managed accounts first, then your keys');
+    } finally {
+      out.mockRestore();
+    }
+  });
+
+  it('new --list with provider names is a usage error and creates nothing', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      post.mockClear();
+      await buildProgram().parseAsync(['new', '--vercel', '--list'], { from: 'user' }).catch(() => undefined);
+      expect(post).not.toHaveBeenCalled();
+    } finally {
+      err.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
   it('create --quiet --json is a usage error', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
