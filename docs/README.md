@@ -45,7 +45,6 @@ Providers are platforms that provide sandboxes. Each package under `@computesdk/
 | `@computesdk/modal`            | Modal        |
 | `@computesdk/northflank`       | Northflank   |
 | `@computesdk/opencomputer`     | OpenComputer |
-| `@computesdk/run-cloud`        | Run Cloud    |
 | `@computesdk/runloop`          | Runloop      |
 | `@computesdk/sandbox0`         | Sandbox0     |
 | `@computesdk/superserve`       | Superserve   |
