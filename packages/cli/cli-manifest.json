@@ -2610,6 +2610,38 @@
     },
     {
       "path": [
+        "new"
+      ],
+      "aliases": [],
+      "args": [
+        "[providers...]"
+      ],
+      "flags": [
+        "--provider",
+        "--byok",
+        "--managed",
+        "--size",
+        "--label",
+        "--image",
+        "--snapshot-id",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--timeout-ms",
+        "--secret",
+        "--no-use",
+        "--quiet",
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Create a sandbox (short for `compute sandboxes create`); `compute new vercel` or `--vercel` picks the provider"
+    },
+    {
+      "path": [
         "agents"
       ],
       "aliases": [

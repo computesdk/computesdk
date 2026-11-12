@@ -306,6 +306,30 @@ describe('quiet and verbose output', () => {
     }
   });
 
+  it('compute new is create; providers come as words or --flags', async () => {
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['new', '-q', '--no-use'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', {});
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['new', '--vercel', '-q', '--no-use'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { only: ['vercel'] });
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['new', 'daytona', '--e2b', '--managed', '--size', 'large', '-q', '--no-use'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { only: ['daytona', 'e2b'], byok: 'off', size: 'large' });
+      post.mockClear();
+      await buildProgram().parseAsync(['new', '--vercel', '--provider', 'e2b', '-q', '--no-use'], { from: 'user' }).catch(() => undefined);
+      expect(post).not.toHaveBeenCalled();
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
   it('create --quiet --json is a usage error', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);

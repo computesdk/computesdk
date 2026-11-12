@@ -566,20 +566,14 @@ export function listQuery(opts: ListOpts): Record<string, string | undefined> {
   };
 }
 
-export function registerSandboxesCommands(program: Command): void {
-  const cmd = program
-    .command('instances')
-    .alias('sandboxes')
-    .alias('sbx')
-    .description('Create and drive compute instances through the platform')
-    .enablePositionalOptions()
-    .configureOutput({ outputError: usageErrorOutput });
-
-  addCreateFlags(
-    cmd
-      .command('create')
-      .description('Create a sandbox through your Sandboxes router (`compute sandboxes route` shows where it lands)'),
-  )
+/**
+ * The `create` flags and action, on `compute sandboxes create` and on the
+ * `compute new` shorthand. With `providerShorthand`, the command's operands
+ * — `vercel` or an unknown `--vercel` flag, which commander hands over as
+ * operands — name providers, as `--provider` does.
+ */
+function registerCreate(command: Command, { providerShorthand = false }: { providerShorthand?: boolean } = {}): void {
+  addCreateFlags(command)
     .option('--no-use', 'do not mark the new instance as this directory\'s current instance')
     .option('-q, --quiet', 'print only the new instance ID')
     .option('--verbose', 'print the full instance details')
@@ -587,9 +581,16 @@ export function registerSandboxesCommands(program: Command): void {
     .option('--base-url <url>', 'platform base URL')
     .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
     .option('--json', 'print the raw response')
-    .action(async (opts: QuietOpts & CreateFlagOpts & { use?: boolean }) => {
+    .action(async (...args: unknown[]) => {
+      const operands = providerShorthand ? (args[0] as string[]) : [];
+      const opts = args[providerShorthand ? 1 : 0] as QuietOpts & CreateFlagOpts & { use?: boolean };
       try {
         checkQuietJson(opts);
+        const named = shorthandProviders(operands);
+        if (named.length > 0) {
+          if (opts.provider) throw new Error('Name providers either as words/flags or with --provider, not both.');
+          opts.provider = named.join(',');
+        }
         const c = await client(opts);
         const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', buildCreateBody(opts));
         // Commander stores --no-use as `use: false`.
@@ -604,6 +605,46 @@ export function registerSandboxesCommands(program: Command): void {
         fail(e, opts);
       }
     });
+}
+
+/** `['--vercel', 'e2b']` → `['vercel', 'e2b']`; anything else is a usage error. */
+function shorthandProviders(operands: string[]): string[] {
+  return operands.map((operand) => {
+    const name = operand.startsWith('--') ? operand.slice(2) : operand;
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+      throw new Error(`"${operand}" isn't a provider name — use e.g. \`compute new vercel\` or \`compute new --vercel\`.`);
+    }
+    return name;
+  });
+}
+
+export function registerSandboxesCommands(program: Command): void {
+  const cmd = program
+    .command('instances')
+    .alias('sandboxes')
+    .alias('sbx')
+    .description('Create and drive compute instances through the platform')
+    .enablePositionalOptions()
+    .configureOutput({ outputError: usageErrorOutput });
+
+  registerCreate(
+    cmd
+      .command('create')
+      .description('Create a sandbox through your Sandboxes router (`compute sandboxes route` shows where it lands)'),
+  );
+
+  // `compute new` — the short form of `compute sandboxes create`. Providers
+  // narrow the router like --provider, as words or as flags:
+  // `compute new vercel` / `compute new --vercel` = `--provider vercel`.
+  registerCreate(
+    program
+      .command('new')
+      .description('Create a sandbox (short for `compute sandboxes create`); `compute new vercel` or `--vercel` picks the provider')
+      .argument('[providers...]', 'only these providers, through your router (vercel, --vercel, e2b, …)')
+      .allowUnknownOption()
+      .configureOutput({ outputError: usageErrorOutput }),
+    { providerShorthand: true },
+  );
 
   // `route`: where a create would land under the Sandboxes router, and what
   // it costs — managed (ComputeSDK credit) or BYOK (billed by the provider).
