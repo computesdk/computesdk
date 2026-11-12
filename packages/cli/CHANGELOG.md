@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.6.9
+
+### Patch Changes
+
+- 42d7e47: Add `compute sandboxes options` (and `compute new --list`): everything you can create sandboxes on, in your Sandboxes router's order — each ComputeSDK managed account with its price per size (billed from credit) and each BYOK provider (billed by the provider) — plus where a plain `compute new` would land.
+
 ## 2.6.8
 
 ### Patch Changes
