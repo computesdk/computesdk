@@ -202,13 +202,14 @@ export interface LaneRouting {
   managed: string[];
   /** Every live managed account a custom order may name. */
   available: string[];
-  byok: { mode: ByokMode; order: string[] };
+  /** `order` is what placement uses; `inherits` (Sandboxes) says it comes from the Actions router. */
+  byok: { mode: ByokMode; order: string[]; inherits?: boolean };
 }
 
 const arrow = (list: string[]): string => list.join(' → ');
 
 /** The router: managed routing first (the default path), then BYOK. */
-export function printLaneRouting(r: LaneRouting, s: LaneSettings, lane: 'actions' | 'sandboxes'): void {
+export function printLaneRouting(r: LaneRouting, lane: 'actions' | 'sandboxes'): void {
   const label = (text: string) => text.padEnd(12);
   const managed = r.managed.length > 0 ? arrow(r.managed) : pc.dim('no managed account is live');
   console.log(
@@ -216,11 +217,12 @@ export function printLaneRouting(r: LaneRouting, s: LaneSettings, lane: 'actions
   );
   console.log(`${label('BYOK')}${r.byok.mode}  ${pc.dim(`(${BYOK_MODE_HELP[r.byok.mode]})`)}`);
   if (r.byok.mode !== 'off') {
+    const list = r.byok.order.length > 0 ? arrow(r.byok.order) : '—';
     const order =
-      r.byok.order.length > 0
-        ? arrow(r.byok.order)
-        : lane === 'sandboxes'
-          ? pc.dim(`inherits Actions (${arrow(s.actionsProviderOrder ?? []) || '—'})`)
+      lane === 'sandboxes' && r.byok.inherits === true
+        ? `${list}  ${pc.dim('(inherited from the Actions router)')}`
+        : r.byok.order.length > 0
+          ? list
           : pc.dim('none set — add keys with `compute byok configure`');
     console.log(`${label('BYOK order')}${order}`);
   }
@@ -310,7 +312,7 @@ export function registerSettingsCommands(
     return { routing, settings };
   };
   const print = ({ routing, settings }: { routing: LaneRouting; settings: LaneSettings }) => {
-    printLaneRouting(routing, settings, lane);
+    printLaneRouting(routing, lane);
     printLaneSettings(settings);
   };
 
@@ -444,6 +446,13 @@ export function registerSettingsCommands(
       }
       if (opts.snapshotPool && opts.snapshotPool.length > 0) {
         settingsBody.snapshotPool = poolPatch(opts.snapshotPool, parseSnapshotPoolFlag);
+      }
+      // The router and the sizes/pools are two endpoints; one command never
+      // half-applies, so it changes one or the other.
+      if (Object.keys(routing).length > 0 && Object.keys(settingsBody).length > 0) {
+        throw new Error(
+          'Change routing (--routing, --byok, --byok-order) and sizes or pools in separate commands.',
+        );
       }
       if (Object.keys(routing).length === 0 && Object.keys(settingsBody).length === 0) {
         throw new Error(

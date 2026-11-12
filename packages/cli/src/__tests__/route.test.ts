@@ -75,6 +75,22 @@ describe('compute sandboxes route', () => {
     expect(out).toContain('billed by tensorlake to your account');
   });
 
+  it('shows a hold only when the quote returns one', async () => {
+    get.mockResolvedValue({
+      quote: {
+        ...base,
+        ok: true,
+        providerOrder: ['market'],
+        placement: { source: 'market', provider: 'blaxel', region: null, size: 'medium', box: { provider: 'blaxel', sizeName: 'medium' } },
+        rate: { usd: 0.2, per: 'hour' },
+        estimatedCostUsd: 0.35,
+      },
+    });
+    const out = await run(['route']);
+    expect(out).not.toContain('held');
+    expect(out).toMatch(/Estimate\s+\$0\.35/);
+  });
+
   it('says why nothing can place', async () => {
     get.mockResolvedValue({
       quote: { ...base, ok: false, reason: 'insufficient_credits', providerOrder: ['managed/daytona'], requiredHoldUsd: 3, topUpPath: '/acme/settings/billing' },

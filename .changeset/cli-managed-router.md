@@ -1,5 +1,5 @@
 ---
-"@computesdk/cli": minor
+"@computesdk/cli": patch
 "@computesdk/platform": patch
 ---
 

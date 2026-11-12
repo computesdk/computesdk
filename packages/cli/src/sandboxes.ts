@@ -213,9 +213,13 @@ function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
     row('Rate', q.rateUsd ? formatRateAllUnits(q.rateUsd) : q.rate ? formatUsdPer(q.rate) : '—');
     if (p.source === 'own-key') {
       row('Billing', `billed by ${provider} to your account`);
-    } else {
+    } else if (q.requiredHoldUsd !== undefined) {
       const timeout = timeoutMs !== undefined ? ` for ${timeoutMs}ms` : ' for the timeout';
-      row('Billing', `from your ComputeSDK credit: ${usdAmount(q.requiredHoldUsd ?? q.estimatedCostUsd)} held${timeout}, settled at actual runtime (balance ${usdAmount(q.creditBalanceUsd)})`);
+      row('Billing', `from your ComputeSDK credit: ${usdAmount(q.requiredHoldUsd)} held${timeout}, settled at actual runtime (balance ${usdAmount(q.creditBalanceUsd)})`);
+    } else {
+      // No hold quoted: the estimate is just that.
+      row('Billing', `from your ComputeSDK credit (balance ${usdAmount(q.creditBalanceUsd)})`);
+      if (q.estimatedCostUsd !== undefined) row('Estimate', usdAmount(q.estimatedCostUsd));
     }
   }
   row('Tries', q.providerOrder.map(walkEntry).join(' → ') || '—');

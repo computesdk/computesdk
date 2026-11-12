@@ -130,6 +130,14 @@ describe('compute sandboxes settings', () => {
     expect(out).not.toContain('BYOK order');
   });
 
+  it('marks an inherited Sandboxes BYOK order with the order placement uses', async () => {
+    mockGets(SANDBOX_SETTINGS, { ...ROUTING, byok: { mode: 'first', order: ['blaxel'], inherits: true } });
+    const out = await captureStdout(() =>
+      buildSandboxes().parseAsync(['sandboxes', 'settings'], { from: 'user' }),
+    );
+    expect(out).toContain('blaxel  (inherited from the Actions router)');
+  });
+
   it('--json prints the router and the settings', async () => {
     const out = await captureStdout(() =>
       buildSandboxes().parseAsync(['sandboxes', 'settings', '--json'], { from: 'user' }),
@@ -338,16 +346,21 @@ describe('compute sandboxes settings set --resources / --warm-pool', () => {
     });
   });
 
-  it('combines with the other flags in one PATCH', async () => {
+  it('sends sizes and pools together in one PATCH', async () => {
     await buildSandboxes().parseAsync(
-      ['sandboxes', 'settings', 'set', '--resources', 'blaxel=small', '--warm-pool', 'blaxel=1', '--order', 'blaxel'],
+      ['sandboxes', 'settings', 'set', '--resources', 'blaxel=small', '--warm-pool', 'blaxel=1'],
       { from: 'user' },
     );
-    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/routing', { byokOrder: ['blaxel'] });
+    expect(patch).toHaveBeenCalledTimes(1);
     expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', {
       providerResources: { blaxel: 'small' },
       warmPool: { blaxel: 1 },
     });
+  });
+
+  it('refuses to mix routing and sizes/pools, so nothing half-applies', async () => {
+    expect(await rejects(['--resources', 'blaxel=small', '--order', 'blaxel'])).toMatch(/separate commands/);
+    expect(await rejects(['--routing', 'e2b', '--warm-pool', 'blaxel=1'])).toMatch(/separate commands/);
   });
 
   it('rejects a warm pool above 16', async () => {
