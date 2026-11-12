@@ -405,6 +405,34 @@ describe('quiet and verbose output', () => {
     }
   });
 
+  it('create says how to use the sandbox next (stderr), always naming it and its org', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create'], { from: 'user' });
+      let text = err.mock.calls.map((c) => String(c[0])).join('\n');
+      // Always the explicit id: COMPUTE_INSTANCE or another pick must never be the target.
+      expect(text).toContain(`compute sandboxes exec ${ID_A} -- node -v`);
+      expect(text).toContain(`compute sandboxes destroy ${ID_A}`);
+      expect(out.mock.calls.map((c) => String(c[0])).join('\n')).not.toContain('Use it');
+
+      err.mockClear();
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '--org', 'team-b', '--no-use'], { from: 'user' });
+      text = err.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(text).toContain(`compute sandboxes destroy ${ID_A} --org team-b`);
+
+      err.mockClear();
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use'], { from: 'user' });
+      expect(err.mock.calls.map((c) => String(c[0])).join('\n')).not.toContain('Use it');
+    } finally {
+      err.mockRestore();
+      out.mockRestore();
+    }
+  });
+
   it('create --quiet --json is a usage error', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
