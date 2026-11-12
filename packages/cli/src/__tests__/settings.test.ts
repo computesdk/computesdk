@@ -29,10 +29,11 @@ vi.mock('../actions-client.js', async (importOriginal) => {
 });
 
 const { registerSandboxesCommands } = await import('../sandboxes.js');
+const { inheritParentOptions } = await import('../option-inheritance.js');
 const { registerActionsCommands } = await import('../actions.js');
 
 function buildSandboxes(): Command {
-  const program = new Command().enablePositionalOptions().exitOverride();
+  const program = inheritParentOptions(new Command().enablePositionalOptions().exitOverride());
   registerSandboxesCommands(program);
   return program;
 }
@@ -158,6 +159,18 @@ describe('compute sandboxes settings set', () => {
       byok: 'first',
       byokOrder: ['tensorlake', 'blaxel'],
     });
+  });
+
+  it('flags before set reach it (settings --org team-b set …)', async () => {
+    const { resolveActionsAuth } = await import('../actions-client.js');
+    const { client } = await import('../actions.js');
+    vi.mocked(resolveActionsAuth).mockClear();
+    vi.mocked(client).mockClear();
+    await buildSandboxes().parseAsync(['sandboxes', 'settings', '--org', 'team-b', 'set', '--byok', 'only'], { from: 'user' });
+    // Whichever layer built the client, it was asked for team-b.
+    const calls = JSON.stringify([...vi.mocked(resolveActionsAuth).mock.calls, ...vi.mocked(client).mock.calls]);
+    expect(calls).toContain('team-b');
+    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/routing', { byok: 'only' });
   });
 
   it('--routing takes a managed order', async () => {
