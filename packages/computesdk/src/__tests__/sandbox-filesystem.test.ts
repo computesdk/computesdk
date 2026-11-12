@@ -304,15 +304,6 @@ const providerDefinitions: Record<string, ProviderDefinition> = {
       }),
     isConfigured: () => Boolean(env('RAILWAY_API_TOKEN')),
   },
-  'run-cloud': {
-    config: () =>
-      envConfig({
-        apiKey: firstEnv('RUN_CLOUD_API_KEY', 'RUN_CLOUD_API_TOKEN'),
-        apiUrl: env('RUN_CLOUD_API_URL'),
-      }),
-    isConfigured: () =>
-      hasAnyEnv('RUN_CLOUD_API_KEY', 'RUN_CLOUD_API_TOKEN'),
-  },
   runloop: {
     config: () => envConfig({ apiKey: env('RUNLOOP_API_KEY') }),
     isConfigured: () => Boolean(env('RUNLOOP_API_KEY')),
@@ -467,7 +458,6 @@ async function loadProviderFactory(
     opencomputer: 'opencomputer',
     quilt: 'quilt',
     railway: 'railway',
-    'run-cloud': 'runCloud',
     runloop: 'runloop',
     sail: 'sail',
     sandbox0: 'sandbox0',
