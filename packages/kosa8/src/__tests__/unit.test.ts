@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBody, execArgv, execBody, kosa8, WRITE_CHUNK_CHARS } from '../index';
+import { createBody, execArgv, execBody, kosa8, MAX_EXEC_BODY_BYTES, WRITE_CHUNK_CHARS } from '../index';
 
 const sandboxRow = {
   id: 'sbx_123',
@@ -178,6 +178,13 @@ describe('kosa8 lifecycle', () => {
     expect((await sandbox.getInfo()).status).toBe('error');
   });
 
+  it('does not report a sandbox that is still creating as running', async () => {
+    mockFetch(() => ({ status: 200, body: { sandboxes: [{ ...sandboxRow, state: 'creating' }] } }));
+    const [sandbox] = await provider().sandbox.list();
+    mockFetch(() => ({ status: 200, body: { sandbox: { ...sandboxRow, state: 'creating' } } }));
+    expect((await sandbox.getInfo()).status).toBe('stopped');
+  });
+
   it('pauses with sleep and resumes with wake', async () => {
     const calls = mockFetch((call) => {
       if (call.url.endsWith('/sleep')) return { status: 200, body: { sandbox: { ...sandboxRow, state: 'sleeping' } } };
@@ -213,6 +220,17 @@ describe('kosa8 lifecycle', () => {
     const before = calls.length;
     await sandbox.extendLifetime!(60_000);
     expect(calls.slice(before).map((c) => c.method)).toEqual(['GET']);
+  });
+
+  it('fails to extend a lifetime when the sandbox is deleted before the update (PATCH 404)', async () => {
+    const row = { ...sandboxRow, delete_after: Date.now() + 1_000 };
+    mockFetch((call) => {
+      if (call.method === 'PATCH') return { status: 404, body: { error: 'not_found', message: 'no such sandbox' } };
+      if (call.method === 'GET') return { status: 200, body: { sandbox: row } };
+      return { status: 201, body: { sandbox: row } };
+    });
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.extendLifetime!(60_000)).rejects.toThrow(/sbx_123 not found/);
   });
 
   it('does not offer port URLs', async () => {
@@ -266,6 +284,34 @@ describe('kosa8 commands', () => {
       env: ['A=1', `KOSA8_SCRIPT=${long}`],
     });
     expect(execBody('echo hi').cmd).toEqual(['sh', '-c', 'echo hi']);
+  });
+
+  it('rejects a caller environment that sets the reserved KOSA8_SCRIPT name', async () => {
+    const calls = mockFetch(execRoute(() => ({ exit: 0 })));
+    const sandbox = await provider().sandbox.create();
+    const long = `echo "$KOSA8_SCRIPT"; # ${'a'.repeat(8200)}`;
+    await expect(sandbox.runCommand(long, { env: { KOSA8_SCRIPT: 'hello' } })).rejects.toThrow(/KOSA8_SCRIPT is reserved/);
+    expect(() => execBody('echo hi', { env: { KOSA8_SCRIPT: 'hello' } })).toThrow(/KOSA8_SCRIPT is reserved/);
+    expect(calls.filter((c) => c.url.endsWith('/exec'))).toHaveLength(0);
+  });
+
+  it('rejects a request body over the 64 KiB exec limit before sending it', async () => {
+    const calls = mockFetch(execRoute(() => ({ exit: 0 })));
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.runCommand(`echo ${'a'.repeat(MAX_EXEC_BODY_BYTES)}`)).rejects.toThrow(/65536 bytes \(64 KiB\)/);
+    expect(calls.filter((c) => c.url.endsWith('/exec'))).toHaveLength(0);
+
+    // Caller environment counts toward the same limit.
+    expect(() => execBody(`echo ${'a'.repeat(40_000)}`, { env: { BIG: 'b'.repeat(30_000) } })).toThrow(/64 KiB/);
+
+    // Multi-byte characters are counted in bytes, not characters.
+    expect(() => execBody(`echo ${'ü'.repeat(40_000)}`)).toThrow(/64 KiB/);
+
+    // A body just under the limit is accepted.
+    const fits = `echo ${'a'.repeat(MAX_EXEC_BODY_BYTES - 200)}`;
+    const body = execBody(fits);
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeLessThanOrEqual(MAX_EXEC_BODY_BYTES);
+    expect(body.env).toEqual([`KOSA8_SCRIPT=${fits}`]);
   });
 
   it('enforces a timeout inside the sandbox, reporting exit 124', () => {

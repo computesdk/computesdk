@@ -178,26 +178,49 @@ export function execArgv(command: string, options?: RunCommandOptions): string[]
 /** The exec API's limit on each argv entry. */
 const MAX_ARG_CHARS = 8192;
 
-/** The exec request body: a script too long for one argv entry travels in an environment variable. */
+/** The exec API's limit on the whole request body, in bytes. */
+export const MAX_EXEC_BODY_BYTES = 64 * 1024;
+
+/** Environment variable that carries a script too long for one argv entry; callers may not set it. */
+export const SCRIPT_ENV = 'KOSA8_SCRIPT';
+
+/**
+ * The exec request body: a script too long for one argv entry travels in an environment variable.
+ * Throws before any request is made when the serialized body would exceed the exec API's limit.
+ */
 export function execBody(command: string, options?: RunCommandOptions): { cmd: string[]; env: string[] } {
-  const cmd = execArgv(command, options);
+  const argv = execArgv(command, options);
   const env = execEnv(options?.env);
-  if (cmd[2].length <= MAX_ARG_CHARS) return { cmd, env };
-  return { cmd: ['sh', '-c', 'eval "$KOSA8_SCRIPT"'], env: [...env, `KOSA8_SCRIPT=${cmd[2]}`] };
+  const body = argv[2].length <= MAX_ARG_CHARS
+    ? { cmd: argv, env }
+    : { cmd: ['sh', '-c', `eval "$${SCRIPT_ENV}"`], env: [...env, `${SCRIPT_ENV}=${argv[2]}`] };
+  const size = Buffer.byteLength(JSON.stringify(body), 'utf8');
+  if (size > MAX_EXEC_BODY_BYTES) {
+    throw new Error(
+      `kosa8 exec request is ${size} bytes, over the exec API's limit of ${MAX_EXEC_BODY_BYTES} bytes (64 KiB) ` +
+        `for the command and its environment together. Write a long script to a file with ` +
+        `sandbox.filesystem.writeFile() and run that file instead.`,
+    );
+  }
+  return body;
 }
 
 function execEnv(env?: Record<string, string>): string[] {
   if (!env) return [];
   return Object.entries(env).map(([key, value]) => {
     if (!ENV_NAME.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
+    if (key === SCRIPT_ENV) {
+      throw new Error(`The environment variable name ${SCRIPT_ENV} is reserved by the kosa8 provider; use another name.`);
+    }
     return `${key}=${value}`;
   });
 }
 
 function infoStatus(state: string): InstanceInfo['status'] {
   if (state === 'error') return 'error';
-  if (state === 'creating' || state === 'running') return 'running';
-  // sleeping, paused, stopped and deleted: not running now. A sleeping sandbox wakes on its next command.
+  if (state === 'running') return 'running';
+  // creating, sleeping, paused, stopped and deleted: not running now, so a readiness check keeps waiting.
+  // A sleeping sandbox wakes on its next command.
   return 'stopped';
 }
 
@@ -354,7 +377,9 @@ export const kosa8 = defineProvider<Kosa8Sandbox, Kosa8Config>({
         const data = await request<{ sandbox: Kosa8SandboxData }>(sandbox, 'PATCH', sandboxPath(sandbox.id), {
           delete_after: Math.floor(deleteAfter),
         });
-        if (data?.sandbox) sandbox.data = data.sandbox;
+        // A 404 here means the sandbox was deleted between the read and the update.
+        if (!data) throw new Error(`kosa8 sandbox ${sandbox.id} not found`);
+        if (data.sandbox) sandbox.data = data.sandbox;
       },
 
       getInstance: (sandbox: Kosa8Sandbox): Kosa8Sandbox => sandbox,
