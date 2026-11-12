@@ -1726,7 +1726,8 @@
       "args": [],
       "flags": [
         "--provider",
-        "--order",
+        "--byok",
+        "--managed",
         "--size",
         "--label",
         "--image",
@@ -1767,6 +1768,8 @@
       "flags": [
         "--size",
         "--provider",
+        "--byok",
+        "--managed",
         "--cpus",
         "--memory-mb",
         "--disk-mb",
@@ -1922,7 +1925,8 @@
       ],
       "flags": [
         "--provider",
-        "--order",
+        "--byok",
+        "--managed",
         "--size",
         "--label",
         "--image",

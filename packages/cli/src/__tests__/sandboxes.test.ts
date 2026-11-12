@@ -278,6 +278,34 @@ describe('quiet and verbose output', () => {
     }
   });
 
+  it('create --managed / --byok override the router mode for one create; --order stays hidden', async () => {
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--provider', 'e2b', '--managed'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { only: ['e2b'], byok: 'off' });
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--byok'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { byok: 'only' });
+      post.mockClear();
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--byok', '--managed'], { from: 'user' }).catch(() => undefined);
+      expect(post).not.toHaveBeenCalled();
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--order', 'e2b,blaxel'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { providerOrder: ['e2b', 'blaxel'] });
+      const sandboxes = buildProgram().commands.find((c) => c.name() === 'sandboxes' || c.aliases().includes('sandboxes'))!;
+      const help = sandboxes.commands.find((c) => c.name() === 'create')!.helpInformation();
+      expect(help).toContain('--managed');
+      expect(help).not.toContain('--order');
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
   it('create --quiet --json is a usage error', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);

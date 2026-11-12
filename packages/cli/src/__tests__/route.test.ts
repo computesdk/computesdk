@@ -105,6 +105,14 @@ describe('compute sandboxes route', () => {
     expect(get).toHaveBeenCalledWith('/api/v1/sandboxes/quote', expect.objectContaining({ only: 'daytona,e2b' }));
   });
 
+  it('--managed / --byok set the mode for this quote', async () => {
+    get.mockResolvedValue({ quote: { ...base, ok: false, reason: 'no_provider_configured', providerOrder: [] } });
+    await run(['route', '--provider', 'e2b', '--managed']);
+    expect(get).toHaveBeenLastCalledWith('/api/v1/sandboxes/quote', expect.objectContaining({ only: 'e2b', byok: 'off' }));
+    await run(['route', '--byok']);
+    expect(get).toHaveBeenLastCalledWith('/api/v1/sandboxes/quote', expect.objectContaining({ byok: 'only' }));
+  });
+
   it('keeps quote as a hidden alias', async () => {
     get.mockResolvedValue({ quote: { ...base, ok: false, reason: 'no_provider_configured', providerOrder: [] } });
     await run(['quote']);
