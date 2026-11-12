@@ -330,6 +330,31 @@ describe('quiet and verbose output', () => {
     }
   });
 
+  it('create says where the router will place it before the box boots', async () => {
+    fakeClient.get.mockResolvedValueOnce({
+      quote: {
+        ok: true,
+        orderType: 'limit',
+        creditBalanceUsd: 25,
+        providerOrder: ['managed/daytona'],
+        placement: { source: 'house', provider: 'daytona', region: null, size: 'medium', box: { provider: 'daytona', sizeName: 'medium' } },
+      },
+    });
+    post.mockResolvedValueOnce({ sandbox });
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'create', '--no-use', '--provider', 'daytona'], { from: 'user' });
+      expect(fakeClient.get).toHaveBeenCalledWith('/api/v1/sandboxes/quote', expect.objectContaining({ only: 'daytona' }));
+      const stderr = err.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(stderr).toContain('placing on daytona · managed · medium');
+      expect(fakeClient.get.mock.invocationCallOrder[0]).toBeLessThan(post.mock.invocationCallOrder[0]);
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+    }
+  });
+
   it('create --quiet --json is a usage error', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);

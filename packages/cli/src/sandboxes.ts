@@ -591,8 +591,10 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
           if (opts.provider) throw new Error('Name providers either as words/flags or with --provider, not both.');
           opts.provider = named.join(',');
         }
+        const body = buildCreateBody(opts);
         const c = await client(opts);
-        const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', buildCreateBody(opts));
+        if (!opts.json && !opts.quiet) await previewPlacement(c, opts);
+        const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
         // Commander stores --no-use as `use: false`.
         if (opts.use !== false) {
           setCurrentInstance(res.sandbox.id, orgKey(opts));
@@ -605,6 +607,43 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
         fail(e, opts);
       }
     });
+}
+
+/**
+ * Before the create (which only returns once the box is up), say where the
+ * router will place it: the same quote `compute sandboxes route` prints.
+ * It's the router's first choice; if that provider fails at create time the
+ * walk moves on, and the created sandbox's line says where it landed. On
+ * stderr, and never fatal: a failed quote just skips the line.
+ */
+async function previewPlacement(c: Awaited<ReturnType<typeof client>>, opts: CreateFlagOpts): Promise<void> {
+  // --order and the market flags don't walk the router the quote describes.
+  if (opts.order || opts.market || opts.orderType || opts.maxPrice) return;
+  const mode = accountMode(opts);
+  const params: Record<string, string | undefined> = {
+    size: opts.size,
+    cpus: opts.cpus,
+    memoryMb: opts.memoryMb,
+    ephemeralDiskMb: opts.diskMb,
+    timeoutMs: opts.timeoutMs,
+    only: opts.provider === undefined ? undefined : providerNames(opts.provider).join(','),
+    byok: mode,
+  };
+  let quote: SandboxQuoteWire;
+  try {
+    quote = (await c.get<{ quote: SandboxQuoteWire }>('/api/v1/sandboxes/quote', params)).quote;
+  } catch {
+    return; // A preview only; the create below reports any real problem.
+  }
+  if (!quote.ok || !quote.placement) {
+    console.error(pc.dim(`→ the router can't place this: ${quoteRefusal(quote)}`));
+    return;
+  }
+  const p = quote.placement;
+  const provider = p.box?.provider ?? p.provider;
+  console.error(
+    pc.dim(`→ placing on ${provider} · ${placementLane(p.source)} · ${p.size ?? p.box?.sizeName ?? 'custom size'} (${billedBy(p.source, provider)}) …`),
+  );
 }
 
 /** `['--vercel', 'e2b']` → `['vercel', 'e2b']`; anything else is a usage error. */
