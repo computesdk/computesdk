@@ -42,7 +42,7 @@ Credentials resolve once per provider instance, with the same precedence as the 
 
 ## Create options
 
-Creates accept either a platform `size` (`small` 1 vCPU/2 GiB, `medium` 2/4 GiB, `large` 4/8 GiB, `xlarge` 8/16 GiB, `xxlarge` 16/32 GiB, `xxxlarge` 32/128 GiB) or raw resources (`cpus`/`vcpus`, `memoryMb`/`memoryMiB`/`memMiB`/`memory`, `diskMb`/`diskMiB`) — never both. A provider must have a verified preset for the requested shape; accepting a size name does not imply every provider or account supports it. These platform `size` names are separate from the direct adapters' opt-in [`sizeClass`](../reference/sizes.md) vocabulary.
+Creates accept either a platform `size` (`small` 1 vCPU/2 GiB, `medium` 2/4 GiB, `large` 4/8 GiB, `xlarge` 8/16 GiB, `2xlarge` 16/32 GiB, `3xlarge` 32/128 GiB) or raw resources (`cpus`/`vcpus`, `memoryMb`/`memoryMiB`/`memMiB`/`memory`, `diskMb`/`diskMiB`) — never both. A provider must have a verified preset for the requested shape; accepting a size name does not imply every provider or account supports it. These platform `size` names are separate from the direct adapters' opt-in [`sizeClass`](../reference/sizes.md) vocabulary.
 
 ```typescript
 await compute.sandbox.create({ size: 'medium' });

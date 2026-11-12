@@ -148,7 +148,7 @@ describe('compute sandboxes settings', () => {
 });
 
 describe('compute sandboxes settings set', () => {
-  it.each(['xxlarge', 'xxxlarge'])('accepts a %s price cap', async (size) => {
+  it.each(['2xlarge', '3xlarge'])('accepts a %s price cap', async (size) => {
     await buildSandboxes().parseAsync(
       ['sandboxes', 'settings', 'set', '--cap', `${size}=1.28/hour`],
       { from: 'user' },
