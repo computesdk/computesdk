@@ -1,5 +1,11 @@
 # @computesdk/promigence
 
+## 1.0.11
+
+### Patch Changes
+
+- fbdf09f: Reject tier requests without an image rather than silently creating a sandbox at its snapshot's original size.
+
 ## 1.0.10
 
 ### Patch Changes

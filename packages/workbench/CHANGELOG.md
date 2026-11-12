@@ -1,5 +1,14 @@
 # @computesdk/workbench
 
+## 33.0.35
+
+### Patch Changes
+
+- Updated dependencies [fc09449]
+- Updated dependencies [fc09449]
+  - @computesdk/freestyle@0.2.21
+  - @computesdk/upstash@0.3.30
+
 ## 33.0.34
 
 ### Patch Changes
