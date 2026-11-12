@@ -1,6 +1,6 @@
 ---
 name: computesdk-sdk
-description: Write code that drives ComputeSDK sandboxes — the hosted platform via `@computesdk/platform`, or BYOK with the `computesdk` SDK plus a provider package. Use when the user wants a script or app that controls sandboxes outside ChatGPT.
+description: Write code that drives ComputeSDK sandboxes — the hosted platform via `@computesdk/platform`, or BYOK with the `computesdk` SDK plus a provider package. Use when the user wants a script or app that controls sandboxes outside the chat.
 ---
 
 # Driving ComputeSDK sandboxes from code
@@ -35,10 +35,9 @@ await sandbox.destroy();
 
 Auth precedence: `apiKey` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
 > a `compute login` session (needs `@benchsdk/cli` installed). Hosted
-sandboxes place on the org's provider order — market by default, the org's
-own provider keys when `providerOrder` names them; see the package README for
-`size`/`maxPrice`/`orderType` and the market error codes
-(`insufficient_credits`, `no_market_capacity`, …) on `err.code`.
+sandboxes place on the org's provider order — the org's own provider keys, or
+ComputeSDK's house account billed from prepaid credit; see the package README
+for `size` and the error codes (`insufficient_credits`, …) on `err.code`.
 
 ## BYOK: the `computesdk` SDK + provider package
 
