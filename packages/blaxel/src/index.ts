@@ -6,8 +6,8 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 
-import { SANDBOX_API_IMAGE, SANDBOX_API_PATH, SandboxInstance, Snapshot, VolumeInstance, deleteImage, deleteImageTag, getImage, initialize, listImages, settings } from '@blaxel/core';
-import type { Image as BlaxelImage } from '@blaxel/core';
+import { SANDBOX_API_IMAGE, SANDBOX_API_PATH, SandboxInstance, Snapshot, VolumeInstance, deleteImage, deleteImageTag, getImage, initialize, listImages, listImageTags, settings } from '@blaxel/core';
+import type { Image, ImageSummary, ImageTag as BlaxelImageTag } from '@blaxel/core';
 import { defineProvider, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions, CreateTemplateOptions, ListTemplatesOptions } from '@computesdk/provider';
@@ -78,6 +78,12 @@ export interface BlaxelCreateTemplateOptions extends CreateTemplateOptions {
 	/** Called with each image status of this build (`UPLOADING`, `BUILDING`, `BUILT`, `FAILED`). */
 	onStatusChange?: (status: string) => void;
 }
+
+/**
+ * A sandbox image as Blaxel returns it: a summary with a tag count from API
+ * version 2026-09-22 on, the image with its tags before that.
+ */
+export type BlaxelImage = Image | ImageSummary;
 
 /**
  * A Blaxel template: one tag of a sandbox image in the workspace registry.
@@ -543,10 +549,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			list: async (config: BlaxelConfig, options?: ListTemplatesOptions): Promise<BlaxelTemplateInfo[]> =>
 				withBlaxelConfig(config, async () => {
 					if (options?.limit === 0) return [];
-					const { data } = await listImages({ throwOnError: true });
-					const templates = (data ?? [])
-						.filter(image => image.metadata?.resourceType === SANDBOX_IMAGE_TYPE)
-						.flatMap(toTemplateInfos);
+					const templates: BlaxelTemplateInfo[] = [];
+					for (const image of await listSandboxImages()) {
+						const name = image.metadata?.name;
+						if (!name) continue;
+						templates.push(...toTemplateInfos(image, await imageTags(name, image)));
+						if (options?.limit !== undefined && templates.length >= options.limit) break;
+					}
 					return options?.limit === undefined ? templates : templates.slice(0, options.limit);
 				}),
 
@@ -647,7 +656,7 @@ async function buildBlaxelTemplate(options: BlaxelCreateTemplateOptions): Promis
 		throw new Error(`Failed to read the Blaxel template ${name}: ${describeError(before.error)}`);
 	}
 	const lastEventBefore = latestEventTime(before.data);
-	const tagsBefore = new Set((before.data?.spec?.tags ?? []).map(tag => tag.name));
+	const tagsBefore = new Set((await imageTags(name, before.data)).map(tag => tag.name));
 
 	await settings.authenticate();
 	const created = await fetch(`${settings.baseUrl}/images?upload=true`, {
@@ -692,7 +701,7 @@ async function buildBlaxelTemplate(options: BlaxelCreateTemplateOptions): Promis
 		// it does. A tag the image already had counts only once no new tag has
 		// shown up for TEMPLATE_TAG_SETTLE_MS after the build result, since an
 		// identical build reuses its tag without saying so.
-		const tags = data?.spec?.tags ?? [];
+		const tags = result ? await imageTags(name, data) : [];
 		if (result && builtSeenAt === undefined) builtSeenAt = Date.now();
 		const settled = builtSeenAt !== undefined && Date.now() - builtSeenAt >= TEMPLATE_TAG_SETTLE_MS;
 		const tag = tags.find(t => t.name && !tagsBefore.has(t.name)) ?? (settled ? newestTag(tags) : undefined);
@@ -714,7 +723,7 @@ async function buildBlaxelTemplate(options: BlaxelCreateTemplateOptions): Promis
 }
 
 type BlaxelImageEvent = NonNullable<NonNullable<BlaxelImage['metadata']['events']>[number]>;
-type BlaxelImageTag = NonNullable<BlaxelImage['spec']['tags']>[number];
+type ListPage<T> = { data?: T[]; meta?: { nextCursor?: string } };
 
 function eventTime(event: BlaxelImageEvent): number {
 	return Date.parse(event.time ?? '') || 0;
@@ -722,6 +731,55 @@ function eventTime(event: BlaxelImageEvent): number {
 
 function latestEventTime(image: BlaxelImage | undefined): number {
 	return Math.max(0, ...(image?.metadata?.events ?? []).map(eventTime));
+}
+
+/**
+ * Every tag of a sandbox image. From Blaxel API version 2026-09-22 (sent by
+ * @blaxel/core 0.3.23 and later) the image is a summary with a tag count and
+ * the tags are listed, a page at a time, by `listImageTags`. Older API versions
+ * return the tags on the image itself.
+ */
+async function imageTags(imageName: string, image: BlaxelImage | undefined): Promise<BlaxelImageTag[]> {
+	if (!image) return [];
+	if ('tags' in image.spec && Array.isArray(image.spec.tags)) return image.spec.tags;
+	if ('tagCount' in image.spec && image.spec.tagCount === 0) return [];
+	return await allPages<BlaxelImageTag>(async cursor => {
+		const { data, error, response } = await listImageTags({
+			path: { resourceType: SANDBOX_IMAGE_TYPE, imageName },
+			query: { limit: 100, ...(cursor && { cursor }) },
+		});
+		// Deleted meanwhile: it has no tags.
+		if (response?.status === 404) return [];
+		if (error !== undefined) {
+			throw new Error(`Failed to list the tags of the Blaxel template ${imageName}: ${describeError(error)}`);
+		}
+		return data;
+	});
+}
+
+/** The workspace's sandbox images: every page from API 2026-09-22 on, the bare array before it. */
+async function listSandboxImages(): Promise<BlaxelImage[]> {
+	const images = await allPages<BlaxelImage>(async cursor => {
+		const { data } = await listImages({ throwOnError: true, ...(cursor && { query: { cursor } }) });
+		return data as BlaxelImage[] | ListPage<BlaxelImage>;
+	});
+	return images.filter(image => image.metadata?.resourceType === SANDBOX_IMAGE_TYPE);
+}
+
+/** Collect a cursor-paged list; a bare array is the whole list. */
+async function allPages<T>(fetchPage: (cursor?: string) => Promise<T[] | ListPage<T> | undefined>): Promise<T[]> {
+	const items: T[] = [];
+	const seen = new Set<string>();
+	let cursor: string | undefined;
+	do {
+		const page = await fetchPage(cursor);
+		if (Array.isArray(page)) return [...items, ...page];
+		items.push(...(page?.data ?? []));
+		cursor = page?.meta?.nextCursor || undefined;
+		if (cursor && seen.has(cursor)) throw new Error('Blaxel returned a repeated page cursor.');
+		if (cursor) seen.add(cursor);
+	} while (cursor);
+	return items;
 }
 
 function newestTag(tags: BlaxelImageTag[]): BlaxelImageTag | undefined {
@@ -770,10 +828,10 @@ function crc32(bytes: Uint8Array): number {
 }
 
 /** One template per tag of a registry image. */
-function toTemplateInfos(image: BlaxelImage): BlaxelTemplateInfo[] {
+function toTemplateInfos(image: BlaxelImage, tags: BlaxelImageTag[]): BlaxelTemplateInfo[] {
 	const name = image.metadata?.name;
 	if (!name) return [];
-	return (image.spec?.tags ?? [])
+	return tags
 		.filter(tag => tag.name)
 		.map(tag => ({
 			id: `${SANDBOX_IMAGE_TYPE}/${name}:${tag.name}`,

@@ -16,6 +16,7 @@ vi.mock('@blaxel/core', () => ({
 	VolumeInstance: {},
 	getImage: vi.fn(),
 	listImages: vi.fn(),
+	listImageTags: vi.fn(),
 	deleteImage: vi.fn(),
 	deleteImageTag: vi.fn(),
 }));
@@ -31,6 +32,16 @@ type Event = { status: string; time: string; message?: string };
 
 function image(status: string, tags: Tag[], events: Event[] = []) {
 	return { data: { metadata: { name: 'img', resourceType: 'sandbox', status, events }, spec: { tags } }, error: undefined, response: { status: 200 } };
+}
+
+/** The image as Blaxel API 2026-09-22 returns it: a summary with a tag count, no tags. */
+function summary(status: string, tagCount: number, events: Event[] = []) {
+	return { data: { metadata: { name: 'img', resourceType: 'sandbox', status, events }, spec: { tagCount } }, error: undefined, response: { status: 200 } };
+}
+
+/** One page of `listImageTags`. */
+function tagPage(tags: Tag[], nextCursor?: string) {
+	return { data: { data: tags, meta: { hasMore: Boolean(nextCursor), ...(nextCursor && { nextCursor }) } }, error: undefined, response: { status: 200 } };
 }
 
 const built1 = { status: 'BUILT', time: '2026-11-08T00:00:10Z' };
@@ -161,6 +172,66 @@ describe('blaxel template.create', () => {
 		expect(template.id).toMatch(/:new$/);
 	});
 
+	describe('with Blaxel API 2026-09-22 image summaries', () => {
+		it('reads the new tag from the paged tag list', async () => {
+			const core = await mockedCore();
+			vi.mocked(core.getImage)
+				.mockResolvedValueOnce(notFound as never)
+				.mockResolvedValueOnce(summary('BUILDING', 0, [initiated2]) as never)
+				.mockResolvedValueOnce(summary('BUILT', 1, [initiated2, built2]) as never);
+			vi.mocked(core.listImageTags).mockResolvedValueOnce(tagPage([{ name: 'b0031c', createdAt: '2026-11-09T18:00:10Z' }]) as never);
+
+			const template = await create({ name: 'oci-base', image: 'ubuntu:24.04' });
+
+			expect(template.id).toBe(`sandbox/${template.name}:b0031c`);
+			expect(template.createdAt).toEqual(new Date('2026-11-09T18:00:10Z'));
+			expect(core.listImageTags).toHaveBeenCalledWith({ path: { resourceType: 'sandbox', imageName: template.name }, query: { limit: 100 } });
+		});
+
+		it('on a rebuild, skips the tags from before it across pages', async () => {
+			const core = await mockedCore();
+			const oldTags = [{ name: 'a-old' }, { name: 'b-old' }];
+			vi.mocked(core.getImage)
+				.mockResolvedValueOnce(summary('BUILT', 2, [built1]) as never)
+				.mockResolvedValueOnce(summary('BUILT', 3, [built1, initiated2, built2]) as never);
+			vi.mocked(core.listImageTags)
+				.mockResolvedValueOnce(tagPage([oldTags[0]], 'p2') as never)
+				.mockResolvedValueOnce(tagPage([oldTags[1]]) as never)
+				.mockResolvedValueOnce(tagPage([oldTags[0]], 'p2') as never)
+				.mockResolvedValueOnce(tagPage([oldTags[1], { name: 'c-new' }]) as never);
+
+			const template = await create({ name: 'oci-base', image: 'ubuntu:24.04' });
+
+			expect(template.id).toMatch(/:c-new$/);
+			expect(vi.mocked(core.listImageTags).mock.calls[1][0]).toMatchObject({ query: { limit: 100, cursor: 'p2' } });
+		});
+
+		it('keeps polling until the tag is listed', async () => {
+			const core = await mockedCore();
+			vi.mocked(core.getImage)
+				.mockResolvedValueOnce(notFound as never)
+				.mockResolvedValueOnce(summary('BUILT', 0, [initiated2, built2]) as never)
+				.mockResolvedValueOnce(summary('BUILT', 1, [initiated2, built2]) as never);
+			vi.mocked(core.listImageTags).mockResolvedValueOnce(tagPage([{ name: 'late' }]) as never);
+
+			const template = await create({ name: 'oci-base', image: 'ubuntu:24.04' });
+
+			expect(template.id).toMatch(/:late$/);
+			// A summary with no tags is not listed.
+			expect(core.listImageTags).toHaveBeenCalledTimes(1);
+		});
+
+		it('reports a failed tag listing', async () => {
+			const core = await mockedCore();
+			vi.mocked(core.getImage)
+				.mockResolvedValueOnce(notFound as never)
+				.mockResolvedValueOnce(summary('BUILT', 1, [initiated2, built2]) as never);
+			vi.mocked(core.listImageTags).mockResolvedValueOnce({ data: undefined, error: { error: 'forbidden' }, response: { status: 403 } } as never);
+
+			await expect(create({ name: 'oci-base', image: 'ubuntu:24.04' })).rejects.toThrow(/Failed to list the tags of the Blaxel template oci-base-[0-9a-f]{8}: .*forbidden/);
+		});
+	});
+
 	it('reports a failed build', async () => {
 		const core = await mockedCore();
 		vi.mocked(core.getImage)
@@ -238,6 +309,43 @@ describe('blaxel template.list and delete', () => {
 		const templates = await blaxel({}).template!.list();
 
 		expect(templates).toEqual([expect.objectContaining({ id: 'sandbox/oci-base:abc', name: 'oci-base', provider: 'blaxel' })]);
+	});
+
+	it('lists the tags of every page of sandbox image summaries (API 2026-09-22)', async () => {
+		const core = await mockedCore();
+		vi.mocked(core.listImages)
+			.mockResolvedValueOnce({ data: { data: [
+				{ metadata: { name: 'oci-base', resourceType: 'sandbox' }, spec: { tagCount: 2 } },
+				{ metadata: { name: 'agent', resourceType: 'agent' }, spec: { tagCount: 1 } },
+			], meta: { hasMore: true, nextCursor: 'next' } } } as never)
+			.mockResolvedValueOnce({ data: { data: [
+				{ metadata: { name: 'empty', resourceType: 'sandbox' }, spec: { tagCount: 0 } },
+				{ metadata: { name: 'py', resourceType: 'sandbox' }, spec: { tagCount: 1 } },
+			], meta: { hasMore: false } } } as never);
+		vi.mocked(core.listImageTags)
+			.mockResolvedValueOnce(tagPage([{ name: 'abc' }], 'c2') as never)
+			.mockResolvedValueOnce(tagPage([{ name: 'def' }]) as never)
+			.mockResolvedValueOnce(tagPage([{ name: '3.12' }]) as never);
+
+		const templates = await blaxel({}).template!.list();
+
+		expect(templates.map(t => t.id)).toEqual(['sandbox/oci-base:abc', 'sandbox/oci-base:def', 'sandbox/py:3.12']);
+		expect(vi.mocked(core.listImages).mock.calls[1][0]).toMatchObject({ query: { cursor: 'next' } });
+		expect(vi.mocked(core.listImageTags).mock.calls.map(([options]) => (options as { path: { imageName: string } }).path.imageName)).toEqual(['oci-base', 'oci-base', 'py']);
+	});
+
+	it('stops listing tags once it has the limit', async () => {
+		const core = await mockedCore();
+		vi.mocked(core.listImages).mockResolvedValueOnce({ data: { data: [
+			{ metadata: { name: 'a', resourceType: 'sandbox' }, spec: { tagCount: 1 } },
+			{ metadata: { name: 'b', resourceType: 'sandbox' }, spec: { tagCount: 1 } },
+		], meta: { hasMore: false } } } as never);
+		vi.mocked(core.listImageTags).mockResolvedValueOnce(tagPage([{ name: 'x' }]) as never);
+
+		const templates = await blaxel({}).template!.list({ limit: 1 });
+
+		expect(templates.map(t => t.id)).toEqual(['sandbox/a:x']);
+		expect(core.listImageTags).toHaveBeenCalledTimes(1);
 	});
 
 	it('deletes the tag a template id names and ignores one already gone', async () => {

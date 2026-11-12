@@ -431,8 +431,8 @@ importers:
   packages/blaxel:
     dependencies:
       '@blaxel/core':
-        specifier: ^0.3.21
-        version: 0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^0.3.38
+        version: 0.3.38(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -1527,7 +1527,7 @@ importers:
         version: link:../computesdk
       isorun:
         specifier: ^1.0.0
-        version: 1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
+        version: 1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.6.7))(zod@4.6.7)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -2483,7 +2483,7 @@ importers:
         version: link:../computesdk
       withruntime:
         specifier: ^0.6.1
-        version: 0.6.1(zod@4.4.3)
+        version: 0.6.1(zod@4.6.7)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -3011,7 +3011,7 @@ importers:
         version: link:../provider
       '@upstash/box':
         specifier: ^0.5.5
-        version: 0.5.5(zod@4.4.3)
+        version: 0.5.5(zod@4.6.7)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -3487,8 +3487,8 @@ packages:
     resolution: {integrity: sha512-QJ36YkXwVdKWtQdaz7p6dKT+8tEcLYYuKPsNycxzdJJPi9YAZf2quXeG2eDYhrfVhJIlGxU6L+01oPxpTezxCQ==}
     engines: {node: '>=18.0.0'}
 
-  '@blaxel/core@0.3.21':
-    resolution: {integrity: sha512-a+JxiT1I6OKcm+6mxPcVjWo9u1LjBwPf8hmspnrGU73UbJYzvG6YeYz7VLQubf+rKocDpiqhzkMjasG/I77b8Q==}
+  '@blaxel/core@0.3.38':
+    resolution: {integrity: sha512-US4U25kUjh2l9atjLtnSlSD8A3QGR6pwk89CmM9GOfkrmlYHCDG1m8O0FtG0CuK35/7sIHBxCiCA76gnTUksNA==}
     engines: {node: '>=18'}
 
   '@boatdev/sdk@1.9.9':
@@ -5618,23 +5618,17 @@ packages:
   '@smithy/core@3.24.1':
     resolution: {integrity: sha512-3mT7o4qQyUWttYnVK3A0Z/u3Xha3E81tXn32Tz6vjZiUXhBrkEivpw1hBYfh84iFF9CSzkBU9Y1DJ3Q6RQ231g==}
     engines: {node: '>=18.0.0'}
-    deprecated: |-
-      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
-        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.29.0':
     resolution: {integrity: sha512-sEvpvkBVoMxjoek35XyJFn2ZD3EJ1RpiZrT47WaZodxzAIWS44zkdvbqGE/ZlugtjiQp62cffYZ9ldyRkjAGnA==}
     engines: {node: '>=18.0.0'}
-    deprecated: |-
-      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
-        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.35.2':
     resolution: {integrity: sha512-ejTukBuP/Pg3t9N8Ux+0zKsXeHWm7p6W3HbXFOyltKasSxZwCFmvTut7kBdZSCF3m9y1bXXyVu6p2xuMFcsTyQ==}
     engines: {node: '>=18.0.0'}
-    deprecated: |-
-      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
-        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.4.5':
     resolution: {integrity: sha512-LnjUTNG0GgQlKIq7IioeOrPaEmC5xOd1WtAz24TLSiYQnWX2uHr53GrFuQhkrJBktPYCMga/NbUOW7hFbSA2Cg==}
@@ -9885,6 +9879,9 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
 
   '@alcalzone/ansi-tokenize@0.2.0':
@@ -10408,21 +10405,21 @@ snapshots:
     dependencies:
       '@benchsdk/api': 0.11.3
 
-  '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@blaxel/core@0.3.38(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))
-      '@modelcontextprotocol/sdk': 1.26.0(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.6.7)
       archiver: 7.0.1
-      axios: 1.18.1
+      axios: 1.20.0
       dockerfile-ast: 0.7.1
       dotenv: 17.4.2
-      form-data: 4.0.5
+      form-data: 4.0.6
       jwt-decode: 4.0.0
       smol-toml: 1.8.0
       uuid: 11.1.1
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      yaml: 2.8.2
-      zod: 4.4.3
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      yaml: 2.9.1
+      zod: 4.6.7
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@hey-api/openapi-ts'
@@ -11548,7 +11545,7 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@modelcontextprotocol/sdk@1.26.0(zod@4.4.3)':
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.6.7)':
     dependencies:
       '@hono/node-server': 1.19.9(hono@4.12.27)
       ajv: 8.18.0
@@ -11565,8 +11562,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.0
       raw-body: 3.0.1
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.1(zod@4.4.3)
+      zod: 4.6.7
+      zod-to-json-schema: 3.25.1(zod@4.6.7)
     transitivePeerDependencies:
       - supports-color
 
@@ -12840,7 +12837,7 @@ snapshots:
   '@types/node-fetch@2.6.13':
     dependencies:
       '@types/node': 20.19.41
-      form-data: 4.0.5
+      form-data: 4.0.6
 
   '@types/node@12.20.55': {}
 
@@ -13071,10 +13068,10 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@upstash/box@0.5.5(zod@4.4.3)':
+  '@upstash/box@0.5.5(zod@4.6.7)':
     dependencies:
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.1(zod@4.4.3)
+      zod: 4.6.7
+      zod-to-json-schema: 3.25.1(zod@4.6.7)
 
   '@vercel/cli-config@0.3.1':
     dependencies:
@@ -13362,7 +13359,7 @@ snapshots:
   axios@1.11.0:
     dependencies:
       follow-redirects: 1.15.11
-      form-data: 4.0.5
+      form-data: 4.0.6
       proxy-from-env: 1.1.0
     transitivePeerDependencies:
       - debug
@@ -13370,7 +13367,7 @@ snapshots:
   axios@1.18.1:
     dependencies:
       follow-redirects: 1.16.0
-      form-data: 4.0.5
+      form-data: 4.0.6
       https-proxy-agent: 5.0.1
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
@@ -14169,7 +14166,7 @@ snapshots:
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
       has-tostringtag: 1.0.2
-      hasown: 2.0.2
+      hasown: 2.0.4
 
   es-toolkit@1.39.10: {}
 
@@ -14694,7 +14691,7 @@ snapshots:
       get-proto: 1.0.1
       gopd: 1.2.0
       has-symbols: 1.1.0
-      hasown: 2.0.2
+      hasown: 2.0.4
       math-intrinsics: 1.1.0
 
   get-proto@1.0.1:
@@ -15013,7 +15010,7 @@ snapshots:
 
   is-core-module@2.16.1:
     dependencies:
-      hasown: 2.0.2
+      hasown: 2.0.4
 
   is-docker@3.0.0: {}
 
@@ -15067,7 +15064,7 @@ snapshots:
       call-bound: 1.0.4
       gopd: 1.2.0
       has-tostringtag: 1.0.2
-      hasown: 2.0.2
+      hasown: 2.0.4
 
   is-stream@2.0.1: {}
 
@@ -15115,7 +15112,7 @@ snapshots:
     dependencies:
       ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  isorun@1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3):
+  isorun@1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.6.7))(zod@4.6.7):
     dependencies:
       '@currentspace/http3': 0.8.5
       undici: 8.3.0
@@ -15124,8 +15121,8 @@ snapshots:
       '@isorun/http-transport-linux-arm64-musl': 0.8.8
       '@isorun/http-transport-linux-x64-gnu': 0.8.8
       '@isorun/http-transport-linux-x64-musl': 0.8.8
-      '@modelcontextprotocol/sdk': 1.26.0(zod@4.4.3)
-      zod: 4.4.3
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.6.7)
+      zod: 4.6.7
 
   istanbul-lib-coverage@3.2.2: {}
 
@@ -16117,14 +16114,14 @@ snapshots:
 
   pyodide@0.27.7(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
   pyodide@0.28.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -17420,11 +17417,11 @@ snapshots:
     dependencies:
       string-width: 7.2.0
 
-  withruntime@0.6.1(zod@4.4.3):
+  withruntime@0.6.1(zod@4.6.7):
     dependencies:
       undici: 7.29.1
     optionalDependencies:
-      zod: 4.4.3
+      zod: 4.6.7
 
   word-wrap@1.2.5: {}
 
@@ -17595,6 +17592,10 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  zod-to-json-schema@3.25.1(zod@4.6.7):
+    dependencies:
+      zod: 4.6.7
+
   zod@3.25.76: {}
 
   zod@4.1.11: {}
@@ -17602,3 +17603,5 @@ snapshots:
   zod@4.3.5: {}
 
   zod@4.4.3: {}
+
+  zod@4.6.7: {}
