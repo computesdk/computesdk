@@ -43,7 +43,7 @@ function buildActions(): Command {
 }
 
 const SANDBOX_SETTINGS = {
-  providerOrder: ['market', 'blaxel'],
+  providerOrder: ['tensorlake', 'blaxel'],
   actionsProviderOrder: ['blaxel', 'vercel'],
   marketCap: null,
   actionsMarketCap: { usd: 0.4, per: 'hour' },
@@ -66,6 +66,18 @@ const ACTIONS_SETTINGS = {
   referencePrices: { small: null, medium: null, large: null, xlarge: null },
 };
 
+const ROUTING = {
+  routing: 'default',
+  managed: ['daytona', 'e2b'],
+  available: ['daytona', 'e2b'],
+  byok: { mode: 'first', order: ['tensorlake', 'blaxel'] },
+};
+
+/** GET answers the router for `/routing` and `settings` for everything else. */
+function mockGets(settings: unknown, routing: unknown = ROUTING): void {
+  get.mockImplementation(async (path: string) => (path.endsWith('/routing') ? routing : settings));
+}
+
 function captureStdout(fn: () => Promise<unknown>): Promise<string> {
   const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
   const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -87,73 +99,99 @@ function captureStdout(fn: () => Promise<unknown>): Promise<string> {
 beforeEach(() => {
   get.mockReset();
   patch.mockReset();
-  get.mockImplementation(async () => SANDBOX_SETTINGS);
+  mockGets(SANDBOX_SETTINGS);
   patch.mockImplementation(async () => SANDBOX_SETTINGS);
 });
 
 describe('compute sandboxes settings', () => {
-  it('GETs the settings and prints the resolved view', async () => {
+  it('shows managed routing first, then BYOK, then sizes and pools', async () => {
     const out = await captureStdout(() =>
       buildSandboxes().parseAsync(['sandboxes', 'settings'], { from: 'user' }),
     );
+    expect(get).toHaveBeenCalledWith('/api/v1/sandboxes/routing');
     expect(get).toHaveBeenCalledWith('/api/v1/sandboxes/settings');
-    expect(out).toContain('order type: inherit');
-    expect(out).toContain('Actions: limit');
-    expect(out).toContain('inherits Actions: $0.4/hr');
-    expect(out).toContain('reference $0.12/hr');
-    expect(out).toContain('market, blaxel');
+    expect(out).toContain('ComputeSDK default');
+    expect(out).toContain('daytona → e2b');
+    expect(out).toMatch(/BYOK\s+first/);
+    expect(out).toContain('tensorlake → blaxel');
+    expect(out.indexOf('Routing')).toBeLessThan(out.indexOf('BYOK'));
     expect(out).toContain('blaxel  4 vCPU / 8192 MB');
     expect(out).toContain('blaxel  2');
+    expect(out).not.toMatch(/order type|general cap|per-size caps|market/);
   });
 
-  it('--json prints the raw response', async () => {
+  it('shows a custom managed order and hides the BYOK order when BYOK is off', async () => {
+    mockGets(SANDBOX_SETTINGS, { ...ROUTING, routing: ['e2b'], managed: ['e2b'], byok: { mode: 'off', order: ['tensorlake'] } });
+    const out = await captureStdout(() =>
+      buildSandboxes().parseAsync(['sandboxes', 'settings'], { from: 'user' }),
+    );
+    expect(out).toContain('custom: e2b');
+    expect(out).toMatch(/BYOK\s+off/);
+    expect(out).not.toContain('BYOK order');
+  });
+
+  it('--json prints the router and the settings', async () => {
     const out = await captureStdout(() =>
       buildSandboxes().parseAsync(['sandboxes', 'settings', '--json'], { from: 'user' }),
     );
-    expect(JSON.parse(out)).toEqual(SANDBOX_SETTINGS);
+    expect(JSON.parse(out)).toEqual({ routing: ROUTING, settings: SANDBOX_SETTINGS });
   });
 });
 
 describe('compute sandboxes settings set', () => {
-  it('PATCHes caps, order type and order together', async () => {
+  it('sends --routing, --byok and --byok-order to the router', async () => {
     await buildSandboxes().parseAsync(
-      [
-        'sandboxes', 'settings', 'set',
-        '--cap', 'small=0.11/hour', '--cap', 'large=none',
-        '--general-cap', '0.4/hour',
-        '--order-type', 'market',
-        '--order', 'market,blaxel',
-      ],
+      ['sandboxes', 'settings', 'set', '--routing', 'default', '--byok', 'first', '--byok-order', 'tensorlake,blaxel'],
       { from: 'user' },
     );
-    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', {
-      marketCaps: {
-        small: { usd: 0.11, per: 'hour' },
-        large: null,
-      },
-      marketCap: { usd: 0.4, per: 'hour' },
-      marketOrderType: 'market',
-      providerOrder: ['market', 'blaxel'],
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/routing', {
+      routing: 'default',
+      byok: 'first',
+      byokOrder: ['tensorlake', 'blaxel'],
     });
   });
 
-  it('--order-type inherit and --order inherit send null/[]', async () => {
+  it('--routing takes a managed order', async () => {
     await buildSandboxes().parseAsync(
-      ['sandboxes', 'settings', 'set', '--order-type', 'inherit', '--order', 'inherit'],
+      ['sandboxes', 'settings', 'set', '--routing', 'daytona, e2b'],
       { from: 'user' },
     );
-    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', {
-      marketOrderType: null,
-      providerOrder: [],
-    });
+    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/routing', { routing: ['daytona', 'e2b'] });
   });
 
-  it('--general-cap none sends marketCap: null', async () => {
-    await buildSandboxes().parseAsync(
-      ['sandboxes', 'settings', 'set', '--general-cap', 'none'],
-      { from: 'user' },
-    );
+  it('--byok-order inherit, and the old --order, write the BYOK order', async () => {
+    await buildSandboxes().parseAsync(['sandboxes', 'settings', 'set', '--byok-order', 'inherit'], { from: 'user' });
+    expect(patch).toHaveBeenLastCalledWith('/api/v1/sandboxes/routing', { byokOrder: [] });
+    await buildSandboxes().parseAsync(['sandboxes', 'settings', 'set', '--order', 'blaxel'], { from: 'user' });
+    expect(patch).toHaveBeenLastCalledWith('/api/v1/sandboxes/routing', { byokOrder: ['blaxel'] });
+  });
+
+  it('rejects an unknown --byok mode', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await buildSandboxes().parseAsync(['sandboxes', 'settings', 'set', '--byok', 'sometimes'], { from: 'user' });
+    } catch {
+      /* noop */
+    } finally {
+      exit.mockRestore();
+      err.mockRestore();
+    }
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('keeps the unreleased price flags working but out of help', async () => {
+    await buildSandboxes().parseAsync(['sandboxes', 'settings', 'set', '--general-cap', 'none'], { from: 'user' });
     expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', { marketCap: null });
+    const program = buildSandboxes();
+    const set = program.commands.find((c) => c.name() === 'sandboxes' || c.aliases().includes('sandboxes'))!
+      .commands.find((c) => c.name() === 'settings')!
+      .commands.find((c) => c.name() === 'set')!;
+    const help = set.helpInformation();
+    expect(help).toContain('--routing');
+    expect(help).toContain('--byok-order');
+    expect(help).not.toMatch(/--cap|--general-cap|--order-type|market/);
   });
 
   it('rejects a cap without a unit before calling the API', async () => {
@@ -206,32 +244,21 @@ describe('compute sandboxes settings set', () => {
 });
 
 describe('compute actions settings', () => {
-  it('GETs and prints actions settings', async () => {
-    get.mockImplementation(async () => ACTIONS_SETTINGS);
+  it('GETs the Actions router and settings', async () => {
+    mockGets(ACTIONS_SETTINGS);
     const out = await captureStdout(() =>
       buildActions().parseAsync(['actions', 'settings'], { from: 'user' }),
     );
+    expect(get).toHaveBeenCalledWith('/api/v1/actions/routing');
     expect(get).toHaveBeenCalledWith('/api/v1/actions/settings');
-    expect(out).toContain('order type: limit');
-    expect(out).toContain('general cap: $0.4/hr');
+    expect(out).toContain('ComputeSDK default');
     expect(out).toContain('warm pool');
     expect(out).toContain('snapshot pool');
   });
 
-  it('settings set PATCHes the actions lane', async () => {
-    patch.mockImplementation(async () => ACTIONS_SETTINGS);
-    await buildActions().parseAsync(
-      [
-        'actions', 'settings', 'set',
-        '--order-type', 'market',
-        '--cap', 'medium=0.2/hour',
-      ],
-      { from: 'user' },
-    );
-    expect(patch).toHaveBeenCalledWith('/api/v1/actions/settings', {
-      marketOrderType: 'market',
-      marketCaps: { medium: { usd: 0.2, per: 'hour' } },
-    });
+  it('settings set changes the Actions router', async () => {
+    await buildActions().parseAsync(['actions', 'settings', 'set', '--byok', 'only'], { from: 'user' });
+    expect(patch).toHaveBeenCalledWith('/api/v1/actions/routing', { byok: 'only' });
   });
 
   it('rejects inherit on the actions lane', async () => {
@@ -316,8 +343,8 @@ describe('compute sandboxes settings set --resources / --warm-pool', () => {
       ['sandboxes', 'settings', 'set', '--resources', 'blaxel=small', '--warm-pool', 'blaxel=1', '--order', 'blaxel'],
       { from: 'user' },
     );
+    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/routing', { byokOrder: ['blaxel'] });
     expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', {
-      providerOrder: ['blaxel'],
       providerResources: { blaxel: 'small' },
       warmPool: { blaxel: 1 },
     });
@@ -340,12 +367,12 @@ describe('compute sandboxes settings set --resources / --warm-pool', () => {
   });
 
   it('settings render has a resources row and a warm-pool row', async () => {
-    get.mockImplementation(async () => ({
+    mockGets({
       ...SANDBOX_SETTINGS,
       providerResources: { blaxel: { memoryMb: 2048 }, archil: { cpus: 4, memoryMb: 8192 }, e2b: { cpus: 2, memoryMb: 4096 } },
       providerResourcePresets: { blaxel: null, archil: 'large' },
       warmPool: { blaxel: 1 },
-    }));
+    });
     const out = await captureStdout(() =>
       buildSandboxes().parseAsync(['sandboxes', 'settings'], { from: 'user' }),
     );
@@ -413,8 +440,8 @@ describe('compute actions settings set --resources / --warm-pool / --snapshot-po
     expect(await rejects([])).toMatch(/--resources, --warm-pool, or --snapshot-pool/);
   });
 
-  it('prints the default order, preset names and the snapshot summary', async () => {
-    get.mockImplementation(async () => ({
+  it('prints preset names and the snapshot summary', async () => {
+    mockGets({
       ...ACTIONS_SETTINGS,
       providerOrder: [],
       defaultProviderOrder: ['vercel'],
@@ -429,9 +456,8 @@ describe('compute actions settings set --resources / --warm-pool / --snapshot-po
         ],
         live: [{ repoFullName: 'ada/app', workflowPath: '.github/workflows/ci.yml', count: 2 }],
       },
-    }));
+    });
     const out = await captureStdout(() => buildActions().parseAsync(['actions', 'settings'], { from: 'user' }));
-    expect(out).toContain('default (vercel)');
     expect(out).toContain('blaxel  large (4 vCPU / 8192 MB)');
     expect(out).toMatch(/snapshot pool:\s*\n?\s*blaxel {2}4/);
     expect(out).toContain('ada/app  .github/workflows/ci.yml  3');
@@ -442,13 +468,13 @@ describe('compute actions settings set --resources / --warm-pool / --snapshot-po
 
   it('strips terminal control sequences from workflow paths in the snapshot summary', async () => {
     const evil = '.github/workflows/\u001b]0;pwned\u0007ci.yml';
-    get.mockImplementation(async () => ({
+    mockGets({
       ...ACTIONS_SETTINGS,
       snapshotSummary: {
         workflows: [{ repoFullName: 'ada/app', path: evil, name: 'CI', snapshotCap: 3 }],
         live: [{ repoFullName: 'ada/app', workflowPath: evil, count: 1 }],
       },
-    }));
+    });
     const out = await captureStdout(() => buildActions().parseAsync(['actions', 'settings'], { from: 'user' }));
     expect(out).not.toContain('\u001b]0;');
     expect(out).not.toContain('\u0007');

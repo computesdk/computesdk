@@ -381,8 +381,6 @@
         "--manual",
         "--provider",
         "--provider-region",
-        "--max-bid",
-        "--max-bid-per",
         "--with-changes",
         "--api-key",
         "--base-url",
@@ -1483,7 +1481,7 @@
         "--json",
         "--help"
       ],
-      "summary": "Show the org's actions routing policy (order, caps, sizes, pools)"
+      "summary": "Show the Actions router: managed routing, BYOK use, sizes and pools"
     },
     {
       "path": [
@@ -1500,10 +1498,9 @@
       ],
       "args": [],
       "flags": [
-        "--cap",
-        "--general-cap",
-        "--order-type",
-        "--order",
+        "--routing",
+        "--byok",
+        "--byok-order",
         "--api-key",
         "--base-url",
         "--org",
@@ -1514,7 +1511,7 @@
         "--snapshot-pool",
         "--help"
       ],
-      "summary": "Update the org's actions routing policy"
+      "summary": "Change the Actions router (owner/admin)"
     },
     {
       "path": [
@@ -1695,464 +1692,6 @@
     },
     {
       "path": [
-        "market"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--help"
-      ],
-      "summary": "Buy and sell compute capacity on the compute market"
-    },
-    {
-      "path": [
-        "market",
-        "listings"
-      ],
-      "aliases": [
-        [
-          "market",
-          "list"
-        ]
-      ],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Your listings — live, paused, expired, and withdrawn"
-    },
-    {
-      "path": [
-        "market",
-        "sell"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--price",
-        "--per",
-        "--size",
-        "--use-case",
-        "--region",
-        "--capacity",
-        "--expires-in",
-        "--renew",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Post a listing: sell capacity at a price"
-    },
-    {
-      "path": [
-        "market",
-        "price"
-      ],
-      "aliases": [],
-      "args": [
-        "<listing-id>"
-      ],
-      "flags": [
-        "--price",
-        "--per",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Reprice a listing"
-    },
-    {
-      "path": [
-        "market",
-        "pause"
-      ],
-      "aliases": [],
-      "args": [
-        "<listing-id>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Pause a listing — it stays posted but cannot fill"
-    },
-    {
-      "path": [
-        "market",
-        "resume"
-      ],
-      "aliases": [],
-      "args": [
-        "<listing-id>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Resume a paused listing"
-    },
-    {
-      "path": [
-        "market",
-        "withdraw"
-      ],
-      "aliases": [],
-      "args": [
-        "<listing-id>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Withdraw a listing — it leaves the book for good"
-    },
-    {
-      "path": [
-        "market",
-        "replace"
-      ],
-      "aliases": [],
-      "args": [
-        "[listing-id]"
-      ],
-      "flags": [
-        "--fill",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Take capacity back: evict a sale, or pause a listing and evict every sale on it."
-    },
-    {
-      "path": [
-        "market",
-        "book"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--use-case",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Live prices: sellers' asking prices, buyer offers, recent sales"
-    },
-    {
-      "path": [
-        "market",
-        "settlements"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Your monthly payout reports"
-    },
-    {
-      "path": [
-        "market",
-        "status"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Who you are on the market: seller identity, credential, sizes, regions"
-    },
-    {
-      "path": [
-        "market",
-        "cap"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--help"
-      ],
-      "summary": "The org market cap: the most a market-placed job pays without its own bid"
-    },
-    {
-      "path": [
-        "market",
-        "cap",
-        "show"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Show the current cap"
-    },
-    {
-      "path": [
-        "market",
-        "cap",
-        "set"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--price",
-        "--per",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Set the cap"
-    },
-    {
-      "path": [
-        "market",
-        "cap",
-        "clear"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Remove the cap (refused while your placement order still names market)"
-    },
-    {
-      "path": [
-        "market",
-        "bids"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Your org's standing bids — open, filled, and cancelled"
-    },
-    {
-      "path": [
-        "market",
-        "bid"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--size",
-        "--price",
-        "--per",
-        "--region",
-        "--use-case",
-        "--expires-in",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Post a standing bid: the most you will pay for a size tier"
-    },
-    {
-      "path": [
-        "market",
-        "cancel-bid"
-      ],
-      "aliases": [],
-      "args": [
-        "<bid-id>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Cancel an open standing bid"
-    },
-    {
-      "path": [
-        "market",
-        "purchases"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--limit",
-        "--cursor",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "What the market ran for you: seller, price, duration, and cost, newest first"
-    },
-    {
-      "path": [
-        "market",
-        "credits"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Prepaid market credits: available balance and reserved holds"
-    },
-    {
-      "path": [
-        "market",
-        "ledger"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--limit",
-        "--cursor",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Credit history, newest first: top-ups, charges, holds, refunds"
-    },
-    {
-      "path": [
-        "market",
-        "topup"
-      ],
-      "aliases": [],
-      "args": [
-        "<usd>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Buy prepaid credits — prints a Stripe checkout link to pay in your browser"
-    },
-    {
-      "path": [
-        "market",
-        "credential"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--help"
-      ],
-      "summary": "Connect the credential your listings fill under"
-    },
-    {
-      "path": [
-        "market",
-        "credential",
-        "connect"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--field",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Save the executor credential your sold capacity runs under. Each field is read from"
-    },
-    {
-      "path": [
-        "market",
-        "credential",
-        "disconnect"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Remove the stored credential — listings stop filling until a new one connects"
-    },
-    {
-      "path": [
         "instances"
       ],
       "aliases": [
@@ -2194,10 +1733,6 @@
         "--cpus",
         "--memory-mb",
         "--disk-mb",
-        "--max-price",
-        "--max-price-per",
-        "--market",
-        "--order-type",
         "--timeout-ms",
         "--secret",
         "--no-use",
@@ -2210,21 +1745,21 @@
         "--org",
         "--help"
       ],
-      "summary": "Place a sandbox (provider order walks 1,2,3; \"market\" bids first)"
+      "summary": "Create a sandbox through your Sandboxes router (`compute sandboxes route` shows where it lands)"
     },
     {
       "path": [
         "instances",
-        "quote"
+        "route"
       ],
       "aliases": [
         [
           "sandboxes",
-          "quote"
+          "route"
         ],
         [
           "sbx",
-          "quote"
+          "route"
         ]
       ],
       "args": [],
@@ -2235,10 +1770,6 @@
         "--disk-mb",
         "--region",
         "--timeout-ms",
-        "--order-type",
-        "--market",
-        "--max-price",
-        "--max-price-per",
         "--api-key",
         "--base-url",
         "--allow-untrusted-host",
@@ -2246,7 +1777,7 @@
         "--org",
         "--help"
       ],
-      "summary": "Quote a sandbox create: placement, rate, caps and credits — creates nothing"
+      "summary": "Show where a sandbox create would land, how it is billed, and the price — creates nothing"
     },
     {
       "path": [
@@ -2396,10 +1927,6 @@
         "--cpus",
         "--memory-mb",
         "--disk-mb",
-        "--max-price",
-        "--max-price-per",
-        "--market",
-        "--order-type",
         "--timeout-ms",
         "--secret",
         "--keep",
@@ -3011,7 +2538,7 @@
         "--json",
         "--help"
       ],
-      "summary": "Show the org's sandboxes routing policy (order, caps, sizes, pools)"
+      "summary": "Show the Sandboxes router: managed routing, BYOK use, sizes and pools"
     },
     {
       "path": [
@@ -3033,10 +2560,9 @@
       ],
       "args": [],
       "flags": [
-        "--cap",
-        "--general-cap",
-        "--order-type",
-        "--order",
+        "--routing",
+        "--byok",
+        "--byok-order",
         "--api-key",
         "--base-url",
         "--org",
@@ -3046,7 +2572,7 @@
         "--warm-pool",
         "--help"
       ],
-      "summary": "Update the org's sandboxes routing policy"
+      "summary": "Change the Sandboxes router (owner/admin)"
     },
     {
       "path": [

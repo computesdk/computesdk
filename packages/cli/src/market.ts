@@ -751,8 +751,10 @@ export function formatPurchaseRow(p: MarketPurchase): string {
 // ─── Commands ───────────────────────────────────────────────────────────────
 
 export function registerMarketCommands(program: Command): void {
+  // Not generally available: registered for the orgs that use it, kept out
+  // of `compute --help`.
   const market = program
-    .command('market')
+    .command('market', { hidden: true })
     .description('Buy and sell compute capacity on the compute market')
     .configureOutput({ outputError: usageErrorOutput });
 

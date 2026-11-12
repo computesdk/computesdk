@@ -15,7 +15,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { Readable } from 'node:stream';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import pc from 'picocolors';
 import * as tar from 'tar';
 import { ActionsApiError, type ActionsClient } from './actions-client.js';
@@ -79,6 +79,23 @@ function shortRate(rate: { usd: number; per: string }): string {
   return `${formatUsd(rateAllUnits(rate).perHour)}/h`;
 }
 
+/**
+ * Who the sandbox runs under: a ComputeSDK managed account (billed from
+ * prepaid credit) or the org's own BYOK key (billed by the provider).
+ */
+export function placementLane(source: string | undefined): string {
+  if (source === 'house') return 'managed';
+  if (source === 'own-key') return 'BYOK';
+  return source ?? '—';
+}
+
+/** Where a placement's compute is billed. */
+function billedBy(source: string | undefined, provider: string): string {
+  if (source === 'house') return 'billed from your ComputeSDK credit';
+  if (source === 'own-key') return `billed by ${provider} to your account`;
+  return 'billed from your ComputeSDK credit';
+}
+
 /** `2026-10-27 14:02` — a timestamp in the viewer's local time. */
 function formatLocalTime(iso: string): string {
   const d = new Date(iso);
@@ -96,7 +113,7 @@ function formatLocalTime(iso: string): string {
 function printSandbox(s: SandboxSummary, verbose = false): void {
   const p = s.placement;
   console.log(
-    `${pc.cyan(s.id)}  ${s.status}  ${p?.box?.provider ?? s.provider ?? '—'}  ${p?.size ?? '—'}  ${p ? shortRate(p.rate) : '—'}`,
+    `${pc.cyan(s.id)}  ${s.status}  ${p?.box?.provider ?? s.provider ?? '—'} · ${placementLane(p?.source)}  ${p?.size ?? '—'}  ${p ? shortRate(p.rate) : '—'}`,
   );
   if (s.label) {
     console.log(`  label: ${s.label}   created: ${formatLocalTime(s.createdAt)}`);
@@ -111,16 +128,16 @@ function printSandbox(s: SandboxSummary, verbose = false): void {
     const box = p.box
       ? ` / ${p.box.sizeName ?? 'custom'}${p.box.resources ? ` (${p.box.resources.cpus ?? '?'} vCPU / ${p.box.resources.memoryMb ?? '?'} MB)` : ''}`
       : '';
+    const provider = p.box?.provider ?? s.provider ?? 'the provider';
     console.log(
-      `  placement: ${p.source}${box}   order: ${p.orderType ?? '—'}   rate: ${formatUsdPer(p.rate)}` +
-        `${p.maxPrice ? `   max price: ${formatUsdPer(p.maxPrice)}` : ''}`,
+      `  placement: ${placementLane(p.source)}${box}   rate: ${formatUsdPer(p.rate)}   ${pc.dim(billedBy(p.source, provider))}`,
     );
   }
   const attach = 'attach' in s ? (s as SandboxDetail).attach : undefined;
   if (attach !== undefined) {
     console.log(
       attach === null
-        ? '  attach: none (market fill or ambient provider — platform drive only)'
+        ? '  attach: none (managed account or platform provider — drive it through ComputeSDK)'
         : `  attach: ${attach.provider} / ${attach.providerSandboxId}${attach.region ? ` (${attach.region})` : ''}`,
     );
   }
@@ -133,7 +150,7 @@ interface SandboxQuoteWire {
   providerOrder: string[];
   orderType: 'market' | 'limit';
   placement?: {
-    source: 'market' | 'own-key';
+    source: 'house' | 'own-key' | 'market';
     provider: string;
     region: string | null;
     size: string | null;
@@ -157,36 +174,51 @@ interface SandboxQuoteWire {
   topUpPath?: string;
 }
 
-/** A per-hour dollar field off the wire → all-units display (`—` when absent). */
-const perHour = (n: number | undefined): string =>
-  n === undefined ? '—' : formatRateAllUnits(rateAllUnits({ usd: n, per: 'hour' }));
 
 const usdAmount = (n: number | undefined): string => (n === undefined ? '—' : formatMoney(n));
 
-function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
-  console.log(`quote: ${q.ok ? pc.green('ok') : pc.red(q.reason ?? 'unfillable')}`);
-  const box = q.placement?.box;
-  console.log(
-    `  size: ${q.placement?.size ?? '—'}   provider: ${q.placement?.provider ?? '—'}` +
-      (box ? `   box: ${box.sizeName ?? 'custom'} (${box.provider}${box.resources ? `, ${box.resources.cpus ?? '?'} vCPU / ${box.resources.memoryMb ?? '?'} MB` : ''})` : ''),
-  );
-  console.log(`  order type: ${q.orderType}   order: ${q.providerOrder.join(', ')}`);
-  if (q.rateUsd) {
-    console.log(`  rate: ${formatRateAllUnits(q.rateUsd)}`);
-  } else if (q.rate) {
-    console.log(`  rate: ${formatUsdPer(q.rate)}`);
+/** A walk entry as people read it: `daytona (managed)`, `e2b (BYOK)`. */
+function walkEntry(entry: string): string {
+  if (entry.startsWith('managed/')) return `${entry.slice('managed/'.length)} (managed)`;
+  if (entry === 'market' || entry.startsWith('market:')) return entry;
+  return `${entry} (BYOK)`;
+}
+
+/** Why a quote can't place, in the caller's terms. */
+function quoteRefusal(q: SandboxQuoteWire): string {
+  switch (q.reason) {
+    case 'insufficient_credits':
+      return `not enough ComputeSDK credit for the hold (need ${usdAmount(q.requiredHoldUsd)}, have ${usdAmount(q.creditBalanceUsd)})`;
+    case 'no_provider_configured':
+      return 'nothing in the router can place this size: no live managed account prices it, and no BYOK key covers it';
+    default:
+      return q.reason ?? 'nothing in the router can place it';
   }
-  console.log(`  cheapest live: ${perHour(q.cheapestLiveUsdPerHour)}`);
-  console.log(`  reference: ${perHour(q.referenceUsdPerHour)}`);
-  const timeout = timeoutMs !== undefined ? ` for ${timeoutMs}ms` : '';
-  console.log(
-    `  est. cost${timeout}: ${usdAmount(q.estimatedCostUsd)}   required hold: ${usdAmount(q.requiredHoldUsd)}` +
-      `   balance: ${usdAmount(q.creditBalanceUsd)}`,
-  );
-  console.log(`  cap: ${q.maxPrice ? formatUsdPer(q.maxPrice) : perHour(q.marketCapUsdPerHour)}`);
-  console.log(`  protection limit: ${perHour(q.protectionLimitUsdPerHour)}`);
-  if (!q.ok && q.topUpPath) console.log(`  ${pc.dim(`→ ${q.topUpPath}`)}`);
-  if (q.liveAskDepth !== undefined) console.log(`  ${pc.dim(`live asks: ${q.liveAskDepth}`)}`);
+}
+
+/**
+ * Where a create would land and what it would cost: the provider and whether
+ * it's a managed account (billed from credit, with a hold) or your BYOK key
+ * (billed by the provider), the rate, and the router's walk.
+ */
+function printQuote(q: SandboxQuoteWire, timeoutMs?: string): void {
+  const row = (label: string, value: string) => console.log(`${label.padEnd(10)} ${value}`);
+  if (!q.ok || !q.placement) {
+    row('Lands on', pc.red(`nowhere — ${quoteRefusal(q)}`));
+    if (q.reason === 'insufficient_credits' && q.topUpPath) row('Top up', q.topUpPath);
+  } else {
+    const p = q.placement;
+    const provider = p.box?.provider ?? p.provider;
+    row('Lands on', `${provider} · ${placementLane(p.source)} · ${p.size ?? p.box?.sizeName ?? 'custom size'}`);
+    row('Rate', q.rateUsd ? formatRateAllUnits(q.rateUsd) : q.rate ? formatUsdPer(q.rate) : '—');
+    if (p.source === 'own-key') {
+      row('Billing', `billed by ${provider} to your account`);
+    } else {
+      const timeout = timeoutMs !== undefined ? ` for ${timeoutMs}ms` : ' for the timeout';
+      row('Billing', `from your ComputeSDK credit: ${usdAmount(q.requiredHoldUsd ?? q.estimatedCostUsd)} held${timeout}, settled at actual runtime (balance ${usdAmount(q.creditBalanceUsd)})`);
+    }
+  }
+  row('Tries', q.providerOrder.map(walkEntry).join(' → ') || '—');
 }
 
 function printProcess(p: SandboxProcess | SandboxProcessStatus): void {
@@ -414,7 +446,7 @@ function resolveTwoArgTarget(
 /** The create options `create` and `run` share — declared once. */
 function addCreateFlags(c: Command): Command {
   return c
-    .option('--order <providers>', 'provider order, comma-separated (e.g. "market,blaxel,vercel")')
+    .option('--order <providers>', 'skip the router and try exactly these BYOK providers, in order (e.g. e2b,blaxel)')
     .option('--size <size>', 'platform size: small (1 vCPU/2 GB), medium, large, xlarge (8/16 GB); default medium')
     .option('--label <label>', 'label for the sandbox')
     .option('--image <image>', 'container image to boot')
@@ -422,10 +454,10 @@ function addCreateFlags(c: Command): Command {
     .option('--cpus <n>', 'CPU cores (raw resources — mutually exclusive with --size)')
     .option('--memory-mb <n>', 'memory in MB (raw resources)')
     .option('--disk-mb <n>', 'ephemeral disk in MB (raw resources)')
-    .option('--max-price <usd/unit>', 'max price for a market fill (e.g. 0.12/hour); makes the create a limit order')
-    .option('--max-price-per <unit>', 'unit for a bare --max-price usd (second, minute, or hour)')
-    .option('--market', 'place the create on the compute market (order type "market")')
-    .option('--order-type <type>', 'explicit market order type: market or limit')
+    .addOption(new Option('--max-price <usd/unit>').hideHelp())
+    .addOption(new Option('--max-price-per <unit>').hideHelp())
+    .addOption(new Option('--market').hideHelp())
+    .addOption(new Option('--order-type <type>').hideHelp())
     .option('--timeout-ms <ms>', 'sandbox timeout in ms (provider minimums apply, e.g. blaxel ≥5m)')
     .option('--secret <name>', 'vault secret name to inject (repeatable)', (v, a: string[]) => a.concat(v), [] as string[]);
 }
@@ -516,7 +548,7 @@ export function registerSandboxesCommands(program: Command): void {
   addCreateFlags(
     cmd
       .command('create')
-      .description('Place a sandbox (provider order walks 1,2,3; "market" bids first)'),
+      .description('Create a sandbox through your Sandboxes router (`compute sandboxes route` shows where it lands)'),
   )
     .option('--no-use', 'do not mark the new instance as this directory\'s current instance')
     .option('-q, --quiet', 'print only the new instance ID')
@@ -543,22 +575,27 @@ export function registerSandboxesCommands(program: Command): void {
       }
     });
 
-  cmd
-    .command('quote')
-    .description('Quote a sandbox create: placement, rate, caps and credits — creates nothing')
-    .option('--size <size>', 'platform size (or raw resource flags; default medium)')
-    .option('--cpus <n>', 'CPU cores')
-    .option('--memory-mb <n>', 'memory in MB')
-    .option('--disk-mb <n>', 'ephemeral disk in MB')
-    .option('--region <region>', 'pin the placement region')
-    .option('--timeout-ms <ms>', 'sandbox timeout in ms (provider minimums apply, e.g. blaxel ≥5m)')
-    .option('--order-type <type>', 'market order type: market or limit')
-    .option('--market', 'quote a market order (fills at the live price, protection-bounded)')
-    .option('--max-price <usd/unit>', 'max price for a market fill (e.g. 0.12/hour)')
-    .option('--max-price-per <unit>', 'unit for a bare --max-price usd (second, minute, or hour)')
-    .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
-    .option('--json', 'print the raw response')
-    .action(async (opts: CommonOpts & {
+  // `route`: where a create would land under the Sandboxes router, and what
+  // it costs — managed (ComputeSDK credit) or BYOK (billed by the provider).
+  // `quote` is its pre-router name, kept hidden for existing scripts; the
+  // market-only flags are accepted but stay out of help.
+  for (const name of ['route', 'quote'] as const) {
+    const command = cmd
+      .command(name, { hidden: name === 'quote' })
+      .description('Show where a sandbox create would land, how it is billed, and the price — creates nothing')
+      .option('--size <size>', 'platform size: small, medium (default), large, xlarge')
+      .option('--cpus <n>', 'CPU cores (raw resources instead of --size)')
+      .option('--memory-mb <n>', 'memory in MB')
+      .option('--disk-mb <n>', 'ephemeral disk in MB')
+      .option('--region <region>', 'pin the placement region')
+      .option('--timeout-ms <ms>', 'sandbox timeout in ms; a managed account holds credit for it')
+      .addOption(new Option('--order-type <type>').hideHelp())
+      .addOption(new Option('--market').hideHelp())
+      .addOption(new Option('--max-price <usd/unit>').hideHelp())
+      .addOption(new Option('--max-price-per <unit>').hideHelp())
+      .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
+      .option('--json', 'print the raw response');
+    command.action(async (opts: CommonOpts & {
       size?: string; cpus?: string; memoryMb?: string; diskMb?: string;
       region?: string; timeoutMs?: string; orderType?: string; market?: boolean;
       maxPrice?: string; maxPricePer?: string;
@@ -591,6 +628,7 @@ export function registerSandboxesCommands(program: Command): void {
         fail(e, opts);
       }
     });
+  }
 
   cmd
     .command('list')

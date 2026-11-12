@@ -11,7 +11,7 @@
  *   compute org …                        # active org, members, invitations
  *   compute invitations …                # your own invitations (show/accept/decline)
  *   compute actions …                    # Actions API
- *   compute market …                     # market sell-side commands
+ *   compute market …                     # not generally available (hidden from help)
  *   compute instances …                  # platform compute-instance control plane
  *     (alias: compute sandboxes, compute sbx)
  *   compute bench …                      # benchmarks platform CLI (runs, results, fork, …)
