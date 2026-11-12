@@ -6,7 +6,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 
-import { SANDBOX_API_IMAGE, SANDBOX_API_PATH, SandboxInstance, Snapshot, VolumeInstance, deleteImage, deleteImageTag, getImage, initialize, listImages, settings } from '@blaxel/core';
+import { SANDBOX_API_IMAGE, SANDBOX_API_PATH, SandboxInstance, Snapshot, VolumeInstance, deleteImage, deleteImageTag, getImage, getSandbox, initialize, listImages, settings } from '@blaxel/core';
 import type { Image as BlaxelImage } from '@blaxel/core';
 import { defineProvider, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 
@@ -469,6 +469,19 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					})
 			},
 
+			// Blaxel has no pause call: a sandbox with no open connection goes to
+			// standby by itself seconds after its last request, keeping memory,
+			// processes and files, and the next request wakes it. pause() waits for the control plane to
+			// report STANDBY; resume() sends a request and waits for the answer.
+			// pause() holds the config gate only for each control-plane request,
+			// never across the waits between them.
+			pause: async (sandbox: SandboxInstance): Promise<void> => waitForStandby(sandbox),
+			resume: async (sandbox: SandboxInstance): Promise<void> =>
+				withBlaxelInstance(sandbox, async () => {
+					await sandbox.fs.ls('/');
+				}),
+			pauseCapabilities: { memory: true },
+
 			// Provider-specific typed getInstance method
 			getInstance: (sandbox: SandboxInstance): SandboxInstance => {
 				return sandbox;
@@ -588,6 +601,29 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		}
 	}
 });
+
+const STANDBY_TIMEOUT_MS = 120_000;
+const STANDBY_POLL_MS = 500;
+
+/**
+ * Polls the control plane (not the sandbox, which a request would wake) until
+ * the sandbox is in standby. Each poll enters the config gate under the
+ * sandbox's own config and leaves it before the sleep, so calls under another
+ * config are not held up for the whole wait.
+ */
+async function waitForStandby(sandbox: SandboxInstance): Promise<void> {
+	const name = sandbox.metadata?.name ?? '';
+	const deadline = Date.now() + STANDBY_TIMEOUT_MS;
+	let state: string | undefined;
+	while (Date.now() < deadline) {
+		const { data, error } = await withBlaxelInstance(sandbox, () => getSandbox({ path: { sandboxName: name } }));
+		if (error !== undefined) throw new Error(`Failed to pause Blaxel sandbox ${name}: ${describeError(error)}`);
+		state = data?.state;
+		if (state === 'STANDBY') return;
+		await new Promise((resolve) => setTimeout(resolve, STANDBY_POLL_MS));
+	}
+	throw new Error(`Blaxel sandbox ${name} did not reach standby within ${STANDBY_TIMEOUT_MS / 1000} s (state ${state ?? 'unknown'})`);
+}
 
 /**
  * Map a Blaxel workspace snapshot to the provider-agnostic snapshot shape.
