@@ -265,6 +265,19 @@ describe('quiet and verbose output', () => {
     }
   });
 
+  it('create --provider sends only (the router narrowed to those providers)', async () => {
+    post.mockResolvedValueOnce({ sandbox });
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--provider', 'daytona'], { from: 'user' });
+      expect(post).toHaveBeenCalledWith('/api/v1/sandboxes', { only: ['daytona'] });
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+    }
+  });
+
   it('create --quiet --json is a usage error', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);

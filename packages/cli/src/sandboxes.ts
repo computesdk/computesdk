@@ -450,6 +450,7 @@ function resolveTwoArgTarget(
 /** The create options `create` and `run` share — declared once. */
 function addCreateFlags(c: Command): Command {
   return c
+    .option('--provider <names>', 'place only on these providers, through your router (its BYOK mode and order), e.g. daytona or daytona,e2b')
     .option('--order <providers>', 'skip the router and try exactly these BYOK providers, in order (e.g. e2b,blaxel)')
     .option('--size <size>', 'platform size: small (1 vCPU/2 GB), medium, large, xlarge (8/16 GB); default medium')
     .option('--label <label>', 'label for the sandbox')
@@ -467,10 +468,17 @@ function addCreateFlags(c: Command): Command {
 }
 
 interface CreateFlagOpts {
-  order?: string; label?: string; image?: string; snapshotId?: string;
+  order?: string; provider?: string; label?: string; image?: string; snapshotId?: string;
   size?: string; cpus?: string; memoryMb?: string; diskMb?: string; timeoutMs?: string;
   maxPrice?: string; maxPricePer?: string; market?: boolean; orderType?: string;
   secret?: string[];
+}
+
+/** `--provider daytona,e2b` → ['daytona', 'e2b']; empty is a usage error. */
+function providerNames(value: string): string[] {
+  const names = value.split(',').map((name) => name.trim()).filter(Boolean);
+  if (names.length === 0) throw new Error(`--provider "${value}" names no providers.`);
+  return names;
 }
 
 /** The POST /api/v1/sandboxes body `create` and `run` share. */
@@ -480,6 +488,10 @@ function buildCreateBody(opts: CreateFlagOpts): Record<string, unknown> {
   if (opts.memoryMb) resources.memoryMb = Number(opts.memoryMb);
   if (opts.diskMb) resources.ephemeralDiskMb = Number(opts.diskMb);
   const body: Record<string, unknown> = {};
+  if (opts.provider && opts.order) {
+    throw new Error('--provider narrows your router; --order skips it. Pass one.');
+  }
+  if (opts.provider) body.only = providerNames(opts.provider);
   if (opts.order) body.providerOrder = opts.order.split(',').map((s) => s.trim());
   if (opts.size) body.size = opts.size;
   if (opts.label) body.label = opts.label;
@@ -588,6 +600,7 @@ export function registerSandboxesCommands(program: Command): void {
       .command(name, { hidden: name === 'quote' })
       .description('Show where a sandbox create would land, how it is billed, and the price — creates nothing')
       .option('--size <size>', 'platform size: small, medium (default), large, xlarge')
+      .option('--provider <names>', 'only these providers, through your router (e.g. daytona)')
       .option('--cpus <n>', 'CPU cores (raw resources instead of --size)')
       .option('--memory-mb <n>', 'memory in MB')
       .option('--disk-mb <n>', 'ephemeral disk in MB')
@@ -600,7 +613,7 @@ export function registerSandboxesCommands(program: Command): void {
       .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
       .option('--json', 'print the raw response');
     command.action(async (opts: CommonOpts & {
-      size?: string; cpus?: string; memoryMb?: string; diskMb?: string;
+      size?: string; provider?: string; cpus?: string; memoryMb?: string; diskMb?: string;
       region?: string; timeoutMs?: string; orderType?: string; market?: boolean;
       maxPrice?: string; maxPricePer?: string;
     }) => {
@@ -608,6 +621,7 @@ export function registerSandboxesCommands(program: Command): void {
         const c = await client(opts);
         const params: Record<string, string | undefined> = {
           size: opts.size,
+          only: opts.provider === undefined ? undefined : providerNames(opts.provider).join(','),
           cpus: opts.cpus,
           memoryMb: opts.memoryMb,
           ephemeralDiskMb: opts.diskMb,

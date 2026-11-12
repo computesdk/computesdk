@@ -99,6 +99,12 @@ describe('compute sandboxes route', () => {
     expect(out).toContain('not enough ComputeSDK credit for the hold');
   });
 
+  it('--provider narrows the router for this quote', async () => {
+    get.mockResolvedValue({ quote: { ...base, ok: false, reason: 'no_provider_configured', providerOrder: [] } });
+    await run(['route', '--provider', 'daytona, e2b']);
+    expect(get).toHaveBeenCalledWith('/api/v1/sandboxes/quote', expect.objectContaining({ only: 'daytona,e2b' }));
+  });
+
   it('keeps quote as a hidden alias', async () => {
     get.mockResolvedValue({ quote: { ...base, ok: false, reason: 'no_provider_configured', providerOrder: [] } });
     await run(['quote']);

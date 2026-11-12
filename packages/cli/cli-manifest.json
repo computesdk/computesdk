@@ -1725,6 +1725,7 @@
       ],
       "args": [],
       "flags": [
+        "--provider",
         "--order",
         "--size",
         "--label",
@@ -1765,6 +1766,7 @@
       "args": [],
       "flags": [
         "--size",
+        "--provider",
         "--cpus",
         "--memory-mb",
         "--disk-mb",
@@ -1919,6 +1921,7 @@
         "[command...]"
       ],
       "flags": [
+        "--provider",
         "--order",
         "--size",
         "--label",
