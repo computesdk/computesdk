@@ -77,7 +77,7 @@ describe('compute sandboxes route', () => {
 
   it('says why nothing can place', async () => {
     get.mockResolvedValue({
-      quote: { ...base, ok: false, reason: 'insufficient_credits', providerOrder: ['managed/daytona'], requiredHoldUsd: 3, topUpPath: '/acme/market' },
+      quote: { ...base, ok: false, reason: 'insufficient_credits', providerOrder: ['managed/daytona'], requiredHoldUsd: 3, topUpPath: '/acme/settings/billing' },
     });
     const out = await run(['route']);
     expect(out).toContain('not enough ComputeSDK credit for the hold');
