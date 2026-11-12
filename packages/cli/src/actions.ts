@@ -19,7 +19,7 @@ function sanitizePathPart(name: string): string {
  * data, on failure the `{ ok: false, error: {...} }` envelope on stderr.
  */
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import pc from 'picocolors';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { spawnSync } from 'child_process';
@@ -1021,10 +1021,10 @@ export function registerActionsCommands(program: Command): void {
       .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref); also finds a workflow file only this ref has')
       .option('--inputs <pairs...>', 'workflow inputs as key=value (workflow_dispatch inputs only)')
       .option('--manual', 'run a workflow even if it does not declare workflow_dispatch (such runs take no --inputs)')
-      .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
+      .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the Actions router')
       .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)')
-      .option('--max-bid <usd>', 'max price per vCPU for a market fill (e.g. 0.12); unfilled jobs fall through to the next provider')
-      .option('--max-bid-per <unit>', 'time unit --max-bid is priced in: second, minute, or hour (default: second)')
+      .addOption(new Option('--max-bid <usd>').hideHelp())
+      .addOption(new Option('--max-bid-per <unit>').hideHelp())
       .option('--with-changes', 'run your local changes: everything the working tree has beyond origin/<ref> is sent as a diff and applied after checkout (default --ref: the current branch)'),
   ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string; maxBid?: string; maxBidPer?: string; withChanges?: boolean }) => {
     try {
