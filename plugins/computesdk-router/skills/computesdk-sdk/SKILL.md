@@ -1,6 +1,6 @@
 ---
 name: computesdk-sdk
-description: Write code that drives ComputeSDK sandboxes — the hosted platform via `@computesdk/platform`, or BYOK with the `computesdk` SDK plus a provider package. Use when the user wants a script or app that controls sandboxes outside ChatGPT.
+description: Write code that drives ComputeSDK sandboxes — the hosted platform via `@computesdk/platform`, or BYOK with the `computesdk` SDK plus a provider package. Use when the user wants a script or app that controls sandboxes outside the chat.
 ---
 
 # Driving ComputeSDK sandboxes from code

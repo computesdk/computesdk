@@ -26,6 +26,9 @@ client-side.
 - `skills/sandboxes/` — workflow skill teaching the model the tool surface.
 - `skills/actions/` — workflow skill for the Actions (CI) tools: list
   repos/workflows/runs, tail job logs, dispatch, cancel, re-run.
+- `skills/providers/` — BYOK provider keys, status and rates (no key values
+  ever pass through chat).
+- `skills/benchmarks/` — read-only benchmark results and reliability.
 - `skills/computesdk-sdk/` — guidance for generating SDK code.
 - `assets/` — icon/logo/screenshots (placeholder art; replace with the real
   assets from the design team before submission).
@@ -76,6 +79,10 @@ marketplace, and install.
 The same directory also loads as a Claude Code plugin. Validate and run it
 locally:
 
+Or install it from this repo's marketplace
+(`/plugin marketplace add computesdk/computesdk`, then
+`/plugin install computesdk-router@computesdk`).
+
 ```sh
 claude plugin validate ./plugins/computesdk-router
 claude --plugin-dir ./plugins/computesdk-router
@@ -85,7 +92,8 @@ Claude reads `.claude-plugin/plugin.json` for the manifest and `.mcp.json`
 for the server (`type: "http"`, Claude's name for streamable HTTP). The
 `skills/*/SKILL.md` files load unchanged as plugin skills, prefixed with
 the plugin name: `/computesdk-router:sandboxes`,
-`/computesdk-router:actions`, `/computesdk-router:computesdk-sdk`.
+`/computesdk-router:actions`, `/computesdk-router:providers`,
+`/computesdk-router:benchmarks`, `/computesdk-router:computesdk-sdk`.
 
 Auth is the same platform OAuth flow ChatGPT uses: on first MCP use
 Claude follows the RFC 9728 challenge, registers itself via DCR, and opens
