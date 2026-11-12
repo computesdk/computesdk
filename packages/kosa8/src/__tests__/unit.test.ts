@@ -1,5 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBody, execArgv, execBody, kosa8, MAX_EXEC_BODY_BYTES, WRITE_CHUNK_CHARS } from '../index';
+import { createBody, execArgv, execBody, kosa8, MAX_EXEC_BODY_BYTES, SCRIPT_ENV, WRITE_CHUNK_CHARS } from '../index';
 
 const sandboxRow = {
   id: 'sbx_123',
@@ -316,8 +317,55 @@ describe('kosa8 commands', () => {
 
   it('enforces a timeout inside the sandbox, reporting exit 124', () => {
     const [, , script] = execArgv('sleep 60', { timeout: 1500 });
-    expect(script).toContain('timeout -s KILL 2 sh -c "sleep 60"');
-    expect(script).toContain('exit 124');
+    expect(script).toContain('timeout -s KILL 2 sh -c');
+    expect(script).toContain('s=124');
+    // 137 counts as a timeout only when the command never returned (no marker file).
+    expect(script).toContain('[ $s -eq 137 ] && [ ! -e "$KOSA8_DONE" ] && [ $(( $(date +%s) - t0 )) -ge 2 ]');
+  });
+
+  it('counts the argv limit in UTF-8 bytes, so multibyte commands move to the env path', () => {
+    const cmd = `echo ${'ü'.repeat(4100)}`; // 4,105 characters, 8,205 bytes
+    const body = execBody(cmd);
+    expect(body.cmd).toEqual(['sh', '-c', `eval "$${SCRIPT_ENV}"`]);
+    expect(body.env).toEqual([`${SCRIPT_ENV}=${cmd}`]);
+    const ascii = execBody('echo hi');
+    expect(ascii.cmd).toEqual(['sh', '-c', 'echo hi']);
+  });
+});
+
+// Runs the generated timeout wrapper in a real shell. Needs `timeout` on PATH (coreutils or
+// busybox), as in kosa8's images and Linux CI; skipped elsewhere.
+const hasTimeout = (() => {
+  try { execFileSync('sh', ['-c', 'command -v timeout'], { stdio: 'ignore' }); return true; } catch { return false; }
+})();
+function runLocal(command: string, timeoutMs: number): number {
+  const [file, flag, script] = execArgv(command, { timeout: timeoutMs });
+  try { execFileSync(file, [flag, script], { stdio: 'ignore' }); return 0; } catch (e: any) { return e.status; }
+}
+describe.skipIf(!hasTimeout)('kosa8 timeout wrapper in a real shell', () => {
+  it('keeps an early exit 137', () => expect(runLocal('exit 137', 10_000)).toBe(137));
+  it('keeps a child killed early by SIGKILL', () => expect(runLocal("sh -c 'kill -9 $$'", 10_000)).toBe(137));
+  it('keeps an early kill of the wrapper shell itself', () => expect(runLocal('kill -9 $$', 10_000)).toBe(137));
+  it('keeps ordinary exit codes', () => expect(runLocal('exit 3', 10_000)).toBe(3));
+  it('reports 124 when the deadline kills the command', () => expect(runLocal('sleep 30', 1000)).toBe(124));
+  it('handles quotes, comments and $ in the command', () =>
+    expect(runLocal('x="a b"; [ "$x" = "a b" ] && exit 5 # note', 10_000)).toBe(5));
+});
+
+describe('kosa8 template and region defaults from the environment', () => {
+  afterEach(() => { delete process.env.KOSA8_TEMPLATE; delete process.env.KOSA8_REGION; });
+  it('uses KOSA8_TEMPLATE and KOSA8_REGION when neither options nor config set them', () => {
+    process.env.KOSA8_TEMPLATE = 'node';
+    process.env.KOSA8_REGION = 'eu-hel1';
+    expect(createBody({}, {})).toMatchObject({ template: 'node', region: 'eu-hel1' });
+  });
+  it('prefers options, then config, over the environment', () => {
+    process.env.KOSA8_TEMPLATE = 'node';
+    expect(createBody({ template: 'base' }, { templateId: 'python' }).template).toBe('python');
+    expect(createBody({ template: 'base' }, {}).template).toBe('base');
+  });
+  it('sends no template when nothing sets one', () => {
+    expect(createBody({}, {}).template).toBeUndefined();
   });
 });
 

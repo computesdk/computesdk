@@ -85,9 +85,9 @@ interface Kosa8Config {
   apiKey?: string;
   /** API base URL - defaults to KOSA8_API_URL, then https://api.kosa8.com */
   baseUrl?: string;
-  /** Default template for new sandboxes (the organization's default, `base`, when unset) */
+  /** Default template for new sandboxes - defaults to KOSA8_TEMPLATE, then the organization's default (`base`, no Node) */
   template?: string;
-  /** Default region for new sandboxes, e.g. `eu-hel1` (any region when unset) */
+  /** Default region for new sandboxes, e.g. `eu-hel1` - defaults to KOSA8_REGION, then any region */
   region?: string;
 }
 ```
