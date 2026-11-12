@@ -102,6 +102,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **GravixLayer** | `GRAVIXLAYER_API_KEY` | Cloud runtimes with filesystem, port publishing, and snapshots |
 | **HopX** | `HOPX_API_KEY` | Fast ephemeral sandboxes |
 | **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
+| **kosa8** | `KOSA8_API_KEY` | Sandboxes that each run in their own microVM with its own kernel, per-second billing, sleep and wake |
 | **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
 | **Lizard** | `LIZARD_API_KEY`, `LIZARD_PROJECT_ID` | Lizard Sandboxes with native command streaming, files and authenticated port URLs |
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
@@ -329,6 +330,7 @@ npm install @computesdk/givemeanode      # givemeanode provider
 npm install @computesdk/gravixlayer      # GravixLayer provider
 npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
+npm install @computesdk/kosa8            # kosa8 microVM sandboxes
 npm install @computesdk/lightning        # Lightning AI provider
 npm install @computesdk/lizard           # Lizard Sandboxes provider
 npm install @computesdk/modal            # Modal provider
@@ -382,6 +384,7 @@ See individual provider READMEs for details:
 - **[@computesdk/givemeanode](./packages/givemeanode)** - Very fast microVM sandboxes, from any container image
 - **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
 - **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
+- **[@computesdk/kosa8](./packages/kosa8)** - Sandboxes that each run in their own microVM with its own kernel, with sleep and wake
 - **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
 - **[@computesdk/lizard](./packages/lizard)** - Lizard Sandboxes with command streaming, files and authenticated port URLs
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
