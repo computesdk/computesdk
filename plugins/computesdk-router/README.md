@@ -1,7 +1,7 @@
 # ComputeSDK Router — ChatGPT + Claude Code plugin
 
-A developer tool for running code in any sandbox provider, with a live
-bidding option for the best price. This directory is the **plugin package**,
+A developer tool for running code in any sandbox provider, routing each
+sandbox and CI job across providers. This directory is the **plugin package**,
 in both the ChatGPT Agent Plugins layout and the Claude Code plugin layout:
 manifests, MCP server mappings, skills, and assets. The MCP server itself
 lives in the platform and serves `https://platform.computesdk.com/mcp`;

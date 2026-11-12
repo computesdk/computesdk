@@ -35,10 +35,9 @@ await sandbox.destroy();
 
 Auth precedence: `apiKey` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
 > a `compute login` session (needs `@benchsdk/cli` installed). Hosted
-sandboxes place on the org's provider order — market by default, the org's
-own provider keys when `providerOrder` names them; see the package README for
-`size`/`maxPrice`/`orderType` and the market error codes
-(`insufficient_credits`, `no_market_capacity`, …) on `err.code`.
+sandboxes place on the org's provider order — the org's own provider keys, or
+ComputeSDK's house account billed from prepaid credit; see the package README
+for `size` and the error codes (`insufficient_credits`, …) on `err.code`.
 
 ## BYOK: the `computesdk` SDK + provider package
 
