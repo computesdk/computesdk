@@ -31,7 +31,7 @@ export interface SettingsDeps {
   usageErrorOutput: (str: string, write: (str: string) => void, argv?: string[]) => void;
 }
 
-export const PLATFORM_SIZES = ['small', 'medium', 'large', 'xlarge'] as const;
+export const PLATFORM_SIZES = ['small', 'medium', 'large', 'xlarge', '2xlarge', '3xlarge'] as const;
 
 type Rate = { usd: number; per: string };
 

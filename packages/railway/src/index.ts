@@ -38,6 +38,28 @@ export interface RailwayConfig {
   environmentId?: string;
 }
 
+/** Native Railway resource overrides, applied when the sandbox is created. */
+export interface RailwayResources {
+  /** Positive vCPUs; fractional values are supported. */
+  cpu?: number;
+  /** Decimal GB (1 GB = 1,000,000,000 bytes), not GiB. */
+  memoryGB?: number;
+}
+
+/** Validate before JSON serialization can turn NaN/Infinity into vendor defaults. */
+function validateResources(resources: Record<string, unknown>): RailwayResources {
+  const validated: RailwayResources = {};
+  for (const key of ['cpu', 'memoryGB'] as const) {
+    const value = resources[key];
+    if (value === undefined) continue;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      throw new TypeError(`resources.${key} must be a positive finite number.`);
+    }
+    validated[key] = value;
+  }
+  return validated;
+}
+
 /** Options accepted by the Railway SDK's create/connect/list calls. */
 interface RailwayClientOptions {
   token: string;
@@ -181,19 +203,25 @@ async function waitForRunning(sandbox: RailwaySandbox): Promise<RailwaySandbox> 
   return sandbox;
 }
 
-/** Boot a new sandbox from a named checkpoint. */
-async function createFromCheckpoint(
+/**
+ * The installed SDK does not forward resource overrides. Use the public
+ * sandboxCreate mutation for sized creates and named checkpoint restores.
+ */
+async function createThroughAPI(
   client: RailwayClientOptions,
-  checkpointName: string,
   options?: CreateInstanceOptions
 ): Promise<RailwaySandbox> {
+  const resources = options?.resources === undefined
+    ? undefined
+    : validateResources(options.resources);
   const data = await railwayGraphQL<{ sandboxCreate: { id: string } }>(
     client,
     'mutation RailwaySandboxCreate($input: SandboxCreateInput!) { sandboxCreate(input: $input) { id status } }',
     {
       input: {
         environmentId: requireEnvironmentId(client),
-        template: { name: checkpointName },
+        ...(options?.snapshotId ? { template: { name: options.snapshotId } } : {}),
+        ...(resources === undefined ? {} : { resources }),
         ...(options?.envs ? { variables: options.envs } : {}),
         ...(options?.idleTimeoutMinutes !== undefined
           ? { idleTimeoutMinutes: options.idleTimeoutMinutes }
@@ -355,8 +383,8 @@ export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
         const client = resolveClientOptions(config);
 
         try {
-          if (options?.snapshotId) {
-            const sandbox = await createFromCheckpoint(client, options.snapshotId, options);
+          if (options?.snapshotId || options?.resources !== undefined) {
+            const sandbox = await createThroughAPI(client, options);
             return { instance: sandbox, instanceId: sandbox.id };
           }
           const sandbox = await Sandbox.create({

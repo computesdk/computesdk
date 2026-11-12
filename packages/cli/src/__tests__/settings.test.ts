@@ -148,6 +148,16 @@ describe('compute sandboxes settings', () => {
 });
 
 describe('compute sandboxes settings set', () => {
+  it.each(['2xlarge', '3xlarge'])('accepts a %s price cap', async (size) => {
+    await buildSandboxes().parseAsync(
+      ['sandboxes', 'settings', 'set', '--cap', `${size}=1.28/hour`],
+      { from: 'user' },
+    );
+    expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/settings', {
+      marketCaps: { [size]: { usd: 1.28, per: 'hour' } },
+    });
+  });
+
   it('sends --routing, --byok and --byok-order to the router', async () => {
     await buildSandboxes().parseAsync(
       ['sandboxes', 'settings', 'set', '--routing', 'default', '--byok', 'first', '--byok-order', 'tensorlake,blaxel'],

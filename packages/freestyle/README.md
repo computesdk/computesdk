@@ -67,6 +67,13 @@ interface FreestyleConfig {
 | Pause / resume (`getInstance().pause()` / `.start()`) | ✅ (default sandboxes; `ephemeral: true` VMs cannot pause) |
 | `getUrl` (per-port URL) | ❌ — map a domain via [`freestyle.domains`](https://docs.freestyle.sh) |
 
+CPU and memory requests must be at least the snapshot's existing resources:
+Freestyle can only grow a VM. A smaller requested axis fails creation and the
+new VM is deleted, rather than silently keeping the larger snapshot resources.
+For custom snapshots (including `FREESTYLE_SNAPSHOT_ID`), use native `cpu` and
+`memory` options; standard size classes apply only to the default runtime snapshot.
+See [Freestyle resizing](https://www.freestyle.sh/docs/vms/lifecycle#resize).
+
 ## License
 
 MIT

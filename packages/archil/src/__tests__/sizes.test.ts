@@ -50,4 +50,18 @@ describe('Archil standard size mapping (mock-only, installed disk SDK)', () => {
     expect(JSON.parse((fetch.mock.calls as any[][])[1][1].body)).toMatchObject({ vcpu_count: 3, mem_size_mib: 3333 });
     expect(result.sizing).toBeUndefined();
   });
+  it.each([
+    { vcpuCount: 16, memSizeMiB: 32768 },
+    { vcpu_count: 16, mem_size_mib: 32768 },
+    { cpus: 16, memoryMb: 32768 },
+    { cpus: 16, memMiB: 32768 },
+    { sandbox: { vcpuCount: 16, memSizeMiB: 32768 } },
+  ])('preserves a larger native shape without sizeClass: %j', async options => {
+    const fetch = mockFetch();
+    const result = await archil(config).instances.create(options);
+    expect(JSON.parse((fetch.mock.calls as any[][])[0][1].body)).toMatchObject({
+      vcpu_count: 16, mem_size_mib: 32768,
+    });
+    expect(result.sizing).toBeUndefined();
+  });
 });

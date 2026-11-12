@@ -81,7 +81,7 @@ interface PromigenceConfig {
   snapshot?: string;
   /** Sandbox lifetime in milliseconds when create() sets none; also the bound on a command that sets none */
   timeout?: number;
-  /** Size of a sandbox created from an image: 'xsmall', 'small', 'medium', 'large', 'xlarge' or '2xlarge' */
+  /** Size of a sandbox created from an image: 'xsmall', 'small', 'medium', 'large-16', 'large', 'xlarge' or '2xlarge'; rejected without an image */
   tier?: string;
   /** 'start' (the default) or 'compute' (long, memory-heavy jobs on the larger tiers) */
   optimizeFor?: 'start' | 'compute';
@@ -91,6 +91,13 @@ interface PromigenceConfig {
 ```
 
 The provider checks this config before it sends anything. A missing key, or a malformed URL, spend cap or timeout, is an error that says what to fix.
+
+A `tier` request without an `image` is rejected rather than silently using the
+snapshot's original size. Build an image at the desired tier, or create from
+an existing snapshot already built at that tier and omit `tier`. Discover your
+account's current shapes and limits through `PromigenceClient.pricing()`
+([API reference](https://www.promigence.ai/docs/reference/api/billing)); tier
+names alone do not prove a CPU/RAM mapping or live availability.
 
 ### `create()` options
 
