@@ -36,6 +36,7 @@
   * [HopX](providers/hopx.md)
   * [Isorun](providers/isorun.md)
   * [Just Bash](providers/just-bash.md)
+  * [kosa8](providers/kosa8.md)
   * [Kubernetes](providers/k8s.md)
   * [Leap0](providers/leap0.md)
   * [Lelantos](providers/lelantos.md)
