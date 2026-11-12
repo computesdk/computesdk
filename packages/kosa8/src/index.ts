@@ -20,9 +20,9 @@ export interface Kosa8Config {
   apiKey?: string;
   /** API base URL - if not provided, will fallback to KOSA8_API_URL, then https://api.kosa8.com */
   baseUrl?: string;
-  /** Default template for new sandboxes (the org's default, `base`, when unset) */
+  /** Default template for new sandboxes - falls back to KOSA8_TEMPLATE, then the org's default (`base`) */
   template?: string;
-  /** Default region for new sandboxes, e.g. `eu-hel1` (any region when unset) */
+  /** Default region for new sandboxes, e.g. `eu-hel1` - falls back to KOSA8_REGION, then any region */
   region?: string;
 }
 
@@ -76,6 +76,9 @@ const MAX_TTL_S = 90 * 86400;
 
 /** Exit code reported when `runCommand`'s timeout stops a command (as coreutils `timeout` does). */
 const TIMEOUT_EXIT = 124;
+
+/** Names the marker file a timed command creates once it returns (see execArgv). */
+const DONE_ENV = 'KOSA8_DONE';
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -146,9 +149,10 @@ export function createBody(config: Kosa8Config, options: CreateInstanceOptions =
     }
   }
   const body: Record<string, unknown> = {};
-  const template = options.templateId ?? config.template;
+  const env = typeof process !== 'undefined' ? process.env : undefined;
+  const template = options.templateId ?? config.template ?? (env?.KOSA8_TEMPLATE || undefined);
   if (template) body.template = template;
-  const region = typeof options.region === 'string' ? options.region : config.region;
+  const region = typeof options.region === 'string' ? options.region : (config.region ?? (env?.KOSA8_REGION || undefined));
   if (region) body.region = region;
   if (options.sleepAfterSeconds !== undefined) body.sleep_after_s = options.sleepAfterSeconds;
   if (typeof options.timeout === 'number' && options.timeout > 0) {
@@ -168,15 +172,30 @@ export function execArgv(command: string, options?: RunCommandOptions): string[]
     // Stop the command in the sandbox, not just the wait for it. GNU timeout signals the whole
     // process group; an image without `timeout` runs the command unbounded and the request's
     // own deadline (runCommand) still applies.
+    //
+    // Status 137 alone does not mean the deadline passed: the command may exit 137 itself or be
+    // killed early. The command runs in a subshell and a marker file is created once it returns,
+    // whatever its status. Only a 137 with no marker (the shell itself was killed) once the
+    // deadline has passed (whole seconds: the elapsed count cannot fall short of a real deadline)
+    // is reported as a timeout.
     const seconds = Math.max(1, Math.ceil(options.timeout / 1000));
-    const inner = `sh -c "${escapeShellArg(cmd)}"`;
-    cmd = `if command -v timeout >/dev/null 2>&1; then timeout -s KILL ${seconds} ${inner}; s=$?; [ $s -eq 137 ] && exit ${TIMEOUT_EXIT}; exit $s; else ${inner}; fi`;
+    const plain = `sh -c "${escapeShellArg(cmd)}"`;
+    const marked = `sh -c "${escapeShellArg(`(\n${cmd}\n); s=$?; : > "$${DONE_ENV}"; exit $s`)}"`;
+    cmd =
+      `if command -v timeout >/dev/null 2>&1 && ${DONE_ENV}=$(mktemp 2>/dev/null); then ` +
+      `rm -f "$${DONE_ENV}"; export ${DONE_ENV}; t0=$(date +%s); timeout -s KILL ${seconds} ${marked}; s=$?; ` +
+      `if [ $s -eq 137 ] && [ ! -e "$${DONE_ENV}" ] && [ $(( $(date +%s) - t0 )) -ge ${seconds} ]; then s=${TIMEOUT_EXIT}; fi; ` +
+      `rm -f "$${DONE_ENV}"; exit $s; ` +
+      `else ${plain}; fi`;
   }
   return ['sh', '-c', cmd];
 }
 
-/** The exec API's limit on each argv entry. */
-const MAX_ARG_CHARS = 8192;
+/**
+ * The exec API's limit on each argv entry. Measured in UTF-8 bytes here, which is never less than
+ * the API's own count, so a command with multibyte characters cannot slip over it.
+ */
+const MAX_ARG_BYTES = 8192;
 
 /** The exec API's limit on the whole request body, in bytes. */
 export const MAX_EXEC_BODY_BYTES = 64 * 1024;
@@ -191,7 +210,7 @@ export const SCRIPT_ENV = 'KOSA8_SCRIPT';
 export function execBody(command: string, options?: RunCommandOptions): { cmd: string[]; env: string[] } {
   const argv = execArgv(command, options);
   const env = execEnv(options?.env);
-  const body = argv[2].length <= MAX_ARG_CHARS
+  const body = Buffer.byteLength(argv[2], 'utf8') <= MAX_ARG_BYTES
     ? { cmd: argv, env }
     : { cmd: ['sh', '-c', `eval "$${SCRIPT_ENV}"`], env: [...env, `${SCRIPT_ENV}=${argv[2]}`] };
   const size = Buffer.byteLength(JSON.stringify(body), 'utf8');

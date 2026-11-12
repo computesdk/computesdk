@@ -61,9 +61,9 @@ interface Kosa8Config {
   apiKey?: string;
   /** API base URL - defaults to KOSA8_API_URL, then https://api.kosa8.com */
   baseUrl?: string;
-  /** Default template for new sandboxes (the organization's default, `base`, when unset) */
+  /** Default template for new sandboxes - defaults to KOSA8_TEMPLATE, then the organization's default (`base`, no Node) */
   template?: string;
-  /** Default region for new sandboxes, e.g. `eu-hel1` (any region when unset) */
+  /** Default region for new sandboxes, e.g. `eu-hel1` - defaults to KOSA8_REGION, then any region */
   region?: string;
 }
 ```
@@ -99,3 +99,13 @@ interface Kosa8Config {
 
 - [kosa8](https://kosa8.com)
 - [Cloud dashboard](https://app.kosa8.com)
+
+## Logos
+
+SVG logos for results pages and docs are in [`assets/`](./assets):
+
+| File | Use |
+|---|---|
+| `kosa8-logo-light.svg` | Mark and wordmark, for light backgrounds |
+| `kosa8-logo-dark.svg` | Mark and wordmark, for dark backgrounds |
+| `kosa8-mark.svg` | Square mark alone (icons, tables) |
