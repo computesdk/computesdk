@@ -566,6 +566,70 @@ export function listQuery(opts: ListOpts): Record<string, string | undefined> {
   };
 }
 
+/** GET /api/v1/sandboxes/options. */
+interface SandboxOptionsWire {
+  byokMode: 'off' | 'first' | 'fallback' | 'only';
+  options: Array<
+    | { account: 'managed'; provider: string; sizes: { name: string; label: string; rate: { usd: number; per: string } | null }[] }
+    | { account: 'byok'; provider: string; region: string | null; ready: boolean }
+  >;
+}
+
+const BYOK_MODE_LINE: Record<SandboxOptionsWire['byokMode'], string> = {
+  off: 'managed accounts only',
+  first: 'your keys first, then managed accounts',
+  fallback: 'managed accounts first, then your keys',
+  only: 'your keys only',
+};
+
+/**
+ * Everything a create can land on, in the router's order: managed accounts
+ * with a price per size (billed from credit), BYOK providers (billed by the
+ * provider). The first usable row is where a plain `compute new` goes.
+ */
+function printSandboxOptions(o: SandboxOptionsWire): void {
+  if (o.options.length === 0) {
+    console.log('Nothing to create on yet: no managed account is live and no BYOK key is set up.');
+    return;
+  }
+  const sizeNames = [...new Set(o.options.flatMap((row) => (row.account === 'managed' ? row.sizes.map((size) => size.name) : [])))]
+    .filter((name) => name !== 'default');
+  const order = ['small', 'medium', 'large', 'xlarge'];
+  sizeNames.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  const providerWidth = Math.max(8, ...o.options.map((row) => (row.account === 'byok' && row.region ? `${row.provider}:${row.region}` : row.provider).length));
+  const cell = (text: string) => text.padEnd(11);
+  console.log(pc.dim(`${'Provider'.padEnd(providerWidth)}  ${'Account'.padEnd(8)}  ${sizeNames.map(cell).join(' ')}`.trimEnd()));
+  let first: string | null = null;
+  for (const row of o.options) {
+    const name = row.account === 'byok' && row.region ? `${row.provider}:${row.region}` : row.provider;
+    let detail: string;
+    let usable: boolean;
+    if (row.account === 'managed') {
+      const fixed = row.sizes.length === 1 && row.sizes[0]!.name === 'default';
+      usable = row.sizes.some((size) => size.rate !== null);
+      detail = fixed
+        ? row.sizes[0]!.rate ? `default size ${shortRate(row.sizes[0]!.rate)}` : pc.dim('not priced yet')
+        : sizeNames.map((size) => {
+            const priced = row.sizes.find((entry) => entry.name === size)?.rate;
+            return cell(priced ? shortRate(priced) : '—');
+          }).join(' ').trimEnd();
+    } else {
+      usable = row.ready;
+      detail = row.ready ? pc.dim(`billed by ${row.provider} to your account`) : pc.dim('key not tested — compute byok verify ' + row.provider);
+    }
+    if (usable && first === null) first = row.provider;
+    console.log(`${name.padEnd(providerWidth)}  ${(row.account === 'managed' ? 'managed' : 'BYOK').padEnd(8)}  ${detail}`);
+  }
+  console.log('');
+  console.log(`Router: ${BYOK_MODE_LINE[o.byokMode]} (BYOK ${o.byokMode}).`);
+  if (first !== null) console.log(pc.dim(`A plain \`compute new\` lands on ${first}. Pick one: compute new --${first} --size <size>`));
+}
+
+async function showSandboxOptions(opts: CommonOpts): Promise<void> {
+  const c = await client(opts);
+  output(opts, await c.get<SandboxOptionsWire>('/api/v1/sandboxes/options'), printSandboxOptions);
+}
+
 /**
  * The `create` flags and action, on `compute sandboxes create` and on the
  * `compute new` shorthand. With `providerShorthand`, the command's operands
@@ -580,11 +644,18 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
     .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
     .option('--base-url <url>', 'platform base URL')
     .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
-    .option('--json', 'print the raw response')
+    .option('--json', 'print the raw response');
+  if (providerShorthand) command.option('--list', 'list what you can create on, with prices, instead of creating (= compute sandboxes options)');
+  command
     .action(async (...args: unknown[]) => {
       const operands = providerShorthand ? (args[0] as string[]) : [];
-      const opts = args[providerShorthand ? 1 : 0] as QuietOpts & CreateFlagOpts & { use?: boolean };
+      const opts = args[providerShorthand ? 1 : 0] as QuietOpts & CreateFlagOpts & { use?: boolean; list?: boolean };
       try {
+        if (opts.list) {
+          if (operands.length > 0) throw new Error('--list shows every option; drop the provider names.');
+          await showSandboxOptions(opts);
+          return;
+        }
         checkQuietJson(opts);
         const named = shorthandProviders(operands);
         if (named.length > 0) {
@@ -684,6 +755,22 @@ export function registerSandboxesCommands(program: Command): void {
       .configureOutput({ outputError: usageErrorOutput }),
     { providerShorthand: true },
   );
+
+  // `options`: everything a create can land on, with prices, in router order.
+  cmd
+    .command('options')
+    .description('List what you can create sandboxes on: managed accounts with prices per size, and your BYOK providers, in router order')
+    .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
+    .option('--base-url <url>', 'platform base URL')
+    .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
+    .option('--json', 'print the raw response')
+    .action(async (opts: CommonOpts) => {
+      try {
+        await showSandboxOptions(opts);
+      } catch (e) {
+        fail(e, opts);
+      }
+    });
 
   // `route`: where a create would land under the Sandboxes router, and what
   // it costs — managed (ComputeSDK credit) or BYOK (billed by the provider).
