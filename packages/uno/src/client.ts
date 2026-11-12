@@ -11,6 +11,10 @@
 export const DEFAULT_BASE_URL = 'https://console.uno4.dev'
 /** How long POST /boxes may take: a busy console can hold it well past the 30 s of plain calls. */
 const CREATE_TIMEOUT_MS = 120_000
+/** Readiness polling cadence, see {@link UnoClient.waitReady}. */
+const READY_POLL_FAST_MS = 100
+const READY_POLL_FAST_WINDOW_MS = 10_000
+const READY_POLL_SLOW_MS = 1_000
 
 /** Box JSON as returned by `GET /api/v1/boxes/{id}` (fields this package reads). */
 export interface UnoBox {
@@ -202,13 +206,18 @@ export class UnoClient {
 
   /**
    * Poll until the box is running and provisioned. Create returns at once with
-   * `status: "provisioning"`; the machine boots from a warm snapshot in seconds.
+   * `status: "provisioning"`; the machine is usually ready a second or two
+   * later. The box is checked every 100 ms for the first 10 s, then once a
+   * second. The interval counts from the start of each request, so the round
+   * trip does not add to it and a box is never polled more than 10 times a
+   * second.
    */
   async waitReady(id: string | number, timeoutMs: number, signal?: AbortSignal): Promise<UnoBox> {
-    const deadline = Date.now() + timeoutMs
-    let delay = 250
+    const started = Date.now()
+    const deadline = started + timeoutMs
     for (;;) {
       signal?.throwIfAborted()
+      const polledAt = Date.now()
       const box = await this.getBox(id)
       if (!box) throw new UnoError(`Uno box ${id} disappeared while starting`, 404, 'NOT_FOUND')
       if (box.status === 'running' && box.provision_state === 'ready') return box
@@ -220,11 +229,12 @@ export class UnoClient {
           box,
         )
       }
+      const interval = polledAt - started < READY_POLL_FAST_WINDOW_MS ? READY_POLL_FAST_MS : READY_POLL_SLOW_MS
+      const delay = Math.max(0, polledAt + interval - Date.now())
       if (Date.now() + delay > deadline) {
         throw new UnoError(`Uno box ${id} not ready after ${timeoutMs} ms (status ${box.status})`, 504, 'READY_TIMEOUT', box)
       }
-      await sleep(delay)
-      delay = Math.min(delay * 2, 2_000)
+      if (delay > 0) await sleep(delay)
     }
   }
 

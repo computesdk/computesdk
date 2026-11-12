@@ -111,6 +111,70 @@ describe('UnoClient', () => {
   })
 })
 
+/**
+ * A box that turns ready `readyAt` ms after the first poll (fake clock); each
+ * GET takes `rttMs`. Returns the times the GETs were sent, relative to the first.
+ */
+function bootingBox(readyAt: number, rttMs: number) {
+  const polls: number[] = []
+  let t0: number | undefined
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      t0 ??= Date.now()
+      const at = Date.now() - t0
+      polls.push(at)
+      await new Promise(resolve => setTimeout(resolve, rttMs))
+      const body = at >= readyAt ? box() : box({ status: 'starting', provision_state: 'started' })
+      return new Response(JSON.stringify(body), { status: 200 })
+    }),
+  )
+  return polls
+}
+
+describe('readiness polling', () => {
+  const steps = (from: number, to: number, step: number) =>
+    Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => from + i * step)
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+  })
+
+  it('polls every 100 ms from the start of each request, so the round trip does not add to it', async () => {
+    const polls = bootingBox(1_250, 30)
+    const ready = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).waitReady(42, 120_000)
+    await vi.advanceTimersByTimeAsync(2_000)
+    await expect(ready).resolves.toMatchObject({ status: 'running', provision_state: 'ready' })
+    expect(polls).toEqual(steps(0, 1_300, 100))
+  })
+
+  it('sends the next poll at once when a round trip is longer than the interval', async () => {
+    const polls = bootingBox(500, 150)
+    const ready = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).waitReady(42, 120_000)
+    await vi.advanceTimersByTimeAsync(1_000)
+    await expect(ready).resolves.toMatchObject({ status: 'running' })
+    expect(polls).toEqual([0, 150, 300, 450, 600])
+  })
+
+  it('slows to once a second after the first 10 s', async () => {
+    const polls = bootingBox(11_500, 30)
+    const ready = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).waitReady(42, 120_000)
+    await vi.advanceTimersByTimeAsync(13_000)
+    await expect(ready).resolves.toMatchObject({ status: 'running' })
+    expect(polls).toEqual([...steps(0, 10_000, 100), 11_000, 12_000])
+  })
+
+  it('gives up with READY_TIMEOUT when the box is not ready in time', async () => {
+    const polls = bootingBox(Infinity, 30)
+    const ready = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).waitReady(42, 1_000).catch(e => e)
+    await vi.advanceTimersByTimeAsync(2_000)
+    const err = await ready
+    expect(err).toBeInstanceOf(UnoError)
+    expect(err).toMatchObject({ code: 'READY_TIMEOUT', status: 504 })
+    expect(polls).toEqual(steps(0, 1_000, 100))
+  })
+})
+
 describe('uno provider', () => {
   it('creates with the requested shape and region, waits until ready, runs, destroys', async () => {
     const calls = mockFetch([
