@@ -674,6 +674,7 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
           }
         }
         emitResult(opts, res.sandbox, (s) => s.id, (s) => printSandbox(s, opts.verbose));
+        if (!opts.json && !opts.quiet) printNextSteps(res.sandbox.id, opts.use !== false);
       } catch (e) {
         fail(e, opts);
       }
@@ -715,6 +716,26 @@ async function previewPlacement(c: Awaited<ReturnType<typeof client>>, opts: Cre
   console.error(
     pc.dim(`→ placing on ${provider} · ${placementLane(p.source)} · ${p.size ?? p.box?.sizeName ?? 'custom size'} (${billedBy(p.source, provider)}) …`),
   );
+}
+
+/**
+ * After a create: how to use the sandbox. With it current for this
+ * directory the commands need no id; otherwise they name it. On stderr, so
+ * stdout stays the sandbox line.
+ */
+function printNextSteps(id: string, current: boolean): void {
+  const target = current ? '' : ` ${id}`;
+  const steps: [string, string][] = [
+    [`compute sandboxes exec${target} -- node -v`, 'run a command'],
+    [`compute sandboxes spawn${target} -- npm run dev`, 'start a server'],
+    [`compute sandboxes url${target} --port 3000`, 'get its public URL'],
+    [`compute sandboxes destroy${target}`, 'stop billing'],
+  ];
+  const width = Math.max(...steps.map(([command]) => command.length));
+  console.error('');
+  console.error(current ? 'Use it (current for this directory):' : 'Use it:');
+  for (const [command, does] of steps) console.error(`  ${command.padEnd(width)}  ${pc.dim(does)}`);
+  console.error(pc.dim('It runs and bills until it times out or is destroyed.'));
 }
 
 /** `['--vercel', 'e2b']` → `['vercel', 'e2b']`; anything else is a usage error. */
