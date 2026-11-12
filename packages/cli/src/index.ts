@@ -31,6 +31,7 @@ import { registerActionsCommands } from './actions.js';
 import { registerByokCommands } from './byok.js';
 import { registerMarketCommands } from './market.js';
 import { registerCreditsCommands } from './credits.js';
+import { inheritParentOptions } from './option-inheritance.js';
 import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
 import { parseBenchDispatch, runBench } from './bench.js';
@@ -64,6 +65,8 @@ process.stderr.on('error', (err: NodeJS.ErrnoException) => {
 });
 
 const program = new Command();
+// `compute credits --org x topup 50`: a parent's flags reach the subcommand.
+inheritParentOptions(program);
 
 program
   .name('compute')
