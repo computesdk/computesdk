@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "bin": "compute",
   "package": "@computesdk/cli",
-  "version": "2.6.10",
+  "version": "2.6.11",
   "source": {
     "repo": "computesdk/computesdk",
     "released": false
