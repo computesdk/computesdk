@@ -1,0 +1,868 @@
+# @computesdk/namespace
+
+## 1.6.43
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 1.6.42
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 1.6.41
+
+### Patch Changes
+
+- 28d5f17: Report a failing command's real exit code. Namespace returns exit code 1 for every failure and puts the real code in a trailing `exec failed with exit code N` stderr line, which is now stripped.
+- 1904e82: Enable the shared filesystem conformance suite for Namespace (backed by the provider shell filesystem).
+- 1904e82: Declare snapshot capabilities: volume snapshots keep `/workspace` only, need `snapshotVolume: true` on the source, and destroy the source when taken. Snapshot conformance tests now run live.
+- 1904e82: Send `env` and `cwd` in CommandService's own `Command.envVars` / `Command.cwd` fields instead of a shell prefix, so they apply to the whole command line (`echo $FOO`, `a && b` previously saw no env past the first word), and run `background` commands under `nohup sh -c` so compound commands detach as a whole.
+- 11c511e: Add native `streamCommand` using Namespace's server-streaming `CommandService/RunCommand` (Connect JSON envelopes), so streaming `runCommand` (`onStdout`/`onStderr`) no longer falls back to the daemond bootstrap. Honors `timeout` (`Connect-Timeout-Ms` + client abort, exit 124), `cwd`, `env`, and `background`; a dropped stream keeps streamed output and reports exit `-1`.
+- 1904e82: Support on-demand snapshots via persistent volumes. Opt in with `snapshotVolume: true` (provider config or create option) to attach a persistent volume at `/workspace` (also the default cwd). `snapshot.create` shuts the sandbox down and waits for the volume snapshot to commit; `create({ snapshotId })` restores it into the container (fanout supported). `snapshot.list`/`delete` work against the committed volume snapshots. Only the volume is preserved, not the rootfs.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.6.40
+
+### Patch Changes
+
+- b9711e9: Fixed `snapshot.list` and `snapshot.delete` against the real StorageService contract. `ListPersistentVolumeSnapshots` ignores its `id` filter and answers the workspace's full record set in camelCase, so listing now makes one call and joins each record to its volume (the record `id` is the volume id, `completedSnapshot` the generation) instead of re-fetching per volume and emitting duplicates. Listed snapshots are id'd `tag/<gen>` — the form `create({ snapshotId })` restores. `delete` now addresses the artifact by its volume (`{id: volumeId, tag}`) as the RPC requires, accepting `tag/<gen>` or a bare generation, and no-ops when the volume or generation is already gone.
+- 24803d6: Add additive standard CPU/RAM sizeClass requests, immutable pure provider capability resolution and request metadata, with typed pre-create failures instead of silently ignored or default-sized requests. Initially map sm/md/lg/xl for Namespace Linux amd64 and new Archil persistent VMs; preserve every legacy create path without sizeClass. Other mappings remain explicitly unknown; no builds, live availability checks, or consumer migrations are performed.
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.6.39
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.6.38
+
+### Patch Changes
+
+- e3f821f: Honor `runCommand`'s `options.timeout` server-side. The Namespace CommandService runs each `RunCommandSync` call inside a single RPC, so the caller's timeout is now sent as the Connect `Connect-Timeout-Ms` deadline header — the server aborts the command when it expires instead of the request running away. A client-side abort at timeout + 10s remains as a fallback if the server ignores the deadline. Previously `options.timeout` was accepted but silently ignored.
+- e3f821f: fix(namespace): attach volumes at VM level + bind into container — nsc recipe
+
+  Runtime-attached volumes were mounted directly at the requested `mountPath` on
+  the instance's VM namespace, which the CommandService container never sees —
+  and instances whose volumes can't provision that way are destroyed while
+  waiting for readiness. Mirrors nsc's `cluster run --volume` recipe: the volume
+  mounts VM-side at `/volumes/volumeN` and an `experimental.host_mount` bind
+  exposes it inside the container at the requested `mountPath`.
+
+- e3f821f: Allow per-create shape overrides via `instanceOptions.shape` (virtual_cpu, memory_megabytes, machine_arch, os), previously only settable at provider construction.
+
+## 1.6.37
+
+### Patch Changes
+
+- d24737a: fix(namespace): attach volumes at VM level + bind into container — nsc recipe
+
+  Runtime-attached volumes were mounted directly at the requested `mountPath` on
+  the instance's VM namespace, which the CommandService container never sees —
+  and instances whose volumes can't provision that way are destroyed while
+  waiting for readiness. Mirrors nsc's `cluster run --volume` recipe: the volume
+  mounts VM-side at `/volumes/volumeN` and an `experimental.host_mount` bind
+  exposes it inside the container at the requested `mountPath`.
+
+- d24737a: Allow per-create shape overrides via `instanceOptions.shape` (virtual_cpu, memory_megabytes, machine_arch, os), previously only settable at provider construction.
+
+## 1.6.36
+
+### Patch Changes
+
+- 7668bf8: namespace: send size_mb on runtime volume attaches — a fresh persistent volume with no size can't be provisioned and the instance is destroyed while waiting for readiness. createos: wait for mount_status=mounted after create/attachDisk (the in-VM agent mounts asynchronously); mount_error surfaces on failure.
+
+## 1.6.35
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 1.6.34
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 1.6.33
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 1.6.32
+
+### Patch Changes
+
+- a3de4ae: Volume soak fixes: `withVolumeSettle` retries volume delete while the provider reports it still attached (sandbox.destroy() returns before the control plane unmounts); daytona volume get/delete resolve by id or name (`volume.get` is name-keyed); miosa create defaults size_bytes to 1 GiB (missing field 422s); sandbox0 create sends the explicit s0fs/RWO request.
+- 3d44808: Volume fixes round 3: namespace delete paginates the id→tag lookup and tolerates list outages (falls back to the given tag); createos forks destroy themselves when a post-fork volume attach fails instead of leaking a running sandbox.
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 1.6.31
+
+### Patch Changes
+
+- d7d8efc: Volume surface review fixes: list() no longer swallows real provider failures (only the not-supported stub), delete() only targets the known owning provider, novita create-mounts resolve the volume name (not the native object), namespace delete resolves id→tag, and createos snapshot forks attach requested volumes post-fork.
+- 1b639da: Add a unified persistent-volume surface: `CreateInstanceOptions.volumes` (create-time mounts), `compute.volume.create/get/list/delete` with multi-provider routing, and `instance.attachVolume`/`detachVolume` where the provider exposes runtime attach. Provider plumbing maps the unified `VolumeMount[]` onto each native wire shape (daytona `volumes[]`, e2b `volumeMounts`, modal `volumes` map, vercel `mounts`, namespace `volumes[]` with `persistency_kind`, northflank `volumesToAttach`, sandbox0 claim `mounts`, tenki `CreateOptions.volumes`, novita `volumeMounts`, createos `disks` attachments, plus volume managers for blaxel, declaw, beam, microsandbox, miosa).
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 1.6.30
+
+### Patch Changes
+
+- e94c06a: Namespace API errors now include Namespace's error body, and transient failures retry: any call when the connection never opened, idempotent calls (describe/list/destroy) on any 5xx or dropped connection. Not-found detection keys on the response status, not a `404` in the message.
+
+## 1.6.29
+
+### Patch Changes
+
+- 3315930: `create()` accepts `containerOptions` and `instanceOptions`, raw Namespace API fields merged into the ContainerRequest and CreateInstanceRequest (e.g. `containerOptions: { nsc_state_path: '/var/run/nsc' }` to inject the workload token). Provider-set fields take precedence.
+
+## 1.6.28
+
+### Patch Changes
+
+- ef8770f: Docs: update examples to the canonical `compute.instances` API (`Instance*` type names, `instanceId`, `methods.instances`). `compute.sandbox` / `Sandbox*` / `methods.sandbox` remain working deprecated aliases.
+- Updated dependencies [ef8770f]
+  - @computesdk/provider@2.1.14
+  - computesdk@4.1.12
+
+## 1.6.27
+
+### Patch Changes
+
+- aadc200: Rename `compute.sandbox` to `compute.instances` and `Sandbox` to `Instance` across the SDK so the abstraction covers all compute forms (sandbox, VM, baremetal). `kind: 'sandbox' | 'vm' | 'baremetal'` is now a field on `CreateInstanceOptions`, `InstanceInfo`, and provider configs. `compute.sandbox`, `methods.sandbox`, `sandboxId`, and all `Sandbox*` type names remain as deprecated aliases so existing providers and callers keep working unchanged. CLI: `compute sandboxes` is now `compute instances` (`sandboxes`/`sbx` aliases preserved).
+- Updated dependencies [aadc200]
+  - computesdk@4.1.11
+  - @computesdk/provider@2.1.13
+
+## 1.6.26
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
+## 1.6.25
+
+### Patch Changes
+
+- Updated dependencies [7240d21]
+  - computesdk@4.1.10
+  - @computesdk/provider@2.1.11
+
+## 1.6.24
+
+### Patch Changes
+
+- 14720f9: Honor `options.timeout` on sandbox create: the instance `deadline` was hard-coded to one hour, so every instance was destroyed ~60 minutes after creation regardless of the requested timeout. Callers that pass a longer timeout (e.g. a warm pool holding 6h boxes) now get the lifetime they asked for; the one-hour default is unchanged when no timeout is given.
+
+## 1.6.23
+
+### Patch Changes
+
+- Updated dependencies [f1a8578]
+  - @computesdk/provider@2.1.10
+  - computesdk@4.1.9
+
+## 1.6.22
+
+### Patch Changes
+
+- ecde591: Fix snapshot handling in the Blaxel, Archil, and Namespace providers
+
+  - `@computesdk/blaxel`: `sandbox.create({ snapshotId })` now forks a new
+    sandbox from the workspace snapshot via `Snapshot.get(id).fork(...)`
+    instead of treating the id as a live sandbox (`sandboxId` still resumes a
+    live sandbox). The snapshot manager now maps to Blaxel's real snapshot
+    resources (`Snapshot.create/list/delete`, `sandbox.snapshots`) instead of
+    treating sandbox instances as snapshots.
+  - `@computesdk/archil`: `sandbox.create({ snapshotId })` forks a new sandbox
+    from the source sandbox via `POST /api/sandboxes/{id}/fork` (persistent
+    mode); `sandboxId` attaches to a live sandbox or disk. Added a snapshot
+    manager where `create` forks the source sandbox and `delete` removes the
+    backing sandbox (snapshot listing is unsupported — Archil has no snapshot
+    resource).
+  - `@computesdk/namespace`: `sandbox.create({ snapshotId })` restores
+    filesystem state by attaching a new PERSISTENT volume seeded via
+    `VolumeRequest.from_snapshot_id` (mounted at `/computesdk-data`). Added a
+    snapshot manager over the `StorageService` API: `list` enumerates
+    persistent-volume snapshots and `delete` abandons one. `create` throws —
+    Namespace snapshots are captured automatically on instance shutdown, never
+    on demand.
+
+## 1.6.21
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
+## 1.6.20
+
+### Patch Changes
+
+- 6096b4d: fix(namespace): report destroyed instances as gone
+
+  DescribeInstance keeps returning an instance while it is DESTROYING or
+  DESTROYED — NotFound only comes later — so getById (and list) saw deleted
+  sandboxes as alive forever. getById now maps InstanceMetadata.status
+  DESTROYING/DESTROYED (name or number encoding) to null, list filters them,
+  NamespaceSandbox carries the lowercased status into getInfo, and destroy
+  rejects on API failure instead of warning-and-succeeding.
+
+- e110bfa: fix(namespace): refresh instance status in getInfo
+
+  getInfo returned the status snapshot captured when the handle was
+  attached, so a long-held handle kept reporting running after the
+  instance was suspended, errored, or destroyed. getInfo now describes
+  the instance live: terminal and suspended states map to stopped, a
+  describe 404 maps to stopped (NotFound only arrives once the terminal
+  statuses have passed), and the refreshed state is written back onto the
+  handle. Unrecognized or future statuses fall back to running instead of
+  reading as stopped.
+
+## 1.6.19
+
+### Patch Changes
+
+- Updated dependencies [7e65fe7]
+  - @computesdk/provider@2.1.8
+  - computesdk@4.1.7
+
+## 1.6.18
+
+### Patch Changes
+
+- deca747: feat(namespace): support `dockerSockPath` create option to mount the instance's managed dockerd socket
+
+  Setting `dockerSockPath` (e.g. `/var/run/docker.sock`) on `sandbox.create` sets `docker_sock_path` on the container, so containers can drive the instance's managed Docker daemon without needing elevated privileges to run dockerd inside the container.
+
+## 1.6.17
+
+### Patch Changes
+
+- Updated dependencies [0732fed]
+  - computesdk@4.1.6
+  - @computesdk/provider@2.1.7
+
+## 1.6.16
+
+### Patch Changes
+
+- Updated dependencies [3914faa]
+  - computesdk@4.1.5
+  - @computesdk/provider@2.1.6
+
+## 1.6.15
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
+## 1.6.14
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
+## 1.6.13
+
+### Patch Changes
+
+- 92b93da: Use Namespace's managed `builtin:base` image when no sandbox image is provided.
+
+## 1.6.12
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
+## 1.6.11
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
+## 1.6.10
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
+## 1.6.9
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+
+## 1.6.8
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+  - @computesdk/provider@2.0.0
+
+## 1.6.7
+
+### Patch Changes
+
+- Updated dependencies [3ef4817]
+- Updated dependencies [371f667]
+  - @computesdk/provider@1.4.0
+  - computesdk@3.0.0
+
+## 1.6.6
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
+
+## 1.6.5
+
+### Patch Changes
+
+- 7c53d28: Add `buildShellCommand` utility to unify shell command building across providers
+
+  Centralizes cwd/env handling into a single `buildShellCommand` function in
+  `@computesdk/provider`, fixing bugs where env vars didn't work with cwd set
+  (docker, sprites, hopx) and where values weren't properly quoted (namespace,
+  sprites, hopx). All shell-based providers now use the shared utility.
+
+- Updated dependencies [7c53d28]
+  - @computesdk/provider@1.2.0
+
+## 1.6.4
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.6.4
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.6.4
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 1.6.3
+
+### Patch Changes
+
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
+
+## 1.6.3
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
+
+## 1.6.2
+
+### Patch Changes
+
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+  - @computesdk/provider@1.0.32
+
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+  - @computesdk/provider@1.0.29
+
+## 1.5.0
+
+### Minor Changes
+
+- d49d036: implement refactored provider package for namespace
+
+### Patch Changes
+
+- Updated dependencies [d49d036]
+  - computesdk@2.3.0
+  - @computesdk/provider@1.0.28
+
+## 1.4.0
+
+### Minor Changes
+
+- f0bf381: Update namespace provider to infra model provider
+
+## 1.3.0
+
+### Minor Changes
+
+- 866f7c8: Update namespace provider to infra model provider
+
+## 1.2.0
+
+### Minor Changes
+
+- 736a3e7: Update namespace provider to infra model provider
+
+## 1.1.34
+
+### Patch Changes
+
+- Updated dependencies [5b010a3]
+  - computesdk@2.2.1
+  - @computesdk/provider@1.0.27
+
+## 1.1.33
+
+### Patch Changes
+
+- Updated dependencies [55b793e]
+  - computesdk@2.2.0
+  - @computesdk/provider@1.0.26
+
+## 1.1.32
+
+### Patch Changes
+
+- Updated dependencies [a5a7f63]
+  - computesdk@2.1.2
+  - @computesdk/provider@1.0.25
+
+## 1.1.31
+
+### Patch Changes
+
+- Updated dependencies [2c9468b]
+  - computesdk@2.1.1
+  - @computesdk/provider@1.0.24
+
+## 1.1.30
+
+### Patch Changes
+
+- Updated dependencies [9e7e50a]
+  - computesdk@2.1.0
+  - @computesdk/provider@1.0.23
+
+## 1.1.29
+
+### Patch Changes
+
+- Updated dependencies [e3ed89b]
+  - computesdk@2.0.2
+  - @computesdk/provider@1.0.22
+
+## 1.1.28
+
+### Patch Changes
+
+- ca82472: Bump versions to skip burned version numbers from rollback.
+
+## 1.1.27
+
+### Patch Changes
+
+- Updated dependencies [53506ed]
+  - computesdk@2.0.1
+  - @computesdk/provider@1.0.21
+
+## 1.1.26
+
+### Patch Changes
+
+- Updated dependencies [9946e72]
+  - computesdk@1.21.1
+  - @computesdk/provider@1.0.20
+
+## 1.1.25
+
+### Patch Changes
+
+- Updated dependencies [7ba17e1]
+  - computesdk@1.21.0
+  - @computesdk/provider@1.0.19
+
+## 1.1.24
+
+### Patch Changes
+
+- Updated dependencies [2b30125]
+- Updated dependencies [2b30125]
+  - computesdk@1.20.0
+  - @computesdk/provider@1.0.18
+
+## 1.1.23
+
+### Patch Changes
+
+- Updated dependencies [68b5296]
+  - computesdk@1.19.0
+  - @computesdk/provider@1.0.17
+
+## 1.1.22
+
+### Patch Changes
+
+- Updated dependencies [59147ac]
+  - computesdk@1.18.2
+  - @computesdk/provider@1.0.16
+
+## 1.1.21
+
+### Patch Changes
+
+- Updated dependencies [688ca54]
+- Updated dependencies [688ca54]
+  - computesdk@1.18.1
+  - @computesdk/provider@1.0.15
+
+## 1.1.20
+
+### Patch Changes
+
+- Updated dependencies [128edac]
+  - computesdk@1.18.0
+  - @computesdk/provider@1.0.14
+
+## 1.1.19
+
+### Patch Changes
+
+- Updated dependencies [79c9fc5]
+  - computesdk@1.17.0
+  - @computesdk/provider@1.0.13
+
+## 1.1.18
+
+### Patch Changes
+
+- Updated dependencies [208a400]
+  - computesdk@1.16.0
+  - @computesdk/provider@1.0.12
+
+## 1.1.17
+
+### Patch Changes
+
+- Updated dependencies [25341eb]
+  - computesdk@1.15.0
+  - @computesdk/provider@1.0.11
+
+## 1.1.16
+
+### Patch Changes
+
+- Updated dependencies [0c58ba9]
+  - computesdk@1.14.0
+  - @computesdk/provider@1.0.10
+
+## 1.1.15
+
+### Patch Changes
+
+- Updated dependencies [3333388]
+  - computesdk@1.13.0
+  - @computesdk/provider@1.0.9
+
+## 1.1.14
+
+### Patch Changes
+
+- Updated dependencies [4decff7]
+  - @computesdk/provider@1.0.8
+  - computesdk@1.12.1
+
+## 1.1.13
+
+### Patch Changes
+
+- Updated dependencies [fdda069]
+  - computesdk@1.12.0
+  - @computesdk/provider@1.0.7
+
+## 1.1.12
+
+### Patch Changes
+
+- Updated dependencies [7c8d968]
+  - computesdk@1.11.1
+  - @computesdk/provider@1.0.6
+
+## 1.1.11
+
+### Patch Changes
+
+- Updated dependencies [40d66fc]
+  - computesdk@1.11.0
+  - @computesdk/provider@1.0.5
+
+## 1.1.10
+
+### Patch Changes
+
+- computesdk@1.10.3
+- @computesdk/provider@1.0.4
+
+## 1.1.9
+
+### Patch Changes
+
+- acdc8c6: fix: align provider factory with clean command execution
+
+  Updates all providers to use the new clean command signature introduced in #192.
+
+  **Changes:**
+
+  - Provider factory `runCommand` signature simplified from `(command, args?, options?)` to `(command, options?)`
+  - All 13 providers updated to handle `cwd`, `env`, and `background` options by wrapping commands with shell constructs
+  - Test suite updated to use clean command strings instead of args arrays
+
+  **Related:**
+
+  - Follows #192 which updated the gateway client to send clean commands
+  - Part of the larger refactor to remove client-side command preprocessing
+
+  **Migration:**
+  Providers now receive clean command strings and handle options uniformly:
+
+  ```typescript
+  // Before
+  runCommand(sandbox, "npm", ["install"], { cwd: "/app" });
+
+  // After
+  runCommand(sandbox, "npm install", { cwd: "/app" });
+  ```
+
+- Updated dependencies [acdc8c6]
+  - @computesdk/provider@1.0.3
+
+## 1.1.8
+
+### Patch Changes
+
+- Updated dependencies [07e0953]
+  - computesdk@1.10.2
+  - @computesdk/provider@1.0.2
+
+## 1.1.7
+
+### Patch Changes
+
+- fa18a99: # Grandmother/Mother/Children Architecture Refactor
+
+  Major architectural refactoring that splits computesdk into a clean three-tier structure.
+
+  ## New Architecture
+
+  - **computesdk** (Grandmother) - User-facing SDK with gateway HTTP + Sandbox client
+  - **@computesdk/provider** (Mother) - Provider framework for building custom providers
+  - **Provider packages** (Children) - Import from @computesdk/provider
+
+  ## Changes to computesdk
+
+  - Removed `setConfig()`, `getConfig()`, `clearConfig()` methods from compute singleton
+  - Removed `createCompute()` (moved to @computesdk/provider)
+  - Gateway now uses direct HTTP implementation (not a provider)
+  - Merged @computesdk/client into computesdk package
+  - Renamed `sandbox.kill()` → `sandbox.destroy()`
+
+  ## New @computesdk/provider Package
+
+  Contains the provider framework extracted from computesdk:
+
+  - `defineProvider()` function for defining custom providers (renamed from `createProvider()`)
+  - `createCompute()` for direct mode
+  - Provider types and interfaces (Provider, ProviderSandbox, etc.)
+  - Universal Sandbox interface types
+
+  ### Why `defineProvider()`?
+
+  We renamed `createProvider()` to `defineProvider()` to match modern framework conventions and improve developer experience:
+
+  **Pattern Recognition:**
+
+  - Vite: `defineConfig()`
+  - Nuxt: `defineNuxtConfig()`
+  - Vue: `defineComponent()`
+
+  **Better Semantics:**
+
+  - `createProvider` implies creating an instance (it actually returns a factory definition)
+  - `defineProvider` means "define what this provider is" (accurate to what it does)
+  - More intuitive for developers familiar with modern frameworks
+
+  **Example:**
+
+  ```typescript
+  import { defineProvider } from "@computesdk/provider";
+
+  export const modal = defineProvider({
+    name: "modal",
+    defaultMode: "direct",
+    sandbox: {
+      /* ... */
+    },
+    methods: {
+      /* ... */
+    },
+  });
+  ```
+
+  ## Provider Package Updates
+
+  All 12 provider packages now:
+
+  - Import `defineProvider` from @computesdk/provider
+  - Import types from @computesdk/provider (which re-exports from computesdk)
+  - Have @computesdk/provider as a dependency
+
+  ## Migration Guide
+
+  ### Gateway Mode (unchanged)
+
+  ```typescript
+  import { compute } from "computesdk";
+  const sandbox = await compute.sandbox.create(); // Auto-detects from env
+  ```
+
+  ### Direct Mode (new location)
+
+  ```typescript
+  import { createCompute } from "@computesdk/provider";
+  import { e2b } from "@computesdk/e2b";
+
+  const compute = createCompute({ defaultProvider: e2b({ apiKey: "xxx" }) });
+  const sandbox = await compute.sandbox.create();
+  ```
+
+  ### Method Rename
+
+  ```typescript
+  // Before
+  await sandbox.kill();
+
+  // After
+  await sandbox.destroy();
+  ```
+
+- Updated dependencies [fa18a99]
+  - computesdk@1.10.1
+  - @computesdk/provider@1.0.1
+
+## 1.1.6
+
+### Patch Changes
+
+- Updated dependencies [38caad9]
+- Updated dependencies [f2d4273]
+  - computesdk@1.10.0
+
+## 1.1.5
+
+### Patch Changes
+
+- Updated dependencies [251f324]
+  - computesdk@1.9.6
+
+## 1.1.4
+
+### Patch Changes
+
+- Updated dependencies [b027cd9]
+  - computesdk@1.9.5
+
+## 1.1.3
+
+### Patch Changes
+
+- computesdk@1.9.4
+
+## 1.1.2
+
+### Patch Changes
+
+- Updated dependencies [f38470d]
+- Updated dependencies [f38470d]
+  - computesdk@1.9.3
+
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [1ac5ad2]
+  - computesdk@1.9.1
+
+## 1.1.0
+
+### Minor Changes
+
+- 8002931: Adding in support for ClientSandbox to all packages
+
+### Patch Changes
+
+- Updated dependencies [8002931]
+  - computesdk@1.9.0
+
+## 1.0.0
+
+### Major Changes
+
+- Initial release of Namespace provider for ComputeSDK

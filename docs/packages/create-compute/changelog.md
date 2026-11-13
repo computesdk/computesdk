@@ -1,0 +1,222 @@
+# create-compute
+
+## 0.2.29
+
+### Patch Changes
+
+- computesdk@4.1.18
+
+## 0.2.28
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - computesdk@4.1.17
+
+## 0.2.27
+
+### Patch Changes
+
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - computesdk@4.1.16
+
+## 0.2.26
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+
+## 0.2.25
+
+### Patch Changes
+
+- Updated dependencies [0a54571]
+  - computesdk@4.1.14
+
+## 0.2.24
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+
+## 0.2.23
+
+### Patch Changes
+
+- Updated dependencies [ef8770f]
+  - computesdk@4.1.12
+
+## 0.2.22
+
+### Patch Changes
+
+- Updated dependencies [aadc200]
+  - computesdk@4.1.11
+
+## 0.2.21
+
+### Patch Changes
+
+- Updated dependencies [7240d21]
+  - computesdk@4.1.10
+
+## 0.2.20
+
+### Patch Changes
+
+- Updated dependencies [f1a8578]
+  - computesdk@4.1.9
+
+## 0.2.19
+
+### Patch Changes
+
+- computesdk@4.1.8
+
+## 0.2.18
+
+### Patch Changes
+
+- computesdk@4.1.7
+
+## 0.2.17
+
+### Patch Changes
+
+- Updated dependencies [0732fed]
+  - computesdk@4.1.6
+
+## 0.2.16
+
+### Patch Changes
+
+- Updated dependencies [3914faa]
+  - computesdk@4.1.5
+
+## 0.2.15
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+
+## 0.2.14
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+
+## 0.2.13
+
+### Patch Changes
+
+- computesdk@4.1.2
+
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+
+## 0.2.11
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [371f667]
+  - computesdk@3.0.0
+
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - computesdk@2.5.4
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - computesdk@2.5.4
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - computesdk@2.5.4
+
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [5f1b08f]
+  - computesdk@2.5.2
+
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [3c4e595]
+  - computesdk@2.4.0
+
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [d49d036]
+  - computesdk@2.3.0
+
+## 0.2.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+## 0.1.0
+
+### Minor Changes
+
+- fdb1271: Releasing sandbox instances via getInstance method
