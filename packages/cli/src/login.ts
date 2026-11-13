@@ -49,7 +49,7 @@ async function postForm(url: string, params: Record<string, string>, timeoutMs =
   return body;
 }
 
-export async function login(options: { baseUrl?: string; browser?: boolean } = {}): Promise<void> {
+export async function login(options: { baseUrl?: string; browser?: boolean; org?: string } = {}): Promise<void> {
   const baseUrl = (options.baseUrl || envBaseUrl() || DEFAULT_BASE_URL).replace(/\/+$/, '').replace(/\/api\/v1$/, '');
   if (!isTrustedPlatformHost(baseUrl) || !isSecurePlatformTransport(baseUrl)) {
     throw new Error('Sign in against a trusted ComputeSDK HTTPS host (or localhost for development).');
@@ -104,15 +104,23 @@ export async function login(options: { baseUrl?: string; browser?: boolean } = {
     // Use the token just issued, regardless of API keys in the environment.
     const auth: CliAuth = { ...credentials, apiBaseUrl: resource, authBaseUrl: authUrl };
     const me = await getMe(auth);
-    let org = me.organizations.find((o) => o.id === me.activeOrganizationId);
-    if (!me.activeOrganizationId && me.organizations.length === 1) {
-      org = (await setActiveOrganization(auth, me.organizations[0].slug)).organization ?? undefined;
+    const requestedOrg = options.org || process.env.COMPUTE_ORG;
+    const override = requestedOrg ? me.organizations.find((o) => o.slug === requestedOrg) : undefined;
+    if (requestedOrg && !override) {
+      throw new Error(`Signed in, but not a member of organization ${requestedOrg}. Run compute org list.`);
     }
-    if (!org) throw new Error('Signed in, but no active organization. Run compute org list, then compute org use <slug>.');
+    let active = me.organizations.find((o) => o.id === me.activeOrganizationId);
+    if (!me.activeOrganizationId && me.organizations.length === 1) {
+      active = (await setActiveOrganization(auth, me.organizations[0].slug)).organization ?? undefined;
+    }
+    const effective = override ?? active;
+    if (!effective) throw new Error('Signed in, but no active organization. Run compute org list, then compute org use <slug>.');
+    // A one-off override must not change the server's shared active org or
+    // cache it as the default for subsequent commands on this machine.
     await saveCredentials({
-      ...credentials, orgSlug: org.slug, orgId: org.id,
+      ...credentials, ...(active ? { orgSlug: active.slug, orgId: active.id } : {}),
     });
-    console.error(`Signed in. Active organization: ${org.slug}.`);
+    console.error(`Signed in. ${override ? 'Using' : 'Active'} organization: ${effective.slug}.`);
     return;
   }
   throw new Error('Sign-in code expired. Run compute login to get a new code.');

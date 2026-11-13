@@ -31,7 +31,7 @@ describe('first-run creation auth', () => {
   it('logs in once and resolves again with the original flags before any provisioning', async () => {
     const opts = { baseUrl: 'http://localhost:3210', org: 'team', browser: false };
     expect(await creationClient(opts)).toEqual({ ready: true });
-    expect(login).toHaveBeenCalledWith({ baseUrl: opts.baseUrl, browser: false });
+    expect(login).toHaveBeenCalledWith({ baseUrl: opts.baseUrl, browser: false, org: opts.org });
     expect(client.mock.calls).toEqual([[opts], [opts]]);
   });
   it.each([{ json: true }, { quiet: true }, { apiKey: 'explicit' }])('never starts login for %j', async (opts) => {

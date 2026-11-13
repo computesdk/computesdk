@@ -16,7 +16,7 @@ export async function creationClient(opts: CommonOpts & { quiet?: boolean; brows
   } catch (error) {
     if (!(error instanceof ActionsCliError) || error.code !== 'no_credentials' || !interactive ||
         credentials?.token || credentials?.apiKey || credentials?.refreshToken) throw error;
-    await login({ baseUrl: opts.baseUrl, browser: opts.browser });
+    await login({ baseUrl: opts.baseUrl, browser: opts.browser, org: opts.org });
     return client(opts);
   }
 }

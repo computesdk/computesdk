@@ -104,6 +104,30 @@ describe('ComputeSDK device login', () => {
     expect(saveCredentials).toHaveBeenCalledTimes(1);
   });
 
+  it('honors an explicit org when no shared org is active, without changing that default', async () => {
+    getMe.mockResolvedValue({ activeOrganizationId: null, organizations: [org, { id: 'o2', slug: 'team', name: 'Team' }] });
+    respond(device); respond(token);
+    expect(await finish(login({ baseUrl: 'http://localhost:3210', browser: false, org: 'team' }))).toBeUndefined();
+    expect(setActiveOrganization).not.toHaveBeenCalled();
+    expect(saveCredentials.mock.calls.at(-1)![0]).not.toHaveProperty('orgId');
+    expect(console.error).toHaveBeenCalledWith('Signed in. Using organization: team.');
+  });
+
+  it('keeps the saved default when a command overrides another organization', async () => {
+    getMe.mockResolvedValue({ activeOrganizationId: org.id, organizations: [org, { id: 'o2', slug: 'team', name: 'Team' }] });
+    respond(device); respond(token);
+    expect(await finish(login({ baseUrl: 'http://localhost:3210', browser: false, org: 'team' }))).toBeUndefined();
+    expect(saveCredentials).toHaveBeenLastCalledWith(expect.objectContaining({ orgId: org.id, orgSlug: org.slug }));
+    expect(setActiveOrganization).not.toHaveBeenCalled();
+  });
+
+  it('rejects an organization override the user does not belong to', async () => {
+    respond(device); respond(token);
+    const result = await finish(login({ baseUrl: 'http://localhost:3210', browser: false, org: 'other' }));
+    expect(result?.message).toContain('not a member');
+    expect(setActiveOrganization).not.toHaveBeenCalled();
+  });
+
   it('refuses a verification URL from another origin', async () => {
     respond({ ...device, verification_uri_complete: 'https://evil.example/device' });
     const result = await finish(login({ baseUrl: 'http://localhost:3210', browser: false }), 0);
