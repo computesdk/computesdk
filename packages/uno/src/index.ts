@@ -384,7 +384,7 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
       create: async (config: ConfigWithClient, instanceId: string, options?: CreateSnapshotOptions) => {
         const client = getClient(config)
         await flushDisk(client, instanceId)
-        const name = snapshotName(options?.name)
+        const name = snapshotName(String(parseBoxId(instanceId, 'instance')), options?.name)
         const since = Date.now() - 60_000
         let snap: UnoBox
         try {
@@ -404,14 +404,14 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
           throw err
         }
         knownSnapshots(client).add(String(snap.id))
-        return toSnapshot({ ...snap, clone_of: snap.clone_of ?? Number(instanceId) })
+        return toSnapshot({ ...snap, name: snap.name ?? name })
       },
 
       list: async (config: ConfigWithClient, options?: ListSnapshotsOptions) => {
         const source = options?.instanceId ?? options?.sandboxId
         const snaps = (await getClient(config).listBoxes())
           .filter(isSnapshotBox)
-          .filter(box => source === undefined || String(box.clone_of ?? '') === String(source))
+          .filter(box => source === undefined || snapshotSource(box) === String(source))
           .map(toSnapshot)
         return options?.limit ? snaps.slice(0, options.limit) : snaps
       },
@@ -437,11 +437,20 @@ function isSnapshotBox(box: UnoBox): boolean {
   return typeof box.name === 'string' && box.name.startsWith(SNAPSHOT_PREFIX)
 }
 
-/** `computesdk-snapshot-<12 hex>[-<caller's name>]`, within the 63-character name limit. */
-function snapshotName(name: string | undefined): string {
-  const base = `${SNAPSHOT_PREFIX}${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+/**
+ * `computesdk-snapshot-<source id>-<12 hex>[-<caller's name>]`, within the
+ * 63-character name limit. The source id is in the name because the API does
+ * not return a box's clone source.
+ */
+function snapshotName(sourceId: string, name: string | undefined): string {
+  const base = `${SNAPSHOT_PREFIX}${sourceId}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
   const extra = safeName(name)
   return extra ? `${base}-${extra}`.slice(0, 63) : base
+}
+
+function snapshotSource(box: UnoBox): string | undefined {
+  if (box.clone_of != null) return String(box.clone_of)
+  return box.name.slice(SNAPSHOT_PREFIX.length).match(/^(\d+)-[0-9a-f]{12}(?:-|$)/)?.[1]
 }
 
 function toSnapshot(box: UnoBox) {
@@ -451,7 +460,7 @@ function toSnapshot(box: UnoBox) {
     createdAt: new Date(box.created_at),
     metadata: {
       name: box.name,
-      sourceInstanceId: box.clone_of != null ? String(box.clone_of) : undefined,
+      sourceInstanceId: snapshotSource(box),
       vcpu: box.vcpu,
       ramMb: box.ram_mb,
       diskGb: box.disk_gb,

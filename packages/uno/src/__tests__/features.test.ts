@@ -74,7 +74,7 @@ describe('snapshots', () => {
   it('flushes the disk, copies it into a sleeping snapshot machine and returns its id', async () => {
     const calls = mockFetch([
       () => ok(),
-      c => [201, { boxes: [box({ id: 77, name: c.body.name, status: 'provisioning', provision_state: 'pending', clone_of: 42 })] }],
+      c => [201, { boxes: [box({ id: 77, name: c.body.name, status: 'provisioning', provision_state: 'pending' })] }],
       () => [200, box({ id: 77, name: 'computesdk-snapshot-x', clone_of: 42 })],
       () => [200, { status: 'sleeping' }],
     ])
@@ -83,7 +83,7 @@ describe('snapshots', () => {
     const snap = await compute.snapshot!.create('42', { name: 'before tests' })
     expect(calls[0]).toMatchObject({ method: 'POST', url: `${api}/api/v1/boxes/42/run`, body: { cmd: 'sync' } })
     expect(calls[1]).toMatchObject({ method: 'POST', url: `${api}/api/v1/boxes/42/clone`, body: { count: 1 } })
-    expect(calls[1].body.name).toMatch(/^computesdk-snapshot-[0-9a-f]{12}-before tests$/)
+    expect(calls[1].body.name).toMatch(/^computesdk-snapshot-42-[0-9a-f]{12}-before tests$/)
     expect(calls[2]).toMatchObject({ method: 'GET', url: `${api}/api/v1/boxes/77` })
     expect(calls[3]).toMatchObject({ method: 'POST', url: `${api}/api/v1/boxes/77/sleep` })
     expect(snap).toMatchObject({ id: '77', provider: 'uno', metadata: { sourceInstanceId: '42' } })
@@ -134,19 +134,21 @@ describe('snapshots', () => {
   })
 
   it('lists snapshots apart from instances and refuses to delete a working machine as a snapshot', async () => {
-    const boxes = [box({ id: 1, name: 'worker' }), box({ id: 2, name: 'computesdk-snapshot-abc', status: 'sleeping', clone_of: 1 })]
+    const boxes = [box({ id: 1, name: 'worker' }), box({ id: 2, name: 'computesdk-snapshot-1-0123456789ab', status: 'sleeping' })]
     mockFetch([
       () => [200, { boxes }],
       () => [200, { boxes }],
       () => [200, { boxes }],
+      () => [200, { boxes }],
       () => [200, box({ id: 1, name: 'worker' })],
-      () => [200, box({ id: 2, name: 'computesdk-snapshot-abc' })],
+      () => [200, box({ id: 2, name: 'computesdk-snapshot-1-0123456789ab' })],
       () => [200, { status: 'deleted' }],
     ])
     const compute = uno({ apiKey: 'k', baseUrl: api })
     expect((await compute.instances.list()).map(i => i.instanceId)).toEqual(['1'])
     expect((await compute.snapshot!.list()).map(s => s.id)).toEqual(['2'])
     expect(await compute.snapshot!.list({ instanceId: '9' })).toEqual([])
+    expect((await compute.snapshot!.list({ instanceId: '1' }))[0]).toMatchObject({ id: '2', metadata: { sourceInstanceId: '1' } })
     await expect(compute.snapshot!.delete('1')).rejects.toThrow(/not a snapshot/)
     await expect(compute.snapshot!.delete('2')).resolves.toBeUndefined()
   })
