@@ -56,12 +56,8 @@ compute actions repos connect <clone-url>      # connect a generic git remote
 compute actions repos enable <owner>/<repo>    # enable / disable scheduling
 compute actions repos disable <owner>/<repo>
 
-# Provider credentials (owner/admin key required)
-compute actions providers                      # registered providers, regions, status
-compute actions providers configure <provider> --key <key> [--verify]  # save the org's credential
-compute actions providers configure <provider> --field name=value ...  # multi-field credentials
-compute actions providers verify <provider>    # probe it with a real sandbox
-compute actions providers remove <provider>
+# Where Actions can place (order, act capability, key status)
+compute actions providers                      # provider keys themselves: `compute byok` below
 
 # Secrets and variables (owner/admin key required)
 compute actions vault ls [--repo <owner>/<repo>] [--kind secret|variable]
@@ -102,6 +98,8 @@ compute bench auth          # browser login / credential management
 compute bench org           # organization info
 compute bench benchmarks    # list benchmarks
 compute bench runs          # list runs
+compute bench runs run-again <benchmark-slug> <runId> [--wait] [--timeout <seconds>]
+compute bench runs run-again-status <benchmark-slug> <runAgainId>
 compute bench results       # query results
 compute bench iterations    # per-iteration data
 compute bench artifacts     # download run artifacts
@@ -146,8 +144,30 @@ Pass CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`,
 `--org`) before the command; a bare `--` before the command is optional but
 supported.
 
+## `compute byok` — the org's BYOK provider keys and custom rates
+
+Keys and custom rates serve every product that places sandboxes (Actions jobs
+and sandbox creates). Reads are open to members; writes need an owner/admin.
+
+```bash
+compute byok                                   # every BYOK provider: key state, rate
+compute byok show <provider>                   # key state, platform rate, custom rate
+compute byok configure <provider> --key <key> [--verify]   # save the org's credential
+compute byok configure <provider> --field name=value ...   # multi-field credentials
+compute byok verify <provider>                 # probe it with a real sandbox
+compute byok remove <provider> [-y]
+compute byok rate set <provider> <usd> [--per second|minute|hour]
+compute byok rate clear <provider>
+```
+
+A custom rate is for the org's own cost reporting (typically what it pays the
+provider): sandbox costs on that provider are reported at it instead of the
+platform rate. It never changes what the org is billed.
+`compute actions providers configure|verify|remove` still work but are
+deprecated in favour of these.
+
 ## `compute providers`
 
 ```bash
-compute providers    # list sandbox providers and their credential status
+compute providers    # SDK provider credentials in this environment (local env vars)
 ```

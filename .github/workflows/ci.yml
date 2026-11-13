@@ -63,6 +63,10 @@ jobs:
         MODAL_TOKEN_ID: ""
         MODAL_TOKEN_SECRET: ""
     
+    - name: Run CLI tests and type checking
+      if: steps.skip_check.outputs.skip != 'true'
+      run: pnpm --filter @computesdk/cli run test && pnpm --filter @computesdk/cli run typecheck
+
     - name: Run type checking
       if: steps.skip_check.outputs.skip != 'true'
       run: pnpm typecheck

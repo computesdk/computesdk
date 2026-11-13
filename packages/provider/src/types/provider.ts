@@ -80,6 +80,13 @@ export interface CreateSnapshotOptions {
   name?: string;
   /** Optional metadata for the snapshot */
   metadata?: Record<string, string>;
+  /**
+   * Optional capture scope hint. `'full'` asks for a live capture that
+   * checkpoints memory and keeps the source running; `'disk'` asks for a
+   * disk-only capture (the source may be stopped for it). Omitted lets the
+   * provider pick. Providers without a live-capture mode ignore this.
+   */
+  scope?: 'disk' | 'full';
 }
 
 /**

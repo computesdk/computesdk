@@ -1,6 +1,6 @@
 {
   "name": "create-compute",
-  "version": "0.2.27",
+  "version": "0.2.28",
   "description": "Spin up a cloud sandbox and start coding in an interactive REPL",
   "author": "Garrison",
   "license": "MIT",

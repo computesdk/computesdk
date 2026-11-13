@@ -19,11 +19,16 @@ function sanitizePathPart(name: string): string {
  * data, on failure the `{ ok: false, error: {...} }` envelope on stderr.
  */
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import pc from 'picocolors';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { spawnSync } from 'child_process';
 import { registerSettingsCommands } from './settings.js';
+import { registerReposCommands } from './actions-repos.js';
+import { registerIntegrationsCommands } from './actions-integrations.js';
+import { registerRunsCommands } from './actions-runs.js';
+import { matchRefOnly, registerWorkflowsCommands, workflowChoices } from './actions-workflows.js';
+import { conclusionLabel, safeTerm, safeTermText } from './term.js';
 import { basename, join } from 'path';
 import {
   ActionsApiError,
@@ -40,25 +45,25 @@ import {
   type CiProviderInfo,
   type CiProviderKeyResponse,
   type CiProvidersResponse,
-  type CiRepo,
-  type CiRepoConnectResponse,
-  type CiRepoPatchResponse,
-  type CiRepoSyncResponse,
-  type CiReposResponse,
   type CiRun,
   type CiRunBenchmarkProvider,
   type CiRunBenchmarkResult,
   type CiRunHistory,
   type CiRunInspection,
   type CiRunSummary,
+  type CiSchedule,
   type CiVaultDeleteResponse,
   type CiVaultItem,
   type CiVaultKind,
   type CiVaultListResponse,
   type CiVaultRevealResponse,
   type CiVaultSaveResponse,
+  type CiRefOnlyWorkflow,
   type CiWorkflow,
+  type CiWorkflowsResponse,
 } from './actions-client.js';
+
+export { conclusionLabel, safeTerm };
 
 /** The jobs inside a `/state` response — a subset of CiJob, no name/steps. */
 interface CiLiveStateJob {
@@ -78,6 +83,76 @@ export interface CommonOpts extends JsonOpts {
   allowUntrustedHost?: boolean;
   /** One-off org override sent as X-Org-Slug (or set $COMPUTE_ORG). */
   org?: string;
+}
+
+interface ScheduleOpts extends CommonOpts {
+  reliability?: boolean;
+  from?: string;
+  to?: string;
+  repo?: string;
+  workflow?: string[];
+  event?: string[];
+  status?: string[];
+  tz?: string;
+  limit?: string;
+  cursor?: string;
+}
+
+function scheduleQuery(opts: ScheduleOpts): Record<string, string | string[] | undefined> {
+  const from = opts.from === undefined ? new Date() : new Date(opts.from);
+  const to = opts.to === undefined ? new Date(from.getTime() + 7 * 86_400_000) : new Date(opts.to);
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) {
+    throw new ActionsCliError('invalid_argument', '--from and --to must be valid timestamps.');
+  }
+  return {
+    from: from.toISOString(), to: to.toISOString(),
+    repo: opts.repo, workflow: opts.workflow, event: opts.event, status: opts.status,
+    reliability: opts.reliability ? '1' : undefined,
+    timeZone: opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    limit: opts.limit, cursor: opts.cursor,
+  };
+}
+
+function nextScheduleCommand(data: CiSchedule, opts: ScheduleOpts): string {
+  const args = ['compute', 'actions', 'schedule', '--from', data.from, '--to', data.to, '--tz', data.timeZone];
+  for (const key of ['repo', 'workflow', 'event', 'status', 'limit', 'org', 'baseUrl'] as const) {
+    const value = opts[key];
+    if (value === undefined) continue;
+    for (const item of Array.isArray(value) ? value : [value]) args.push(`--${key === 'baseUrl' ? 'base-url' : key}`, item);
+  }
+  if (opts.reliability) args.push('--reliability');
+  if (opts.allowUntrustedHost) args.push('--allow-untrusted-host');
+  args.push('--cursor', data.nextCursor!);
+  return args.map((value) => /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`).join(' ');
+}
+
+export function formatSchedule(data: CiSchedule, nextCommand?: string): string {
+  const time = new Intl.DateTimeFormat('en-CA', {
+    timeZone: data.timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZoneName: 'short',
+  });
+  const lines = [pc.bold(`Upcoming fires (${safeTerm(data.timeZone)})`)];
+  const fires = data.upcoming.flatMap((schedule) => schedule.occurrences.map((at) => ({ at, schedule })))
+    .sort((a, b) => a.at.localeCompare(b.at));
+  if (fires.length === 0) lines.push('No upcoming fires.');
+  for (const { at, schedule } of fires) {
+    lines.push([time.format(new Date(at)), safeTerm(schedule.workflowName || schedule.workflowPath), safeTerm(schedule.repoFullName), safeTerm(schedule.description)].join('  '));
+  }
+  for (const schedule of data.upcoming) {
+    const remaining = schedule.occurrenceCount - schedule.occurrences.length;
+    if (remaining > 0) lines.push(`+${remaining.toLocaleString('en-US')} more scheduled for ${safeTerm(schedule.workflowName || schedule.workflowPath)}  ${safeTerm(schedule.repoFullName)}  ${safeTerm(schedule.description)}`);
+  }
+  lines.push('', pc.bold(`Past runs (${safeTerm(data.timeZone)})`));
+  if (data.runs.length === 0) lines.push('No past runs found.');
+  for (const run of data.runs) {
+    lines.push([
+      time.format(new Date(run.startedAt ?? run.createdAt)), safeTerm(run.workflowName || run.workflowPath),
+      safeTerm(run.repoFullName), safeTerm(run.event), conclusionLabel(safeTerm(run.status === 'completed' ? run.conclusion : run.status)),
+    ].join('  '));
+  }
+  if (data.countsTruncated) lines.push('Warning: some schedule totals reached the safety limit; use a smaller window for exact counts.');
+  if (nextCommand) lines.push('', `Next page (reuse the same credentials):\n${safeTerm(nextCommand)}`);
+  return lines.join('\n');
 }
 
 /** The platform API client behind both `compute actions` and `compute market`. */
@@ -175,9 +250,10 @@ export function fail(error: unknown, opts: JsonOpts = {}): never {
   if (opts.json) {
     process.stderr.write(JSON.stringify(toErrorEnvelope(error)) + '\n');
   } else if (error instanceof ActionsApiError) {
-    console.error(pc.red(`Error (${error.status}): ${error.message}`));
+    // The message is the server's, or quotes server values: no control sequences.
+    console.error(pc.red(`Error (${error.status}): ${safeTermText(error.message)}`));
   } else {
-    console.error(pc.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+    console.error(pc.red(`Error: ${safeTermText(error instanceof Error ? error.message : String(error))}`));
   }
   process.exit(1);
 }
@@ -213,17 +289,6 @@ export function shortSha(sha: string): string {
   return sha.slice(0, 8);
 }
 
-export function conclusionLabel(conclusion: string): string {
-  switch (conclusion) {
-    case 'passed': return pc.green('passed');
-    case 'failed': return pc.red('failed');
-    case 'running': return pc.yellow('running');
-    case 'cancelled': return pc.gray('cancelled');
-    case 'none': return pc.yellow('queued');
-    default: return conclusion;
-  }
-}
-
 export function formatRunRow(run: CiRun): string {
   const num = run.runNumber === null ? '-' : `#${run.runNumber}`;
   return [
@@ -235,6 +300,7 @@ export function formatRunRow(run: CiRun): string {
     shortSha(run.headSha),
     formatDuration(run.durationMs),
     run.startedAt,
+    ...(run.archivedAt ? [pc.dim('archived')] : []),
   ].join('  ');
 }
 
@@ -566,13 +632,6 @@ async function* followRunLogs(
   }
 }
 
-// Job and step names come from workflow files — potentially attacker-controlled
-// in a PR context — so strip control characters before writing to the terminal.
-export function safeTerm(s: string): string {
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '�');
-}
-
 export function formatRunHistory(history: CiRunHistory): string {
   const lines: string[] = [];
   const parts = (Object.entries(history.conclusions) as [string, number][])
@@ -609,6 +668,14 @@ export function formatRunHistory(history: CiRunHistory): string {
   return lines.join('\n');
 }
 
+/** A stored key's verification state: `connected …abcd`, `error (detail)`, `unconfigured`. */
+function keyStatusText(p: CiProviderInfo): string {
+  const status = p.status === 'connected' ? pc.green('connected') : p.status === 'error' ? pc.red('error') : pc.gray('unconfigured');
+  const hint = p.keyHint ? ` ${pc.dim(safeTerm(p.keyHint))}` : '';
+  const detail = p.status === 'error' && p.statusDetail ? ` ${pc.dim(`(${safeTerm(p.statusDetail)})`)}` : '';
+  return `${status}${hint}${detail}`;
+}
+
 export function formatProviderRow(p: CiProviderInfo): string {
   const icon = p.usable ? pc.green('●') : pc.gray('○');
   const name = p.usable ? pc.white(p.provider) : pc.gray(p.provider);
@@ -617,6 +684,7 @@ export function formatProviderRow(p: CiProviderInfo): string {
     p.actCapable ? pc.green('act') : pc.gray('no-act'),
     p.regions.length > 0 ? `regions: ${p.regions.join(',')}` : 'no region choice',
     p.position === null ? pc.gray('not in provider order') : `order #${p.position}`,
+    ...(p.credential !== 'ambient' && p.status !== undefined ? [keyStatusText(p)] : []),
   ].join('  ');
   return `  ${icon} ${name}  ${flags}`;
 }
@@ -629,26 +697,6 @@ export function formatVerifyResult(r: CiProviderKeyResponse): string {
   return `${head}  ${r.key.provider}${act}${detail}`;
 }
 
-function formatRepoRow(r: CiRepo): string {
-  const head = r.enabled ? pc.green('enabled') : pc.dim('disabled');
-  const via = r.authType === 'github_app' ? 'github-app' : r.authType;
-  const workflows =
-    r.workflowPaths.length > 0
-      ? `${r.workflowPaths.length} workflow${r.workflowPaths.length === 1 ? '' : 's'}`
-      : 'no workflows yet';
-  const error = r.lastPollError ? pc.red(`  poll error: ${safeTerm(r.lastPollError)}`) : '';
-  return `${head}  ${safeTerm(r.fullName)}  ${pc.dim(`${safeTerm(via)} · ${safeTerm(r.defaultBranch)} · ${workflows}`)}${error}`;
-}
-
-/** Print what an enable/connect discovered — one dim line, nothing on a clean run. */
-function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: string | null }): void {
-  if (d.error) {
-    console.log(pc.yellow(`discovery: ${safeTerm(d.error)} (the poll cron retries)`));
-    return;
-  }
-  console.log(pc.dim(`discovery: ${d.workflowsFound ? 'workflows found' : 'no workflows yet'}${d.seeded ? ', cursors seeded' : ''}`));
-}
-
 // ─── Commands ───────────────────────────────────────────────────────────────
 
 /**
@@ -657,8 +705,12 @@ function printDiscovery(d: { workflowsFound: boolean; seeded: boolean; error: st
  * is run anyway; such a run has no inputs, so any given are refused rather
  * than silently dropped. A dispatchable workflow keeps its inputs either way.
  */
-/** A workflow that exists only in the dispatched diff: addressed by path since it has no catalog row yet. */
-export type PatchedWorkflowTarget = { repoFullName: string; workflowPath: string };
+/**
+ * A workflow with no catalog row yet — a file the dispatched diff creates, or
+ * one only the dispatched ref has — so it is addressed by path. `dispatchable`
+ * is known only for a ref-only file; a diff's file is left to the platform.
+ */
+export type PatchedWorkflowTarget = { repoFullName: string; workflowPath: string; dispatchable?: boolean };
 
 export function isPatchedWorkflowTarget(target: CiWorkflow | PatchedWorkflowTarget): target is PatchedWorkflowTarget {
   return 'workflowPath' in target;
@@ -693,16 +745,18 @@ export function dispatchBody(
   },
 ): Record<string, unknown> {
   const patched = isPatchedWorkflowTarget(workflow);
-  if (!patched && !workflow.dispatchable && !opts.manual) {
+  const path = patched ? workflow.workflowPath : workflow.path;
+  const pushOnly = workflow.dispatchable === false;
+  if (pushOnly && !opts.manual) {
     throw new ActionsCliError(
       'invalid_argument',
-      `Workflow "${workflow.path}" does not declare workflow_dispatch. Pass --manual to run it anyway (no inputs).`,
+      `Workflow "${path}" does not declare workflow_dispatch. Pass --manual to run it anyway (no inputs).`,
     );
   }
-  if (!patched && !workflow.dispatchable && opts.inputs !== undefined && opts.inputs.length > 0) {
+  if (pushOnly && opts.inputs !== undefined && opts.inputs.length > 0) {
     throw new ActionsCliError(
       'invalid_argument',
-      `Workflow "${workflow.path}" has no workflow_dispatch inputs; --manual runs of it take no --inputs.`,
+      `Workflow "${path}" has no workflow_dispatch inputs; --manual runs of it take no --inputs.`,
     );
   }
   const ref = opts.ref ?? (patched ? undefined : workflow.refs[0]);
@@ -964,13 +1018,13 @@ export function registerActionsCommands(program: Command): void {
       .description('Dispatch a workflow_dispatch run (or any workflow with --manual)')
       .argument('<repo>', 'repository in owner/repo format')
       .requiredOption('--workflow <path|name>', 'workflow path or name')
-      .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref)')
+      .option('--ref <ref>', 'git ref to run (default: the workflow\'s first watched ref); also finds a workflow file only this ref has')
       .option('--inputs <pairs...>', 'workflow inputs as key=value (workflow_dispatch inputs only)')
       .option('--manual', 'run a workflow even if it does not declare workflow_dispatch (such runs take no --inputs)')
-      .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the org provider order')
+      .option('--provider <id>', 'place the run on one provider (e.g. namespace, vercel:sfo1) instead of the Actions router')
       .option('--provider-region <region>', 'region for --provider (same as --provider <id>:<region>)')
-      .option('--max-bid <usd>', 'max price per vCPU for a market fill (e.g. 0.12); unfilled jobs fall through to the next provider')
-      .option('--max-bid-per <unit>', 'time unit --max-bid is priced in: second, minute, or hour (default: second)')
+      .addOption(new Option('--max-bid <usd>').hideHelp())
+      .addOption(new Option('--max-bid-per <unit>').hideHelp())
       .option('--with-changes', 'run your local changes: everything the working tree has beyond origin/<ref> is sent as a diff and applied after checkout (default --ref: the current branch)'),
   ).action(async (repo: string, opts: CommonOpts & { workflow: string; ref?: string; inputs?: string[]; manual?: boolean; provider?: string; providerRegion?: string; maxBid?: string; maxBidPer?: string; withChanges?: boolean }) => {
     try {
@@ -990,11 +1044,20 @@ export function registerActionsCommands(program: Command): void {
       );
       // A workflow file the diff creates has no catalog row yet; the platform
       // builds the run's definition from the diff when addressed by path.
-      const workflow: CiWorkflow | PatchedWorkflowTarget | undefined =
+      let workflow: CiWorkflow | PatchedWorkflowTarget | undefined =
         matchWorkflow(workflows, opts.workflow) ??
         (local && patchTouches(local.patch, opts.workflow) ? { repoFullName: repo, workflowPath: opts.workflow } : undefined);
+      // A file only the ref has is not in the catalog either; it dispatches by path.
+      let refOnly: CiRefOnlyWorkflow[] | undefined;
+      if (!workflow && ref !== undefined) {
+        refOnly = (await c.get<CiWorkflowsResponse>('/api/v1/actions/workflows', { repo, ref })).refOnly ?? [];
+        const match = matchRefOnly(refOnly, opts.workflow);
+        if (match) workflow = { repoFullName: repo, workflowPath: match.path, dispatchable: match.dispatchable };
+      }
       if (!workflow) {
-        const choices = workflows.map((w) => `${w.path} (${w.name})`).join(', ') || 'none';
+        const choices =
+          workflowChoices(workflows) +
+          (refOnly && refOnly.length > 0 ? `; only on ${ref}: ${workflowChoices(refOnly)}` : '');
         const hint =
           !opts.withChanges && hasLocalChanges() && /^\.github\/workflows\//.test(opts.workflow)
             ? ' If it only exists in your working tree, add --with-changes.'
@@ -1032,26 +1095,29 @@ export function registerActionsCommands(program: Command): void {
     }
   });
 
+  registerRunsCommands(actions, common, { client, fail, output, formatRunRow });
+  registerWorkflowsCommands(actions, common, { client, fail, output });
+
   common(
     actions
-      .command('runs')
-      .description('List recent runs for a repo')
-      .argument('<repo>', 'repository in owner/repo format')
-      .option('--status <status...>', 'filter by conclusion: passed, failed, running, cancelled, none')
-      .option('--branch <branch...>', 'filter by branch/ref'),
-  ).action(async (repo: string, opts: CommonOpts & { status?: string[]; branch?: string[] }) => {
+      .command('schedule')
+      .description('List upcoming scheduled fires and past runs in a time window')
+      .option('--reliability', 'show only reliability runs and workflows (hidden by default)')
+      .option('--from <timestamp>', 'inclusive start timestamp (default: now)')
+      .option('--to <timestamp>', 'exclusive end timestamp (default: seven days after --from)')
+      .option('--repo <repo>', 'repository in owner/repo format')
+      .option('--workflow <path...>', 'workflow file paths; repeatable')
+      .option('--event <event...>', 'trigger events: schedule, push, pull_request, workflow_dispatch')
+      .option('--status <status...>', 'run conclusions: passed, failed, running, cancelled, none (excludes upcoming)')
+      .option('--tz <zone>', 'IANA time zone (default: local)')
+      .option('--limit <n>', 'past-run page size (default 100, max 500)')
+      .option('--cursor <cursor>', 'nextCursor from a prior page; keep the window and filters unchanged'),
+  ).action(async (opts: ScheduleOpts) => {
+    opts.org ??= program.opts<CommonOpts>().org;
     try {
-      const { runs } = await (await client(opts)).get<{ runs: CiRun[] }>(
-        '/api/v1/actions/runs',
-        { repo, status: opts.status, branch: opts.branch },
-      );
-      output(opts, runs, (rs) => {
-        if (rs.length === 0) {
-          console.log('No runs found.');
-          return;
-        }
-        for (const run of rs) console.log(formatRunRow(run));
-      });
+      const query = scheduleQuery(opts);
+      const data = await (await client(opts)).get<CiSchedule>('/api/v1/actions/schedule', query);
+      output(opts, data, (result) => console.log(formatSchedule(result, result.nextCursor ? nextScheduleCommand(result, opts) : undefined)));
     } catch (e) {
       fail(e, opts);
     }
@@ -1230,7 +1296,7 @@ export function registerActionsCommands(program: Command): void {
 
   const providers = actions
     .command('providers')
-    .description('List the org\'s registered compute providers (regions, act/usable status)');
+    .description('List the providers Actions can place on (order, act/usable, key status); keys and rates: compute byok');
   common(providers).action(async (opts: CommonOpts) => {
     try {
       const data = await (await client(opts)).get<CiProvidersResponse>('/api/v1/actions/providers');
@@ -1242,17 +1308,21 @@ export function registerActionsCommands(program: Command): void {
     }
   });
 
+  // configure/verify/remove predate `compute byok` and stay on the
+  // /api/v1/actions/providers aliases, which keep the actions OAuth scopes, so
+  // logins made before the providers scopes existed keep working.
   common(
     providers
       .command('configure')
-      .description('Save the org\'s credential for a provider (owner/admin API key)')
+      .description('Deprecated: use `compute byok configure`. Save the org\'s credential for a provider (owner/admin)')
       .argument('<provider>', 'provider id (e.g. tensorlake, blaxel)')
       .option('--key <key>', 'provider API key (single-field credentials)')
       .option('--field <pair...>', 'credential fields as name=value (multi-field providers)')
       .option('--verify', 'run the placement probe after saving'),
   ).action(async (provider: string, opts: CommonOpts & { key?: string; field?: string[]; verify?: boolean }) => {
     try {
-      const c = await client(opts);
+      // A provider key is a local secret: trusted hosts only, even with --allow-untrusted-host.
+      const c = await secretValueClient(opts, 'provider keys');
       let body: Record<string, unknown>;
       if (opts.field !== undefined) {
         if (opts.key !== undefined) throw new Error('Pass either --key or --field, not both.');
@@ -1284,7 +1354,7 @@ export function registerActionsCommands(program: Command): void {
   common(
     providers
       .command('verify')
-      .description('Probe the stored provider key with a real sandbox ("Test" in Settings)')
+      .description('Deprecated: use `compute byok verify`. Probe the stored provider key with a real sandbox')
       .argument('<provider>', 'provider id'),
   ).action(async (provider: string, opts: CommonOpts) => {
     try {
@@ -1301,7 +1371,7 @@ export function registerActionsCommands(program: Command): void {
   common(
     providers
       .command('remove')
-      .description('Delete the org\'s stored credential for a provider')
+      .description('Deprecated: use `compute byok remove`. Delete the org\'s stored credential for a provider')
       .argument('<provider>', 'provider id'),
   ).action(async (provider: string, opts: CommonOpts) => {
     try {
@@ -1316,130 +1386,8 @@ export function registerActionsCommands(program: Command): void {
     }
   });
 
-  const repos = actions
-    .command('repos')
-    .description('List the org\'s connected repositories');
-  common(repos).action(async (opts: CommonOpts) => {
-    try {
-      const data = await (await client(opts)).get<CiReposResponse>('/api/v1/actions/repos');
-      output(opts, data, (d) => {
-        for (const r of d.repos) console.log(formatRepoRow(r));
-      });
-    } catch (e) {
-      fail(e, opts);
-    }
-  });
-
-  common(
-    repos
-      .command('connect')
-      .description('Connect a git remote (validated by a real ls-remote; lands enabled)')
-      .argument('<cloneUrl>', 'http(s) or ssh git remote URL')
-      .option('--name <owner/repo>', 'repo name override (default: derived from cloneUrl)')
-      .option('--branch <branch>', 'default branch (default: main, else the remote\'s first)')
-      .option('--token <token>', 'credential for private http(s) remotes')
-      .option('--username <user>', 'username — with --token, makes auth "basic" instead of "token"')
-      .option('--ssh-key-file <path>', 'OpenSSH/PEM private key file for ssh remotes')
-      .option('--known-hosts-file <path>', 'known_hosts pin for ssh remotes'),
-  ).action(async (cloneUrl: string, opts: CommonOpts & { name?: string; branch?: string; token?: string; username?: string; sshKeyFile?: string; knownHostsFile?: string }) => {
-    try {
-      let body: Record<string, unknown>;
-      if (opts.sshKeyFile !== undefined) {
-        if (opts.token !== undefined || opts.username !== undefined) {
-          throw new Error('Pass either --ssh-key-file or --token/--username, not both.');
-        }
-        body = {
-          authType: 'ssh',
-          credential: readFileSync(opts.sshKeyFile, 'utf8'),
-          ...(opts.knownHostsFile !== undefined && {
-            knownHosts: readFileSync(opts.knownHostsFile, 'utf8'),
-          }),
-        };
-      } else if (opts.username !== undefined) {
-        if (opts.token === undefined) throw new Error('--username requires --token.');
-        body = { authType: 'basic', username: opts.username, credential: opts.token };
-      } else if (opts.token !== undefined) {
-        body = { authType: 'token', credential: opts.token };
-      } else {
-        body = { authType: 'none' };
-      }
-      if (opts.knownHostsFile !== undefined && opts.sshKeyFile === undefined) {
-        throw new Error('--known-hosts-file requires --ssh-key-file.');
-      }
-      const result = await (await client(opts)).post<CiRepoConnectResponse>('/api/v1/actions/repos', {
-        cloneUrl,
-        ...body,
-        ...(opts.name !== undefined && { name: opts.name }),
-        ...(opts.branch !== undefined && { defaultBranch: opts.branch }),
-      });
-      output(opts, result, (r) => {
-        console.log(`connected  ${pc.cyan(safeTerm(r.fullName))}  ${pc.dim(`(${safeTerm(r.authType)}, ${safeTerm(r.defaultBranch)})`)}`);
-        printDiscovery(r.discovery);
-      });
-    } catch (e) {
-      fail(e, opts);
-    }
-  });
-
-  common(
-    repos
-      .command('sync')
-      .description('Re-read the GitHub App installation so repos granted after install show up (owner/admin key)'),
-  ).action(async (opts: CommonOpts) => {
-    try {
-      const result = await (await client(opts)).post<CiRepoSyncResponse>('/api/v1/actions/repos/sync', {});
-      output(opts, result, (r) => {
-        for (const a of r.accounts) {
-          console.log(a.error === null ? `synced  ${pc.cyan(safeTerm(a.account))}` : `failed  ${pc.cyan(safeTerm(a.account))}  ${pc.red(safeTerm(a.error))}`);
-        }
-        console.log(pc.dim(`${r.repos.length} repos visible`));
-      });
-      if (result.accounts.some((a) => a.error !== null)) process.exitCode = 1;
-    } catch (e) {
-      fail(e, opts);
-    }
-  });
-
-  common(
-    repos
-      .command('enable')
-      .description('Enable a repo the org can already see (granted by a GitHub App install, or a connected remote)')
-      .argument('<repo>', 'repository in owner/repo format')
-      .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
-  ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
-    try {
-      const result = await (await client(opts)).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
-        fullName: repo,
-        enabled: true,
-        ...(opts.repoId !== undefined && { repoId: opts.repoId }),
-      });
-      output(opts, result, (r) => {
-        console.log(`enabled  ${pc.cyan(safeTerm(r.fullName))}`);
-        if (r.discovery) printDiscovery(r.discovery);
-      });
-    } catch (e) {
-      fail(e, opts);
-    }
-  });
-
-  common(
-    repos
-      .command('disable')
-      .description('Disable a repo — it stays connected but no runs are scheduled')
-      .argument('<repo>', 'repository in owner/repo format')
-      .option('--repo-id <id>', 'scope to one row when two installations grant the same name'),
-  ).action(async (repo: string, opts: CommonOpts & { repoId?: string }) => {
-    try {
-      const result = await (await client(opts)).patch<CiRepoPatchResponse>('/api/v1/actions/repos', {
-        fullName: repo,
-        enabled: false,
-        ...(opts.repoId !== undefined && { repoId: opts.repoId }),
-      });
-      output(opts, result, (r) => console.log(`disabled  ${pc.cyan(safeTerm(r.fullName))}`));
-    } catch (e) {
-      fail(e, opts);
-    }
-  });
+  registerReposCommands(actions, common, { client, fail, output });
+  registerIntegrationsCommands(actions, common, { client, fail, output });
 
   const vault = actions
     .command('vault')

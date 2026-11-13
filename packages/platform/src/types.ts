@@ -30,10 +30,11 @@ export interface SandboxSummary {
   destroyError: string | null;
   /** The sandbox's configured timeout, when one was set at create. */
   timeoutMs: number | null;
-  /** How the sandbox was placed — source, order type, rate, max price, the
-   * requested platform `size` and the seller's `box` on a market fill. */
+  /** How the sandbox was placed — source (`house`: a ComputeSDK managed
+   * account, billed from credit; `own-key`: the org's BYOK key), the
+   * requested platform `size`, and the rate. */
   placement: {
-    source: 'market' | 'own-key';
+    source: 'house' | 'own-key' | 'market';
     size?: string | null;
     box?: {
       provider: string;
@@ -49,7 +50,7 @@ export interface SandboxSummary {
 
 /** `toDetail` — POST /sandboxes and GET /sandboxes/{id}. */
 export interface SandboxDetail extends SandboxSummary {
-  /** BYOK direct-attach descriptor — null on market fills and ambient providers. */
+  /** BYOK direct-attach descriptor — null on managed accounts and ambient providers. */
   attach: { provider: string; providerSandboxId: string; region: string | null } | null;
 }
 

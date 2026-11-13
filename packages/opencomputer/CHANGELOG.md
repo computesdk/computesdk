@@ -1,5 +1,19 @@
 # @computesdk/opencomputer
 
+## 1.0.23
+
+### Patch Changes
+
+- 34aed4f: Depend on `@opencomputer/sdk` ^2.3.1 instead of `latest`. 3.0.0 changed the SDK's API and the provider doesn't build against it yet; with `latest`, any lockfile update pulled it in.
+
+## 1.0.22
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
 ## 1.0.21
 
 ### Patch Changes

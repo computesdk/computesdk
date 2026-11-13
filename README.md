@@ -86,9 +86,12 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **AWS EC2** | `AWS_REGION` + AWS SDK credential chain (or a `credentials` provider) | On-demand or Spot instances from a launch template; commands over SSM |
 | **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
 | **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
+| **Boat** | `BOAT_API_KEY` | Ubuntu cloud sandboxes with command streaming, named snapshots, file transfers, and protected preview URLs |
 | **Brezel** | `BREZEL_API_KEY`, `BREZEL_API_URL`, `BREZEL_PROJECT_ID`, `BREZEL_ENVIRONMENT_REVISION` | Self-hosted Firecracker sandboxes |
+| **Briq** | `BRIQ_API_KEY` | Sandboxes on microVMs with streaming commands, files, previews and interactive processes |
 | **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
 | **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_API_KEY` | Edge computing |
+| **Cocoon Stack** | `COCOONSTACK_API_URL`, `COCOONSTACK_API_KEY` | Self-hosted microVM sandboxes from warm pools |
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
 | **CreateOS** | `CREATEOS_SANDBOX_API_KEY`, `CREATEOS_SANDBOX_BASE_URL` | VM sandboxes with pause/resume/fork snapshots |
 | **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
@@ -99,6 +102,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **GravixLayer** | `GRAVIXLAYER_API_KEY` | Cloud runtimes with filesystem, port publishing, and snapshots |
 | **HopX** | `HOPX_API_KEY` | Fast ephemeral sandboxes |
 | **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
+| **kosa8** | `KOSA8_API_KEY` | Sandboxes that each run in their own microVM with its own kernel, per-second billing, sleep and wake |
 | **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
 | **Lizard** | `LIZARD_API_KEY`, `LIZARD_PROJECT_ID` | Lizard Sandboxes with native command streaming, files and authenticated port URLs |
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
@@ -110,10 +114,10 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Novita** | `NOVITA_API_KEY` | Cloud sandboxes with native command streaming, filesystem access, snapshots, and template builds |
 | **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
 | **Promigence** | `PROMIGENCE_API_KEY` | Production-grade sandboxes for AI agents, with filesystem and streaming output |
-| **Run Cloud** | `RUN_CLOUD_API_KEY` | Fast Firecracker microVM sandboxes with snapshots |
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
 | **Runtime** | `RUNTIME_API_KEY` | Firecracker microVM sandboxes with streaming, previews and snapshots |
 | **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
+| **sandbox-cli** | `SANDBOX_ENDPOINT`, `SANDBOX_TOKEN` | MicroVM sandboxes with their own kernel, one API on a Mac, a self-hosted Linux machine or the cloud |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
 | **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
 | **Tangle Sandbox** | `TANGLE_API_KEY`, `TANGLE_SANDBOX_BASE_URL` (optional) | Isolated Linux sandboxes with command execution and filesystem access |
@@ -309,10 +313,13 @@ npm install @computesdk/archil           # Archil provider
 npm install @computesdk/aws              # AWS providers (@computesdk/aws/ec2, @computesdk/aws/agentcore)
 npm install @computesdk/beam             # Beam provider
 npm install @computesdk/blaxel           # Blaxel provider
+npm install @computesdk/boat             # Boat Ubuntu cloud sandboxes
 npm install @computesdk/brezel           # Brezel provider
+npm install @computesdk/briq            # Briq provider
 npm install @computesdk/buddy            # Buddy provider
 npm install @computesdk/gcp              # Google Cloud providers (Cloud Run: @computesdk/gcp/cloud-run)
 npm install @computesdk/cloudflare       # Cloudflare provider
+npm install @computesdk/cocoonstack      # Cocoon Stack provider
 npm install @computesdk/codesandbox      # CodeSandbox provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/daytona          # Daytona provider
@@ -323,6 +330,7 @@ npm install @computesdk/givemeanode      # givemeanode provider
 npm install @computesdk/gravixlayer      # GravixLayer provider
 npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
+npm install @computesdk/kosa8            # kosa8 microVM sandboxes
 npm install @computesdk/lightning        # Lightning AI provider
 npm install @computesdk/lizard           # Lizard Sandboxes provider
 npm install @computesdk/modal            # Modal provider
@@ -333,10 +341,10 @@ npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/novita           # Novita Sandbox provider
 npm install @computesdk/platform         # ComputeSDK Platform hosted sandboxes (market or own keys)
 npm install @computesdk/promigence       # Promigence provider
-npm install @computesdk/run-cloud        # Run Cloud Firecracker sandbox provider
 npm install @computesdk/runloop          # Runloop provider
 npm install @computesdk/runtime          # Runtime provider
 npm install @computesdk/sail             # Sail provider
+npm install @computesdk/sandbox-cli      # sandbox-cli provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/superserve       # Superserve provider
 npm install @computesdk/tangle           # Tangle Sandbox provider
@@ -361,10 +369,13 @@ See individual provider READMEs for details:
 - **[@computesdk/aws](./packages/aws)** - AWS providers; `@computesdk/aws/ec2`: on-demand or Spot EC2 instances, commands over SSM Run Command; `@computesdk/aws/agentcore`: Bedrock AgentCore Code Interpreter sessions
 - **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
 - **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
+- **[@computesdk/boat](./packages/boat)** - Boat Ubuntu cloud sandboxes with reconnecting command streams, named snapshots/templates, signed file transfers, and HTTPS previews
 - **[@computesdk/brezel](./packages/brezel)** - Self-hosted Firecracker sandboxes with immutable environments
+- **[@computesdk/briq](./packages/briq)** - Sandboxes on microVMs with streaming commands, files, previews and interactive processes
 - **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
 - **[@computesdk/gcp](./packages/gcp)** - Google Cloud providers: Cloud Run sandboxes via `@computesdk/gcp/cloud-run`
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
+- **[@computesdk/cocoonstack](./packages/cocoonstack)** - Self-hosted microVM sandboxes served from warm pools by sandboxd
 - **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
@@ -373,6 +384,7 @@ See individual provider READMEs for details:
 - **[@computesdk/givemeanode](./packages/givemeanode)** - Very fast microVM sandboxes, from any container image
 - **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
 - **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
+- **[@computesdk/kosa8](./packages/kosa8)** - Sandboxes that each run in their own microVM with its own kernel, with sleep and wake
 - **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
 - **[@computesdk/lizard](./packages/lizard)** - Lizard Sandboxes with command streaming, files and authenticated port URLs
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
@@ -383,7 +395,6 @@ See individual provider READMEs for details:
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
 - **[@computesdk/platform](./packages/platform)** - ComputeSDK Platform hosted sandboxes: market placement or your own provider keys, one API and sandbox ID space
 - **[@computesdk/promigence](./packages/promigence)** - Production-grade sandboxes for AI agents, with filesystem and streaming output
-- **[@computesdk/run-cloud](./packages/run-cloud)** - Fast Firecracker microVM sandboxes with filesystem and snapshot support
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
 - **[@computesdk/runtime](./packages/runtime)** - Firecracker microVM sandboxes for AI agents, with native command streaming, private preview URLs and snapshots
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access

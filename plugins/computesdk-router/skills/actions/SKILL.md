@@ -1,6 +1,6 @@
 ---
 name: actions
-description: Work with the org's ComputeSDK Actions CI runs from ChatGPT — list connected repos and workflows, dispatch workflow runs, watch runs, read job logs, cancel and re-run. Use when the user asks about CI status, a failing run, or wants to kick off a workflow.
+description: Work with the org's ComputeSDK Actions CI runs — list connected repos and workflows, dispatch workflow runs, watch runs, read job logs, cancel and re-run. Use when the user asks about CI status, a failing run, or wants to kick off a workflow.
 ---
 
 # ComputeSDK Actions (CI)
@@ -46,6 +46,19 @@ A 403 is one of two things: `insufficient_scope` means the connection was
 authorized before `actions:write` existed — the user must reconnect the
 connector and re-consent; a permission message means the user isn't an org
 owner/admin — tell them, don't retry.
+
+## Setup and settings
+
+- `actions_list_installations` — connected GitHub accounts and repo counts. To
+  connect another, `actions_get_install_link` returns the Settings → Actions
+  page; the install is the user's to do. Slack works the same way
+  (`actions_get_slack`, `actions_get_slack_install_link`).
+- `actions_get_settings`, `actions_list_providers`, `actions_list_vault`
+  (names only, never values) — owners/admins only; changing settings is done
+  in the dashboard or `compute actions settings`.
+- `actions_poll_repo`, `actions_update_repo`, `actions_sync_repos` describe
+  the change until called with `confirm: true`; confirm with the user first.
+- `actions_get_run_state` — how a run was configured and placed, when asked why.
 
 ## Workflow details
 

@@ -185,6 +185,25 @@ const sandbox = await provider.sandbox.getById('blaxel-1234567890');
 await provider.sandbox.destroy('blaxel-1234567890');
 ```
 
+### Templates
+
+A template is a sandbox image in your workspace registry, built from any OCI image. Blaxel adds its sandbox API to the image while it builds; no sandbox runs during the build. Sandboxes then boot from the built image.
+
+```typescript
+// Build a template from a registry image (about 10-15 seconds for ubuntu:24.04)
+const template = await provider.template.create({ name: 'ubuntu-base', image: 'ubuntu:24.04' });
+console.log(template.id); // 'sandbox/ubuntu-base-<build hash>:<tag>'
+
+// Boot a sandbox from it
+const sandbox = await provider.sandbox.create({ templateId: template.id });
+
+// List and delete templates
+const templates = await provider.template.list();
+await provider.template.delete(template.id);
+```
+
+The registry image is named after the template plus a hash of its build, so each source image gets its own image. Blaxel reuses an identical earlier build, so a template keeps the base image it was first built from.
+
 ### Preview URLs
 
 > 📚 For a complete guide, see [Creating preview URLs & custom domains](https://docs.blaxel.ai/Sandboxes/Preview-url)

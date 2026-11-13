@@ -277,7 +277,9 @@ vi.mock('microsandbox', () => {
       },
     },
     Snapshot: {
-      builder: () => { throw new Error('not implemented in unit mock'); },
+      // Mimic a backend without snapshot support: the adapter treats an
+      // "unsupported" failure as its cue to use the disk-only fallback path.
+      builder: () => { throw new Error('unsupported: snapshot capture is not implemented in unit mock'); },
       list: async () => [],
       get: async () => { throw new Error('not implemented in unit mock'); },
       remove: async () => {},

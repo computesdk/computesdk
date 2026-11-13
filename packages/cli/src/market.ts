@@ -710,7 +710,7 @@ export function formatCredits(b: MarketCreditBalance): string {
   const lines = [`available  ${formatMoney(b.balanceMicroUsd / MICRO_USD)}`];
   if (b.holds.length > 0) {
     lines.push(
-      pc.dim(`reserved   ${formatMoney(b.heldMicroUsd / MICRO_USD)} across ${b.holds.length} running job${b.holds.length === 1 ? '' : 's'}`),
+      pc.dim(`reserved   ${formatMoney(b.heldMicroUsd / MICRO_USD)} across ${b.holds.length} running sandbox${b.holds.length === 1 ? '' : 'es'} or job${b.holds.length === 1 ? '' : 's'}`),
     );
   }
   return lines.join('\n');
@@ -751,8 +751,10 @@ export function formatPurchaseRow(p: MarketPurchase): string {
 // ─── Commands ───────────────────────────────────────────────────────────────
 
 export function registerMarketCommands(program: Command): void {
+  // Not generally available: registered for the orgs that use it, kept out
+  // of `compute --help`.
   const market = program
-    .command('market')
+    .command('market', { hidden: true })
     .description('Buy and sell compute capacity on the compute market')
     .configureOutput({ outputError: usageErrorOutput });
 
@@ -1178,7 +1180,7 @@ export function registerMarketCommands(program: Command): void {
       }>('/api/v1/billing/ledger', { limit: opts.limit, cursor: opts.cursor });
       output(opts, page, (p) => {
         if (p.entries.length === 0) {
-          console.log('No credit activity yet — add credits with `compute market topup`.');
+          console.log('No credit activity yet — add credit with `compute credits topup <usd>`.');
           return;
         }
         for (const entry of p.entries) console.log(formatLedgerRow(entry));

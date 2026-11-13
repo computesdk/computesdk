@@ -1,0 +1,3071 @@
+{
+  "schemaVersion": 1,
+  "bin": "compute",
+  "package": "@computesdk/cli",
+  "version": "2.6.10",
+  "source": {
+    "repo": "computesdk/computesdk",
+    "released": false
+  },
+  "globalFlags": [
+    "--version",
+    "--login",
+    "--logout",
+    "--org",
+    "--help"
+  ],
+  "commands": [
+    {
+      "path": [
+        "providers"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "List all providers and their configuration status"
+    },
+    {
+      "path": [
+        "login"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--base-url",
+        "--help"
+      ],
+      "summary": "Authenticate with ComputeSDK (OAuth device flow)"
+    },
+    {
+      "path": [
+        "logout"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--json",
+        "--help"
+      ],
+      "summary": "Clear stored credentials"
+    },
+    {
+      "path": [
+        "org"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Manage the active organization, its members and invitations"
+    },
+    {
+      "path": [
+        "org",
+        "list"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--json",
+        "--help"
+      ],
+      "summary": "List your organizations"
+    },
+    {
+      "path": [
+        "org",
+        "use"
+      ],
+      "aliases": [],
+      "args": [
+        "<slug>"
+      ],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Set the active organization (persisted to the stored login)"
+    },
+    {
+      "path": [
+        "org",
+        "current"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--base-url",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the current user and active organization"
+    },
+    {
+      "path": [
+        "org",
+        "members"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List the organization's members with their roles"
+    },
+    {
+      "path": [
+        "org",
+        "invitations"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List the organization's pending invitations with their links (owner/admin)"
+    },
+    {
+      "path": [
+        "org",
+        "invitations",
+        "cancel"
+      ],
+      "aliases": [],
+      "args": [
+        "<invitationId>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Cancel a pending invitation; its link stops working (owner/admin)"
+    },
+    {
+      "path": [
+        "org",
+        "invite"
+      ],
+      "aliases": [],
+      "args": [
+        "<email>"
+      ],
+      "flags": [
+        "--role",
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Invite someone to the organization by email and print the invite link (owner/admin)"
+    },
+    {
+      "path": [
+        "org",
+        "member"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Change a member's role or remove a member (owner/admin)"
+    },
+    {
+      "path": [
+        "org",
+        "member",
+        "set-role"
+      ],
+      "aliases": [],
+      "args": [
+        "<member>",
+        "<role>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Change a member's role between member and admin (owner roles change in the web app)"
+    },
+    {
+      "path": [
+        "org",
+        "member",
+        "remove"
+      ],
+      "aliases": [
+        [
+          "org",
+          "member",
+          "rm"
+        ]
+      ],
+      "args": [
+        "<member>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Remove a member from the organization (owners are removed in the web app)"
+    },
+    {
+      "path": [
+        "org",
+        "leave"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Leave the organization (needs a user login; the last owner cannot leave)"
+    },
+    {
+      "path": [
+        "whoami"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--base-url",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the current user and active organization"
+    },
+    {
+      "path": [
+        "invitations"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Your pending invitations to other organizations (needs a user login)"
+    },
+    {
+      "path": [
+        "invitations",
+        "show"
+      ],
+      "aliases": [],
+      "args": [
+        "<invitationId>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show one of your invitations"
+    },
+    {
+      "path": [
+        "invitations",
+        "accept"
+      ],
+      "aliases": [],
+      "args": [
+        "<invitationId>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Accept an invitation and join its organization (no confirmation)"
+    },
+    {
+      "path": [
+        "invitations",
+        "decline"
+      ],
+      "aliases": [],
+      "args": [
+        "<invitationId>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Decline an invitation"
+    },
+    {
+      "path": [
+        "actions"
+      ],
+      "aliases": [
+        [
+          "ci"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Drive the benchmarks-platform Actions API"
+    },
+    {
+      "path": [
+        "actions",
+        "dispatch"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "dispatch"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--workflow",
+        "--ref",
+        "--inputs",
+        "--manual",
+        "--provider",
+        "--provider-region",
+        "--with-changes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Dispatch a workflow_dispatch run (or any workflow with --manual)"
+    },
+    {
+      "path": [
+        "actions",
+        "runs"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "runs"
+        ]
+      ],
+      "args": [
+        "[repo]"
+      ],
+      "flags": [
+        "--status",
+        "--branch",
+        "--event",
+        "--workflow",
+        "--search",
+        "--archived",
+        "--reliability",
+        "--day",
+        "--time-zone",
+        "--cursor",
+        "--all",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List recent runs (every repo, or one), or one day's runs with --day"
+    },
+    {
+      "path": [
+        "actions",
+        "runs",
+        "days"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "runs",
+          "days"
+        ]
+      ],
+      "args": [
+        "[repo]"
+      ],
+      "flags": [
+        "--status",
+        "--branch",
+        "--event",
+        "--workflow",
+        "--search",
+        "--archived",
+        "--reliability",
+        "--time-zone",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "How many runs each day holds, newest first (same filters as runs)"
+    },
+    {
+      "path": [
+        "actions",
+        "runs",
+        "archive"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "runs",
+          "archive"
+        ]
+      ],
+      "args": [
+        "<run-id...>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Archive runs: hide them from run lists and counts, still reachable by id (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "runs",
+        "unarchive"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "runs",
+          "unarchive"
+        ]
+      ],
+      "args": [
+        "<run-id...>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Restore archived runs to the run lists (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "workflows"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "workflows"
+        ]
+      ],
+      "args": [
+        "[repo]"
+      ],
+      "flags": [
+        "--all",
+        "--ref",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List workflows with their controls (every repo, or one); --all adds disabled ones, --ref the files only a branch has"
+    },
+    {
+      "path": [
+        "actions",
+        "workflows",
+        "enable"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "workflows",
+          "enable"
+        ]
+      ],
+      "args": [
+        "<repo>",
+        "<workflow>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Turn a workflow back on (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "workflows",
+        "disable"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "workflows",
+          "disable"
+        ]
+      ],
+      "args": [
+        "<repo>",
+        "<workflow>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Turn a workflow off: no pushes, schedules or dispatches run it until enabled (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "workflows",
+        "set"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "workflows",
+          "set"
+        ]
+      ],
+      "args": [
+        "<repo>",
+        "<workflow>"
+      ],
+      "flags": [
+        "--order",
+        "--inherit-order",
+        "--snapshot-cap",
+        "--dynamic-snapshots",
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Set a workflow's provider order and snapshot cap (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "schedule"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "schedule"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--reliability",
+        "--from",
+        "--to",
+        "--repo",
+        "--workflow",
+        "--event",
+        "--status",
+        "--tz",
+        "--limit",
+        "--cursor",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List upcoming scheduled fires and past runs in a time window"
+    },
+    {
+      "path": [
+        "actions",
+        "history"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "history"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--workflow",
+        "--branch",
+        "--job",
+        "--limit",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Recent run history for a workflow — per-job/step failure rates (is this failure flaky?)"
+    },
+    {
+      "path": [
+        "actions",
+        "run"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "run"
+        ]
+      ],
+      "args": [
+        "<run-id>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show a run: jobs, provider:region placement, placement attempts"
+    },
+    {
+      "path": [
+        "actions",
+        "summary"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "summary"
+        ]
+      ],
+      "args": [
+        "<run-id>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show a run's failure digest: failed jobs, failed steps, bounded log tails"
+    },
+    {
+      "path": [
+        "actions",
+        "benchmarks"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "benchmarks"
+        ]
+      ],
+      "args": [
+        "<run-id>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the benchmark runs this run produced: per-provider score and success rate"
+    },
+    {
+      "path": [
+        "actions",
+        "inspect"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "inspect"
+        ]
+      ],
+      "args": [
+        "<run-id>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Inspect a run: resolved runner image, caches, secret names, concurrency, placement context"
+    },
+    {
+      "path": [
+        "actions",
+        "logs"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "logs"
+        ]
+      ],
+      "args": [
+        "<run-id>"
+      ],
+      "flags": [
+        "--job",
+        "--step",
+        "--follow",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Print or follow a run's job logs"
+    },
+    {
+      "path": [
+        "actions",
+        "providers"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "providers"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List the providers Actions can place on (order, act/usable, key status); keys and rates: compute byok"
+    },
+    {
+      "path": [
+        "actions",
+        "providers",
+        "configure"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "providers",
+          "configure"
+        ]
+      ],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--key",
+        "--field",
+        "--verify",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Deprecated: use `compute byok configure`. Save the org's credential for a provider (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "providers",
+        "verify"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "providers",
+          "verify"
+        ]
+      ],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Deprecated: use `compute byok verify`. Probe the stored provider key with a real sandbox"
+    },
+    {
+      "path": [
+        "actions",
+        "providers",
+        "remove"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "providers",
+          "remove"
+        ]
+      ],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Deprecated: use `compute byok remove`. Delete the org's stored credential for a provider"
+    },
+    {
+      "path": [
+        "actions",
+        "repos"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List the org's connected repositories: run counts, last run and next poll"
+    },
+    {
+      "path": [
+        "actions",
+        "repos",
+        "connect"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos",
+          "connect"
+        ]
+      ],
+      "args": [
+        "<cloneUrl>"
+      ],
+      "flags": [
+        "--name",
+        "--branch",
+        "--token",
+        "--username",
+        "--ssh-key-file",
+        "--known-hosts-file",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Connect a git remote (validated by a real ls-remote; lands enabled)"
+    },
+    {
+      "path": [
+        "actions",
+        "repos",
+        "sync"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos",
+          "sync"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Re-read the GitHub App installation so repos granted after install show up (owner/admin key)"
+    },
+    {
+      "path": [
+        "actions",
+        "repos",
+        "enable"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos",
+          "enable"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--repo-id",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Enable a repo the org can already see (granted by a GitHub App install, or a connected remote)"
+    },
+    {
+      "path": [
+        "actions",
+        "repos",
+        "disable"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos",
+          "disable"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--repo-id",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Disable a repo — it stays connected but no runs are scheduled"
+    },
+    {
+      "path": [
+        "actions",
+        "repos",
+        "poll"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos",
+          "poll"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--repo-id",
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Poll a repo now: fetch its refs and start the runs new commits call for (owner/admin; at most every 30 s)"
+    },
+    {
+      "path": [
+        "actions",
+        "repos",
+        "set"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "repos",
+          "set"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--fork-prs",
+        "--repo-id",
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Change a repo's settings: whether pull requests from forks run CI (owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "branches"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "branches"
+        ]
+      ],
+      "args": [
+        "<repo>"
+      ],
+      "flags": [
+        "--search",
+        "--archived",
+        "--repo-id",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List a repo's refs: watched branches and pull requests, then refs with run history only"
+    },
+    {
+      "path": [
+        "actions",
+        "installations"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "installations"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List the org's GitHub App installations (account, repo selection and counts, suspension)"
+    },
+    {
+      "path": [
+        "actions",
+        "installations",
+        "install-url"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "installations",
+          "install-url"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Print where an owner/admin installs the GitHub App into another account"
+    },
+    {
+      "path": [
+        "actions",
+        "slack"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "slack"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the org's Slack connection (workspace, channel, notify rule, daily brief; owner/admin)"
+    },
+    {
+      "path": [
+        "actions",
+        "slack",
+        "install-url"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "slack",
+          "install-url"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Print where an owner/admin connects a Slack workspace"
+    },
+    {
+      "path": [
+        "actions",
+        "vault"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "vault"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "The org vault: secrets and variables (owner/admin key)"
+    },
+    {
+      "path": [
+        "actions",
+        "vault",
+        "ls"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "vault",
+          "ls"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--repo",
+        "--kind",
+        "--help"
+      ],
+      "summary": "List names and metadata (never values)"
+    },
+    {
+      "path": [
+        "actions",
+        "vault",
+        "set"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "vault",
+          "set"
+        ]
+      ],
+      "args": [
+        "<name>"
+      ],
+      "flags": [
+        "--from-file",
+        "--revealable",
+        "--description",
+        "--labels",
+        "--proxy",
+        "--inject",
+        "--hosts",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--repo",
+        "--kind",
+        "--help"
+      ],
+      "summary": "Store a value, read from stdin (or --from-file) and sent exactly as read"
+    },
+    {
+      "path": [
+        "actions",
+        "vault",
+        "get"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "vault",
+          "get"
+        ]
+      ],
+      "args": [
+        "<name>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--repo",
+        "--kind",
+        "--help"
+      ],
+      "summary": "Print a value: any variable, or a secret created --revealable"
+    },
+    {
+      "path": [
+        "actions",
+        "vault",
+        "delivery"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "vault",
+          "delivery"
+        ]
+      ],
+      "args": [
+        "<name>"
+      ],
+      "flags": [
+        "--proxy",
+        "--inject",
+        "--hosts",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--repo",
+        "--kind",
+        "--help"
+      ],
+      "summary": "Reclassify how a secret reaches a job — labels only, no value needed"
+    },
+    {
+      "path": [
+        "actions",
+        "vault",
+        "rm"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "vault",
+          "rm"
+        ]
+      ],
+      "args": [
+        "<name>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--repo",
+        "--kind",
+        "--help"
+      ],
+      "summary": "Delete an item (with --repo, only the repo's override)"
+    },
+    {
+      "path": [
+        "actions",
+        "cancel"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "cancel"
+        ]
+      ],
+      "args": [
+        "<run-id>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Cancel a run"
+    },
+    {
+      "path": [
+        "actions",
+        "rerun"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "rerun"
+        ]
+      ],
+      "args": [
+        "<run-id>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Re-run a finished run at the same commit"
+    },
+    {
+      "path": [
+        "actions",
+        "artifacts"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "artifacts"
+        ]
+      ],
+      "args": [
+        "<run-id>"
+      ],
+      "flags": [
+        "--job",
+        "--out",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List or download a run's artifacts"
+    },
+    {
+      "path": [
+        "actions",
+        "settings"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "settings"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the Actions router: managed routing, BYOK use, sizes and pools"
+    },
+    {
+      "path": [
+        "actions",
+        "settings",
+        "set"
+      ],
+      "aliases": [
+        [
+          "ci",
+          "settings",
+          "set"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--routing",
+        "--byok",
+        "--byok-order",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--resources",
+        "--warm-pool",
+        "--snapshot-pool",
+        "--help"
+      ],
+      "summary": "Change the Actions router (owner/admin)"
+    },
+    {
+      "path": [
+        "byok"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "The org's BYOK providers: their keys and custom rates, shared by Actions and sandboxes"
+    },
+    {
+      "path": [
+        "byok",
+        "list"
+      ],
+      "aliases": [
+        [
+          "byok",
+          "ls"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Every provider the org may bring a key for, with key state and rate"
+    },
+    {
+      "path": [
+        "byok",
+        "show"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "One provider's key state, platform rate and custom rate"
+    },
+    {
+      "path": [
+        "byok",
+        "configure"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--key",
+        "--field",
+        "--verify",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Save the org's key for a provider; untested until verified (owner/admin)"
+    },
+    {
+      "path": [
+        "byok",
+        "verify"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Test the stored key by placing a real sandbox with it (\"Test\" in Settings; owner/admin)"
+    },
+    {
+      "path": [
+        "byok",
+        "remove"
+      ],
+      "aliases": [
+        [
+          "byok",
+          "rm"
+        ]
+      ],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Delete the org's stored key for a provider; nothing places on it until a new key passes (owner/admin)"
+    },
+    {
+      "path": [
+        "byok",
+        "rate"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Custom rates: report sandbox costs at your own price. Reporting only; billing is unchanged"
+    },
+    {
+      "path": [
+        "byok",
+        "rate",
+        "set"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>",
+        "<usd>"
+      ],
+      "flags": [
+        "--per",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Report a provider's sandbox costs at your own rate, e.g. what you pay it (owner/admin). Doesn't change what you're billed"
+    },
+    {
+      "path": [
+        "byok",
+        "rate",
+        "clear"
+      ],
+      "aliases": [],
+      "args": [
+        "<provider>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Drop a provider's custom rate; its costs report at the platform rate again (owner/admin)"
+    },
+    {
+      "path": [
+        "credits"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Your prepaid credit — managed accounts bill from it: balance, ledger, top-ups"
+    },
+    {
+      "path": [
+        "credits",
+        "ledger"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--limit",
+        "--cursor",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Credit history, newest first: top-ups, grants, holds, charges, refunds"
+    },
+    {
+      "path": [
+        "credits",
+        "topup"
+      ],
+      "aliases": [],
+      "args": [
+        "<usd>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Add credit — prints a Stripe checkout link to pay in your browser (owner/admin)"
+    },
+    {
+      "path": [
+        "instances"
+      ],
+      "aliases": [
+        [
+          "sandboxes"
+        ],
+        [
+          "sbx"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Create and drive compute instances through the platform"
+    },
+    {
+      "path": [
+        "instances",
+        "create"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "create"
+        ],
+        [
+          "sbx",
+          "create"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--provider",
+        "--byok",
+        "--managed",
+        "--size",
+        "--label",
+        "--image",
+        "--snapshot-id",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--timeout-ms",
+        "--secret",
+        "--no-use",
+        "--quiet",
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Create a sandbox through your Sandboxes router (`compute sandboxes route` shows where it lands)"
+    },
+    {
+      "path": [
+        "instances",
+        "options"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "options"
+        ],
+        [
+          "sbx",
+          "options"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List what you can create sandboxes on: managed accounts with prices per size, and your BYOK providers, in router order"
+    },
+    {
+      "path": [
+        "instances",
+        "route"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "route"
+        ],
+        [
+          "sbx",
+          "route"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--size",
+        "--provider",
+        "--byok",
+        "--managed",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--region",
+        "--timeout-ms",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show where a sandbox create would land, how it is billed, and the price — creates nothing"
+    },
+    {
+      "path": [
+        "instances",
+        "list"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "list"
+        ],
+        [
+          "sbx",
+          "list"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--status",
+        "--customer-only",
+        "--search",
+        "--sort",
+        "--direction",
+        "--limit",
+        "--cursor",
+        "--quiet",
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List sandboxes"
+    },
+    {
+      "path": [
+        "instances",
+        "get"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "get"
+        ],
+        [
+          "sbx",
+          "get"
+        ]
+      ],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show one sandbox (includes the BYOK attach descriptor)"
+    },
+    {
+      "path": [
+        "instances",
+        "use"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "use"
+        ],
+        [
+          "sbx",
+          "use"
+        ]
+      ],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--clear",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show or set this directory's current instance (COMPUTE_INSTANCE always wins)"
+    },
+    {
+      "path": [
+        "instances",
+        "destroy"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "destroy"
+        ],
+        [
+          "sbx",
+          "destroy"
+        ]
+      ],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Destroy a sandbox (verified teardown + cost settle)"
+    },
+    {
+      "path": [
+        "instances",
+        "run"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "run"
+        ],
+        [
+          "sbx",
+          "run"
+        ]
+      ],
+      "args": [
+        "[command...]"
+      ],
+      "flags": [
+        "--provider",
+        "--byok",
+        "--managed",
+        "--size",
+        "--label",
+        "--image",
+        "--snapshot-id",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--timeout-ms",
+        "--secret",
+        "--keep",
+        "--detach",
+        "--yes",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Create an instance, run a command on it, and tear it down. `run -- <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately."
+    },
+    {
+      "path": [
+        "instances",
+        "serve"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "serve"
+        ],
+        [
+          "sbx",
+          "serve"
+        ]
+      ],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--port",
+        "--cwd",
+        "--env",
+        "--timeout-ms",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Start a server, wait for its port to listen publicly, and print the URL"
+    },
+    {
+      "path": [
+        "instances",
+        "exec"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "exec"
+        ],
+        [
+          "sbx",
+          "exec"
+        ]
+      ],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--cwd",
+        "--env",
+        "--timeout-ms",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Run a one-shot command and print its result (options before the command; -- also works)"
+    },
+    {
+      "path": [
+        "instances",
+        "spawn"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "spawn"
+        ],
+        [
+          "sbx",
+          "spawn"
+        ]
+      ],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--cwd",
+        "--env",
+        "--stdin",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Start a detached process that outlives this request (options before the command; -- also works)"
+    },
+    {
+      "path": [
+        "instances",
+        "ps"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "ps"
+        ],
+        [
+          "sbx",
+          "ps"
+        ]
+      ],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List the sandbox's tracked processes"
+    },
+    {
+      "path": [
+        "instances",
+        "logs"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "logs"
+        ],
+        [
+          "sbx",
+          "logs"
+        ]
+      ],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--follow",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show a process's buffered output (--follow streams until exit)"
+    },
+    {
+      "path": [
+        "instances",
+        "wait"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "wait"
+        ],
+        [
+          "sbx",
+          "wait"
+        ]
+      ],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--timeout-ms",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Block until a process exits"
+    },
+    {
+      "path": [
+        "instances",
+        "kill"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "kill"
+        ],
+        [
+          "sbx",
+          "kill"
+        ]
+      ],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--signal",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Signal a process (default SIGTERM)"
+    },
+    {
+      "path": [
+        "instances",
+        "stdin"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "stdin"
+        ],
+        [
+          "sbx",
+          "stdin"
+        ]
+      ],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--data",
+        "--file",
+        "--base64",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Write to a process's stdin pipe (spawn with --stdin; --data, --file, or piped)"
+    },
+    {
+      "path": [
+        "instances",
+        "close-stdin"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "close-stdin"
+        ],
+        [
+          "sbx",
+          "close-stdin"
+        ]
+      ],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Close a process's stdin pipe"
+    },
+    {
+      "path": [
+        "instances",
+        "ls"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "ls"
+        ],
+        [
+          "sbx",
+          "ls"
+        ]
+      ],
+      "args": [
+        "[pathOrSandboxId]",
+        "[path]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List a directory (or stat a path) inside the sandbox"
+    },
+    {
+      "path": [
+        "instances",
+        "cat"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "cat"
+        ],
+        [
+          "sbx",
+          "cat"
+        ]
+      ],
+      "args": [
+        "[pathOrSandboxId]",
+        "[path]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Print a file's contents"
+    },
+    {
+      "path": [
+        "instances",
+        "write"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "write"
+        ],
+        [
+          "sbx",
+          "write"
+        ]
+      ],
+      "args": [
+        "[pathOrSandboxId]",
+        "[path]"
+      ],
+      "flags": [
+        "--content",
+        "--file",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Write a file inside the sandbox (--content or --file <local>, else stdin)"
+    },
+    {
+      "path": [
+        "instances",
+        "mkdir"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "mkdir"
+        ],
+        [
+          "sbx",
+          "mkdir"
+        ]
+      ],
+      "args": [
+        "[pathOrSandboxId]",
+        "[path]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Create a directory (parents included)"
+    },
+    {
+      "path": [
+        "instances",
+        "rm"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "rm"
+        ],
+        [
+          "sbx",
+          "rm"
+        ]
+      ],
+      "args": [
+        "[pathOrSandboxId]",
+        "[path]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Remove a file or directory inside the sandbox"
+    },
+    {
+      "path": [
+        "instances",
+        "cp"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "cp"
+        ],
+        [
+          "sbx",
+          "cp"
+        ]
+      ],
+      "args": [
+        "<src>",
+        "<dst>"
+      ],
+      "flags": [
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Copy files/dirs between here and an instance — remote side is [id:]/abs/path"
+    },
+    {
+      "path": [
+        "instances",
+        "url"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "url"
+        ],
+        [
+          "sbx",
+          "url"
+        ]
+      ],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--port",
+        "--protocol",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Resolve the provider's public URL for a port"
+    },
+    {
+      "path": [
+        "instances",
+        "snapshots"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "snapshots"
+        ],
+        [
+          "sbx",
+          "snapshots"
+        ]
+      ],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List the sandbox's snapshots"
+    },
+    {
+      "path": [
+        "instances",
+        "snapshot"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "snapshot"
+        ],
+        [
+          "sbx",
+          "snapshot"
+        ]
+      ],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--label",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Snapshot a running sandbox through its provider"
+    },
+    {
+      "path": [
+        "instances",
+        "snapshot-delete"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "snapshot-delete"
+        ],
+        [
+          "sbx",
+          "snapshot-delete"
+        ]
+      ],
+      "args": [
+        "[snapOrSandboxId]",
+        "[snapshotId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Delete a snapshot's provider artifact"
+    },
+    {
+      "path": [
+        "instances",
+        "settings"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "settings"
+        ],
+        [
+          "sbx",
+          "settings"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the Sandboxes router: managed routing, BYOK use, sizes and pools"
+    },
+    {
+      "path": [
+        "instances",
+        "settings",
+        "set"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "settings",
+          "set"
+        ],
+        [
+          "sbx",
+          "settings",
+          "set"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--routing",
+        "--byok",
+        "--byok-order",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--resources",
+        "--warm-pool",
+        "--help"
+      ],
+      "summary": "Change the Sandboxes router (owner/admin)"
+    },
+    {
+      "path": [
+        "instances",
+        "costs"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "costs"
+        ],
+        [
+          "sbx",
+          "costs"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--customer-only",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the org's sandbox spend: running, settled and per provider"
+    },
+    {
+      "path": [
+        "new"
+      ],
+      "aliases": [],
+      "args": [
+        "[providers...]"
+      ],
+      "flags": [
+        "--provider",
+        "--byok",
+        "--managed",
+        "--size",
+        "--label",
+        "--image",
+        "--snapshot-id",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--timeout-ms",
+        "--secret",
+        "--no-use",
+        "--quiet",
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--list",
+        "--help"
+      ],
+      "summary": "Create a sandbox (short for `compute sandboxes create`); `compute new vercel` or `--vercel` picks the provider"
+    },
+    {
+      "path": [
+        "agents"
+      ],
+      "aliases": [
+        [
+          "ag"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Managed agents: durable agent configs running sessions in routed sandboxes"
+    },
+    {
+      "path": [
+        "agents",
+        "list"
+      ],
+      "aliases": [
+        [
+          "agents",
+          "ls"
+        ],
+        [
+          "ag",
+          "list"
+        ],
+        [
+          "ag",
+          "ls"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "List agents"
+    },
+    {
+      "path": [
+        "agents",
+        "create"
+      ],
+      "aliases": [
+        [
+          "ag",
+          "create"
+        ]
+      ],
+      "args": [
+        "<name>"
+      ],
+      "flags": [
+        "--prompt",
+        "--prompt-file",
+        "--harness",
+        "--model",
+        "--secret",
+        "--order",
+        "--volume-disk",
+        "--volume-path",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Create an agent (prompt via --prompt or --prompt-file)"
+    },
+    {
+      "path": [
+        "agents",
+        "describe"
+      ],
+      "aliases": [
+        [
+          "agents",
+          "get"
+        ],
+        [
+          "ag",
+          "describe"
+        ],
+        [
+          "ag",
+          "get"
+        ]
+      ],
+      "args": [
+        "<ref>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show one agent (id or name)"
+    },
+    {
+      "path": [
+        "agents",
+        "update"
+      ],
+      "aliases": [
+        [
+          "ag",
+          "update"
+        ]
+      ],
+      "args": [
+        "<ref>"
+      ],
+      "flags": [
+        "--name",
+        "--prompt",
+        "--prompt-file",
+        "--harness",
+        "--model",
+        "--secret",
+        "--clear-secrets",
+        "--order",
+        "--volume-disk",
+        "--volume-path",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Update an agent's config"
+    },
+    {
+      "path": [
+        "agents",
+        "delete"
+      ],
+      "aliases": [
+        [
+          "agents",
+          "rm"
+        ],
+        [
+          "ag",
+          "delete"
+        ],
+        [
+          "ag",
+          "rm"
+        ]
+      ],
+      "args": [
+        "<ref>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Delete an agent and stop its live sessions"
+    },
+    {
+      "path": [
+        "agents",
+        "sessions"
+      ],
+      "aliases": [
+        [
+          "ag",
+          "sessions"
+        ]
+      ],
+      "args": [
+        "<ref>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "List an agent's sessions"
+    },
+    {
+      "path": [
+        "agents",
+        "run"
+      ],
+      "aliases": [
+        [
+          "ag",
+          "run"
+        ]
+      ],
+      "args": [
+        "<ref>",
+        "[message]"
+      ],
+      "flags": [
+        "--resume",
+        "--size",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Start a session on a routed sandbox and optionally send a first message"
+    },
+    {
+      "path": [
+        "agents",
+        "session"
+      ],
+      "aliases": [
+        [
+          "ag",
+          "session"
+        ]
+      ],
+      "args": [
+        "<sessionId>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show one session"
+    },
+    {
+      "path": [
+        "agents",
+        "send"
+      ],
+      "aliases": [
+        [
+          "ag",
+          "send"
+        ]
+      ],
+      "args": [
+        "<sessionId>",
+        "<message>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Send a message; the agent runs a turn"
+    },
+    {
+      "path": [
+        "agents",
+        "events"
+      ],
+      "aliases": [
+        [
+          "ag",
+          "events"
+        ]
+      ],
+      "args": [
+        "<sessionId>"
+      ],
+      "flags": [
+        "--after",
+        "--follow",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Show the session event journal; --follow polls for new events"
+    },
+    {
+      "path": [
+        "agents",
+        "stop"
+      ],
+      "aliases": [
+        [
+          "ag",
+          "stop"
+        ]
+      ],
+      "args": [
+        "<sessionId>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Stop a session and release its sandbox"
+    }
+  ],
+  "passthrough": {
+    "bench": {
+      "path": [
+        "bench"
+      ],
+      "aliases": [
+        [
+          "benchmark"
+        ]
+      ],
+      "runner": {
+        "package": "@benchsdk/runner",
+        "version": "0.8.6"
+      },
+      "cli": {
+        "package": "@benchsdk/cli",
+        "version": "0.9.5"
+      }
+    }
+  }
+}

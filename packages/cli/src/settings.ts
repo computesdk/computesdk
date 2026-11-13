@@ -1,19 +1,22 @@
 /**
- * `compute sandboxes settings` / `compute actions settings` — the org's
- * routing policy for one consumer lane over `GET/PATCH /api/v1/{lane}/settings`.
- * Both lanes print the same shape and take the same flags; the sandbox lane
- * adds the inherit semantics (its order/cap/order type fall back to the
- * Actions values when unset).
+ * `compute sandboxes settings` / `compute actions settings` — one lane's
+ * router. Routing is ComputeSDK's managed accounts: the default routing, or
+ * the org's own managed order (`--routing`). BYOK is separate: whether the
+ * org's own keys are used (`--byok off|first|fallback|only`) and in what
+ * order (`--byok-order`), over `GET/PATCH /api/v1/{lane}/routing`. Sizes
+ * and pools stay on `GET/PATCH /api/v1/{lane}/settings`. Keys themselves are
+ * `compute byok`.
  *
  * `--cap`/`--general-cap` prices use the same parser as `--max-price` — a
  * unit is required (`0.12/hour`), so a bare dollar amount never silently
  * becomes per-second pricing.
  */
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import pc from 'picocolors';
-import { ActionsApiError, type ActionsClient } from './actions-client.js';
-import { formatUsdPer } from './rate-display.js';
+import { ActionsApiError, ActionsCliError, type ActionsClient } from './actions-client.js';
+
+import { safeTerm } from './term.js';
 import type { CommonOpts } from './actions.js';
 
 /**
@@ -28,7 +31,7 @@ export interface SettingsDeps {
   usageErrorOutput: (str: string, write: (str: string) => void, argv?: string[]) => void;
 }
 
-export const PLATFORM_SIZES = ['small', 'medium', 'large', 'xlarge'] as const;
+export const PLATFORM_SIZES = ['small', 'medium', 'large', 'xlarge', '2xlarge', '3xlarge'] as const;
 
 type Rate = { usd: number; per: string };
 
@@ -47,8 +50,19 @@ export interface LaneSettings {
     string,
     { cpus?: number; memoryMb?: number; ephemeralDiskMb?: number }
   >;
+  /** Preset name matching each providerResources entry, when one does. */
+  providerResourcePresets?: Record<string, string | null>;
   warmPool?: Record<string, number>;
   snapshotPool?: Record<string, number>;
+  /** Actions lane: the order an org with no providerOrder stored places on. */
+  defaultProviderOrder?: string[];
+  /** Actions lane: each provider's size presets, the names --resources takes. */
+  sizePresets?: Record<string, { name: string; label: string }[]>;
+  /** Actions lane: which workflows cap snapshots and which hold live ones. */
+  snapshotSummary?: {
+    workflows: { repoFullName: string; path: string; name: string; snapshotCap: number | null }[];
+    live: { repoFullName: string; workflowPath: string | null; count: number }[];
+  };
 }
 
 /**
@@ -107,49 +121,121 @@ function parseSizeCap(entry: string): { size: string; cap: Rate | null } {
   return { size, cap };
 }
 
-const fmtRate = (cap: Rate | null | undefined): string =>
-  cap ? formatUsdPer(cap) : '—';
+/** Mirrors MAX_WARM_POOL_SIZE in benchmarks-platform lib/providers/org-settings.ts. */
+export const MAX_WARM_POOL_SIZE = 16;
 
-const fmtRef = (ref: Rate | null | undefined): string =>
-  ref ? `  ${pc.dim(`reference ${formatUsdPer(ref)}`)}` : '';
+/** Mirrors MAX_SNAPSHOT_POOL_SIZE in benchmarks-platform lib/providers/org-settings.ts. */
+export const MAX_SNAPSHOT_POOL_SIZE = 32;
 
-export function printLaneSettings(
-  s: LaneSettings,
-  lane: 'actions' | 'sandboxes',
-): void {
-  const sandbox = lane === 'sandboxes';
-  const orderType = s.marketOrderType ?? (sandbox ? 'inherit' : '—');
-  const orderSuffix =
-    sandbox && s.marketOrderType == null
-      ? pc.dim(`  (Actions: ${s.actionsMarketOrderType ?? '—'})`)
-      : '';
-  console.log(`order type: ${orderType}${orderSuffix}`);
-  const capSuffix =
-    sandbox && s.marketCap == null
-      ? pc.dim(`  (inherits Actions: ${fmtRate(s.actionsMarketCap)})`)
-      : '';
-  console.log(`general cap: ${fmtRate(s.marketCap)}${capSuffix}`);
-  console.log('per-size caps:');
-  for (const size of PLATFORM_SIZES) {
-    const cap = s.marketCaps?.[size];
-    console.log(
-      `  ${size.padEnd(7)} ${fmtRate(cap)}${cap ? '' : fmtRef(s.referencePrices?.[size])}`,
+/** One `<provider>=<preset>` or `<provider>=none` `--resources` value; the server checks the names. */
+export function parseResourcesFlag(entry: string): { provider: string; preset: string | null } {
+  const eq = entry.indexOf('=');
+  const provider = eq === -1 ? '' : entry.slice(0, eq).trim();
+  const preset = eq === -1 ? '' : entry.slice(eq + 1).trim();
+  if (provider === '' || preset === '') {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Invalid --resources "${entry}" — expected <provider>=<preset> (e.g. blaxel=large) or <provider>=none.`,
     );
   }
-  const orderText =
-    s.providerOrder.length > 0
-      ? s.providerOrder.join(', ')
-      : sandbox
-        ? pc.dim(`inherit (Actions: ${(s.actionsProviderOrder ?? []).join(', ') || '—'})`)
-        : '—';
-  console.log(`provider order: ${orderText}`);
+  return { provider, preset: preset === 'none' ? null : preset };
+}
+
+/** One `<provider[:region]>=<n>` pool-flag value, n in 0..max (0 clears the entry). */
+function parsePoolFlag(flag: string, entry: string, max: number): { key: string; size: number } {
+  const eq = entry.indexOf('=');
+  const key = eq === -1 ? '' : entry.slice(0, eq).trim();
+  const value = eq === -1 ? '' : entry.slice(eq + 1).trim();
+  const size = Number(value);
+  if (key === '' || !/^\d+$/.test(value) || size > max) {
+    throw new ActionsCliError(
+      'invalid_argument',
+      `Invalid ${flag} "${entry}" — expected <provider>[:<region>]=<n> with n in 0..${max} (0 clears it).`,
+    );
+  }
+  return { key, size };
+}
+
+/** One `<provider[:region]>=<n>` `--warm-pool` value, n in 0..16 (0 clears the entry). */
+export function parseWarmPoolFlag(entry: string): { key: string; size: number } {
+  return parsePoolFlag('--warm-pool', entry, MAX_WARM_POOL_SIZE);
+}
+
+/** One `<provider[:region]>=<n>` `--snapshot-pool` value, n in 0..32 (0 clears the entry). */
+export function parseSnapshotPoolFlag(entry: string): { key: string; size: number } {
+  return parsePoolFlag('--snapshot-pool', entry, MAX_SNAPSHOT_POOL_SIZE);
+}
+
+/** Repeated pool flags as the settings patch: entry → size. */
+function poolPatch(entries: string[], parse: (entry: string) => { key: string; size: number }): Record<string, number> {
+  const pool: Record<string, number> = {};
+  for (const entry of entries) {
+    const { key, size } = parse(entry);
+    pool[key] = size;
+  }
+  return pool;
+}
+
+function formatResources(r: { cpus?: number; memoryMb?: number; ephemeralDiskMb?: number }): string {
+  const parts: string[] = [];
+  if (r.cpus !== undefined) parts.push(`${r.cpus} vCPU`);
+  if (r.memoryMb !== undefined) parts.push(`${r.memoryMb} MB`);
+  if (r.ephemeralDiskMb) parts.push(`${r.ephemeralDiskMb} MB disk`);
+  return parts.join(' / ') || '—';
+}
+
+export const BYOK_MODES = ['off', 'first', 'fallback', 'only'] as const;
+export type ByokMode = (typeof BYOK_MODES)[number];
+
+const BYOK_MODE_HELP: Record<ByokMode, string> = {
+  off: "not used: managed accounts only",
+  first: 'your keys first, then managed accounts',
+  fallback: 'managed accounts first, then your keys',
+  only: 'your keys only, never managed accounts',
+};
+
+/** `GET/PATCH /api/v1/{lane}/routing`. */
+export interface LaneRouting {
+  /** "default" (ComputeSDK routing) or the org's own managed order. */
+  routing: 'default' | string[];
+  /** The managed accounts the router walks now, in order. */
+  managed: string[];
+  /** Every live managed account a custom order may name. */
+  available: string[];
+  /** `order` is what placement uses; `inherits` (Sandboxes) says it comes from the Actions router. */
+  byok: { mode: ByokMode; order: string[]; inherits?: boolean };
+}
+
+const arrow = (list: string[]): string => list.join(' → ');
+
+/** The router: managed routing first (the default path), then BYOK. */
+export function printLaneRouting(r: LaneRouting, lane: 'actions' | 'sandboxes'): void {
+  const label = (text: string) => text.padEnd(12);
+  const managed = r.managed.length > 0 ? arrow(r.managed) : pc.dim('no managed account is live');
+  console.log(
+    `${label('Routing')}${r.routing === 'default' ? `ComputeSDK default  ${pc.dim(`(${managed})`)}` : `custom: ${managed}`}`,
+  );
+  console.log(`${label('BYOK')}${r.byok.mode}  ${pc.dim(`(${BYOK_MODE_HELP[r.byok.mode]})`)}`);
+  if (r.byok.mode !== 'off') {
+    const list = r.byok.order.length > 0 ? arrow(r.byok.order) : '—';
+    const order =
+      lane === 'sandboxes' && r.byok.inherits === true
+        ? `${list}  ${pc.dim('(inherited from the Actions router)')}`
+        : r.byok.order.length > 0
+          ? list
+          : pc.dim('none set — add keys with `compute byok configure`');
+    console.log(`${label('BYOK order')}${order}`);
+  }
+}
+
+/** Sizes and pools (the BYOK side's per-provider knobs). */
+export function printLaneSettings(s: LaneSettings): void {
   const resources = Object.entries(s.providerResources ?? {});
-  console.log('sizes:');
+  console.log('resources:');
   if (resources.length === 0) console.log('  —');
   for (const [provider, r] of resources) {
-    console.log(
-      `  ${provider}  ${r.cpus ?? '?'} vCPU / ${r.memoryMb ?? '?'} MB${r.ephemeralDiskMb ? ` / ${r.ephemeralDiskMb} MB disk` : ''}`,
-    );
+    const preset = s.providerResourcePresets?.[provider];
+    console.log(preset ? `  ${provider}  ${preset} (${formatResources(r)})` : `  ${provider}  ${formatResources(r)}`);
   }
   const pool = Object.entries(s.warmPool ?? {});
   console.log('warm pool:');
@@ -159,7 +245,24 @@ export function printLaneSettings(
     const snap = Object.entries(s.snapshotPool);
     console.log('snapshot pool:');
     if (snap.length === 0) console.log('  —');
-    for (const [entry, cap] of snap) console.log(`  ${entry}  ${cap}`);
+    for (const [entry, cap] of snap) console.log(`  ${safeTerm(entry)}  ${cap}`);
+  }
+  if (s.snapshotSummary !== undefined) printSnapshotSummary(s.snapshotSummary);
+}
+
+/** Workflows carrying their own snapshot cap, then the workflows holding live snapshots. */
+function printSnapshotSummary(summary: NonNullable<LaneSettings['snapshotSummary']>): void {
+  const capped = summary.workflows.filter((w) => w.snapshotCap !== null);
+  console.log('workflow snapshot caps:');
+  if (capped.length === 0) console.log(`  ${pc.dim('— (every workflow uses the dynamic pool)')}`);
+  for (const w of capped) {
+    const cap = w.snapshotCap === 0 ? 'off' : String(w.snapshotCap);
+    console.log(`  ${safeTerm(w.repoFullName)}  ${safeTerm(w.path)}  ${cap}`);
+  }
+  console.log('live snapshots:');
+  if (summary.live.length === 0) console.log('  —');
+  for (const row of summary.live) {
+    console.log(`  ${safeTerm(row.repoFullName)}  ${row.workflowPath === null ? pc.dim('(no workflow)') : safeTerm(row.workflowPath)}  ${row.count}`);
   }
 }
 
@@ -183,6 +286,13 @@ function settingsFail(
   return deps.fail(e, opts);
 }
 
+/** A comma-separated provider list flag; empty is a usage error. */
+function providerList(flag: string, value: string): string[] {
+  const list = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+  if (list.length === 0) throw new Error(`${flag} "${value}" names no providers — pass a comma-separated list.`);
+  return list;
+}
+
 /**
  * Register `settings` / `settings set` on a lane's command group
  * (`compute sandboxes` or `compute actions`).
@@ -193,105 +303,168 @@ export function registerSettingsCommands(
   common: (cmd: Command) => Command,
   deps: SettingsDeps,
 ): void {
+  const routerName = lane === 'sandboxes' ? 'Sandboxes' : 'Actions';
+  const show = async (c: ActionsClient) => {
+    const [routing, settings] = await Promise.all([
+      c.get<LaneRouting>(`/api/v1/${lane}/routing`),
+      c.get<LaneSettings>(`/api/v1/${lane}/settings`),
+    ]);
+    return { routing, settings };
+  };
+  const print = ({ routing, settings }: { routing: LaneRouting; settings: LaneSettings }) => {
+    printLaneRouting(routing, lane);
+    printLaneSettings(settings);
+  };
+
   const settings = common(
     group
       .command('settings')
-      .description(`Show the org's ${lane} routing policy (order, caps, sizes, pools)`)
+      .description(`Show the ${routerName} router: managed routing, BYOK use, sizes and pools`)
       .configureOutput({
         outputError: (str, write) => deps.usageErrorOutput(str, write),
       }),
   ).action(async (opts: CommonOpts) => {
     try {
-      const c = await deps.client(opts);
-      const res = await c.get<LaneSettings>(`/api/v1/${lane}/settings`);
-      deps.output(opts, res, (s) => printLaneSettings(s, lane));
+      deps.output(opts, await show(await deps.client(opts)), print);
     } catch (e) {
       settingsFail(e, opts, lane, 'view', deps);
     }
   });
 
-  common(
+  const set = common(
     settings
       .command('set')
-      .description(`Update the org's ${lane} routing policy`)
+      .description(`Change the ${routerName} router (owner/admin)`)
       .option(
-        '--cap <size=rate>',
-        'per-size cap: <size>=<usd>/<unit> or <size>=none to clear (repeatable)',
-        (v, a: string[]) => a.concat(v),
-        [] as string[],
+        '--routing <default|providers>',
+        'managed routing: "default" for ComputeSDK routing, or your own managed-account order (e.g. daytona,e2b)',
       )
-      .option('--general-cap <rate|none>', 'whole-lane price cap (e.g. 0.40/hour); "none" clears it')
+      .option('--byok <mode>', `use your own keys: ${BYOK_MODES.join(' | ')}`)
       .option(
-        '--order-type <type>',
+        '--byok-order <providers>',
         lane === 'sandboxes'
-          ? 'market order type: limit | market | inherit (the Actions value)'
-          : 'market order type: limit | market',
+          ? 'your own providers in order (e.g. tensorlake,blaxel); "inherit" uses the Actions BYOK order'
+          : 'your own providers in order (e.g. tensorlake,blaxel)',
       )
-      .option(
-        '--order <providers>',
-        lane === 'sandboxes'
-          ? 'provider order, comma-separated (e.g. "market,blaxel,vercel"); "inherit" restores the Actions order'
-          : 'provider order, comma-separated (e.g. "market,blaxel,vercel"); "default" restores the platform default',
-      ),
-  ).action(async (opts: CommonOpts & {
+      // Pre-router spelling of --byok-order, kept for existing scripts.
+      .addOption(new Option('--order <providers>').hideHelp()),
+  );
+  set
+    .option(
+      '--resources <provider=preset>',
+      'per-provider size preset (e.g. blaxel=large); <provider>=none clears it (repeatable)',
+      (v, a: string[]) => a.concat(v),
+      [] as string[],
+    )
+    .option(
+      '--warm-pool <provider[:region]=n>',
+      `warm pool size per BYOK entry, 0..${MAX_WARM_POOL_SIZE}; 0 clears it (repeatable)`,
+      (v, a: string[]) => a.concat(v),
+      [] as string[],
+    );
+  if (lane === 'actions') {
+    set.option(
+      '--snapshot-pool <provider[:region]=n>',
+      `snapshot cap per BYOK entry, 0..${MAX_SNAPSHOT_POOL_SIZE}; 0 clears it (repeatable)`,
+      (v, a: string[]) => a.concat(v),
+      [] as string[],
+    );
+  }
+  // Caps and order types price the compute market, which is not generally
+  // available; accepted, but kept out of help.
+  set
+    .addOption(new Option('--cap <size=rate>').hideHelp().argParser((v, a: string[] = []) => a.concat(v)).default([]))
+    .addOption(new Option('--general-cap <rate|none>').hideHelp())
+    .addOption(new Option('--order-type <type>').hideHelp());
+
+  set.action(async (opts: CommonOpts & {
+    routing?: string;
+    byok?: string;
+    byokOrder?: string;
+    order?: string;
     cap: string[];
     generalCap?: string;
     orderType?: string;
-    order?: string;
+    resources?: string[];
+    warmPool?: string[];
+    snapshotPool?: string[];
   }) => {
     try {
-      const body: Record<string, unknown> = {};
+      const routing: Record<string, unknown> = {};
+      if (opts.routing !== undefined) {
+        routing.routing = opts.routing === 'default' ? 'default' : providerList('--routing', opts.routing);
+      }
+      if (opts.byok !== undefined) {
+        if (!(BYOK_MODES as readonly string[]).includes(opts.byok)) {
+          throw new Error(`--byok must be one of ${BYOK_MODES.join(', ')}.`);
+        }
+        routing.byok = opts.byok;
+      }
+      if (opts.byokOrder !== undefined && opts.order !== undefined) {
+        throw new Error('--order is the old name of --byok-order; pass one.');
+      }
+      const byokOrder = opts.byokOrder ?? opts.order;
+      if (byokOrder !== undefined) {
+        const flag = opts.byokOrder !== undefined ? '--byok-order' : '--order';
+        routing.byokOrder =
+          (byokOrder === 'inherit' && lane === 'sandboxes') || (byokOrder === 'default' && lane === 'actions')
+            ? []
+            : providerList(flag, byokOrder);
+      }
+
+      const settingsBody: Record<string, unknown> = {};
       if (opts.cap.length > 0) {
         const caps: Record<string, Rate | null> = {};
         for (const entry of opts.cap) {
           const { size, cap } = parseSizeCap(entry);
           caps[size] = cap;
         }
-        body.marketCaps = caps;
+        settingsBody.marketCaps = caps;
       }
       if (opts.generalCap !== undefined) {
-        body.marketCap =
-          opts.generalCap === 'none'
-            ? null
-            : parseMaxPrice(opts.generalCap, undefined);
+        settingsBody.marketCap = opts.generalCap === 'none' ? null : parseMaxPrice(opts.generalCap, undefined);
       }
       if (opts.orderType !== undefined) {
         if (lane === 'sandboxes' && opts.orderType === 'inherit') {
-          body.marketOrderType = null;
+          settingsBody.marketOrderType = null;
         } else if (opts.orderType === 'limit' || opts.orderType === 'market') {
-          body.marketOrderType = opts.orderType;
+          settingsBody.marketOrderType = opts.orderType;
         } else {
-          throw new Error(
-            lane === 'sandboxes'
-              ? '--order-type must be limit, market, or inherit.'
-              : '--order-type must be limit or market.',
-          );
+          throw new Error('--order-type must be limit or market.');
         }
       }
-      if (opts.order !== undefined) {
-        if (opts.order === 'inherit' && lane === 'sandboxes') {
-          body.providerOrder = [];
-        } else if (opts.order === 'default' && lane === 'actions') {
-          body.providerOrder = [];
-        } else {
-          body.providerOrder = opts.order.split(',').map((s) => s.trim()).filter(Boolean);
-          if ((body.providerOrder as string[]).length === 0) {
-            throw new Error(
-              lane === 'sandboxes'
-                ? `--order "${opts.order}" names no providers — pass a comma-separated list or "inherit".`
-                : `--order "${opts.order}" names no providers — pass a comma-separated list or "default".`,
-            );
-          }
+      if (opts.resources && opts.resources.length > 0) {
+        const resources: Record<string, string | null> = {};
+        for (const entry of opts.resources) {
+          const { provider, preset } = parseResourcesFlag(entry);
+          resources[provider] = preset;
         }
+        settingsBody.providerResources = resources;
       }
-      if (Object.keys(body).length === 0) {
+      if (opts.warmPool && opts.warmPool.length > 0) {
+        settingsBody.warmPool = poolPatch(opts.warmPool, parseWarmPoolFlag);
+      }
+      if (opts.snapshotPool && opts.snapshotPool.length > 0) {
+        settingsBody.snapshotPool = poolPatch(opts.snapshotPool, parseSnapshotPoolFlag);
+      }
+      // The router and the sizes/pools are two endpoints; one command never
+      // half-applies, so it changes one or the other.
+      if (Object.keys(routing).length > 0 && Object.keys(settingsBody).length > 0) {
         throw new Error(
-          'Nothing to change — pass --cap, --general-cap, --order-type, or --order.',
+          'Change routing (--routing, --byok, --byok-order) and sizes or pools in separate commands.',
+        );
+      }
+      if (Object.keys(routing).length === 0 && Object.keys(settingsBody).length === 0) {
+        throw new Error(
+          lane === 'sandboxes'
+            ? 'Nothing to change — pass --routing, --byok, --byok-order, --resources, or --warm-pool.'
+            : 'Nothing to change — pass --routing, --byok, --byok-order, --resources, --warm-pool, or --snapshot-pool.',
         );
       }
       const c = await deps.client(opts);
-      const res = await c.patch<LaneSettings>(`/api/v1/${lane}/settings`, body);
-      deps.output(opts, res, (s) => printLaneSettings(s, lane));
+      if (Object.keys(routing).length > 0) await c.patch<LaneRouting>(`/api/v1/${lane}/routing`, routing);
+      if (Object.keys(settingsBody).length > 0) await c.patch<LaneSettings>(`/api/v1/${lane}/settings`, settingsBody);
+      deps.output(opts, await show(c), print);
     } catch (e) {
       settingsFail(e, opts, lane, 'change', deps);
     }

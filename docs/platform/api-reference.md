@@ -21,6 +21,18 @@ Base URL: `https://platform.computesdk.com/api/v1`. Authenticate every request w
 | GET | `/organizations/{orgId}/benchmark-artifacts/{artifactId}` | Org-scoped benchmark artifact download |
 | GET | `/feed` | The org's activity feed |
 
+## BYOK providers
+
+The providers an org brings its own key for, shared by Actions and sandboxes. Reads are open to members; writes need an owner/admin. Ambient providers (platform-keyed) aren't listed and answer 400.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/providers` | Every BYOK provider: key state (masked hint, never the key), `rate`, `customRate`, `platformRate` |
+| GET | `/providers/{provider}` | One provider |
+| PUT/DELETE | `/providers/{provider}/key` | Save / remove the org's credential |
+| POST | `/providers/{provider}/verify` | Probe the stored key with a real sandbox |
+| PUT/DELETE | `/providers/{provider}/rate` | Set / clear the org's custom rate (`{ usd, per }`) — cost reporting only, never billing |
+
 ## Actions (CI)
 
 Actions is available to every organization — no product entitlement required. See [Actions](actions.md) for semantics.
@@ -29,9 +41,9 @@ Actions is available to every organization — no product entitlement required. 
 | --- | --- | --- |
 | GET | `/actions/org` | The org's Actions context |
 | GET/POST/PATCH | `/actions/repos` | Connected repos — list, connect a git remote, enable/disable (GitHub App + generic remotes) |
-| GET | `/actions/providers` | Registered providers — regions, act/usable status |
-| PUT/DELETE | `/actions/providers/{provider}/key` | Save / remove the org's provider credential |
-| POST | `/actions/providers/{provider}/verify` | Probe the stored key with a real sandbox |
+| GET | `/actions/providers` | Where Actions can place — regions, order, act/usable status, key status |
+| PUT/DELETE | `/actions/providers/{provider}/key` | Deprecated alias of `/providers/{provider}/key` |
+| POST | `/actions/providers/{provider}/verify` | Deprecated alias of `/providers/{provider}/verify` |
 | GET | `/actions/workflows?repo=` | Workflows on enabled repos (`dispatchable: false` ones run via `manual: true`) |
 | POST | `/actions/dispatch` | `{ workflowId, ref, inputs?, manual?, requestId?, provider?, providerRegion? }` → `{ runId, created, headSha }` |
 | GET | `/actions/history?repo=&workflow=` | Recent-run window + per-job/step failure rollups |
@@ -83,6 +95,8 @@ Org keys see their own benchmarks plus subscribed (entitled) ones — never othe
 | GET | `/benchmarks/{slug}/runs` | Run list (filters above); `/runs/days`, `/runs/day/{day}`, `/runs/summary` for rollups |
 | GET/POST | `/benchmarks/{slug}/runs` | List / create runs |
 | GET | `/benchmarks/{slug}/runs/{runId}` | Run detail — includes `actionRun: {id, dashboardUrl}` for the owning org when the run was produced by an Actions job |
+| POST | `/benchmarks/{slug}/runs/{runId}/run-again` | Run the benchmark again on the latest code (409 when Run again is off) |
+| GET | `/benchmarks/{slug}/run-again/{runAgainId}` | Poll for the benchmark run ID |
 | GET | `/benchmarks/{slug}/runs/{runId}/summary` | Run summary |
 | GET | `/benchmarks/{slug}/runs/{runId}/progress` | Live progress |
 | GET | `/benchmarks/{slug}/runs/{runId}/iterations` | Per-iteration data |
@@ -94,5 +108,4 @@ Org keys see their own benchmarks plus subscribed (entitled) ones — never othe
 | GET/POST | `.../runs/{runId}/workers/{workerId}` · `/events` · `/heartbeat` · `/complete` · `/fail` · `/release` · `/artifacts` | Worker lifecycle — for benchmark executors |
 
 **Notable fields.** `GET /benchmarks/{slug}` returns `source` — the platform's source descriptor for the bench file (`{githubOwner, repo, ref, path}`). `POST /runs` accepts `ciRunId` (a `ci_runs` id owned by the same org, e.g. `COMPUTESDK_RUN_ID` inside an Actions job) to link the benchmark run to its producing Actions run.
-
 

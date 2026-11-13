@@ -6,12 +6,17 @@
  * Usage:
  *   compute login                        # OAuth device login (benchsdk-cli)
  *   compute logout                       # clear stored credentials
- *   compute providers                    # list configured providers
+ *   compute providers                    # SDK provider credentials in this environment
+ *   compute byok …                       # the org's BYOK provider keys and custom rates
+ *   compute org …                        # active org, members, invitations
+ *   compute invitations …                # your own invitations (show/accept/decline)
  *   compute actions …                    # Actions API
- *   compute market …                     # market sell-side commands
+ *   compute credits [ledger | topup <usd>] # prepaid credit, which managed accounts bill from
+ *   compute market …                     # not generally available (hidden from help)
+ *   compute new [vercel | --vercel]      # create a sandbox (short for `compute sandboxes create`)
  *   compute instances …                  # platform compute-instance control plane
  *     (alias: compute sandboxes, compute sbx)
- *   compute bench …                      # benchmarks platform CLI
+ *   compute bench …                      # benchmarks platform CLI (runs, results, fork, …)
  */
 
 import 'dotenv/config';
@@ -23,9 +28,16 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { getProviderStatus } from './providers.js';
 import { registerActionsCommands } from './actions.js';
+import { registerByokCommands } from './byok.js';
 import { registerMarketCommands } from './market.js';
+import { registerCreditsCommands } from './credits.js';
+import { inheritParentOptions } from './option-inheritance.js';
 import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
+import { parseBenchDispatch, runBench } from './bench.js';
+import { registerManifestCommand } from './manifest.js';
+import { registerInvitationsCommands, registerOrgMemberCommands } from './org-members.js';
+import { benchAuth, envBaseUrl, fetchWhoami, formatWhoami } from './session.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -53,6 +65,8 @@ process.stderr.on('error', (err: NodeJS.ErrnoException) => {
 });
 
 const program = new Command();
+// `compute credits --org x topup 50`: a parent's flags reach the subcommand.
+inheritParentOptions(program);
 
 program
   .name('compute')
@@ -61,19 +75,12 @@ program
   .enablePositionalOptions()
   .passThroughOptions();
 
-function envBaseUrl(): string | undefined {
-  return process.env.COMPUTE_PLATFORM_URL ?? process.env.BENCHMARKS_PLATFORM_URL;
-}
-
-async function benchAuth(opts: { baseUrl?: string } = {}) {
-  const { resolveAuth } = await import('@benchsdk/cli');
-  return resolveAuth({ baseUrl: opts.baseUrl ?? envBaseUrl() });
-}
-
+// Reports the OAuth login just made, so it reads the stored login rather
+// than COMPUTE_API_KEY.
 async function printSessionLine(options?: { baseUrl?: string }): Promise<void> {
   try {
-    const { getMe } = await import('@benchsdk/cli');
-    const me = await getMe(await benchAuth({ baseUrl: options?.baseUrl }));
+    const { getMe, resolveAuth } = await import('@benchsdk/cli');
+    const me = await getMe(await resolveAuth({ baseUrl: options?.baseUrl ?? envBaseUrl() }));
     const active = me.organizations.find((o) => o.id === me.activeOrganizationId);
     const who = me.user.email ?? me.user.name ?? me.user.id;
     if (active) {
@@ -199,20 +206,15 @@ program
 // CLI on every machine.
 
 async function printWhoami(options: { json?: boolean; baseUrl?: string } = {}): Promise<void> {
-  const { getMe } = await import('@benchsdk/cli');
-  const me = await getMe(await benchAuth({ baseUrl: options.baseUrl }));
+  const me = await fetchWhoami(await benchAuth({ baseUrl: options.baseUrl }));
   if (options.json) {
     console.log(JSON.stringify(me, null, 2));
     return;
   }
-  const active = me.organizations.find((o) => o.id === me.activeOrganizationId);
-  console.log(me.user.email ?? me.user.name ?? me.user.id);
-  console.log(
-    `active org: ${active ? `${active.slug} (${active.id})` : '—'}${me.organizations.length > 1 ? '  — change with `compute org use <slug>`' : ''}`,
-  );
+  for (const line of formatWhoami(me)) console.log(line);
 }
 
-const org = program.command('org').description('Manage the active organization');
+const org = program.command('org').description('Manage the active organization, its members and invitations');
 
 org
   .command('list')
@@ -239,6 +241,8 @@ org
     const { loadCredentials, saveCredentials, createApiClient, setActiveOrganization } =
       await import('@benchsdk/cli');
     const credentials = (await loadCredentials()) ?? {};
+    // The switch belongs to the stored user login: COMPUTE_API_KEY (an org
+    // key, no user) must not stand in for it, so only the URL is overridden.
     const { auth } = await createApiClient({ baseUrl: envBaseUrl() });
     const result = await setActiveOrganization(auth, slug);
     if (!result.organization) {
@@ -272,6 +276,10 @@ org
   .option('--json', 'print machine-readable JSON')
   .action((opts) => printWhoami(opts));
 
+// members / invitations / invite / member set-role|remove / leave, over the
+// v1 organization routes with the `current` org alias (src/org-members.ts).
+registerOrgMemberCommands(org);
+
 program
   .command('whoami')
   .description('Show the current user and active organization')
@@ -279,15 +287,31 @@ program
   .option('--json', 'print machine-readable JSON')
   .action((opts) => printWhoami(opts));
 
+// ─── invitations ─────────────────────────────────────────────────────────────
+// The signed-in user's own invitations: list, show, accept, decline.
+
+registerInvitationsCommands(program);
+
 // ─── actions ─────────────────────────────────────────────────────────────────
 
 registerActionsCommands(program);
+
+// ─── byok ────────────────────────────────────────────────────────────────────
+// `compute byok` drives /api/v1/providers — the org's BYOK provider keys and
+// custom rates, shared by Actions and sandboxes (src/byok.ts).
+
+registerByokCommands(program);
 
 // ─── market ──────────────────────────────────────────────────────────────────
 // `compute market` is the sell side of the compute market — same platform
 // API and auth as `compute actions`, for orgs flagged `market_provider`.
 
 registerMarketCommands(program);
+
+// ─── credits ─────────────────────────────────────────────────────────────────
+// `compute credits` — prepaid credit (balance, ledger, top-ups), which managed
+// accounts bill from (src/credits.ts).
+registerCreditsCommands(program);
 
 // ─── sandboxes ───────────────────────────────────────────────────────────────
 // `compute instances` (alias `compute sandboxes`/`sbx`) drives
@@ -305,26 +329,37 @@ registerAgentsCommands(program);
 // ─── bench ───────────────────────────────────────────────────────────────────
 // `compute bench` is the benchmarks-platform CLI (@benchsdk/runner's `bench`
 // binary) folded under compute: run/check/auth/org/benchmarks/runs/results/
-// iterations/artifacts/logs/export all dispatch through it.
+// fork/iterations/artifacts/logs/export all dispatch through it,
+// with COMPUTE_PLATFORM_URL, COMPUTE_API_KEY and COMPUTE_ORG/--org forwarded
+// (src/bench.ts).
 
 program
   .command('bench')
-  .description('Benchmarks platform CLI (run, auth, org, benchmarks, runs, results, artifacts, export, ...)')
+  .description('Benchmarks platform CLI (run, auth, org, benchmarks, runs, results, fork, artifacts, export, ...)')
   .allowUnknownOption()
   .helpOption(false)
   .action(() => {
     // Never reached: bench args are dispatched pre-parse below.
   });
 
+// ─── __manifest (hidden) ─────────────────────────────────────────────────────
+// Regenerate the committed cli-manifest.json with
+// `pnpm --filter @computesdk/cli run manifest` after changing commands.
+
+registerManifestCommand(program, {
+  version: packageJson.version,
+  packageDir: join(__dirname, '..'),
+});
+
 // ─── Run ─────────────────────────────────────────────────────────────────────
 
 // Bench args are opaque to commander (its own --flags, `--` separators, file
-// paths), so they dispatch before parsing. `@benchsdk/runner`'s run() owns the
-// process — it exits itself after dispatch.
+// paths), so they dispatch before parsing — including `compute --org x bench`.
+// `@benchsdk/runner`'s run() owns the process — it exits itself after dispatch.
 async function main() {
-  if (process.argv[2] === 'bench' || process.argv[2] === 'benchmark') {
-    const { run: benchRun } = await import('@benchsdk/runner');
-    await benchRun(process.argv.slice(3));
+  const bench = parseBenchDispatch(process.argv.slice(2));
+  if (bench) {
+    await runBench(bench);
     return;
   }
   await program.parseAsync(process.argv);

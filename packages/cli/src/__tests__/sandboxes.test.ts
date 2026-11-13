@@ -265,6 +265,174 @@ describe('quiet and verbose output', () => {
     }
   });
 
+  it('create --provider sends only (the router narrowed to those providers)', async () => {
+    post.mockResolvedValueOnce({ sandbox });
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--provider', 'daytona'], { from: 'user' });
+      expect(post).toHaveBeenCalledWith('/api/v1/sandboxes', { only: ['daytona'] });
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+    }
+  });
+
+  it('create --managed / --byok override the router mode for one create; --order stays hidden', async () => {
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--provider', 'e2b', '--managed'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { only: ['e2b'], byok: 'off' });
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--byok'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { byok: 'only' });
+      post.mockClear();
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--byok', '--managed'], { from: 'user' }).catch(() => undefined);
+      expect(post).not.toHaveBeenCalled();
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--order', 'e2b,blaxel'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { providerOrder: ['e2b', 'blaxel'] });
+      const sandboxes = buildProgram().commands.find((c) => c.name() === 'sandboxes' || c.aliases().includes('sandboxes'))!;
+      const help = sandboxes.commands.find((c) => c.name() === 'create')!.helpInformation();
+      expect(help).toContain('--managed');
+      expect(help).not.toContain('--order');
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
+  it('compute new is create; providers come as words or --flags', async () => {
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['new', '-q', '--no-use'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', {});
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['new', '--vercel', '-q', '--no-use'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { only: ['vercel'] });
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['new', 'daytona', '--e2b', '--managed', '--size', 'large', '-q', '--no-use'], { from: 'user' });
+      expect(post).toHaveBeenLastCalledWith('/api/v1/sandboxes', { only: ['daytona', 'e2b'], byok: 'off', size: 'large' });
+      post.mockClear();
+      await buildProgram().parseAsync(['new', '--vercel', '--provider', 'e2b', '-q', '--no-use'], { from: 'user' }).catch(() => undefined);
+      expect(post).not.toHaveBeenCalled();
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
+  it('create says where the router will place it before the box boots', async () => {
+    fakeClient.get.mockResolvedValueOnce({
+      quote: {
+        ok: true,
+        orderType: 'limit',
+        creditBalanceUsd: 25,
+        providerOrder: ['managed/daytona'],
+        placement: { source: 'house', provider: 'daytona', region: null, size: 'medium', box: { provider: 'daytona', sizeName: 'medium' } },
+      },
+    });
+    post.mockResolvedValueOnce({ sandbox });
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await buildProgram().parseAsync(['sandboxes', 'create', '--no-use', '--provider', 'daytona'], { from: 'user' });
+      expect(fakeClient.get).toHaveBeenCalledWith('/api/v1/sandboxes/quote', expect.objectContaining({ only: 'daytona' }));
+      const stderr = err.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(stderr).toContain('placing on daytona · managed · medium');
+      expect(fakeClient.get.mock.invocationCallOrder[0]).toBeLessThan(post.mock.invocationCallOrder[0]);
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+    }
+  });
+
+  it('sandboxes options and new --list show what you can create on, in router order', async () => {
+    const options = {
+      byokMode: 'fallback',
+      options: [
+        { account: 'managed', provider: 'daytona', sizes: [
+          { name: 'small', label: '1 vCPU', rate: null },
+          { name: 'medium', label: '2 vCPU', rate: { usd: 0.1, per: 'hour' } },
+        ] },
+        { account: 'managed', provider: 'superserve', sizes: [{ name: 'default', label: "the provider's default size", rate: { usd: 0.08, per: 'hour' } }] },
+        { account: 'byok', provider: 'tensorlake', region: null, ready: true },
+        { account: 'byok', provider: 'blaxel', region: null, ready: false },
+      ],
+    };
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      fakeClient.get.mockResolvedValueOnce(options);
+      await buildProgram().parseAsync(['sandboxes', 'options'], { from: 'user' });
+      expect(fakeClient.get).toHaveBeenLastCalledWith('/api/v1/sandboxes/options');
+      const text = out.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(text).toMatch(/daytona\s+managed\s+—\s+\$0\.1\/h/);
+      expect(text).toContain('default size $0.08/h');
+      expect(text).toContain('billed by tensorlake to your account');
+      expect(text).toContain('key not tested');
+      expect(text.indexOf('daytona')).toBeLessThan(text.indexOf('tensorlake'));
+      expect(text).toContain('A plain `compute new` lands on daytona');
+
+      post.mockClear();
+      out.mockClear();
+      fakeClient.get.mockResolvedValueOnce(options);
+      await buildProgram().parseAsync(['new', '--list'], { from: 'user' });
+      expect(post).not.toHaveBeenCalled();
+      expect(out.mock.calls.map((c) => String(c[0])).join('\n')).toContain('Router: managed accounts first, then your keys');
+    } finally {
+      out.mockRestore();
+    }
+  });
+
+  it('new --list with provider names is a usage error and creates nothing', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      post.mockClear();
+      await buildProgram().parseAsync(['new', '--vercel', '--list'], { from: 'user' }).catch(() => undefined);
+      expect(post).not.toHaveBeenCalled();
+    } finally {
+      err.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
+  it('create says how to use the sandbox next (stderr), always naming it and its org', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create'], { from: 'user' });
+      let text = err.mock.calls.map((c) => String(c[0])).join('\n');
+      // Always the explicit id: COMPUTE_INSTANCE or another pick must never be the target.
+      expect(text).toContain(`compute sandboxes exec ${ID_A} -- node -v`);
+      expect(text).toContain(`compute sandboxes destroy ${ID_A}`);
+      expect(out.mock.calls.map((c) => String(c[0])).join('\n')).not.toContain('Use it');
+
+      err.mockClear();
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '--org', 'team-b', '--no-use'], { from: 'user' });
+      text = err.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(text).toContain(`compute sandboxes destroy ${ID_A} --org team-b`);
+
+      err.mockClear();
+      post.mockResolvedValueOnce({ sandbox });
+      await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use'], { from: 'user' });
+      expect(err.mock.calls.map((c) => String(c[0])).join('\n')).not.toContain('Use it');
+    } finally {
+      err.mockRestore();
+      out.mockRestore();
+    }
+  });
+
   it('create --quiet --json is a usage error', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);

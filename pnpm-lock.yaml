@@ -306,7 +306,7 @@ importers:
     dependencies:
       '@arker-ai/sdk':
         specifier: ^1.2.4
-        version: 1.2.4(@computesdk/daytona@1.7.52(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.71)(@computesdk/modal@1.9.28)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
+        version: 1.2.4(@computesdk/daytona@1.7.53(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.72)(@computesdk/modal@1.9.30)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -465,6 +465,43 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/boat:
+    dependencies:
+      '@boatdev/sdk':
+        specifier: ^1.9.9
+        version: 1.9.9
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/brezel:
     dependencies:
       '@computesdk/provider':
@@ -501,6 +538,46 @@ importers:
       vitest:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/briq:
+    dependencies:
+      '@briq-cloud/sdk':
+        specifier: ^0.1.2
+        version: 0.1.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+      daemond:
+        specifier: workspace:*
+        version: link:../daemond
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
   packages/browserbase:
     dependencies:
@@ -668,11 +745,11 @@ importers:
   packages/cli:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.9.5
+        version: 0.9.5
       '@benchsdk/runner':
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.8.6
+        version: 0.8.6
       '@clack/prompts':
         specifier: ^0.7.0
         version: 0.7.0
@@ -802,6 +879,40 @@ importers:
       vitest:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/cocoonstack:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
   packages/codesandbox:
     dependencies:
@@ -1298,8 +1409,8 @@ importers:
         specifier: workspace:*
         version: link:../computesdk
       gravixlayer:
-        specifier: ^0.1.36
-        version: 0.1.36(@opentelemetry/api@1.9.1)
+        specifier: ^0.1.51
+        version: 0.1.51(@opentelemetry/api@1.9.1)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -1416,7 +1527,7 @@ importers:
         version: link:../computesdk
       isorun:
         specifier: ^1.0.0
-        version: 1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.6.7))(zod@4.6.7)
+        version: 1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -1556,6 +1667,40 @@ importers:
       vitest:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/kosa8:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
   packages/leap0:
     dependencies:
@@ -2047,7 +2192,7 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@opencomputer/sdk':
-        specifier: latest
+        specifier: ^2.3.1
         version: 2.3.1
       computesdk:
         specifier: workspace:*
@@ -2081,8 +2226,8 @@ importers:
   packages/platform:
     dependencies:
       '@benchsdk/cli':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.9.3
+        version: 0.9.3
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -2288,43 +2433,6 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
-  packages/run-cloud:
-    dependencies:
-      '@computesdk/provider':
-        specifier: workspace:*
-        version: link:../provider
-      '@run-cloud/sdk':
-        specifier: ^0.15.0
-        version: 0.15.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      computesdk:
-        specifier: workspace:*
-        version: link:../computesdk
-    devDependencies:
-      '@computesdk/test-utils':
-        specifier: workspace:*
-        version: link:../test-utils
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.41
-      '@vitest/coverage-v8':
-        specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
-      eslint:
-        specifier: ^8.37.0
-        version: 8.57.1
-      rimraf:
-        specifier: ^5.0.0
-        version: 5.0.10
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
-
   packages/runloop:
     dependencies:
       '@computesdk/provider':
@@ -2372,7 +2480,7 @@ importers:
         version: link:../computesdk
       withruntime:
         specifier: ^0.6.1
-        version: 0.6.1(zod@4.6.7)
+        version: 0.6.1(zod@4.4.3)
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -2441,6 +2549,40 @@ importers:
       '@sailresearch/sdk':
         specifier: ^0.5.1
         version: 0.5.1
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
+  packages/sandbox-cli:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2632,43 +2774,6 @@ importers:
       '@superserve/sdk':
         specifier: ^0.9.3
         version: 0.9.3
-      computesdk:
-        specifier: workspace:*
-        version: link:../computesdk
-    devDependencies:
-      '@computesdk/test-utils':
-        specifier: workspace:*
-        version: link:../test-utils
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.41
-      '@vitest/coverage-v8':
-        specifier: ^1.0.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
-      eslint:
-        specifier: ^8.37.0
-        version: 8.57.1
-      rimraf:
-        specifier: ^5.0.0
-        version: 5.0.10
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.0.0
-        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
-
-  packages/tangle:
-    dependencies:
-      '@computesdk/provider':
-        specifier: workspace:*
-        version: link:../provider
-      '@tangle-network/sandbox':
-        specifier: 1.0.264
-        version: 1.0.264
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2903,7 +3008,7 @@ importers:
         version: link:../provider
       '@upstash/box':
         specifier: ^0.5.5
-        version: 0.5.5(zod@4.6.7)
+        version: 0.5.5(zod@4.4.3)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -2987,6 +3092,9 @@ importers:
       '@computesdk/blaxel':
         specifier: workspace:*
         version: link:../blaxel
+      '@computesdk/boat':
+        specifier: workspace:*
+        version: link:../boat
       '@computesdk/cloud-run':
         specifier: workspace:*
         version: link:../cloud-run
@@ -3351,33 +3459,44 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
-  '@benchsdk/api@0.7.1':
-    resolution: {integrity: sha512-YqK5mX4QwWBVmkQgU83PSdoi+zMGhgr5A+aEBUD5kkTF0svWHHwKZSHpl36q4lFJUGvA3nCtjHUtvB/IrsaOtQ==}
+  '@benchsdk/api@0.11.1':
+    resolution: {integrity: sha512-yoT00Fm/V531uCK2/1SHSjFL2/AvxfnW2AV3ZZunBSilP1K2O6ehWWnFRA2Klux7xR5kM0BOhi0XKDXDYtPKaw==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/cli@0.7.0':
-    resolution: {integrity: sha512-UT26riKOPo33wG/B15Gghzzc2+SpE/RHaD+sTOOyP7Pig3Gqb6qk/iZXUGwih5ZoioggHamALqcVb67xV2msrQ==}
+  '@benchsdk/api@0.11.3':
+    resolution: {integrity: sha512-zmfPO/kRWq3kxwAiI0QObHUmd2EIzR9U5CrgSeiRiGUZNOeqo94AmACFtVUGFuDAX+qbFz6PyLDkiNSpskE5FA==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/cli@0.7.1':
-    resolution: {integrity: sha512-XHEPoVcKNQndsZw3uuA+3Vrm/3bUtTHzyiDUrak65U6nW0w7ULw/vP/aBma8BU+yUtWQvc9MXcr8jETpEehStA==}
+  '@benchsdk/cli@0.9.3':
+    resolution: {integrity: sha512-RhVAWctAuPFnJfZ86megoWFlqhiYGWzIdhrbaS+I9hN3N+/1qoCHHnsH4FiACwmRz2vKaEDUGvajJ86FgqfwBA==}
     engines: {node: '>=18.0.0'}
 
-  '@benchsdk/runner@0.6.0':
-    resolution: {integrity: sha512-oNBB6ZaZ2VNpF5FoXp1KmbrKIfWyCGlncjx/gbF6ZR0IlJONWZmk9L9jgX48ZU9ZL29Cf1fCMxZpwlap3eEhBg==}
+  '@benchsdk/cli@0.9.5':
+    resolution: {integrity: sha512-8k9dNtKmyb/AAnlUx47TKerwvJJb5mtpw+jywO3PsjgwZZdDJZ77thi2aLi8tbyoHSbmara/B2xidzDjNjco/w==}
+    engines: {node: '>=18.0.0'}
+
+  '@benchsdk/runner@0.8.6':
+    resolution: {integrity: sha512-f6hEsBcq04a0ERnBP2Tt2357VIq0xXzCNnKZbPyNuNYe67gAlyUC3TxXRH/vRF/gyi1E1DHow3plqslAqb+fQg==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@benchsdk/worker@0.3.2':
-    resolution: {integrity: sha512-gDSpxqnbHvWppuhdHFps3jb0Yn/dkkf0E+uPWs3RgwCggetbnr4m+QiGAd19qENxmTwhLQlYR1tM0MRGKc4Hpw==}
+  '@benchsdk/worker@0.4.3':
+    resolution: {integrity: sha512-QJ36YkXwVdKWtQdaz7p6dKT+8tEcLYYuKPsNycxzdJJPi9YAZf2quXeG2eDYhrfVhJIlGxU6L+01oPxpTezxCQ==}
     engines: {node: '>=18.0.0'}
 
   '@blaxel/core@0.3.21':
     resolution: {integrity: sha512-a+JxiT1I6OKcm+6mxPcVjWo9u1LjBwPf8hmspnrGU73UbJYzvG6YeYz7VLQubf+rKocDpiqhzkMjasG/I77b8Q==}
     engines: {node: '>=18'}
 
+  '@boatdev/sdk@1.9.9':
+    resolution: {integrity: sha512-VsemzYh6sfLA+XFH5To22rGfwL+rXVy6TlXZ0Zi2bAheh6Iw8c1vdNWdmQxOHV/lSd5eVia3iDx+Cve4Lmlf6Q==}
+
   '@borewit/text-codec@0.2.1':
     resolution: {integrity: sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw==}
+
+  '@briq-cloud/sdk@0.1.2':
+    resolution: {integrity: sha512-t9opzVTALWVKADZzMWB9Mep3yhB1efedpfbXwzvVex2WFeBHY00e2hSfn1N7fhC9OzuuizBYBy3CG3jCftXcfA==}
+    engines: {node: '>=22.6'}
 
   '@browserbasehq/sdk@2.9.0':
     resolution: {integrity: sha512-Xzm1+6suzQypXjley4Phqer++pjnYyST6S7CArUn3kWyGA8aruXjAV5wkmqE21lgXo9K3/OQJvCu48bKEZFNDQ==}
@@ -3547,17 +3666,17 @@ packages:
   '@computesdk/cmd@0.4.1':
     resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
 
-  '@computesdk/daytona@1.7.52':
-    resolution: {integrity: sha512-GTSsFmNgXdIEnOoJZEjk84FgWoPakFzPLbIpiQRPHZt9OkWKPUUxV5FtEfKyz49l4wk2iG71fIIV4A+eEqHxzQ==}
+  '@computesdk/daytona@1.7.53':
+    resolution: {integrity: sha512-/oRa+jTq1u+SvRgsxbOMzyDkEPgOF3ZHHkgAjUHJucuR23PDcQss6RBes0nWQHqFSGotlXnopOCLGJkJICbsiw==}
 
-  '@computesdk/e2b@1.7.71':
-    resolution: {integrity: sha512-EQS0PVUx8ooV/KayYOv6MFBmgUyCmqbE0TegISDRr+4dZTnn0kh3vPyhYFbEw1e/83iGpm0KiEFZv0YERxgVJg==}
+  '@computesdk/e2b@1.7.72':
+    resolution: {integrity: sha512-k62lqsJFaIThzAnSmqzfTCwYaPvP1ZiJABhISrNAVI0ZxyNGoN8Lz0KL6TJcZO/7Cf6FLBTnMMyr5apM0si9pg==}
 
-  '@computesdk/modal@1.9.28':
-    resolution: {integrity: sha512-V3Id6gC+XbrCrJr4Re3k+qmEzTGhN7gva70ldyOGAURlpjjon+cY7kK4NCRlOMcIBb3H2WVkbhhwp1aY5IwOzw==}
+  '@computesdk/modal@1.9.30':
+    resolution: {integrity: sha512-QWz/L2qOONNUKg/gg+/G2OG6d6TGJ9MV1wsAKDygkRSe1zDjaMHaE+kkNdqKnMJu0hCTLWIMpGB2Q7COg9ZGcQ==}
 
-  '@computesdk/provider@2.1.22':
-    resolution: {integrity: sha512-MC5NGv8Y0Rwdla1mLHhuNSfVvvCt7o9S+c/GdzHf3Oe2fAjMicRUcb4SOf6D7S39PhdwhOiWoMbjpJohGxQbjg==}
+  '@computesdk/provider@2.1.23':
+    resolution: {integrity: sha512-6V6a6E+VGf33PTbvLIMleliZSI2QZIb5A5iLMfy3z6UEbWEViXUvb6mxBVQyd6CF7M9D9Ilgk7e+2HC25EOYCA==}
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -4644,10 +4763,6 @@ packages:
       ws:
         optional: true
 
-  '@noble/hashes@2.4.0':
-    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
-    engines: {node: '>= 20.19.0'}
-
   '@nodable/entities@2.1.0':
     resolution: {integrity: sha512-nyT7T3nbMyBI/lvr6L5TyWbFJAI9FTgVRakNoBqCD+PmID8DzFrrNdLLtHMwMszOtqZa8PAOV24ZqDnQrhQINA==}
 
@@ -5355,10 +5470,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@run-cloud/sdk@0.15.0':
-    resolution: {integrity: sha512-E0RZ0fArFX32R88mOq5w4nmBb2LOz9UB1gGgOCVo3b08Ly90IuyTYarh4VonHj5b/UtP5WA0sorWYvvIVaPtKg==}
-    engines: {node: '>=20'}
-
   '@runloop/api-client@1.30.0':
     resolution: {integrity: sha512-hfUkudjkYm+h514K0s2eohh1zAy/IR0pnYJQKJEBPQSvYVGI+jMv1S5fEoQAYMZB3W+lknh/SlCcSQw1MnZyNw==}
 
@@ -5629,40 +5740,6 @@ packages:
   '@superserve/sdk@0.9.3':
     resolution: {integrity: sha512-JzGiaNFiaB/fMNnL+Zm6OdE7yGau5zkqPyESX3Sr3piisFwgbGyDnKT21cucW1iA3BEMg2XBIVsuXw6WF6dUIw==}
 
-  '@tangle-network/agent-core@1.0.3':
-    resolution: {integrity: sha512-XEYUcGi2XZTCBcVKb6OK8PFbtW2xcI/0VtvRPWQtuVuBZWTb5PeI4HQ+r+rZB9IBuJpFzfm9wWfWum3zjWbsyQ==}
-    peerDependencies:
-      '@modelcontextprotocol/sdk': ^1.30.0
-    peerDependenciesMeta:
-      '@modelcontextprotocol/sdk':
-        optional: true
-
-  '@tangle-network/agent-interface@5.10.20':
-    resolution: {integrity: sha512-aEzAfS8iatWo/nX8dyTeZnQx+okHlumBZQyUCFLhQ6VoV+/byrRaQZzeVhMTtm3Yn89kvtOofZz4fZ5GH+vD/A==}
-
-  '@tangle-network/agent-trace-contract@2.2.2':
-    resolution: {integrity: sha512-46CGFTHw1E+Fvykjdf3tS0ysQugv+DdM9TptHjALVeFzO+Z4Baiw6XWJLYiP3fx/UEk3QCIiITD1qoPi8XfgkA==}
-
-  '@tangle-network/sandbox@1.0.264':
-    resolution: {integrity: sha512-apuRQxPnm5igWxyBwpxo+DYPukAV1l2z75EoI+ez+vVC1VlTvKNbJBtxk+mKnDvqpbFPAid7cNjujPCEv/xQUA==}
-    peerDependencies:
-      '@mastra/core': ^1.36.0
-      '@modelcontextprotocol/sdk': ^1.30.0
-      ai: ^6.0.175 || ^7.0.107
-      openai: ^6.36.0
-      viem: ^2.0.0
-    peerDependenciesMeta:
-      '@mastra/core':
-        optional: true
-      '@modelcontextprotocol/sdk':
-        optional: true
-      ai:
-        optional: true
-      openai:
-        optional: true
-      viem:
-        optional: true
-
   '@tenkicloud/sandbox@1.4.0':
     resolution: {integrity: sha512-1fio6b1I+5gK9uw8UkHYkcdNU0EDzswL2I1/6RRQfC5cAqmO6YjIlvnbn2Ia5APhqufHvPrHVbKZfwq0gp8tXA==}
     engines: {node: '>=18'}
@@ -5808,9 +5885,6 @@ packages:
 
   '@types/tedious@4.0.14':
     resolution: {integrity: sha512-KHPsfX/FoVbUGbyYvk1q9MMQHLPeRZhRJZdO45Q4YjvFkv4hMNghCWTvy7rdKessBsmtz4euWCWAB6/tVpI1Iw==}
-
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript-eslint/eslint-plugin@6.21.0':
     resolution: {integrity: sha512-oy9+hTPCUFpngkEZUSzbf9MxI65wbKFoQYsgPdILTfbUldp5ovUuphZVe4i30emU9M/kP+T64Di0mxl7dSw3MA==}
@@ -6495,8 +6569,8 @@ packages:
     resolution: {integrity: sha512-jpKJjBTretQACTGLNuvnozP1JdP2ZLrjdGdBgk/tz1VfXlUcBhhSZW6vEsuThmeot/yjvSrPQKEgfF3X2Lpi8Q==}
     hasBin: true
 
-  computesdk@4.1.16:
-    resolution: {integrity: sha512-/A8IEr/EyuzDAhVFzyE5am7mUQ07FPuwo1fB4dJdvBd2nUtsVzqmTRhBjgp15J6VkhwqQKqNa7wZIG31D5Fs/g==}
+  computesdk@4.1.17:
+    resolution: {integrity: sha512-0Ua3oOkmaOi6uc5P6pLgurz2qU8WUl39k+N6KjQlTYExv51MITwzWqzlOS/dCv5yPqJw5uaEQifoGPK+8KRH3Q==}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -7250,8 +7324,8 @@ packages:
     resolution: {integrity: sha512-Chq1s4CY7jmh8gO2qvLIJyfCDIN+EHLFW/9iShnp1z8FjBQMoodWP1kDC36VAMXXIvAjj4ARa7ntfAV2BrjsbA==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
-  gravixlayer@0.1.36:
-    resolution: {integrity: sha512-BQHMvAZ0AIwC12F//xkMGme9exUJCBUy9JQ8waQZesRUnKpRzIsl7J13fT+pHdK8EaryCVqWncyjKTqjMKg6pw==}
+  gravixlayer@0.1.51:
+    resolution: {integrity: sha512-M7qpdtQDIIWH1ut61DN2UqVRHXcGZIZIaH8vw20INsOQvuQV6EIw0Azg/OW/X7YLIXicqjUqLyr0C6BOH0gPnQ==}
     engines: {node: '>=20'}
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
@@ -8907,15 +8981,6 @@ packages:
   spawndamnit@3.0.1:
     resolution: {integrity: sha512-MmnduQUuHCoFckZoWnXsTg7JaiLBJrKFj9UI2MbRPGaJeVpsLcVBu6P/IGZovziM/YBsellCmsprgNA+w0CzVg==}
 
-  spdx-exceptions@2.5.0:
-    resolution: {integrity: sha512-PiU42r+xO4UbUS1buo3LPJkjlO7430Xn5SVAhdpzzsPHsjbYVflnnFdATgabnLude+Cqu25p6N+g2lw/PFsa4w==}
-
-  spdx-expression-parse@5.0.0:
-    resolution: {integrity: sha512-vngmw3Rgn+o2arXNbnZaj5UtOEBuWBfvaI+Wc8GFfykIhA5/vdK9/Sp/XkLv63dykz2rxKDvKEHupF5P0FORcQ==}
-
-  spdx-license-ids@3.0.24:
-    resolution: {integrity: sha512-cLS9TtWkIQFyLkJ3/5aFQAOHOSKTlOs/7WDut/XPSdjom1fJhUdkepeJAKXa9Y05+FabHd0sti+Et559vDtkpQ==}
-
   split-ca@1.0.1:
     resolution: {integrity: sha512-Q5thBSxp5t8WPTTJQS59LrGqOZqOsrhDGDVm8azCqIBjSBd7nd9o2PM+mDulQQkh8h//4U6hFZnc/mul8t5pWQ==}
 
@@ -9084,9 +9149,6 @@ packages:
 
   tar-stream@3.1.7:
     resolution: {integrity: sha512-qJj60CXt7IU1Ffyc3NJMjh6EkuCFej46zUqJ4J7pqYlThyd9bO0XBTmcOIhSzZJVWfsLks0+nle/j538YAW9RQ==}
-
-  tar-stream@3.2.1:
-    resolution: {integrity: sha512-nqsEO8zLZJvrOMdEwkA0QdCLFbetHMn95Zqu4fKwX+hkaTWJPZZOrxx/PwtxoK0MMGQmBQNRW3CPs8IFYQz4cQ==}
 
   tar@6.2.1:
     resolution: {integrity: sha512-DZ4yORTwrbTj/7MZYq2w+/ZFdI6OZ/f9SFHR+71gIVUZhOQPHzVCLpvRnPgyaMpfWxxk/4ONva3GQSyNIKRv6A==}
@@ -9813,9 +9875,6 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
-  zod@4.6.7:
-    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
-
 snapshots:
 
   '@alcalzone/ansi-tokenize@0.2.0':
@@ -9830,15 +9889,15 @@ snapshots:
 
   '@archildata/api-types@0.0.24': {}
 
-  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.52(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.71)(@computesdk/modal@1.9.28)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
+  '@arker-ai/sdk@1.2.4(@computesdk/daytona@1.7.53(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@computesdk/e2b@1.7.72)(@computesdk/modal@1.9.30)(bufferutil@4.1.0)(computesdk@packages+computesdk)(utf-8-validate@6.0.6)':
     dependencies:
       dockerfile-ast: 0.7.1
       tar: 7.5.22
       ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
-      '@computesdk/daytona': 1.7.52(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      '@computesdk/e2b': 1.7.71
-      '@computesdk/modal': 1.9.28
+      '@computesdk/daytona': 1.7.53(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@computesdk/e2b': 1.7.72
+      '@computesdk/modal': 1.9.30
       computesdk: link:packages/computesdk
     transitivePeerDependencies:
       - bufferutil
@@ -10317,25 +10376,27 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@benchsdk/api@0.7.1': {}
+  '@benchsdk/api@0.11.1': {}
 
-  '@benchsdk/cli@0.7.0':
-    dependencies:
-      '@benchsdk/api': 0.7.1
+  '@benchsdk/api@0.11.3': {}
 
-  '@benchsdk/cli@0.7.1':
+  '@benchsdk/cli@0.9.3':
     dependencies:
-      '@benchsdk/api': 0.7.1
+      '@benchsdk/api': 0.11.1
 
-  '@benchsdk/runner@0.6.0':
+  '@benchsdk/cli@0.9.5':
     dependencies:
-      '@benchsdk/api': 0.7.1
-      '@benchsdk/cli': 0.7.0
-      '@benchsdk/worker': 0.3.2
+      '@benchsdk/api': 0.11.3
 
-  '@benchsdk/worker@0.3.2':
+  '@benchsdk/runner@0.8.6':
     dependencies:
-      '@benchsdk/api': 0.7.1
+      '@benchsdk/api': 0.11.3
+      '@benchsdk/cli': 0.9.5
+      '@benchsdk/worker': 0.4.3
+
+  '@benchsdk/worker@0.4.3':
+    dependencies:
+      '@benchsdk/api': 0.11.3
 
   '@blaxel/core@0.3.21(@hey-api/openapi-ts@0.83.1(magicast@0.3.5)(typescript@5.8.3))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
@@ -10361,7 +10422,16 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@boatdev/sdk@1.9.9': {}
+
   '@borewit/text-codec@0.2.1': {}
+
+  '@briq-cloud/sdk@0.1.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+    dependencies:
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@browserbasehq/sdk@2.9.0':
     dependencies:
@@ -10625,11 +10695,11 @@ snapshots:
   '@computesdk/cmd@0.4.1':
     optional: true
 
-  '@computesdk/daytona@1.7.52(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@computesdk/daytona@1.7.53(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      '@computesdk/provider': 2.1.22
+      '@computesdk/provider': 2.1.23
       '@daytonaio/sdk': 0.224.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      computesdk: 4.1.16
+      computesdk: 4.1.17
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -10637,24 +10707,24 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@computesdk/e2b@1.7.71':
+  '@computesdk/e2b@1.7.72':
     dependencies:
-      '@computesdk/provider': 2.1.22
-      computesdk: 4.1.16
+      '@computesdk/provider': 2.1.23
+      computesdk: 4.1.17
       e2b: 2.30.1
     optional: true
 
-  '@computesdk/modal@1.9.28':
+  '@computesdk/modal@1.9.30':
     dependencies:
-      '@computesdk/provider': 2.1.22
-      computesdk: 4.1.16
+      '@computesdk/provider': 2.1.23
+      computesdk: 4.1.17
       modal: 0.11.0
     optional: true
 
-  '@computesdk/provider@2.1.22':
+  '@computesdk/provider@2.1.23':
     dependencies:
       '@computesdk/cmd': 0.4.1
-      computesdk: 4.1.16
+      computesdk: 4.1.17
       daemond: 0.1.8
     optional: true
 
@@ -11490,29 +11560,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.26.0(zod@4.6.7)':
-    dependencies:
-      '@hono/node-server': 1.19.9(hono@4.12.27)
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.6
-      express: 5.2.1
-      express-rate-limit: 8.2.1(express@5.2.1)
-      hono: 4.12.27
-      jose: 6.2.3
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.0
-      raw-body: 3.0.1
-      zod: 4.6.7
-      zod-to-json-schema: 3.25.1(zod@4.6.7)
-    transitivePeerDependencies:
-      - supports-color
-    optional: true
-
   '@mongodb-js/zstd@7.0.0':
     dependencies:
       node-addon-api: 8.6.0
@@ -11524,8 +11571,6 @@ snapshots:
       openapi-fetch: 0.17.0
     optionalDependencies:
       ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-
-  '@noble/hashes@2.4.0': {}
 
   '@nodable/entities@2.1.0': {}
 
@@ -11563,7 +11608,7 @@ snapshots:
 
   '@opencomputer/sdk@2.3.1':
     dependencies:
-      undici: 7.28.0
+      undici: 7.29.1
 
   '@opentelemetry/api-logs@0.214.0':
     dependencies:
@@ -12340,14 +12385,6 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.45.1':
     optional: true
 
-  '@run-cloud/sdk@0.15.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
-    dependencies:
-      '@types/ws': 8.18.1
-      ws: 8.21.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   '@runloop/api-client@1.30.0':
     dependencies:
       '@types/node': 18.19.123
@@ -12674,31 +12711,6 @@ snapshots:
 
   '@superserve/sdk@0.9.3': {}
 
-  '@tangle-network/agent-core@1.0.3':
-    dependencies:
-      '@tangle-network/agent-interface': 5.10.20
-      '@tangle-network/agent-trace-contract': 2.2.2
-      zod: 4.6.7
-
-  '@tangle-network/agent-interface@5.10.20':
-    dependencies:
-      '@noble/hashes': 2.4.0
-      spdx-expression-parse: 5.0.0
-      zod: 4.6.7
-
-  '@tangle-network/agent-trace-contract@2.2.2': {}
-
-  '@tangle-network/sandbox@1.0.264':
-    dependencies:
-      '@tangle-network/agent-core': 1.0.3
-      '@tangle-network/agent-interface': 5.10.20
-      '@tangle-network/agent-trace-contract': 2.2.2
-      tar-stream: 3.2.1
-      zod: 4.6.7
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-
   '@tenkicloud/sandbox@1.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
@@ -12875,10 +12887,6 @@ snapshots:
       '@types/node': 20.19.41
     optional: true
 
-  '@types/ws@8.18.1':
-    dependencies:
-      '@types/node': 20.19.41
-
   '@typescript-eslint/eslint-plugin@6.21.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
@@ -13041,10 +13049,10 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@upstash/box@0.5.5(zod@4.6.7)':
+  '@upstash/box@0.5.5(zod@4.4.3)':
     dependencies:
-      zod: 4.6.7
-      zod-to-json-schema: 3.25.1(zod@4.6.7)
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.1(zod@4.4.3)
 
   '@vercel/cli-config@0.3.1':
     dependencies:
@@ -13363,7 +13371,8 @@ snapshots:
 
   balanced-match@4.0.3: {}
 
-  bare-events@2.6.0: {}
+  bare-events@2.6.0:
+    optional: true
 
   bare-events@2.8.2: {}
 
@@ -13376,12 +13385,15 @@ snapshots:
       fast-fifo: 1.3.2
     transitivePeerDependencies:
       - bare-abort-controller
+    optional: true
 
-  bare-os@3.9.1: {}
+  bare-os@3.9.1:
+    optional: true
 
   bare-path@3.0.0:
     dependencies:
       bare-os: 3.9.1
+    optional: true
 
   bare-stream@2.13.1(bare-events@2.6.0):
     dependencies:
@@ -13389,10 +13401,12 @@ snapshots:
       teex: 1.0.1
     optionalDependencies:
       bare-events: 2.6.0
+    optional: true
 
   bare-url@2.4.3:
     dependencies:
       bare-path: 3.0.0
+    optional: true
 
   base64-js@1.5.1: {}
 
@@ -13785,7 +13799,7 @@ snapshots:
       amdefine: 1.0.1
       commander: 2.8.1
 
-  computesdk@4.1.16:
+  computesdk@4.1.17:
     dependencies:
       '@computesdk/cmd': 0.4.1
       daemond: 0.1.8
@@ -14752,7 +14766,7 @@ snapshots:
 
   graphql@16.14.2: {}
 
-  gravixlayer@0.1.36(@opentelemetry/api@1.9.1):
+  gravixlayer@0.1.51(@opentelemetry/api@1.9.1):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
 
@@ -15079,7 +15093,7 @@ snapshots:
     dependencies:
       ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  isorun@1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.6.7))(zod@4.6.7):
+  isorun@1.0.0(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3):
     dependencies:
       '@currentspace/http3': 0.8.5
       undici: 8.3.0
@@ -15088,8 +15102,8 @@ snapshots:
       '@isorun/http-transport-linux-arm64-musl': 0.8.8
       '@isorun/http-transport-linux-x64-gnu': 0.8.8
       '@isorun/http-transport-linux-x64-musl': 0.8.8
-      '@modelcontextprotocol/sdk': 1.26.0(zod@4.6.7)
-      zod: 4.6.7
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.4.3)
+      zod: 4.4.3
 
   istanbul-lib-coverage@3.2.2: {}
 
@@ -16585,15 +16599,6 @@ snapshots:
       cross-spawn: 7.0.6
       signal-exit: 4.1.0
 
-  spdx-exceptions@2.5.0: {}
-
-  spdx-expression-parse@5.0.0:
-    dependencies:
-      spdx-exceptions: 2.5.0
-      spdx-license-ids: 3.0.24
-
-  spdx-license-ids@3.0.24: {}
-
   split-ca@1.0.1: {}
 
   sprintf-js@1.0.3: {}
@@ -16787,16 +16792,6 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
 
-  tar-stream@3.2.1:
-    dependencies:
-      b4a: 1.6.7
-      bare-fs: 4.7.1
-      fast-fifo: 1.3.2
-      streamx: 2.25.0
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-
   tar@6.2.1:
     dependencies:
       chownr: 2.0.0
@@ -16819,6 +16814,7 @@ snapshots:
       streamx: 2.25.0
     transitivePeerDependencies:
       - bare-abort-controller
+    optional: true
 
   tensorlake@0.5.158(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
@@ -17402,11 +17398,11 @@ snapshots:
     dependencies:
       string-width: 7.2.0
 
-  withruntime@0.6.1(zod@4.6.7):
+  withruntime@0.6.1(zod@4.4.3):
     dependencies:
       undici: 7.29.1
     optionalDependencies:
-      zod: 4.6.7
+      zod: 4.4.3
 
   word-wrap@1.2.5: {}
 
@@ -17577,10 +17573,6 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  zod-to-json-schema@3.25.1(zod@4.6.7):
-    dependencies:
-      zod: 4.6.7
-
   zod@3.25.76: {}
 
   zod@4.1.11: {}
@@ -17588,5 +17580,3 @@ snapshots:
   zod@4.3.5: {}
 
   zod@4.4.3: {}
-
-  zod@4.6.7: {}
