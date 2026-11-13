@@ -71,12 +71,12 @@
 ## Platform
 
 * [Overview](platform/README.md)
-* [CLI reference](platform/cli.md)
-* [Actions](platform/actions.md)
-* [Benchmarks](platform/benchmarks.md)
 * [Sandboxes](platform/sandboxes.md)
+* [Actions (CI)](platform/actions.md)
+* [CLI reference](platform/cli.md)
 * [MCP server (Claude, ChatGPT)](platform/mcp.md)
 * [API reference](platform/api-reference.md)
+* [Benchmarks](platform/benchmarks.md)
 
 ## Reference
 

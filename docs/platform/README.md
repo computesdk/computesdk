@@ -1,29 +1,31 @@
 ---
 description: >-
-  The ComputeSDK Platform is the hosted control plane for ComputeSDK: managed
-  Benchmarks, Actions CI on real compute providers, organizations, and a
-  REST API + CLI for driving all of it.
+  The ComputeSDK Platform is the hosted sandbox router and CI router: place
+  sandboxes across your providers or the compute market, run GitHub Actions
+  workflows on real compute providers, and drive it all from the CLI, REST API
+  or MCP.
 ---
 
 # ComputeSDK Platform
 
 ## What the platform is
 
-The ComputeSDK Platform ([platform.computesdk.com](https://platform.computesdk.com)) is the hosted control plane behind ComputeSDK. Where the open-source SDK gives you a provider-agnostic sandbox API, the platform runs and tracks workloads for you:
+The ComputeSDK Platform ([platform.computesdk.com](https://platform.computesdk.com)) is the hosted control plane for ComputeSDK. The open-source SDK gives you one sandbox API across providers. The platform decides where work runs and tracks it for you:
 
-* **Benchmarks** — managed benchmark runs that measure sandbox, storage, browser, and AI gateway providers and publish reproducible results to your org's feed
-* **Actions** — a CI/workflow engine that executes GitHub-style workflows on real compute providers, not fixed runner VMs
+* **[Sandboxes](sandboxes.md), the sandbox router.** Create sandboxes through one endpoint and let the platform place them. It follows your `providerOrder`, using your own provider keys, the compute market, or both, with optional price limits.
+* **[Actions](actions.md), the CI router.** Run GitHub-style workflows on real compute providers instead of fixed runner VMs. Each job is placed by your org's provider order and reports the `provider:region` it ran on.
+* **[Benchmarks](benchmarks.md).** Managed runs that measure providers and publish results to your org's feed.
 
 Everything the platform does is available four ways:
 
 * the web dashboard at `https://platform.computesdk.com/<org-slug>/...`
 * the `compute` CLI (`@computesdk/cli` on npm)
 * the REST API under `https://platform.computesdk.com/api/v1`
-* the MCP server at `https://platform.computesdk.com/mcp` — for AI assistants (ChatGPT, Claude, Codex). Connects over OAuth; read tools like `benchmarks_list`/`benchmarks_get_results`/`benchmarks_get_participant_logs` expose the same benchmarks data as the REST routes, alongside the Actions and sandbox tools.
+* the MCP server at `https://platform.computesdk.com/mcp` — for AI assistants (ChatGPT, Claude, Codex). Connects over OAuth; tools cover sandboxes, Actions runs, provider keys, and benchmark results, using the same data as the REST routes.
 
 ## Organizations
 
-Work is organized into **organizations**. Signing up at the platform creates your personal org; every benchmark run, connected repo, provider credential, and API key belongs to an organization, and every API call resolves to exactly one org — resources in another org are indistinguishable from nonexistent ones (the API returns `404`).
+Work is organized into **organizations**. Signing up at the platform creates your personal org; every sandbox, connected repo, provider credential, Actions run, benchmark run, and API key belongs to an organization, and every API call resolves to exactly one org — resources in another org are indistinguishable from nonexistent ones (the API returns `404`).
 
 Org members collaborate through the dashboard. Owners and admins manage API keys, provider credentials, and connected repositories under **Settings** (`/<org-slug>/settings`).
 
@@ -54,8 +56,8 @@ The `compute` CLI can also authenticate interactively — `compute login` (equiv
 
 Platform features are gated by per-org **product entitlements**:
 
-* Benchmark categories (compute, storage, browser, AI gateway) unlock benchmark runs in that category
 * **Actions** is free for every org — connected repos, dispatch, and the `/api/v1/actions/*` API work out of the box.
+* Benchmark categories (compute, storage, browser, AI gateway) unlock benchmark runs in that category
 
 Billing is managed under **Settings → Billing** (`/<org-slug>/settings/billing`). Unentitled API calls return `403`.
 
@@ -71,7 +73,9 @@ with status `400`, `401`, `403`, `404`, `410`, `429`, or `500`. Successful respo
 
 ## Where next
 
-* [CLI reference](cli.md) — install and drive the `compute` CLI
+* [Sandboxes](sandboxes.md) — create and route hosted sandboxes from code
 * [Actions](actions.md) — connect repos, register provider credentials, dispatch workflows, stream logs
+* [CLI reference](cli.md) — install and drive the `compute` CLI
+* [MCP server](mcp.md) — connect Claude, ChatGPT and other assistants
 * [Benchmarks](benchmarks.md) — benchmarks, runs, and results over the API
 * [API reference](api-reference.md) — the full `/api/v1` endpoint surface

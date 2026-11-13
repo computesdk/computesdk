@@ -1,17 +1,20 @@
 ---
 description: >-
-  ComputeSDK is the open, multi-provider harness that powers ComputeSDK
-  Benchmarks and a TypeScript sandbox SDK for secure code execution across
-  multiple cloud providers with one unified API.
+  ComputeSDK is a sandbox router and CI router: one API to create sandboxes on
+  any cloud provider, and a CI engine that runs your GitHub Actions workflows
+  on whichever providers you choose.
 ---
 
 # Introduction
 
-## ComputeSDK: the benchmark harness for sandboxes
+## ComputeSDK: one API for every sandbox provider
 
-ComputeSDK is the open, multi-provider harness behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks). It exposes one provider-agnostic sandbox API so benchmarks can run the same workload on every provider and produce fair, reproducible results. The same API is also available as a TypeScript SDK for building AI agents, code execution platforms, developer tools, testing systems, and any product that needs safe cloud sandboxes.
+ComputeSDK routes compute across cloud providers. It does that in two ways:
 
-Because every provider returns the same sandbox interface, your application code stays the same even when you switch providers.
+* **Sandbox router.** Create, use, and destroy sandboxes through one API, and choose which provider each one lands on. Pick a provider per call, set a priority order with fallback, spread load round-robin, or let the hosted platform place sandboxes from your own provider keys or the compute market.
+* **CI router.** [Actions](platform/actions.md) runs your existing GitHub Actions workflows inside sandboxes on the providers your organization registers, instead of on fixed hosted runners. Jobs follow your provider order and report where each one ran.
+
+Every provider returns the same sandbox interface, so your code stays the same when you switch providers or add new ones.
 
 ## How the sandbox API works
 
@@ -54,30 +57,30 @@ Providers are platforms that provide sandboxes. Each package under `@computesdk/
 
 ## Why teams use ComputeSDK
 
-**Provider-agnostic sandbox API** — Switch providers with minimal code changes\
-**Open benchmark harness** — Powers [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks) with the same API on every provider\
-**Secure code execution** — Run untrusted code in isolated sandboxes\
-**Lean installs** — Add only the cloud sandbox providers you need\
-**TypeScript-native SDK** — Get a clean developer experience with strong typing\
-**Production-ready** — Build reliable AI and developer workflows on one interface
+**One API, many providers.** Route sandboxes to E2B, Modal, Vercel, Daytona, and dozens more without rewriting code.\
+**Fallback and routing built in.** Priority order, round-robin, and fallback on error, configured once.\
+**CI on your own compute.** Run GitHub Actions workflows on the sandbox providers you already pay for.\
+**Secure code execution.** Run untrusted code in isolated sandboxes.\
+**Lean installs.** Add only the provider packages you need.\
+**TypeScript-native.** Strong typing and clear errors across every provider.
 
 ### Common use cases
 
-* **Benchmarking infrastructure providers** — Compare sandbox, storage, browser, and AI gateway providers with one consistent harness
-* **AI agent infrastructure** — Let agents run code, commands, and file operations safely
-* **Code execution platforms** — Execute user-submitted code in isolated sandboxes
-* **Browser IDEs and education tools** — Provide interactive coding environments
-* **Data workflows** — Run scripts with filesystem access in disposable environments
-* **Testing and CI systems** — Create clean sandboxes for repeatable execution
+* **AI agent infrastructure.** Let agents run code, commands, and file operations safely, on whichever provider fits the task.
+* **Provider failover.** Keep working when one sandbox provider is down or out of capacity.
+* **Cost and hardware routing.** Send GPU work to one provider and lightweight tasks to another.
+* **CI on sandbox providers.** Move GitHub Actions jobs off fixed runners and onto the providers you choose.
+* **Code execution platforms.** Execute user-submitted code in isolated sandboxes.
+* **Browser IDEs and education tools.** Provide interactive coding environments.
 
 ## Core features
 
-**Open benchmark harness** — Run the same workload on every provider and publish reproducible benchmarks ([ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks))\
-**Multi-provider support** — Use E2B, Modal, Vercel, and other providers through one SDK\
-**Sandbox lifecycle management** — Create, reconnect, list, and destroy sandboxes\
-**Filesystem operations** — Read, write, remove, and organize files\
-**Shell command execution** — Run commands directly inside each sandbox\
-**Type-safe APIs** — Use full TypeScript support with clear errors
+**Multi-provider routing.** One SDK across 50+ sandbox providers, with per-call provider selection and configurable strategies.\
+**Hosted placement.** The [platform](platform/sandboxes.md) places sandboxes from your provider keys or the compute market, with price limits.\
+**Actions CI.** GitHub-compatible workflows that run on your registered providers ([Actions](platform/actions.md)).\
+**Sandbox lifecycle management.** Create, reconnect, list, and destroy sandboxes.\
+**Filesystem and shell.** Read and write files and run commands inside each sandbox.\
+**Type-safe APIs.** Full TypeScript support with clear errors.
 
 ## Quick example
 
@@ -189,4 +192,4 @@ Operations like `destroy` and snapshots automatically route to the provider that
 
 ## Next steps
 
-Start with [Installation](getting-started/installation.md) to set up a provider. Then follow [Quick Start](getting-started/quick-start.md) to launch your first sandbox.
+Start with [Installation](getting-started/installation.md) to set up a provider, then follow [Quick Start](getting-started/quick-start.md) to launch your first sandbox. To route sandboxes or CI through the hosted platform, see the [Platform overview](platform/README.md).
