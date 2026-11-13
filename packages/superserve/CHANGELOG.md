@@ -1,5 +1,11 @@
 # @computesdk/superserve
 
+## 0.2.23
+
+### Patch Changes
+
+- 571b376: Bump @superserve/sdk from ^0.9.3 to ^0.12.0
+
 ## 0.2.22
 
 ### Patch Changes
