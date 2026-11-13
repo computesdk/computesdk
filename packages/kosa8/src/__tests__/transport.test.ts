@@ -62,6 +62,7 @@ describe('kosa8 HTTP/2 transport', () => {
     expect(seen).toHaveLength(100);
     expect(seen[0].auth).toBe('Bearer k');
     expect(JSON.parse(rs[7].text).path).toBe('/v1/sandboxes/7');
+    expect(rs[7].headers['content-type']).toBe('application/json');
   });
 
   it('opens the session on preconnect, before the first request', async () => {
@@ -110,8 +111,8 @@ describe('kosa8 HTTP/2 transport', () => {
 describe('kosa8 HTTP/2 transport keeps the process alive while requests are in progress', () => {
   it('finishes a burst after a preconnect left the session idle', async () => {
     const { execFileSync } = await import('node:child_process');
-    const { fileURLToPath } = await import('node:url');
-    const src = fileURLToPath(new URL('../transport.ts', import.meta.url));
+    const { resolve } = await import('node:path');
+    const src = resolve(__dirname, '../transport.ts');
     // A child process with nothing else to keep it alive: it must not exit before the replies.
     const script = `
       const http2 = require('node:http2');

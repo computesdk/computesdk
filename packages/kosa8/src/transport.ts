@@ -20,6 +20,8 @@ export interface HttpResponse {
   status: number;
   ok: boolean;
   text: string;
+  /** Response headers, names in lower case. */
+  headers: Record<string, string>;
 }
 
 export interface HttpInit {
@@ -147,7 +149,9 @@ async function viaFetch(url: string, init: HttpInit): Promise<HttpResponse> {
     body: init.body,
     signal: init.signal,
   });
-  return { status: res.status, ok: res.ok, text: await res.text() };
+  const headers: Record<string, string> = {};
+  res.headers?.forEach?.((v, k) => (headers[k.toLowerCase()] = v));
+  return { status: res.status, ok: res.ok, text: await res.text(), headers };
 }
 
 /** One request: over the origin's HTTP/2 session when there is one, else `fetch`. */
@@ -226,8 +230,10 @@ function viaSession(s: Session, url: string, init: HttpInit): Promise<HttpRespon
     }
     const chunks: Buffer[] = [];
     let status = 0;
+    const got: Record<string, string> = {};
     req.on('response', (h) => {
       status = Number(h[':status'] ?? 0);
+      for (const [k, v] of Object.entries(h)) if (!k.startsWith(':') && v !== undefined) got[k] = String(v);
     });
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
@@ -239,6 +245,7 @@ function viaSession(s: Session, url: string, init: HttpInit): Promise<HttpRespon
             status,
             ok: status >= 200 && status < 300,
             text: Buffer.concat(chunks).toString('utf8'),
+            headers: got,
           }),
         );
     });
