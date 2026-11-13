@@ -13,6 +13,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { defineProvider, escapeShellArg, ShellFileSystem } from '@computesdk/provider';
+import { httpRequest, preconnect } from './transport';
 
 import type { CommandResult, CreateInstanceOptions, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
 
@@ -121,7 +122,7 @@ async function request<T>(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<T | null> {
-  const res = await fetch(`${auth.baseUrl}${path}`, {
+  const res = await httpRequest(`${auth.baseUrl}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${auth.apiKey}`,
@@ -131,7 +132,7 @@ async function request<T>(
     signal,
   });
   if (res.status === 404) return null;
-  const text = await res.text();
+  const text = res.text;
   if (!res.ok) {
     let detail = text;
     try {
@@ -149,7 +150,11 @@ const sandboxPath = (id: string, rest = '') => `/v1/sandboxes/${encodeURICompone
 
 function toSandbox(auth: Auth, data: Kosa8SandboxData, direct?: unknown): Kosa8Sandbox {
   const sandbox: Kosa8Sandbox = { id: data.id, data, apiKey: auth.apiKey, baseUrl: auth.baseUrl };
-  if (isDirect(direct)) sandbox.direct = direct;
+  if (isDirect(direct)) {
+    sandbox.direct = direct;
+    // The first command follows at once: its host's session opens now.
+    preconnect(direct.exec_url);
+  }
   return sandbox;
 }
 
@@ -196,13 +201,13 @@ async function runDirect(sandbox: Kosa8Sandbox, body: unknown, signal?: AbortSig
   const left = d.expires_at - Date.now();
   if (left < DIRECT_REFRESH_MS) refreshDirect(sandbox);
   if (left < DIRECT_MARGIN_MS) return null;
-  const res = await fetch(d.exec_url, {
+  const res = await httpRequest(d.exec_url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${d.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
   });
-  const text = await res.text();
+  const text = res.text;
   if (DIRECT_NOT_RUN.has(res.status)) {
     if (sandbox.direct === d) sandbox.direct = undefined;
     return null;
@@ -372,7 +377,7 @@ export async function writeFileViaExec(sandbox: Kosa8Sandbox, path: string, cont
 const notAvailable = (what: string) =>
   new Error(`kosa8 does not support ${what} through ComputeSDK yet.`);
 
-export const kosa8 = defineProvider<Kosa8Sandbox, Kosa8Config>({
+const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
   name: 'kosa8',
   methods: {
     instances: {
@@ -513,5 +518,18 @@ export const kosa8 = defineProvider<Kosa8Sandbox, Kosa8Config>({
     },
   },
 });
+
+/**
+ * The kosa8 provider. Configuring it opens the HTTP/2 session to the API (transport.ts), so the
+ * first create does not pay the connection's handshake.
+ */
+export const kosa8: typeof provider = (config) => {
+  try {
+    preconnect(resolveConfig(config).baseUrl);
+  } catch {
+    // No key yet: the first call reports it.
+  }
+  return provider(config);
+};
 
 export default kosa8;
