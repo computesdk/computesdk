@@ -188,7 +188,7 @@ describe('uno provider', () => {
     const sandbox = await compute.sandbox.create({ vcpus: 8, memoryMiB: 16384 } as any)
     expect(calls[0]).toMatchObject({
       method: 'POST',
-      url: 'https://api.test/api/v1/boxes',
+      url: 'https://api.test/api/v1/boxes?wait_ready_s=30',
       body: { template: 'ubuntu-24.04', vcpu: 8, ram_mb: 16384, disk_gb: 10, region: 'us' },
     })
     const r = await sandbox.runCommand('node -v', { cwd: '/tmp', env: { A: '1' } } as any)
@@ -210,11 +210,77 @@ describe('uno provider', () => {
   })
 
   it('rounds memory up to the 256 MiB step and rejects bad env names', async () => {
-    const calls = mockFetch([() => [201, box()], () => [200, box()]])
+    const calls = mockFetch([() => [201, box()]])
     const compute = uno({ apiKey: 'k', baseUrl: 'https://api.test' })
     const sandbox = await compute.sandbox.create({ memory: 1000, cpus: 1 } as any)
     expect(calls[0].body).toMatchObject({ ram_mb: 1024, vcpu: 1 })
     await expect(sandbox.runCommand('true', { env: { 'x; rm': '1' } } as any)).rejects.toThrow(/Invalid environment/)
+  })
+})
+
+describe('create waits on the server', () => {
+  const ready = (waited_ms = 380) => box({ wait: { outcome: 'ready', ready: true, waited_ms } })
+
+  it('takes one request when the server holds create until the machine is ready', async () => {
+    const calls = mockFetch([
+      () => [201, ready()],
+      () => [200, { status: 'finished', exit_code: 0, stdout: 'ok', stderr: '' }],
+    ])
+    const sandbox = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
+    expect(calls.map(c => `${c.method} ${c.url}`)).toEqual(['POST https://api.test/api/v1/boxes?wait_ready_s=30'])
+    expect(calls[0].body.comment).toMatch(/^computesdk [0-9a-f-]{36}$/)
+    expect((await sandbox.runCommand('true')).stdout).toBe('ok')
+  })
+
+  it('polls as before when the server answers create at once', async () => {
+    // An older server ignores wait_ready_s; a wait the server cut short has no `ready`.
+    for (const created of [box({ status: 'provisioning', provision_state: 'pending' }), box({ status: 'provisioning', provision_state: 'pending', wait: { outcome: 'timeout', ready: false, waited_ms: 0 } })]) {
+      const calls = mockFetch([() => [201, created], () => [200, box()]])
+      const sb = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
+      expect(sb.sandboxId).toBe('42')
+      expect(calls.map(c => c.method)).toEqual(['POST', 'GET'])
+    }
+  })
+
+  it('deletes the machine when create says its start failed', async () => {
+    const calls = mockFetch([
+      () => [201, box({ status: 'error', provision_state: 'failed', provision_error: 'no capacity', wait: { outcome: 'failed', ready: false, waited_ms: 900 } })],
+      () => [200, { status: 'deleted' }],
+    ])
+    const err = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create().catch(e => e)
+    expect(err.message).toMatch(/no capacity/)
+    expect(calls.map(c => `${c.method} ${c.url}`)).toEqual([
+      'POST https://api.test/api/v1/boxes?wait_ready_s=30',
+      'DELETE https://api.test/api/v1/boxes/42?purge=now',
+    ])
+  })
+
+  it('asks for no longer than readyTimeoutMs and counts the server wait against it', async () => {
+    const calls = mockFetch([
+      () => [201, box({ status: 'provisioning', provision_state: 'pending', wait: { outcome: 'timeout', ready: false, waited_ms: 5_000 } })],
+      () => [200, box({ status: 'starting', provision_state: 'started' })],
+      () => [200, { status: 'deleted' }],
+    ])
+    const err = await uno({ apiKey: 'k', baseUrl: 'https://api.test', readyTimeoutMs: 5_000 }).sandbox.create().catch(e => e)
+    expect(err).toMatchObject({ code: 'READY_TIMEOUT' })
+    expect(err.message).toMatch(/after 5000 ms/)
+    expect(calls.map(c => `${c.method} ${c.url}`)).toEqual([
+      'POST https://api.test/api/v1/boxes?wait_ready_s=5',
+      'GET https://api.test/api/v1/boxes/42',
+      'DELETE https://api.test/api/v1/boxes/42?purge=now',
+    ])
+  })
+
+  it('does not ask the server to wait under a second', async () => {
+    const calls = mockFetch([() => [201, box()]])
+    await uno({ apiKey: 'k', baseUrl: 'https://api.test', readyTimeoutMs: 500 }).sandbox.create()
+    expect(calls[0].url).toBe('https://api.test/api/v1/boxes')
+  })
+
+  it('caps the wait at what the API holds a response for', async () => {
+    const calls = mockFetch([() => [201, box()]])
+    await new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).createBox({ template: 't', vcpu: 1, ram_mb: 512, disk_gb: 4 }, undefined, { waitReadyS: 600 })
+    expect(calls[0].url).toBe('https://api.test/api/v1/boxes?wait_ready_s=30')
   })
 })
 
@@ -266,7 +332,7 @@ describe('create when the response is lost', () => {
     // ComputeSDK rejects on abort right away; the cleanup finishes in the background.
     await vi.waitFor(() => expect(calls).toHaveLength(3))
     expect(calls.map(c => `${c.method} ${c.url}`)).toEqual([
-      'POST https://api.test/api/v1/boxes',
+      'POST https://api.test/api/v1/boxes?wait_ready_s=30',
       'GET https://api.test/api/v1/boxes',
       'DELETE https://api.test/api/v1/boxes/11?purge=now',
     ])
@@ -283,14 +349,14 @@ describe('safety and status', () => {
   })
 
   it('reports a machine deleted elsewhere as stopped and gives no URL for it', async () => {
-    mockFetch([() => [201, box({ url: 'https://b.uno4.dev' })], () => [200, box({ url: 'https://b.uno4.dev' })], () => [404, { error: 'NOT_FOUND' }], () => [404, { error: 'NOT_FOUND' }]])
+    mockFetch([() => [201, box({ url: 'https://b.uno4.dev' })], () => [404, { error: 'NOT_FOUND' }], () => [404, { error: 'NOT_FOUND' }]])
     const sandbox = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
     expect((await sandbox.getInfo()).status).toBe('stopped')
     await expect(sandbox.getUrl({ port: 80 })).rejects.toThrow(/not found/)
   })
 
   it('says when command output was cut at the API cap', async () => {
-    mockFetch([() => [201, box()], () => [200, box()], () => [200, { status: 'finished', exit_code: 0, stdout: 'x', stderr: '', stdout_truncated: true }]])
+    mockFetch([() => [201, box()], () => [200, { status: 'finished', exit_code: 0, stdout: 'x', stderr: '', stdout_truncated: true }]])
     const sandbox = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
     expect((await sandbox.runCommand('yes | head -c 1000000')).stderr).toMatch(/stdout truncated/)
   })

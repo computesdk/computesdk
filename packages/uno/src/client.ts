@@ -9,8 +9,13 @@
  */
 
 export const DEFAULT_BASE_URL = 'https://console.uno4.dev'
-/** How long POST /boxes may take: a busy console can hold it well past the 30 s of plain calls. */
+/**
+ * How long POST /boxes may take: a busy console can hold it well past the 30 s
+ * of plain calls, plus up to 30 s more when it is asked to wait for readiness.
+ */
 const CREATE_TIMEOUT_MS = 120_000
+/** The longest readiness wait the API holds a response for (`wait_ready_s`). */
+export const MAX_WAIT_READY_S = 30
 /** Readiness polling cadence, see {@link UnoClient.waitReady}. */
 const READY_POLL_FAST_MS = 100
 const READY_POLL_FAST_WINDOW_MS = 10_000
@@ -33,6 +38,8 @@ export interface UnoBox {
   network_region?: string
   max_lifetime_s?: number
   comment?: string
+  /** How a `wait_ready_s` wait ended; present only when the request asked for one. */
+  wait?: { outcome: string; ready: boolean; waited_ms: number }
   [key: string]: unknown
 }
 
@@ -164,10 +171,16 @@ export class UnoClient {
     return { status: res.status, body: parsed as T, headers: res.headers }
   }
 
-  async createBox(req: UnoCreateBoxRequest, signal?: AbortSignal): Promise<UnoBox> {
-    return (
-      await this.request<UnoBox>('POST', '/api/v1/boxes', req, { accept: [201, 200], signal, timeoutMs: CREATE_TIMEOUT_MS })
-    ).body
+  /**
+   * Create a box. With `waitReadyS` the server holds the answer until the box
+   * is running and provisioned, its start fails, or that many seconds pass
+   * (at most {@link MAX_WAIT_READY_S}), and says how the wait ended in `wait`.
+   * A server that does not know the parameter answers at once, as without it.
+   */
+  async createBox(req: UnoCreateBoxRequest, signal?: AbortSignal, opts: { waitReadyS?: number } = {}): Promise<UnoBox> {
+    const waitS = Math.min(MAX_WAIT_READY_S, Math.max(0, Math.floor(opts.waitReadyS ?? 0)))
+    const path = waitS > 0 ? `/api/v1/boxes?wait_ready_s=${waitS}` : '/api/v1/boxes'
+    return (await this.request<UnoBox>('POST', path, req, { accept: [201, 200], signal, timeoutMs: CREATE_TIMEOUT_MS })).body
   }
 
   /**
@@ -205,30 +218,25 @@ export class UnoClient {
   }
 
   /**
-   * Poll until the box is running and provisioned. Create returns at once with
-   * `status: "provisioning"`; the machine is usually ready a second or two
-   * later. The box is checked every 100 ms for the first 10 s, then once a
-   * second. The interval counts from the start of each request, so the round
-   * trip does not add to it and a box is never polled more than 10 times a
-   * second.
+   * Poll until the box is running and provisioned. Create without a wait
+   * returns at once with `status: "provisioning"`; the machine is usually
+   * ready a second or two later. The box is checked every 100 ms for the
+   * first 10 s, then once a second. The interval counts from the start of
+   * each request, so the round trip does not add to it and a box is never
+   * polled more than 10 times a second.
+   *
+   * `waitedMs` is time already spent waiting for this box (by the server,
+   * while it held create) and counts against `timeoutMs`.
    */
-  async waitReady(id: string | number, timeoutMs: number, signal?: AbortSignal): Promise<UnoBox> {
+  async waitReady(id: string | number, timeoutMs: number, signal?: AbortSignal, waitedMs = 0): Promise<UnoBox> {
     const started = Date.now()
-    const deadline = started + timeoutMs
+    const deadline = started + timeoutMs - waitedMs
     for (;;) {
       signal?.throwIfAborted()
       const polledAt = Date.now()
       const box = await this.getBox(id)
       if (!box) throw new UnoError(`Uno box ${id} disappeared while starting`, 404, 'NOT_FOUND')
-      if (box.status === 'running' && box.provision_state === 'ready') return box
-      if (box.status === 'error' || box.provision_state === 'failed') {
-        throw new UnoError(
-          `Uno box ${id} failed to start${box.provision_error ? `: ${box.provision_error}` : ''}`,
-          500,
-          'PROVISION_FAILED',
-          box,
-        )
-      }
+      if (isReadyOrThrow(box)) return box
       const interval = polledAt - started < READY_POLL_FAST_WINDOW_MS ? READY_POLL_FAST_MS : READY_POLL_SLOW_MS
       const delay = Math.max(0, polledAt + interval - Date.now())
       if (Date.now() + delay > deadline) {
@@ -303,6 +311,23 @@ export class UnoClient {
     }
     return run
   }
+}
+
+/**
+ * True once a box is running and provisioned, false while it is still
+ * starting; throws `PROVISION_FAILED` if its start failed.
+ */
+export function isReadyOrThrow(box: UnoBox): boolean {
+  if (box.status === 'running' && box.provision_state === 'ready') return true
+  if (box.status === 'error' || box.provision_state === 'failed') {
+    throw new UnoError(
+      `Uno box ${box.id} failed to start${box.provision_error ? `: ${box.provision_error}` : ''}`,
+      500,
+      'PROVISION_FAILED',
+      box,
+    )
+  }
+  return false
 }
 
 /** Network failures and 5xx/524 from the edge, where trying again is harmless for reads. */
