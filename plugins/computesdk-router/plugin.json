@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "computesdk-router",
   "version": "0.2.0",
-  "description": "Run code in cloud sandboxes across providers, drive your Actions CI, manage provider keys and read benchmark results, from ChatGPT or Claude.",
+  "description": "Run code in cloud sandboxes, manage CI workflows, check provider key status, and read benchmark results.",
   "author": {
     "name": "ComputeSDK",
     "url": "https://www.computesdk.com"
@@ -23,7 +23,7 @@
       "interface": {
         "displayName": "ComputeSDK Router",
         "shortDescription": "Run code in cloud sandboxes",
-        "longDescription": "ComputeSDK Router gives your assistant a real execution environment: create sandboxes, run commands, manage files, run long-lived processes, and preview exposed ports. Sandboxes are placed across providers through the ComputeSDK gateway, on your own provider keys or ComputeSDK's managed accounts, billed from prepaid credit. Ask what you can run on and what each size costs before you create anything. It also drives the org's Actions CI (list repos and workflows, dispatch runs, watch progress, read job logs), shows provider key status and rates, and reads benchmark results. Dispatching CI requires an org admin to connect repos via the ComputeSDK GitHub App first.",
+        "longDescription": "ComputeSDK Router gives your assistant a real execution environment: create sandboxes, run commands, manage files, run long-lived processes, and preview exposed ports. Sandboxes are placed across providers through the ComputeSDK gateway, on your own provider keys or ComputeSDK's managed accounts. Ask which providers and sizes are available before you create anything. It also drives the org's Actions CI (list repos and workflows, dispatch runs, watch progress, read job logs), shows provider key status, and reads benchmark results. Dispatching CI requires an org admin to connect repos via the ComputeSDK GitHub App first.",
         "developerName": "ComputeSDK",
         "category": "Developer Tools",
         "capabilities": [
@@ -31,7 +31,7 @@
           "Manage files",
           "Manage processes",
           "Dispatch and inspect CI runs",
-          "Check provider keys and rates",
+          "Check provider key status",
           "Read benchmark results"
         ],
         "websiteURL": "https://www.computesdk.com",
@@ -39,7 +39,7 @@
         "termsOfServiceURL": "https://www.computesdk.com/terms",
         "supportURL": "https://www.computesdk.com/support",
         "defaultPrompt": [
-          "What can I run sandboxes on, and what does each size cost per hour?",
+          "Which providers and sizes can I run sandboxes on?",
           "Spin up a sandbox, write a small web server, and give me its preview URL.",
           "Show me the latest failing CI run and pull the failing step's logs."
         ],
