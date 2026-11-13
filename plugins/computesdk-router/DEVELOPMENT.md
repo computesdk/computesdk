@@ -1,4 +1,6 @@
-# ComputeSDK Router — ChatGPT + Claude Code plugin
+# ComputeSDK Router — development notes
+
+The user-facing description is `README.md` (Claude's directory uses it as the listing). This file is for maintainers.
 
 A developer tool for running code in any sandbox provider, routing each
 sandbox and CI job across providers. This directory is the **plugin package**,
