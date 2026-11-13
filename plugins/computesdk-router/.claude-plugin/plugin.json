@@ -16,5 +16,6 @@
     "compute",
     "ci",
     "benchmarks"
-  ]
+  ],
+  "privacyPolicyUrl": "https://www.computesdk.com/privacy"
 }

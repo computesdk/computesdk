@@ -17,7 +17,8 @@ org API key or a `compute login` session:
 import { compute } from 'computesdk';
 import { platform } from '@computesdk/platform';
 
-compute.setConfig({ provider: platform({ apiKey: process.env.COMPUTE_API_KEY }) });
+// Reads the org API key from COMPUTE_API_KEY (or a `compute login` session).
+compute.setConfig({ provider: platform() });
 
 // Creates are idempotent — the SDK mints an idempotency key per call
 const sandbox = await compute.sandbox.create({ label: 'my-job', timeout: 30 * 60 * 1000 });
@@ -47,7 +48,8 @@ for `size` and the error codes (`insufficient_credits`, …) on `err.code`.
 import { compute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
-compute.setConfig({ provider: e2b({ apiKey: process.env.E2B_API_KEY }) });
+// Reads the provider key from its environment variable (E2B_API_KEY here).
+compute.setConfig({ provider: e2b() });
 
 const sandbox = await compute.sandbox.create();
 const result = await sandbox.runCommand('python -c "print(\'Hello\')"');
