@@ -1,5 +1,12 @@
 # @computesdk/agent37
 
+## 0.1.7
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 0.1.6
 
 ### Patch Changes

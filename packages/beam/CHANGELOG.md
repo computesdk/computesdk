@@ -1,5 +1,12 @@
 # @computesdk/beam
 
+## 0.3.28
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 0.3.27
 
 ### Patch Changes

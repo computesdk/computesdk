@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/kosa8",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "kosa8 provider for ComputeSDK - sandboxes that each run in their own microVM with its own kernel, with sleep and wake",
   "author": "kosa8",
   "license": "MIT",

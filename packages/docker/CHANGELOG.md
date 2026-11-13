@@ -1,5 +1,12 @@
 # @computesdk/docker
 
+## 1.2.70
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 1.2.69
 
 ### Patch Changes

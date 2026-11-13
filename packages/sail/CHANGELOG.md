@@ -1,5 +1,12 @@
 # @computesdk/sail
 
+## 1.0.23
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 1.0.22
 
 ### Patch Changes

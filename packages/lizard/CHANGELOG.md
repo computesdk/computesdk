@@ -1,5 +1,12 @@
 # @computesdk/lizard
 
+## 1.0.11
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 1.0.10
 
 ### Patch Changes

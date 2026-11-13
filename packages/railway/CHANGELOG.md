@@ -1,5 +1,12 @@
 # @computesdk/railway
 
+## 2.0.22
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 2.0.21
 
 ### Patch Changes

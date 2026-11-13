@@ -1,5 +1,11 @@
 # @computesdk/platform
 
+## 0.2.6
+
+### Patch Changes
+
+- @computesdk/provider@2.1.24
+
 ## 0.2.5
 
 ### Patch Changes
