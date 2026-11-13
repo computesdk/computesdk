@@ -74,6 +74,31 @@ describe('UnoClient', () => {
     await expect(c.deleteBox(1)).resolves.toBeUndefined()
   })
 
+  it('repeats a delete lost on the way; a repeat that finds the box gone is success', async () => {
+    const calls = mockFetch([
+      () => {
+        throw new TypeError('fetch failed')
+      },
+      () => [502, { raw: 'Bad gateway' }],
+      () => [404, { error: 'NOT_FOUND' }],
+    ])
+    const c = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' })
+    await expect(c.deleteBox(42)).resolves.toBeUndefined()
+    expect(calls.map(x => `${x.method} ${x.url}`)).toEqual(
+      Array(3).fill('DELETE https://api.test/api/v1/boxes/42?purge=now'),
+    )
+  })
+
+  it('gives up on a delete after four attempts and does not repeat a refused one', async () => {
+    mockFetch([() => [503, {}], () => [503, {}], () => [524, {}], () => [503, { error: 'UNAVAILABLE' }]])
+    const c = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' })
+    await expect(c.deleteBox(42)).rejects.toMatchObject({ status: 503, code: 'UNAVAILABLE' })
+
+    const calls = mockFetch([() => [403, { error: 'FORBIDDEN' }]])
+    await expect(c.deleteBox(42)).rejects.toMatchObject({ status: 403 })
+    expect(calls).toHaveLength(1)
+  }, 15_000)
+
   it('long-polls a run that outlives one HTTP response, keeping one idempotency key', async () => {
     const calls = mockFetch([
       () => [202, { run_id: 'r1', status: 'running', box_id: 42 }],
