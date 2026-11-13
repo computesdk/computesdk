@@ -324,13 +324,20 @@ export class UnoClient {
   nativeFiles: boolean | undefined
 
   /**
+   * Machines that answered 501 (an older node, a Work trial): the file API
+   * is on for the account but not for them. Asked once; each probe would
+   * leave a failed "[files] …" line in the machine's run history.
+   */
+  private readonly noFilesOn = new Set<string>()
+
+  /**
    * Read a whole file through the native file API. Returns `null` when the
    * API has no file endpoint (an older server, or not enabled for this
    * account); the caller then reads through commands. Throws `FILE_NOT_FOUND`
    * for a missing file and `IS_A_DIRECTORY` for a directory.
    */
   async readFileNative(id: string | number, path: string): Promise<Buffer | null> {
-    if (this.nativeFiles === false) return null
+    if (this.nativeFiles === false || this.noFilesOn.has(String(id))) return null
     const url = filesUrl(id, path)
     const busyDeadline = Date.now() + BUSY_WAIT_MS
     for (let attempt = 0; ; ) {
@@ -341,9 +348,11 @@ export class UnoClient {
           return Buffer.from(await res.arrayBuffer())
         }
         const text = await res.text()
-        if (res.status === 200 || noNativeFiles(res.status, text)) {
-          // A 200 that is not file bytes is the console's web app answering an unknown path.
-          this.nativeFiles = false
+        // A 200 that is not file bytes is the console's web app answering an unknown path.
+        const missing = res.status === 200 ? 'off' : noNativeFiles(res.status, text)
+        if (missing) {
+          if (missing === 'off') this.nativeFiles = false
+          else this.noFilesOn.add(String(id))
           return null
         }
         throw apiError('GET', url, res.status, parseJsonBody(text))
@@ -365,7 +374,7 @@ export class UnoClient {
    * endpoint; the caller then writes through commands.
    */
   async writeFileNative(id: string | number, path: string, data: Uint8Array, opts: { append?: boolean } = {}): Promise<boolean> {
-    if (this.nativeFiles === false) return false
+    if (this.nativeFiles === false || this.noFilesOn.has(String(id))) return false
     const url = filesUrl(id, path) + (opts.append ? '&append=1' : '')
     // ~1 s per MiB on top of a minute: a slow link must not abort a large file half-way.
     const timeoutMs = Math.min(FILE_TIMEOUT_MAX_MS, 60_000 + Math.ceil(data.length / (1024 * 1024)) * 1_000)
@@ -382,8 +391,10 @@ export class UnoClient {
           }
           return true
         }
-        if (res.status === 200 || noNativeFiles(res.status, text)) {
-          this.nativeFiles = false
+        const missing = res.status === 200 ? 'off' : noNativeFiles(res.status, text)
+        if (missing) {
+          if (missing === 'off') this.nativeFiles = false
+          else this.noFilesOn.add(String(id))
           return false
         }
         throw apiError('PUT', url, res.status, parsed)
@@ -579,8 +590,9 @@ function retryDelayMs(err: unknown, attempt: number): number {
   return Math.min(500 * 2 ** attempt, 4_000)
 }
 
+/** The box (or its file channel: `FILES_BUSY`, more than 6 transfers at once) is busy for a moment. */
 function isBusy(err: unknown): boolean {
-  return err instanceof UnoError && err.code === 'BOX_BUSY'
+  return err instanceof UnoError && (err.code === 'BOX_BUSY' || err.code === 'FILES_BUSY')
 }
 
 function parseJsonBody(text: string): Record<string, unknown> {
@@ -604,13 +616,17 @@ function filesUrl(id: string | number, path: string): string {
 }
 
 /**
- * A server without the file endpoints (or with them off for the account)
- * answers like an unknown route: a 404 without a JSON error code, 405 or 501.
- * A 404 with a code is a real answer (`FILE_NOT_FOUND`, the box is gone).
+ * Why a file call got no native answer. `off`: the server has no file
+ * endpoints, or they are off for the account — it answers like an unknown
+ * route (a 404 without a JSON error code, or 405); stop asking. `unavailable`:
+ * 501, this machine cannot use them (an older node, a Work trial) — use
+ * commands for this machine. `false`: a real answer (`FILE_NOT_FOUND`, the
+ * box is gone, …).
  */
-function noNativeFiles(status: number, text: string): boolean {
-  if (status === 405 || status === 501) return true
-  return status === 404 && typeof parseJsonBody(text).error !== 'string'
+function noNativeFiles(status: number, text: string): 'off' | 'unavailable' | false {
+  if (status === 501) return 'unavailable'
+  if (status === 405) return 'off'
+  return status === 404 && typeof parseJsonBody(text).error !== 'string' ? 'off' : false
 }
 
 /** Like {@link isRetryableRunError}: busy, a channel the server says is safe to retry, edge 5xx, network. */

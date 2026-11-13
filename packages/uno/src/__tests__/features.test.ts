@@ -200,6 +200,36 @@ describe('native file API', () => {
     expect(calls[4].body.cmd).toMatch(/^mkdir -p .* base64 -d > ".*\.tmp" && mv -f ".*\.tmp" "\/z"$/)
   })
 
+  it('uses commands on a machine that cannot use the file API (501), and the API on other machines', async () => {
+    const calls = mockFetch([
+      () => [201, box()],
+      () => [501, { error: 'FILES_API_UNAVAILABLE' }],
+      () => ok('2\naGk='),
+      () => ok('2\nb2s='),
+      () => [201, box({ id: 43 })],
+      () => [200, bytes('ok'), { 'content-type': 'application/octet-stream' }],
+    ])
+    const compute = uno({ apiKey: 'k', baseUrl: api })
+    const sandbox = await compute.instances.create()
+    expect(await sandbox.filesystem.readFile('/y')).toBe('hi')
+    // Asked once per machine: the second read goes straight to commands.
+    expect(await sandbox.filesystem.readFile('/z')).toBe('ok')
+    expect(calls[3].url).toMatch(/\/boxes\/42\/run$/)
+    const other = await compute.instances.create()
+    expect(await other.filesystem.readFile('/z')).toBe('ok')
+    expect(calls[5].url).toContain('/boxes/43/files?path=%2Fz')
+  })
+
+  it('waits out FILES_BUSY (too many transfers on one machine)', async () => {
+    mockFetch([
+      () => [201, box()],
+      () => [503, { error: 'FILES_BUSY' }],
+      () => [200, { size: 2 }],
+    ])
+    const sandbox = await uno({ apiKey: 'k', baseUrl: api }).instances.create()
+    await expect(sandbox.filesystem.writeFile('/a', 'hi')).resolves.toBeUndefined()
+  })
+
   it('never takes the web app answering an unknown path for file bytes', async () => {
     mockFetch([
       () => [201, box()],

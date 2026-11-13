@@ -383,8 +383,8 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
 
       create: async (config: ConfigWithClient, instanceId: string, options?: CreateSnapshotOptions) => {
         const client = getClient(config)
-        await flushDisk(client, instanceId)
         const name = snapshotName(String(parseBoxId(instanceId, 'instance')), options?.name)
+        await flushDisk(client, instanceId)
         const since = Date.now() - 60_000
         let snap: UnoBox
         try {
