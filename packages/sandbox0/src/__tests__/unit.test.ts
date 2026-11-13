@@ -257,6 +257,9 @@ describe('sandbox0 provider', () => {
       cwd: '/workspace',
       envVars: { VALUE: 'hello' },
       ttlSec: 5,
+      // Idle reaper disabled: runCommand waits for completion no matter how
+      // quiet the command's output is.
+      idleTimeoutSec: 0,
     });
     expect(nativeSandbox.connectWsContext).toHaveBeenCalledWith('ctx_123');
     expect(nativeSandbox.getContext).toHaveBeenCalledWith('ctx_123');

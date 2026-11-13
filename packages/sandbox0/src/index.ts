@@ -507,6 +507,12 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
               cwd: options?.cwd,
               envVars: options?.env,
               ttlSec,
+              // Sandbox0 reaps a context once it goes idle_timeout_sec without
+              // process output — a quiet command that only prints its result at
+              // the end is killed mid-run and surfaces as exit 0 with empty
+              // stdout. runCommand's contract is wait-until-done, so disable
+              // the idle reaper (0 disables it); ttlSec bounds the duration.
+              idleTimeoutSec: 0,
             });
             break;
           } catch (error) {
@@ -548,6 +554,8 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
               command: ['sh', '-lc', script],
               wait: false,
               ttlSec: 60,
+              // Same idle-reaper guard as the main command above.
+              idleTimeoutSec: 0,
             });
             try {
               const done = await observeCommandCompletion(
