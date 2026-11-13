@@ -569,11 +569,20 @@ export function listQuery(opts: ListOpts): Record<string, string | undefined> {
 /** GET /api/v1/sandboxes/options. */
 interface SandboxOptionsWire {
   byokMode: 'off' | 'first' | 'fallback' | 'only';
+  /** How managed rows are ordered, and the size that order is for (absent from older servers). */
+  strategy?: 'computesdk' | 'cheapest' | 'custom';
+  size?: string;
   options: Array<
     | { account: 'managed'; provider: string; sizes: { name: string; label: string; rate: { usd: number; per: string } | null }[] }
     | { account: 'byok'; provider: string; region: string | null; ready: boolean }
   >;
 }
+
+const STRATEGY_LINE: Record<NonNullable<SandboxOptionsWire['strategy']>, string> = {
+  computesdk: "ComputeSDK's recommended order",
+  cheapest: 'cheapest first',
+  custom: 'your own order',
+};
 
 const BYOK_MODE_LINE: Record<SandboxOptionsWire['byokMode'], string> = {
   off: 'managed accounts only',
@@ -622,6 +631,10 @@ function printSandboxOptions(o: SandboxOptionsWire): void {
   }
   console.log('');
   console.log(`Router: ${BYOK_MODE_LINE[o.byokMode]} (BYOK ${o.byokMode}).`);
+  if (o.strategy !== undefined && o.byokMode !== 'only') {
+    const size = o.strategy === 'cheapest' && o.size !== undefined ? ` at ${o.size}` : '';
+    console.log(`Managed accounts: ${STRATEGY_LINE[o.strategy]}${size} — change with compute sandboxes settings set --routing <computesdk|cheapest|providers>.`);
+  }
   if (first !== null) console.log(pc.dim(`A plain \`compute new\` lands on ${first}. Pick one: compute new --${first} --size <size>`));
 }
 

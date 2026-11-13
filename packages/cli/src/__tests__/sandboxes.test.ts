@@ -358,6 +358,8 @@ describe('quiet and verbose output', () => {
   it('sandboxes options and new --list show what you can create on, in router order', async () => {
     const options = {
       byokMode: 'fallback',
+      strategy: 'cheapest',
+      size: 'medium',
       options: [
         { account: 'managed', provider: 'daytona', sizes: [
           { name: 'small', label: '1 vCPU', rate: null },
@@ -380,6 +382,7 @@ describe('quiet and verbose output', () => {
       expect(text).toContain('key not tested');
       expect(text.indexOf('daytona')).toBeLessThan(text.indexOf('tensorlake'));
       expect(text).toContain('A plain `compute new` lands on daytona');
+      expect(text).toContain('Managed accounts: cheapest first at medium');
 
       post.mockClear();
       out.mockClear();
