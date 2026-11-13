@@ -18,7 +18,7 @@ import { compute } from 'computesdk';
 import { platform } from '@computesdk/platform';
 
 // Reads the org API key from COMPUTE_API_KEY (or a `compute login` session).
-compute.setConfig({ provider: platform() });
+compute.setConfig({ provider: platform({}) });
 
 // Creates are idempotent — the SDK mints an idempotency key per call
 const sandbox = await compute.sandbox.create({ label: 'my-job', timeout: 30 * 60 * 1000 });
@@ -49,7 +49,7 @@ import { compute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
 // Reads the provider key from its environment variable (E2B_API_KEY here).
-compute.setConfig({ provider: e2b() });
+compute.setConfig({ provider: e2b({}) });
 
 const sandbox = await compute.sandbox.create();
 const result = await sandbox.runCommand('python -c "print(\'Hello\')"');
