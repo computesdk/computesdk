@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.6.11
+
+### Patch Changes
+
+- 83f77cb: `compute sandboxes|actions settings` shows the managed routing strategy (ComputeSDK recommended, Cheapest or Custom) and its order; `settings set --routing` takes `computesdk`, `cheapest` or a provider order. `compute sandboxes options` says how managed accounts are ordered.
+
 ## 2.6.10
 
 ### Patch Changes
