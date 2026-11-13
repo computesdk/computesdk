@@ -447,6 +447,8 @@ import type {
 
 ComputeSDK is open source and welcomes contributions!
 
+Building and developing this repository from source requires **Node.js 22.19.0 or later** and **pnpm 9 or later**. For published npm packages, check the requirements for the package version you install.
+
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
