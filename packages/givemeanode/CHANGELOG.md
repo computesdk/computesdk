@@ -1,5 +1,12 @@
 # @computesdk/givemeanode
 
+## 1.2.18
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 1.2.17
 
 ### Patch Changes

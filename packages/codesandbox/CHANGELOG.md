@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.72
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 1.5.71
 
 ### Patch Changes

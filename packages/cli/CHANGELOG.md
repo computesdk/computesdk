@@ -1,5 +1,12 @@
 # @computesdk/cli
 
+## 2.6.13
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/platform@0.2.6
+
 ## 2.6.12
 
 ### Patch Changes

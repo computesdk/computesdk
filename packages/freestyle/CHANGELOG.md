@@ -1,5 +1,12 @@
 # @computesdk/freestyle
 
+## 0.2.22
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 0.2.21
 
 ### Patch Changes
