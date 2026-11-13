@@ -20,7 +20,7 @@
  */
 
 import 'dotenv/config';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { readFileSync } from 'fs';
@@ -34,6 +34,7 @@ import { registerCreditsCommands } from './credits.js';
 import { inheritParentOptions } from './option-inheritance.js';
 import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
+import { login } from './login.js';
 import { parseBenchDispatch, runBench } from './bench.js';
 import { registerManifestCommand } from './manifest.js';
 import { registerInvitationsCommands, registerOrgMemberCommands } from './org-members.js';
@@ -71,9 +72,14 @@ inheritParentOptions(program);
 program
   .name('compute')
   .description('ComputeSDK CLI')
-  .version(VERSION)
+  .version(VERSION, '--version', 'print the CLI version')
   .enablePositionalOptions()
   .passThroughOptions();
+
+// Legacy shorthand remains compatible; help leads with the readable spelling.
+program.addOption(new Option('-V', 'print the CLI version').hideHelp());
+program.on('option:V', () => { console.log(VERSION); process.exit(0); });
+program.addHelpText('before', 'Run code on a cloud sandbox:\n  compute new\n  compute exec echo hello\n  compute destroy\n');
 
 // Reports the OAuth login just made, so it reads the stored login rather
 // than COMPUTE_API_KEY.
@@ -98,11 +104,8 @@ async function printSessionLine(options?: { baseUrl?: string }): Promise<void> {
 // `compute login` and `bench auth login` are the same login: the
 // `benchsdk-cli` OAuth client with the full first-party scope set, stored
 // once in ~/.benchsdk/credentials.json.
-async function runLogin(options?: { baseUrl?: string }): Promise<void> {
-  const { oauthLogin } = await import('@benchsdk/cli');
-  await oauthLogin({
-    baseUrl: options?.baseUrl ?? envBaseUrl(),
-  });
+async function runLogin(options?: { baseUrl?: string; browser?: boolean }): Promise<void> {
+  await login(options);
 }
 
 async function runLogout(): Promise<void> {
@@ -176,10 +179,11 @@ program
   .command('login')
   .description('Authenticate with ComputeSDK (OAuth device flow)')
   .option('--base-url <url>', 'platform URL to authenticate against')
+  .option('--no-browser', 'print the sign-in URL instead of opening a browser')
   .action(async (opts) => {
     console.log();
     p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
-    await runLogin({ baseUrl: opts.baseUrl });
+    await runLogin({ baseUrl: opts.baseUrl, browser: opts.browser });
     await printSessionLine({ baseUrl: opts.baseUrl });
     p.outro(pc.green('Authenticated!'));
   });

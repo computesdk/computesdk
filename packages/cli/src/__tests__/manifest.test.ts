@@ -83,6 +83,25 @@ describe('compute __manifest', () => {
     expect(byPath.get('agents run')?.args).toEqual(['<ref>', '[message]']);
   });
 
+  it('gives root sandbox commands the same arguments and flags as the existing paths', () => {
+    const manifest = JSON.parse(computeManifest()) as CliManifest;
+    const byPath = new Map(manifest.commands.map((c) => [c.path.join(' '), c]));
+    for (const name of ['list', 'get', 'use', 'destroy', 'run', 'serve', 'exec', 'spawn', 'ps', 'logs', 'cp', 'url']) {
+      const root = byPath.get(name)!;
+      const nested = byPath.get(`instances ${name}`)!;
+      expect(root.args).toEqual(nested.args);
+      expect(root.flags).toEqual(nested.flags);
+    }
+  });
+
+  it('leads help with a first workload and --version while keeping -V compatible', () => {
+    const run = (args: string[]) => execFileSync(process.execPath, [distEntry, ...args], { encoding: 'utf-8', env: cleanEnv() });
+    const help = run(['--help']);
+    expect(help).toContain('compute exec echo hello');
+    expect(help).not.toContain('-V, --version');
+    expect(run(['-V'])).toBe(run(['--version']));
+  });
+
   it('leaves out the bench passthrough and hidden commands', () => {
     const manifest = JSON.parse(computeManifest()) as CliManifest;
     for (const command of manifest.commands) {

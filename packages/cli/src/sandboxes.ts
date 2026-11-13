@@ -41,6 +41,7 @@ import {
 import { formatMoney, formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits } from './rate-display.js';
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
 import { registerBillingCommands } from './sandbox-billing.js';
+import { creationClient } from './onboarding.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
 // The definitions moved to @computesdk/platform in cli 2.x — re-exported here
@@ -58,7 +59,6 @@ export type {
 } from '@computesdk/platform';
 import type {
   CommandResult,
-  FileEntry,
   PathView,
   SandboxDetail,
   SandboxProcess,
@@ -352,7 +352,7 @@ function mergeLeadOpts<T>(opts: T, inline: Record<string, string | string[] | tr
 
 // ─── Output modes and current-instance resolution ────────────────────────────
 
-type QuietOpts = CommonOpts & { quiet?: boolean; verbose?: boolean };
+type QuietOpts = CommonOpts & { quiet?: boolean; verbose?: boolean; browser?: boolean };
 
 /** `--quiet` and `--json` together is a usage error. */
 function checkQuietJson(opts: QuietOpts): void {
@@ -374,7 +374,7 @@ function emitResult<T>(
 }
 
 const NO_INSTANCE_HINT =
-  'No instance given. Pass an ID, run `compute instances use <id>`, or set COMPUTE_INSTANCE.';
+  'No sandbox selected. Run `compute new`, pass an ID, or run `compute use <id>`.';
 
 interface ResolvedSandbox {
   id: string;
@@ -652,13 +652,18 @@ async function showSandboxOptions(opts: CommonOpts): Promise<void> {
 function registerCreate(command: Command, { providerShorthand = false }: { providerShorthand?: boolean } = {}): void {
   addCreateFlags(command)
     .option('--no-use', 'do not mark the new instance as this directory\'s current instance')
+    .option('--no-browser', 'print the sign-in URL instead of opening a browser')
     .option('-q, --quiet', 'print only the new instance ID')
     .option('--verbose', 'print the full instance details')
     .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
     .option('--base-url <url>', 'platform base URL')
     .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
     .option('--json', 'print the raw response');
-  if (providerShorthand) command.option('--list', 'list what you can create on, with prices, instead of creating (= compute sandboxes options)');
+  if (providerShorthand) {
+    command
+      .option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)')
+      .option('--list', 'list what you can create on, with prices, instead of creating (= compute sandboxes options)');
+  }
   command
     .action(async (...args: unknown[]) => {
       const operands = providerShorthand ? (args[0] as string[]) : [];
@@ -676,7 +681,7 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
           opts.provider = named.join(',');
         }
         const body = buildCreateBody(opts);
-        const c = await client(opts);
+        const c = await creationClient(opts);
         if (!opts.json && !opts.quiet) await previewPlacement(c, opts);
         const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
         // Commander stores --no-use as `use: false`.
@@ -732,19 +737,17 @@ async function previewPlacement(c: Awaited<ReturnType<typeof client>>, opts: Cre
 }
 
 /**
- * After a create: how to use the sandbox. The commands always name it (and
- * repeat a one-off --org / --base-url): an id-free command would follow
- * COMPUTE_INSTANCE or another org's pick, and `destroy` could hit a
- * different sandbox while this one keeps billing. On stderr, so stdout stays
- * the sandbox line.
+ * Suggest commands for the newly selected instance. An explicit ID is needed
+ * when --no-use or COMPUTE_INSTANCE prevents it from becoming current.
+ * Keep one-off org/base URL flags and leave stdout available to scripts.
  */
-function printNextSteps(id: string, opts: { org?: string; baseUrl?: string }): void {
+function printNextSteps(id: string, opts: { org?: string; baseUrl?: string; use?: boolean }): void {
   const context = `${opts.org ? ` --org ${opts.org}` : ''}${opts.baseUrl ? ` --base-url ${opts.baseUrl}` : ''}`;
+  const target = opts.use === false || (process.env.COMPUTE_INSTANCE && process.env.COMPUTE_INSTANCE !== id) ? ` ${id}` : '';
   const steps: [string, string][] = [
-    [`compute sandboxes exec ${id}${context} -- node -v`, 'run a command'],
-    [`compute sandboxes spawn ${id}${context} -- npm run dev`, 'start a server'],
-    [`compute sandboxes url ${id}${context} --port 3000`, 'get its public URL'],
-    [`compute sandboxes destroy ${id}${context}`, 'stop billing'],
+    [`compute exec${target}${context} echo hello`, 'run your first command'],
+    [`compute list${context}`, 'see your sandboxes'],
+    [`compute destroy${target}${context}`, 'stop billing'],
   ];
   const width = Math.max(...steps.map(([command]) => command.length));
   console.error('');
@@ -792,6 +795,22 @@ export function registerSandboxesCommands(program: Command): void {
     { providerShorthand: true },
   );
 
+  registerSandboxOperations(cmd);
+
+  // Each spelling needs its own Command (Commander stores parser state and
+  // its parent on the object); both sets use the registrations below.
+  const shortcuts = new Command().enablePositionalOptions();
+  registerSandboxOperations(shortcuts);
+  const rootCommands = new Set(['list', 'get', 'use', 'destroy', 'run', 'serve', 'exec', 'spawn', 'ps', 'logs', 'cp', 'url']);
+  for (const sub of shortcuts.commands) {
+    if (rootCommands.has(sub.name())) {
+      sub.configureOutput({ outputError: usageErrorOutput });
+      program.addCommand(sub);
+    }
+  }
+}
+
+function registerSandboxOperations(cmd: Command): void {
   // `options`: everything a create can land on, with prices, in router order.
   cmd
     .command('options')
@@ -1001,9 +1020,10 @@ export function registerSandboxesCommands(program: Command): void {
       .command('run [command...]')
       .description(
         'Create an instance, run a command on it, and tear it down. ' +
-          '`run -- <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately.',
+          '`run <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately.',
       ),
   )
+    .option('--no-browser', 'print the sign-in URL instead of opening a browser')
     .option('--keep', 'keep the instance after the command exits (it becomes this directory\'s current instance)')
     .option('-d, --detach', 'start the command and return immediately (instance becomes current)')
     .option('--yes', 'non-interactive: Ctrl-C destroys without asking')
@@ -1648,8 +1668,9 @@ async function runInstanceCommand(
   command: string[],
   opts: QuietOpts & CreateFlagOpts & { keep?: boolean; detach?: boolean; yes?: boolean },
 ): Promise<void> {
-  const c = await client(opts);
-  const created = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', buildCreateBody(opts));
+  const body = buildCreateBody(opts);
+  const c = await creationClient(opts);
+  const created = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
   const sandbox = created.sandbox;
   const org = orgKey(opts);
   // Before anything else: the ID on stderr, so a `kill -9` leaves a handle.

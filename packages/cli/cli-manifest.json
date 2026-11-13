@@ -34,6 +34,7 @@
       "args": [],
       "flags": [
         "--base-url",
+        "--no-browser",
         "--help"
       ],
       "summary": "Authenticate with ComputeSDK (OAuth device flow)"
@@ -1792,6 +1793,7 @@
         "--timeout-ms",
         "--secret",
         "--no-use",
+        "--no-browser",
         "--quiet",
         "--verbose",
         "--api-key",
@@ -2016,6 +2018,7 @@
         "--disk-mb",
         "--timeout-ms",
         "--secret",
+        "--no-browser",
         "--keep",
         "--detach",
         "--yes",
@@ -2027,7 +2030,7 @@
         "--org",
         "--help"
       ],
-      "summary": "Create an instance, run a command on it, and tear it down. `run -- <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately."
+      "summary": "Create an instance, run a command on it, and tear it down. `run <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately."
     },
     {
       "path": [
@@ -2710,16 +2713,282 @@
         "--timeout-ms",
         "--secret",
         "--no-use",
+        "--no-browser",
         "--quiet",
         "--verbose",
         "--api-key",
         "--base-url",
         "--allow-untrusted-host",
         "--json",
+        "--org",
         "--list",
         "--help"
       ],
       "summary": "Create a sandbox (short for `compute sandboxes create`); `compute new vercel` or `--vercel` picks the provider"
+    },
+    {
+      "path": [
+        "list"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--status",
+        "--customer-only",
+        "--search",
+        "--sort",
+        "--direction",
+        "--limit",
+        "--cursor",
+        "--quiet",
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List sandboxes"
+    },
+    {
+      "path": [
+        "get"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show one sandbox (includes the BYOK attach descriptor)"
+    },
+    {
+      "path": [
+        "use"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--clear",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show or set this directory's current instance (COMPUTE_INSTANCE always wins)"
+    },
+    {
+      "path": [
+        "destroy"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Destroy a sandbox (verified teardown + cost settle)"
+    },
+    {
+      "path": [
+        "run"
+      ],
+      "aliases": [],
+      "args": [
+        "[command...]"
+      ],
+      "flags": [
+        "--provider",
+        "--byok",
+        "--managed",
+        "--size",
+        "--label",
+        "--image",
+        "--snapshot-id",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--timeout-ms",
+        "--secret",
+        "--no-browser",
+        "--keep",
+        "--detach",
+        "--yes",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Create an instance, run a command on it, and tear it down. `run <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately."
+    },
+    {
+      "path": [
+        "serve"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--port",
+        "--cwd",
+        "--env",
+        "--timeout-ms",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Start a server, wait for its port to listen publicly, and print the URL"
+    },
+    {
+      "path": [
+        "exec"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--cwd",
+        "--env",
+        "--timeout-ms",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Run a one-shot command and print its result (options before the command; -- also works)"
+    },
+    {
+      "path": [
+        "spawn"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--cwd",
+        "--env",
+        "--stdin",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Start a detached process that outlives this request (options before the command; -- also works)"
+    },
+    {
+      "path": [
+        "ps"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List the sandbox's tracked processes"
+    },
+    {
+      "path": [
+        "logs"
+      ],
+      "aliases": [],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--follow",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show a process's buffered output (--follow streams until exit)"
+    },
+    {
+      "path": [
+        "cp"
+      ],
+      "aliases": [],
+      "args": [
+        "<src>",
+        "<dst>"
+      ],
+      "flags": [
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Copy files/dirs between here and an instance — remote side is [id:]/abs/path"
+    },
+    {
+      "path": [
+        "url"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--port",
+        "--protocol",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Resolve the provider's public URL for a port"
     },
     {
       "path": [

@@ -22,11 +22,41 @@ The binary is `compute`. Pass `--json` on almost any platform command for machin
 
 `code` is one of `bad_request`, `unauthenticated`, `forbidden`, `not_found`, `conflict`, `payload_too_large`, `rate_limited`, `server_error`, `http_error` (API responses — `httpStatus` is set), or `no_credentials`, `untrusted_host`, `untrusted_host_stored_auth`, `insecure_transport`, `invalid_argument`, `workflow_not_found`, `network`, `unknown` (raised locally — no `httpStatus`). `retryable` is `true` for 429/502/503/504 and network failures. `details` is present only when the API returned a `details` object.
 
+## Your first sandbox
+
+```bash
+compute new                 # browser sign-in if needed, then create a sandbox
+compute exec echo hello     # run a command on the current sandbox
+compute list
+compute destroy             # destroy it and stop billing
+```
+
+Or use `compute run echo hello` to create a sandbox, execute a command and clean
+up automatically. A normal `compute new` keeps the sandbox running until its
+timeout or destruction. `compute --version` prints the CLI version.
+
+The current sandbox is saved per repository/directory and organization. An
+explicit ID wins over `COMPUTE_INSTANCE`, which wins over the saved selection.
+Use `compute use <id>` to select an existing sandbox. `compute new --no-use`
+creates without changing the selection.
+
 ## Authentication
 
 Auth resolves in this order: `--api-key` flag → `COMPUTE_API_KEY` env var → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → stored platform OAuth credentials (`~/.benchsdk/credentials.json`, written by `compute login` or `compute bench auth login`; an expired access token is refreshed silently). Actions commands never start the login flow themselves; with no key anywhere they fail with `no_credentials`.
 
-`compute login` runs the platform's OAuth device flow (the same one `bench auth login` uses) and writes to `~/.benchsdk/credentials.json`; `compute logout` clears it. `compute --login` / `compute --logout` are shortcuts for the same thing. After login the CLI prints the active org; `compute whoami` (or `compute org current`) shows it again via `GET /api/v1/me`.
+`compute login` runs the platform's OAuth device flow (the same one `bench auth login` uses) and writes to `~/.benchsdk/credentials.json`; `compute logout` clears it. `compute --login` / `compute --logout` are shortcuts for the same thing. It opens the verification URL in your browser and prints a URL and code as a
+fallback. Use `compute login --no-browser` for manual sign-in. Press Ctrl-C to
+cancel; expiry or denial explains how to retry.
+
+Interactive `compute new`, `compute instances create`, and `compute run` start
+this flow when the credential store is empty and no key was supplied, then
+continue the original command after approval. `--no-browser` works on these
+commands too. No browser is opened in CI, without a terminal, or with
+`--json`/`--quiet`: missing credentials produce the existing `no_credentials`
+error. Failed refreshes, existing sessions and explicit keys are never silently
+replaced. Provisioning requests are not replayed after API failures.
+
+After login the CLI prints the active org; `compute whoami` (or `compute org current`) shows it again via `GET /api/v1/me`.
 
 ### Organizations
 
@@ -127,15 +157,20 @@ compute bench logs dax <runId> --participant e2b --max-lines 500
 
 `--json` prints the raw API response, including the `filter` echo showing what the server applied.
 
-## `compute sandboxes`
+## Sandboxes
+
+Everyday commands live directly under `compute`: `list`, `get`, `use`, `exec`,
+`run`, `serve`, `spawn`, `ps`, `logs`, `cp`, `url`, and `destroy`. The existing
+`compute instances`, `compute sandboxes`, and `compute sbx` paths remain
+compatible. Settings, billing and snapshots remain in those groups.
 
 ```bash
-compute sandboxes create                       # place a sandbox
-compute sandboxes list                         # list sandboxes
-compute sandboxes exec <id> uname -a           # run a one-shot command
-compute sandboxes spawn <id> --cwd /app -e NODE_ENV=production -- npm run dev
-compute sandboxes ps <id>                      # detached processes
-compute sandboxes url <id> --port 3000         # public URL for an exposed port
+compute new                                    # place and select a sandbox
+compute list                                   # list sandboxes
+compute exec <id> uname -a                      # run a one-shot command
+compute spawn <id> --cwd /app -e NODE_ENV=production npm run dev
+compute ps <id>                                # detached processes
+compute url <id> --port 3000                    # public URL for an exposed port
 ```
 
 For `exec` and `spawn`, everything after the command's first word goes to the

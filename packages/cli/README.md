@@ -9,17 +9,50 @@ sandboxes, and the benchmarks toolchain.
 npm i -g @computesdk/cli        # or: pnpm dlx @computesdk/cli <cmd>
 ```
 
+## First sandbox
+
+```bash
+compute new                     # sign in if needed, create and select a sandbox
+compute exec echo hello         # run on the selected sandbox
+compute list                    # see your sandboxes
+compute destroy                 # destroy the selected sandbox and stop billing
+compute run echo hello          # or create, run, and clean up in one command
+compute --version               # print the CLI version
+```
+
+Common sandbox commands are available directly under `compute`: `list`, `get`,
+`use`, `exec`, `run`, `serve`, `spawn`, `ps`, `logs`, `cp`, `url`, and `destroy`.
+Existing `compute instances`, `compute sandboxes`, and `compute sbx` paths keep
+working. Advanced settings, billing and snapshots remain under `compute instances`.
+
+Creation selects a sandbox for the current repository/directory and organization.
+An explicit ID wins over `COMPUTE_INSTANCE`, which wins over the stored selection.
+Use `compute use <id>` to change the selection, or `compute new --no-use` to leave
+it alone. A new sandbox bills until its timeout or destruction; `compute run`
+cleans up after its command finishes (unless you use `--keep` or `--detach`).
+
 ## Login
 
 ```bash
-compute login                   # OAuth device flow → ~/.benchsdk/credentials.json
+compute login                   # browser sign-in → ~/.benchsdk/credentials.json
+compute login --no-browser      # print the URL and code for manual sign-in
 compute logout                  # clear stored credentials
 compute --login / --logout      # same, as flags
 ```
 
 Login uses the same OAuth device flow as `bench auth login` — every first-party
 CLI shares one credential store (`~/.benchsdk/credentials.json`) and refresh
-tokens renew automatically.
+tokens renew automatically. Login opens the verification URL and prints the URL
+and code as a fallback. Press Ctrl-C to cancel; denied or expired codes produce
+an actionable error.
+
+Interactive `compute new`, `compute instances create`, and `compute run` start
+login only when there are no stored credentials or explicit API keys. After
+approval they continue the original command once, with its original options.
+`--no-browser` prints the link without opening it. In CI, without a terminal,
+or with `--json`/`--quiet`, missing credentials fail promptly; run `compute login`
+separately or set `COMPUTE_API_KEY`. Existing expired sessions and invalid keys
+are reported rather than silently replaced with another identity.
 
 ## Commands
 
@@ -47,15 +80,15 @@ override, pass `--org <slug>` (on the root command or any `sandboxes` /
 on the request. Precedence: `--org` > `COMPUTE_ORG` > the stored login's org.
 The platform ignores the header for org API keys.
 
-For `compute sandboxes exec` and `compute sandboxes spawn`, everything after
+For `compute exec` and `compute spawn`, everything after
 the command's first word goes to the sandbox untouched — flags like `uname
 -a` or `node -e` are not CLI options. Pass CLI options (`--json`,
 `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`) before the command;
 a bare `--` before the command is optional but supported.
 
 ```bash
-compute sandboxes exec sb1 uname -a
-compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
+compute exec <id> uname -a
+compute spawn <id> --cwd /app -e NODE_ENV=production npm run dev
 ```
 
 ## compute actions runs
