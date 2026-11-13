@@ -40,7 +40,7 @@ Credentials are only sent to `computesdk.com`, its subdomains, or loopback — p
 Creates accept either a platform `size` or raw resources — never both:
 
 ```typescript
-// Sizes: 'small' | 'medium' | 'large' | 'xlarge'
+// Sizes: 'small' | 'medium' | 'large' | 'xlarge' | '2xlarge' | '3xlarge'
 await sdk.sandbox.create({ size: 'medium' });
 
 // Or raw resources (aliases: cpus|vcpus, memoryMb|memoryMiB|memMiB|memory, diskMb|diskMiB)
