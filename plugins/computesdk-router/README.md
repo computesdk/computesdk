@@ -30,8 +30,8 @@ client-side.
   ever pass through chat).
 - `skills/benchmarks/` — read-only benchmark results and reliability.
 - `skills/computesdk-sdk/` — guidance for generating SDK code.
-- `assets/` — icon/logo/screenshots (placeholder art; replace with the real
-  assets from the design team before submission).
+- `assets/` — `icon.png` (64px composer icon), `logo.png` and `logo-dark.png`
+  (320px). Final art; no screenshots (the plugin ships no UI).
 
 ## Local install (development)
 
@@ -124,7 +124,7 @@ the platform's default DCR redirect allowlist.
   - Every MCP tool must set `readOnlyHint`, `openWorldHint`, and
     `destructiveHint` with a justification each — enforced server-side
     on the platform `/mcp`.
-  - Real icon/logo assets — placeholder art cannot be submitted.
+  - Real icon/logo assets (the files in `assets/` are final).
     Screenshots only if the plugin ships UI (not in v1).
 
 ## Follow-ups
