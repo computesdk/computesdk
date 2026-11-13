@@ -17,7 +17,7 @@ compute exec echo hello         # run on the selected sandbox
 compute list                    # see your sandboxes
 compute destroy                 # destroy the selected sandbox and stop billing
 compute run echo hello          # or create, run, and clean up in one command
-compute --version               # print the CLI version
+compute -v                      # print the CLI version (--version also works)
 ```
 
 Common sandbox commands are available directly under `compute`: `list`, `get`,

@@ -72,11 +72,11 @@ inheritParentOptions(program);
 program
   .name('compute')
   .description('ComputeSDK CLI')
-  .version(VERSION, '--version', 'print the CLI version')
+  .version(VERSION, '-v, --version', 'print the CLI version')
   .enablePositionalOptions()
   .passThroughOptions();
 
-// Legacy shorthand remains compatible; help leads with the readable spelling.
+// Keep the previous uppercase shorthand compatible as well.
 program.addOption(new Option('-V', 'print the CLI version').hideHelp());
 program.on('option:V', () => { console.log(VERSION); process.exit(0); });
 program.addHelpText('before', 'Run code on a cloud sandbox:\n  compute new\n  compute exec echo hello\n  compute destroy\n');

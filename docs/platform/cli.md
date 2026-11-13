@@ -33,7 +33,7 @@ compute destroy             # destroy it and stop billing
 
 Or use `compute run echo hello` to create a sandbox, execute a command and clean
 up automatically. A normal `compute new` keeps the sandbox running until its
-timeout or destruction. `compute --version` prints the CLI version.
+timeout or destruction. `compute -v` (or `compute --version`) prints the CLI version.
 
 The current sandbox is saved per repository/directory and organization. An
 explicit ID wins over `COMPUTE_INSTANCE`, which wins over the saved selection.

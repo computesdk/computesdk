@@ -94,11 +94,13 @@ describe('compute __manifest', () => {
     }
   });
 
-  it('leads help with a first workload and --version while keeping -V compatible', () => {
+  it('advertises -v and --version while keeping -V compatible', () => {
     const run = (args: string[]) => execFileSync(process.execPath, [distEntry, ...args], { encoding: 'utf-8', env: cleanEnv() });
     const help = run(['--help']);
     expect(help).toContain('compute exec echo hello');
+    expect(help).toContain('-v, --version');
     expect(help).not.toContain('-V, --version');
+    expect(run(['-v'])).toBe(run(['--version']));
     expect(run(['-V'])).toBe(run(['--version']));
   });
 
