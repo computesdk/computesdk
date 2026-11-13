@@ -17,5 +17,6 @@
     "ci",
     "benchmarks"
   ],
-  "privacyPolicyUrl": "https://www.computesdk.com/privacy"
+  "privacyPolicyUrl": "https://www.computesdk.com/privacy",
+  "documentationUrl": "https://docs.computesdk.com/platform/mcp"
 }
