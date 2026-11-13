@@ -1,5 +1,12 @@
 # @computesdk/example-basic
 
+## 0.4.132
+
+### Patch Changes
+
+- Updated dependencies [571b376]
+  - @computesdk/superserve@0.2.23
+
 ## 0.4.131
 
 ### Patch Changes

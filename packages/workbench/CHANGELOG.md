@@ -1,5 +1,12 @@
 # @computesdk/workbench
 
+## 33.0.37
+
+### Patch Changes
+
+- Updated dependencies [b4e7bb0]
+  - @computesdk/cloudflare@2.1.15
+
 ## 33.0.36
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @computesdk/example-cloudflare-direct
 
+## 0.0.25
+
+### Patch Changes
+
+- Updated dependencies [b4e7bb0]
+  - @computesdk/cloudflare@2.1.15
+
 ## 0.0.24
 
 ### Patch Changes
