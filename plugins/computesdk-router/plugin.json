@@ -43,7 +43,7 @@
           "Spin up a sandbox, write a small web server, and give me its preview URL.",
           "Show me the latest failing CI run and pull the failing step's logs."
         ],
-        "brandColor": "#111bf5",
+        "brandColor": "#19874d",
         "composerIcon": "./assets/icon.png",
         "logo": "./assets/logo.png",
         "logoDark": "./assets/logo-dark.png",
