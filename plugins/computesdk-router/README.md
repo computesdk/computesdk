@@ -1,134 +1,60 @@
-# ComputeSDK Router — ChatGPT + Claude Code plugin
+# ComputeSDK Router
 
-A developer tool for running code in any sandbox provider, routing each
-sandbox and CI job across providers. This directory is the **plugin package**,
-in both the ChatGPT Agent Plugins layout and the Claude Code plugin layout:
-manifests, MCP server mappings, skills, and assets. The MCP server itself
-lives in the platform and serves `https://platform.computesdk.com/mcp`;
-clients authenticate to it via OAuth discovery — nothing to configure
-client-side.
+Give Claude a real place to run code. ComputeSDK Router connects Claude to your
+ComputeSDK organization so it can create cloud sandboxes, run commands and
+long-running processes, read and write files, and share a preview URL for a
+server it starts. Each sandbox is placed across sandbox providers (such as
+Tensorlake, E2B, Daytona and Modal) through the ComputeSDK gateway, on your own
+provider keys or on ComputeSDK's managed accounts.
 
-## Contents
+It also works with ComputeSDK Actions, so Claude can list your connected repos
+and workflows, start a CI run, watch it, and read a failed step's logs. It can
+show which provider keys your org has connected and read ComputeSDK benchmark
+results.
 
-- `plugin.json` — Agent Plugins manifest (`computesdk-router`), with the
-  `com.openai.interface` block ChatGPT reads for the directory listing
-  and `com.openai.apps` → `./.app.json`, which maps the registered
-  connector ID (`plugin_asdk_app…`).
-- `mcp.json` — maps the plugin to the platform MCP server
-  (`streamable-http`, Agent Plugins schema). No `headers` — auth comes
-  from OAuth.
-- `.claude-plugin/plugin.json` — Claude Code manifest (name, description,
-  version, author). Only the manifest lives under `.claude-plugin/`; the
-  root `plugin.json` stays the ChatGPT/Agent Plugins manifest.
-- `.mcp.json` — the same MCP server mapping in Claude's schema
-  (`type: "http"`). Both `mcp.json` and `.mcp.json` exist on purpose:
-  each client reads only its own file.
-- `skills/sandboxes/` — workflow skill teaching the model the tool surface.
-- `skills/actions/` — workflow skill for the Actions (CI) tools: list
-  repos/workflows/runs, tail job logs, dispatch, cancel, re-run.
-- `skills/providers/` — BYOK provider keys, status and rates (no key values
-  ever pass through chat).
-- `skills/benchmarks/` — read-only benchmark results and reliability.
-- `skills/computesdk-sdk/` — guidance for generating SDK code.
-- `assets/` — icon/logo/screenshots (placeholder art; replace with the real
-  assets from the design team before submission).
+## What you need
 
-## Local install (development)
+- A ComputeSDK account and organization at https://platform.computesdk.com.
+- Sandboxes on managed accounts use your organization's prepaid credit; sandboxes
+  on your own provider keys are billed by that provider.
+- CI features need an org admin to connect repositories through the ComputeSDK
+  GitHub App first.
 
-Register the plugin in your personal marketplace file,
-`~/.agents/plugins/marketplace.json` (for a repo marketplace, use
-`$REPO_ROOT/.agents/plugins/marketplace.json` and keep plugins under
-`$REPO_ROOT/plugins/`):
+## Connecting
 
-```json
-{
-  "name": "local-plugins",
-  "plugins": [
-    {
-      "name": "computesdk-router",
-      "source": { "source": "local", "path": "./plugins/computesdk-router" },
-      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
-      "category": "Developer Tools"
-    }
-  ]
-}
-```
+The plugin connects to one remote MCP server, `https://platform.computesdk.com/mcp`.
+The first time it's used, Claude opens a ComputeSDK sign-in in your browser:
+sign in, pick the organization to use, and approve the permissions. Nothing is
+installed or run on your computer, and no API key is stored in the plugin.
 
-`source.path` is `./`-prefixed relative to the marketplace root. Then
-restart the ChatGPT desktop app, open the Plugins Directory, choose your
-marketplace, and install.
+## What it does with your data
 
-## Testing in ChatGPT developer mode
+- Every action is a call to the ComputeSDK MCP server above, made on your
+  behalf with the permissions you approved. Commands, files and processes run
+  inside cloud sandboxes, never on your machine.
+- Sandboxes run on third-party providers chosen by ComputeSDK's router or by
+  you. Code running inside a sandbox can reach the internet.
+- Claude can only see sandboxes you created through a connected app such as
+  Claude or ChatGPT, never other members' sandboxes or ones made in the
+  dashboard.
+- Provider API keys and vault secret values are never returned to Claude; it
+  sees only whether a key is connected and a masked hint.
+- The plugin contains no hooks, local servers or scripts; its skills are
+  instructions that help Claude use the tools well.
 
-1. Enable developer mode in ChatGPT → Settings → Security and login →
-   Developer mode.
-2. Go to `chatgpt.com/plugins`, click **+**, choose **Create MCP App**,
-   and register the server at `https://platform.computesdk.com/mcp`.
-   Complete the OAuth sign-in (pick the ComputeSDK org to bill).
-3. Copy the connection's technical ID — `plugin_asdk_app…` — from the
-   browser URL after ChatGPT creates it.
-4. Give the ID to `@plugin-creator` (Work mode) or `$plugin-creator`
-   (Codex): it wires the registered server into this package via
-   `extensions.com.openai.apps` → `./.app.json` and can create a personal
-   marketplace entry for testing. Don't hand-edit the app mapping.
-5. In a chat with the connector enabled, exercise the flow: create →
-   write_file → run_command → sandbox_url → destroy.
+## Skills
 
-## Claude Code
+- `sandboxes` — create, run, files, processes, preview URLs, and clean-up.
+- `actions` — CI runs, logs, dispatch, cancel and re-run.
+- `providers` — provider key status and rates.
+- `benchmarks` — read benchmark results and reliability.
+- `computesdk-sdk` — writing code that uses the ComputeSDK SDK.
 
-The same directory also loads as a Claude Code plugin. Validate and run it
-locally:
+## Links
 
-Or install it from this repo's marketplace
-(`/plugin marketplace add computesdk/computesdk`, then
-`/plugin install computesdk-router@computesdk`).
+- Website: https://www.computesdk.com
+- Privacy policy: https://www.computesdk.com/privacy
+- Terms of service: https://www.computesdk.com/terms
+- Support: https://www.computesdk.com/support
 
-```sh
-claude plugin validate ./plugins/computesdk-router
-claude --plugin-dir ./plugins/computesdk-router
-```
-
-Claude reads `.claude-plugin/plugin.json` for the manifest and `.mcp.json`
-for the server (`type: "http"`, Claude's name for streamable HTTP). The
-`skills/*/SKILL.md` files load unchanged as plugin skills, prefixed with
-the plugin name: `/computesdk-router:sandboxes`,
-`/computesdk-router:actions`, `/computesdk-router:providers`,
-`/computesdk-router:benchmarks`, `/computesdk-router:computesdk-sdk`.
-
-Auth is the same platform OAuth flow ChatGPT uses: on first MCP use
-Claude follows the RFC 9728 challenge, registers itself via DCR, and opens
-the browser to authorize — pick the ComputeSDK org to bill. Claude Code's
-OAuth callback is a loopback (`localhost`) redirect, which the platform
-already allows for public clients; hosted Claude surfaces (claude.ai,
-Cowork) register `https://claude.ai/api/mcp/auth_callback`, which is in
-the platform's default DCR redirect allowlist.
-
-## Publishing
-
-- **Workspace**: publish the plugin to your ChatGPT workspace from the
-  plugin settings once the connector ID is wired in — workspace users get
-  it without developer mode.
-- **Public submission**: submit through the developer portal (Upload new
-  or existing plugin → ZIP). Required by the submission rules:
-  - Five positive test cases (scenario, user prompt, expected tools,
-    expected result) and three negative test cases (where the plugin
-    should refuse, clarify, or fall back safely) — the create/run/url/
-    destroy flows above are the obvious positives.
-  - A demo-recording URL showing the main use cases.
-  - `privacyPolicyURL`, `termsOfServiceURL`, `websiteURL`, and a support
-    URL on live pages (coordinate with the dotcom site; the privacy
-    policy must cover data collected, purposes, recipients, and
-    retention).
-  - Domain verification: a `/.well-known/openai-apps-challenge` token
-    hosted on the MCP host.
-  - Every MCP tool must set `readOnlyHint`, `openWorldHint`, and
-    `destructiveHint` with a justification each — enforced server-side
-    on the platform `/mcp`.
-  - Real icon/logo assets — placeholder art cannot be submitted.
-    Screenshots only if the plugin ships UI (not in v1).
-
-## Follow-ups
-
-- Panel UI: not in v1. The platform `/mcp` is tools-only; adding an MCP
-  Apps resource (`resources/read` + `_meta.ui.resourceUri`) to it would
-  enable a sidebar sandboxes panel.
+Licensed under the MIT license.

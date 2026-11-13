@@ -1,5 +1,11 @@
 # daemond
 
+## 0.1.9
+
+### Patch Changes
+
+- 1fb3804: Raise the minimum supported Node.js version to 22 (root development floor 22.19.0); Node.js 18 and 20 are EOL.
+
 ## 0.1.8
 
 ### Patch Changes

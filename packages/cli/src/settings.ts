@@ -194,12 +194,26 @@ const BYOK_MODE_HELP: Record<ByokMode, string> = {
   only: 'your keys only, never managed accounts',
 };
 
+/** How a router orders its managed accounts. */
+export const MANAGED_STRATEGIES = ['computesdk', 'cheapest'] as const;
+export type ManagedStrategy = (typeof MANAGED_STRATEGIES)[number] | 'custom';
+
+const STRATEGY_LABEL: Record<ManagedStrategy, string> = {
+  computesdk: 'ComputeSDK (recommended)',
+  cheapest: 'Cheapest',
+  custom: 'Custom',
+};
+
 /** `GET/PATCH /api/v1/{lane}/routing`. */
 export interface LaneRouting {
-  /** "default" (ComputeSDK routing) or the org's own managed order. */
+  /** `computesdk` (the default), `cheapest` or `custom`; absent from older servers. */
+  strategy?: ManagedStrategy;
+  /** The org's own managed order when custom, else "default" (older servers: the only field). */
   routing: 'default' | string[];
   /** The managed accounts the router walks now, in order. */
   managed: string[];
+  /** The size `managed` is ordered for (cheapest ranks by price at a size). */
+  size?: string;
   /** Every live managed account a custom order may name. */
   available: string[];
   /** `order` is what placement uses; `inherits` (Sandboxes) says it comes from the Actions router. */
@@ -212,9 +226,10 @@ const arrow = (list: string[]): string => list.join(' → ');
 export function printLaneRouting(r: LaneRouting, lane: 'actions' | 'sandboxes'): void {
   const label = (text: string) => text.padEnd(12);
   const managed = r.managed.length > 0 ? arrow(r.managed) : pc.dim('no managed account is live');
-  console.log(
-    `${label('Routing')}${r.routing === 'default' ? `ComputeSDK default  ${pc.dim(`(${managed})`)}` : `custom: ${managed}`}`,
-  );
+  const strategy = r.strategy ?? (r.routing === 'default' ? 'computesdk' : 'custom');
+  const size = r.size !== undefined && strategy === 'cheapest' ? pc.dim(`  (priced at ${r.size})`) : '';
+  console.log(`${label('Routing')}${STRATEGY_LABEL[strategy]}`);
+  console.log(`${label('Order')}${managed}${size}`);
   console.log(`${label('BYOK')}${r.byok.mode}  ${pc.dim(`(${BYOK_MODE_HELP[r.byok.mode]})`)}`);
   if (r.byok.mode !== 'off') {
     const list = r.byok.order.length > 0 ? arrow(r.byok.order) : '—';
@@ -336,8 +351,8 @@ export function registerSettingsCommands(
       .command('set')
       .description(`Change the ${routerName} router (owner/admin)`)
       .option(
-        '--routing <default|providers>',
-        'managed routing: "default" for ComputeSDK routing, or your own managed-account order (e.g. daytona,e2b)',
+        '--routing <strategy|providers>',
+        'managed routing: computesdk (default) | cheapest | your own managed-account order (e.g. daytona,e2b)',
       )
       .option('--byok <mode>', `use your own keys: ${BYOK_MODES.join(' | ')}`)
       .option(
@@ -392,7 +407,11 @@ export function registerSettingsCommands(
     try {
       const routing: Record<string, unknown> = {};
       if (opts.routing !== undefined) {
-        routing.routing = opts.routing === 'default' ? 'default' : providerList('--routing', opts.routing);
+        // "default" is the old name of computesdk; older servers only know it.
+        routing.routing =
+          opts.routing === 'default' || (MANAGED_STRATEGIES as readonly string[]).includes(opts.routing)
+            ? opts.routing
+            : providerList('--routing', opts.routing);
       }
       if (opts.byok !== undefined) {
         if (!(BYOK_MODES as readonly string[]).includes(opts.byok)) {

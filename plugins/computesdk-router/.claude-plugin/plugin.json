@@ -1,6 +1,7 @@
 {
   "name": "computesdk-router",
-  "description": "Run code in cloud sandboxes across providers, drive your Actions CI, manage provider keys and read benchmark results.",
+  "displayName": "ComputeSDK Router",
+  "description": "Run code in cloud sandboxes across providers, manage CI workflows, check provider key status, and read benchmark results.",
   "version": "0.2.0",
   "author": {
     "name": "ComputeSDK",

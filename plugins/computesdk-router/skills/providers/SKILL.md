@@ -7,7 +7,7 @@ description: Check and manage the org's own provider (BYOK) keys and custom repo
 
 An org can bring its own key for a provider; sandboxes and Actions jobs then
 place on it and bill the provider directly. Without a key, a provider's
-sandboxes run on ComputeSDK's house account and bill from prepaid credit.
+sandboxes run on ComputeSDK's managed accounts and bill from prepaid credit.
 
 ## Read
 

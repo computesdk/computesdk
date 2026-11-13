@@ -68,7 +68,9 @@ const ACTIONS_SETTINGS = {
 };
 
 const ROUTING = {
+  strategy: 'computesdk',
   routing: 'default',
+  size: 'medium',
   managed: ['daytona', 'e2b'],
   available: ['daytona', 'e2b'],
   byok: { mode: 'first', order: ['tensorlake', 'blaxel'] },
@@ -111,7 +113,7 @@ describe('compute sandboxes settings', () => {
     );
     expect(get).toHaveBeenCalledWith('/api/v1/sandboxes/routing');
     expect(get).toHaveBeenCalledWith('/api/v1/sandboxes/settings');
-    expect(out).toContain('ComputeSDK default');
+    expect(out).toMatch(/Routing\s+ComputeSDK \(recommended\)/);
     expect(out).toContain('daytona → e2b');
     expect(out).toMatch(/BYOK\s+first/);
     expect(out).toContain('tensorlake → blaxel');
@@ -122,13 +124,31 @@ describe('compute sandboxes settings', () => {
   });
 
   it('shows a custom managed order and hides the BYOK order when BYOK is off', async () => {
-    mockGets(SANDBOX_SETTINGS, { ...ROUTING, routing: ['e2b'], managed: ['e2b'], byok: { mode: 'off', order: ['tensorlake'] } });
+    mockGets(SANDBOX_SETTINGS, { ...ROUTING, strategy: 'custom', routing: ['e2b'], managed: ['e2b'], byok: { mode: 'off', order: ['tensorlake'] } });
     const out = await captureStdout(() =>
       buildSandboxes().parseAsync(['sandboxes', 'settings'], { from: 'user' }),
     );
-    expect(out).toContain('custom: e2b');
+    expect(out).toMatch(/Routing\s+Custom/);
+    expect(out).toMatch(/Order\s+e2b/);
     expect(out).toMatch(/BYOK\s+off/);
     expect(out).not.toContain('BYOK order');
+  });
+
+  it('shows cheapest with the size it is priced at', async () => {
+    mockGets(SANDBOX_SETTINGS, { ...ROUTING, strategy: 'cheapest', managed: ['e2b', 'daytona'] });
+    const out = await captureStdout(() =>
+      buildSandboxes().parseAsync(['sandboxes', 'settings'], { from: 'user' }),
+    );
+    expect(out).toMatch(/Routing\s+Cheapest/);
+    expect(out).toContain('e2b → daytona  (priced at medium)');
+  });
+
+  it('reads an older server without strategy from routing', async () => {
+    mockGets(SANDBOX_SETTINGS, { routing: ['e2b'], managed: ['e2b'], available: ['e2b'], byok: { mode: 'off', order: [] } });
+    const out = await captureStdout(() =>
+      buildSandboxes().parseAsync(['sandboxes', 'settings'], { from: 'user' }),
+    );
+    expect(out).toMatch(/Routing\s+Custom/);
   });
 
   it('marks an inherited Sandboxes BYOK order with the order placement uses', async () => {
@@ -181,6 +201,11 @@ describe('compute sandboxes settings set', () => {
     const calls = JSON.stringify([...vi.mocked(resolveActionsAuth).mock.calls, ...vi.mocked(client).mock.calls]);
     expect(calls).toContain('team-b');
     expect(patch).toHaveBeenCalledWith('/api/v1/sandboxes/routing', { byok: 'only' });
+  });
+
+  it.each(['computesdk', 'cheapest'])('--routing %s picks a strategy', async (strategy) => {
+    await buildSandboxes().parseAsync(['sandboxes', 'settings', 'set', '--routing', strategy], { from: 'user' });
+    expect(patch).toHaveBeenLastCalledWith('/api/v1/sandboxes/routing', { routing: strategy });
   });
 
   it('--routing takes a managed order', async () => {
@@ -282,7 +307,7 @@ describe('compute actions settings', () => {
     );
     expect(get).toHaveBeenCalledWith('/api/v1/actions/routing');
     expect(get).toHaveBeenCalledWith('/api/v1/actions/settings');
-    expect(out).toContain('ComputeSDK default');
+    expect(out).toContain('ComputeSDK (recommended)');
     expect(out).toContain('warm pool');
     expect(out).toContain('snapshot pool');
   });

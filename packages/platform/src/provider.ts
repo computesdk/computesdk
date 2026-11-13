@@ -28,7 +28,7 @@ import type {
   SandboxSummary,
 } from './types.js';
 
-export type PlatformSize = 'small' | 'medium' | 'large' | 'xlarge';
+export type PlatformSize = 'small' | 'medium' | 'large' | 'xlarge' | '2xlarge' | '3xlarge';
 
 export interface PlatformConfig {
   /** An org API key or an OAuth access token; both are sent as Bearer. */
@@ -174,7 +174,7 @@ const KNOWN_CREATE_KEYS = new Set([
   'envs', 'signal', 'provider', 'kind',
 ]);
 
-const VALID_SIZES: ReadonlySet<string> = new Set(['small', 'medium', 'large', 'xlarge']);
+const VALID_SIZES: ReadonlySet<string> = new Set(['small', 'medium', 'large', 'xlarge', '2xlarge', '3xlarge']);
 
 function buildCreateBody(config: PlatformConfig, options?: CreateInstanceOptions): Record<string, unknown> {
   const opts = (options ?? {}) as PlatformCreateOptions;

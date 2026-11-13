@@ -1,5 +1,17 @@
 # @computesdk/platform
 
+## 0.2.6
+
+### Patch Changes
+
+- @computesdk/provider@2.1.24
+
+## 0.2.5
+
+### Patch Changes
+
+- a995462: Accept the `2xlarge` (16 vCPU / 32 GiB) and `3xlarge` (32 vCPU / 128 GiB) platform sizes on create, matching the platform API and CLI.
+
 ## 0.2.4
 
 ### Patch Changes

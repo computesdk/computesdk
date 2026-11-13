@@ -1,5 +1,12 @@
 # computesdk
 
+## 4.1.18
+
+### Patch Changes
+
+- Updated dependencies [1fb3804]
+  - daemond@0.1.9
+
 ## 4.1.17
 
 ### Patch Changes

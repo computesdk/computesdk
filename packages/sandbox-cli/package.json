@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/sandbox-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "sandbox-cli provider for ComputeSDK - microVM sandboxes with their own kernel, behind one API on a Mac, a self-hosted Linux machine or the cloud",
   "author": "",
   "license": "MIT",
