@@ -5,7 +5,8 @@
  * own kernel. The cloud API is a small JSON surface, so this package talks to it with `fetch`
  * and has no SDK dependency.
  *
- * Commands go through the buffered exec endpoint. File operations run as shell commands over
+ * Commands go through the buffered exec endpoint: straight to the sandbox's host when the create
+ * answer carries a direct-exec URL and token (see runDirect), otherwise through the API. File operations run as shell commands over
  * that exec (ComputeSDK's shell filesystem; no native file API is used here), and `pause()`/`resume()` map
  * to kosa8's sleep and wake, which snapshot the VM's memory and disk and restore it.
  */
@@ -52,11 +53,23 @@ export interface Kosa8Template {
   [key: string]: unknown;
 }
 
+/** The create answer's `direct` object: the host's exec endpoint for this sandbox and a token for it. */
+export interface Kosa8Direct {
+  exec_url: string;
+  token: string;
+  /** When the token stops working, ms since the epoch. */
+  expires_at: number;
+}
+
 export interface Kosa8Sandbox {
   id: string;
   data: Kosa8SandboxData;
   apiKey: string;
   baseUrl: string;
+  /** Present while commands can go straight to the sandbox's host (runDirect). */
+  direct?: Kosa8Direct;
+  /** A fresh direct token being fetched (refreshDirect). */
+  refreshing?: Promise<void>;
 }
 
 interface Auth {
@@ -134,8 +147,77 @@ async function request<T>(
 
 const sandboxPath = (id: string, rest = '') => `/v1/sandboxes/${encodeURIComponent(id)}${rest}`;
 
-function toSandbox(auth: Auth, data: Kosa8SandboxData): Kosa8Sandbox {
-  return { id: data.id, data, apiKey: auth.apiKey, baseUrl: auth.baseUrl };
+function toSandbox(auth: Auth, data: Kosa8SandboxData, direct?: unknown): Kosa8Sandbox {
+  const sandbox: Kosa8Sandbox = { id: data.id, data, apiKey: auth.apiKey, baseUrl: auth.baseUrl };
+  if (isDirect(direct)) sandbox.direct = direct;
+  return sandbox;
+}
+
+function isDirect(d: unknown): d is Kosa8Direct {
+  const x = d as Kosa8Direct | null | undefined;
+  return !!x && typeof x.exec_url === 'string' && /^https:\/\//.test(x.exec_url) && typeof x.token === 'string' &&
+    typeof x.expires_at === 'number';
+}
+
+/** A direct token this close to expiry is not used; one closer than DIRECT_REFRESH_MS is renewed in the background. */
+const DIRECT_MARGIN_MS = 15_000;
+const DIRECT_REFRESH_MS = 60_000;
+
+/**
+ * Statuses from the direct endpoint that mean the command did not run there: the token was refused
+ * (401, 403), the host does not have the sandbox (404), it is asleep and only the API wakes it
+ * (409), the host does not offer it (501), or Cloudflare could not reach the host (521, 522, 523,
+ * 530). The command is then sent through the API. Any other failure is reported as is, since the
+ * command may have run.
+ */
+const DIRECT_NOT_RUN = new Set([401, 403, 404, 409, 501, 521, 522, 523, 530]);
+
+/** Renews the direct token in the background; a failure leaves the API path in use. */
+function refreshDirect(sandbox: Kosa8Sandbox): void {
+  if (sandbox.refreshing) return;
+  sandbox.refreshing = request<{ direct?: unknown }>(sandbox, 'POST', sandboxPath(sandbox.id, '/direct'))
+    .then((r) => {
+      if (isDirect(r?.direct)) sandbox.direct = r.direct;
+    })
+    .catch(() => {})
+    .finally(() => {
+      sandbox.refreshing = undefined;
+    });
+}
+
+/**
+ * Runs a command on the sandbox's host directly (the create answer's `direct`), skipping the API's
+ * hop. Returns null when the command was not run there, so the caller sends it through the API;
+ * the sandbox then stops using the direct path until a fresh token arrives.
+ */
+async function runDirect(sandbox: Kosa8Sandbox, body: unknown, signal?: AbortSignal): Promise<ExecResponse | null> {
+  const d = sandbox.direct;
+  if (!d) return null;
+  const left = d.expires_at - Date.now();
+  if (left < DIRECT_REFRESH_MS) refreshDirect(sandbox);
+  if (left < DIRECT_MARGIN_MS) return null;
+  const res = await fetch(d.exec_url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${d.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const text = await res.text();
+  if (DIRECT_NOT_RUN.has(res.status)) {
+    if (sandbox.direct === d) sandbox.direct = undefined;
+    return null;
+  }
+  if (!res.ok) {
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed?.error) detail = parsed.error;
+    } catch {
+      // Not JSON: keep the raw text.
+    }
+    throw new Error(`kosa8 host error (${res.status}) on exec in ${sandbox.id}: ${detail}`);
+  }
+  return JSON.parse(text) as ExecResponse;
 }
 
 /** Maps ComputeSDK's create options onto the body of POST /v1/sandboxes. */
@@ -296,7 +378,7 @@ export const kosa8 = defineProvider<Kosa8Sandbox, Kosa8Config>({
     instances: {
       create: async (config: Kosa8Config, options?: CreateInstanceOptions) => {
         const auth = resolveConfig(config);
-        const data = await request<{ sandbox: Kosa8SandboxData }>(
+        const data = await request<{ sandbox: Kosa8SandboxData; direct?: unknown }>(
           auth,
           'POST',
           '/v1/sandboxes',
@@ -304,7 +386,7 @@ export const kosa8 = defineProvider<Kosa8Sandbox, Kosa8Config>({
           options?.signal,
         );
         if (!data?.sandbox) throw new Error('kosa8 API returned no sandbox on create');
-        return { instance: toSandbox(auth, data.sandbox), instanceId: data.sandbox.id };
+        return { instance: toSandbox(auth, data.sandbox, data.direct), instanceId: data.sandbox.id };
       },
 
       getById: async (config: Kosa8Config, instanceId: string) => {
@@ -332,7 +414,8 @@ export const kosa8 = defineProvider<Kosa8Sandbox, Kosa8Config>({
         const signal = options?.timeout && options.timeout > 0 && !options.background
           ? AbortSignal.timeout(options.timeout + 30_000)
           : undefined;
-        const data = await request<ExecResponse>(sandbox, 'POST', sandboxPath(sandbox.id, '/exec'), body, signal);
+        const data = (await runDirect(sandbox, body, signal)) ??
+          (await request<ExecResponse>(sandbox, 'POST', sandboxPath(sandbox.id, '/exec'), body, signal));
         if (!data) throw new Error(`kosa8 sandbox ${sandbox.id} not found`);
         return {
           stdout: data.stdout ?? '',
