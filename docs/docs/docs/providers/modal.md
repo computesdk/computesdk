@@ -1,0 +1,97 @@
+---
+description: >-
+  Set up the Modal provider for ComputeSDK, configure your credentials, and
+  create sandboxes to run commands with optional GPU support.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+  anchors:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
+# Modal
+
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/modal/" %}
+
+Modal provider for ComputeSDK - Execute code with GPU support for machine learning workloads.
+
+## Lifecycle
+
+Snapshots capture rootfs without memory and leave the source running. Restore with `snapshotId`; running processes do not continue from the captured image.
+
+## Installation & Setup
+
+```bash
+npm install @computesdk/modal
+```
+
+Add your Modal credentials to a `.env` file:
+
+```bash
+MODAL_TOKEN_ID=your_modal_token_id
+MODAL_TOKEN_SECRET=your_modal_token_secret
+```
+
+## Usage
+
+```typescript
+import { modal } from '@computesdk/modal';
+
+const compute = modal({
+  tokenId: process.env.MODAL_TOKEN_ID,
+  tokenSecret: process.env.MODAL_TOKEN_SECRET,
+});
+
+// Create sandbox
+const sandbox = await compute.instances.create();
+
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Modal!"');
+console.log(result.stdout); // "Hello from Modal!"
+
+// Clean up
+await sandbox.destroy();
+```
+
+### Configuration Options
+
+```typescript
+interface ModalConfig {
+  /** Modal token ID - if not provided, will use MODAL_TOKEN_ID env var */
+  tokenId?: string;
+  /** Modal token secret - if not provided, will use MODAL_TOKEN_SECRET env var */
+  tokenSecret?: string;
+  /** Execution timeout in milliseconds */
+  timeout?: number;
+  /** Modal environment (sandbox or main) */
+  environment?: string;
+  /** Ports to expose (unencrypted by default) */
+  ports?: number[];
+  /** Optional-daemond SSE port (defaults to 38989); false disables port exposure, not runtime selection */
+  daemonSsePort?: number | false;
+  /** Modal app name (default: 'computesdk-modal') */
+  appName?: string;
+}
+```
+
+Ports are exposed with unencrypted tunnels by default for maximum compatibility.
+
+Streaming/processes use native hooks where implemented, otherwise the shell tier. `processRuntime: 'daemond'` opts into the daemon fallback; `daemonSsePort` alone does not enable it. See [process tiers](../reference/instance.md#startprocesscommand-options).

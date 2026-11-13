@@ -1,0 +1,263 @@
+# @computesdk/s3
+
+## 1.2.25
+
+### Patch Changes
+
+- 1fb3804: Raise the minimum supported Node.js version to 22 (root development floor 22.19.0); Node.js 18 and 20 are EOL.
+  - @computesdk/provider@2.1.24
+
+## 1.2.24
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+
+## 1.2.23
+
+### Patch Changes
+
+- 1904e82: Fix `list()` returning no objects: read the Tigris SDK's `items`/`name`/`hasMore`/`paginationToken` response and pass `continuationToken` as `paginationToken`. Default the endpoint to Tigris (`https://t3.storage.dev`, like the Tigris SDK) when neither `endpoint` nor `TIGRIS_STORAGE_ENDPOINT` is set, instead of throwing.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+
+## 1.2.22
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - @computesdk/provider@2.1.21
+
+## 1.2.21
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+  - @computesdk/provider@2.1.20
+
+## 1.2.20
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 1.2.19
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 1.2.18
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 1.2.17
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 1.2.16
+
+### Patch Changes
+
+- Updated dependencies [1b639da]
+  - @computesdk/provider@2.1.15
+
+## 1.2.15
+
+### Patch Changes
+
+- Updated dependencies [ef8770f]
+  - @computesdk/provider@2.1.14
+
+## 1.2.14
+
+### Patch Changes
+
+- Updated dependencies [aadc200]
+  - @computesdk/provider@2.1.13
+
+## 1.2.13
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
+## 1.2.12
+
+### Patch Changes
+
+- Updated dependencies [7240d21]
+  - @computesdk/provider@2.1.11
+
+## 1.2.11
+
+### Patch Changes
+
+- Updated dependencies [f1a8578]
+  - @computesdk/provider@2.1.10
+
+## 1.2.10
+
+### Patch Changes
+
+- @computesdk/provider@2.1.9
+
+## 1.2.9
+
+### Patch Changes
+
+- Updated dependencies [7e65fe7]
+  - @computesdk/provider@2.1.8
+
+## 1.2.8
+
+### Patch Changes
+
+- @computesdk/provider@2.1.7
+
+## 1.2.7
+
+### Patch Changes
+
+- @computesdk/provider@2.1.6
+
+## 1.2.6
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
+## 1.2.5
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - @computesdk/provider@2.1.4
+
+## 1.2.4
+
+### Patch Changes
+
+- @computesdk/provider@2.1.3
+
+## 1.2.3
+
+### Patch Changes
+
+- @computesdk/provider@2.1.2
+
+## 1.2.2
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - @computesdk/provider@2.1.1
+
+## 1.2.1
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - @computesdk/provider@2.1.0
+
+## 1.2.0
+
+### Minor Changes
+
+- d65c97b: Migrate S3 and R2 providers from direct AWS SDK usage to `@tigrisdata/storage`, including per-call config forwarding and improved object metadata handling on downloads.
+
+  Align Tigris storage dependency usage across providers and include a BrowserUse typing fix for custom proxy configuration.
+
+## 1.1.5
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - @computesdk/provider@2.0.0
+
+## 1.1.4
+
+### Patch Changes
+
+- Updated dependencies [3ef4817]
+- Updated dependencies [371f667]
+  - @computesdk/provider@1.4.0
+
+## 1.1.3
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - @computesdk/provider@1.3.0
+
+## 1.1.2
+
+### Patch Changes
+
+- Updated dependencies [7c53d28]
+  - @computesdk/provider@1.2.0
+
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - @computesdk/provider@1.1.0
+
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - @computesdk/provider@1.1.0
+
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - @computesdk/provider@1.1.0
+
+## 1.1.0
+
+### Minor Changes
+
+- 45f918b: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
+### Patch Changes
+
+- @computesdk/provider@1.0.33
+
+## 1.1.0
+
+### Minor Changes
+
+- 0b97465: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
+### Patch Changes
+
+- @computesdk/provider@1.0.33
+
+## 1.1.0
+
+### Minor Changes
+
+- b1d5204: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite

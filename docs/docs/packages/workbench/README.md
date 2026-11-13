@@ -1,0 +1,307 @@
+# @computesdk/workbench
+
+Interactive REPL for testing ComputeSDK sandbox operations with instant feedback and autocomplete.
+
+## Features
+
+- 🚀 **Zero ceremony** - Just run commands, no sandbox ID management
+- ✨ **Tab autocomplete** - All 100+ `@computesdk/cmd` functions autocomplete
+- 🔄 **Provider switching** - Seamlessly switch between e2b, daytona, modal, etc.
+- ⚡ **Smart evaluation** - Type `npm.install('express')` and it just runs
+- 📊 **Real-time feedback** - See timing, output, and errors instantly
+
+## Installation
+
+```bash
+npm install -D @computesdk/workbench
+
+# Install at least one provider
+npm install @computesdk/e2b
+# or any other provider
+```
+
+## Quick Start
+
+1. **Configure credentials** in `.env`:
+
+```bash
+# E2B Provider
+E2B_API_KEY=e2b_your_api_key_here
+
+# Daytona Provider
+DAYTONA_API_KEY=your_daytona_api_key
+```
+
+2. **Start workbench**:
+
+```bash
+npx workbench
+```
+
+3. **Run commands** (autocomplete works!):
+
+```
+workbench> npm.install('express')
+⏳ Creating sandbox with e2b...
+✅ Sandbox ready (1.2s)
+Running: npm install express
+✅ Completed (3.2s)
+
+workbench> git.clone('https://github.com/user/repo')
+Running: git clone https://github.com/user/repo
+✅ Completed (2.1s)
+
+workbench> ls('/home')
+Running: ls /home
+total 8
+drwxr-xr-x 3 user user 4096 Dec 12 19:00 node_modules
+drwxr-xr-x 2 user user 4096 Dec 12 19:01 repo
+✅ Completed (0.1s)
+```
+
+## Commands
+
+### Workbench Commands
+
+- `provider <name>` - Switch provider (e.g., `provider e2b`)
+- `providers` - List all providers with status
+- `restart` - Restart current sandbox
+- `destroy` - Destroy current sandbox
+- `info` - Show sandbox info (provider, uptime)
+- `env` - Show environment/credentials status
+- `help` - Show this help
+- `exit` - Exit workbench
+
+Each provider requires its package installed (e.g. `@computesdk/e2b`) and its credentials configured.
+
+### Running Commands
+
+Just type any `@computesdk/cmd` function. Tab autocomplete works!
+
+**Package Managers:**
+```javascript
+npm.install('express')
+npm.run('dev')
+pnpm.install()
+yarn.add('lodash')
+pip.install('requests')
+```
+
+**Git:**
+```javascript
+git.clone('https://...')
+git.commit('Initial commit')
+git.push()
+```
+
+**Filesystem:**
+```javascript
+mkdir('/app/src')
+ls('/home')
+cat('/home/file.txt')
+cp('/src', '/dest', { recursive: true })
+rm('/file.txt')              // Remove file
+rm.rf('/directory')          // Force remove anything
+rm.auto('/path')             // Smart remove (auto-detects file vs directory)
+```
+
+**Network:**
+```javascript
+curl('https://api.example.com')
+wget('https://file.com/download.zip')
+```
+
+**And 100+ more!** Press Tab to explore.
+
+## Provider Switching
+
+Switch between providers:
+
+```
+workbench> provider e2b
+✅ Switched to e2b
+
+workbench> npm.install('express')
+⏳ Creating sandbox with e2b...
+✅ Sandbox ready (1.2s)
+Running: npm install express
+✅ Completed (3.2s)
+
+workbench> provider daytona
+Destroy current sandbox? (y/N): y
+✅ Switched to daytona
+```
+
+## Creating and Switching Sandboxes
+
+When you create a sandbox using `create()`, it automatically becomes your current active sandbox. All subsequent commands will run on this sandbox.
+
+```javascript
+> create({ namespace: "h" })
+✅ Switched to sandbox sandbox-123
+{ instanceId: 'sandbox-123', provider: 'e2b', metadata: {} }
+e2b:sandbox-123>  // Prompt shows you're now on this sandbox
+
+> ls('/home')  // Runs on sandbox-123
+```
+
+### Switching Between Sandboxes
+
+If you already have an active sandbox and create another one, the workbench will prompt you:
+
+```javascript
+e2b:sandbox-456> create({ namespace: "prod" })
+Switch to new sandbox? (Y/n): y
+✅ Switched to sandbox sandbox-789
+e2b:sandbox-789>
+```
+
+Press Enter or type "y" to switch. Type "n" to create the sandbox without switching to it.
+
+## Tab Autocomplete
+
+Autocomplete works for all commands:
+
+```
+workbench> npm.<TAB>
+install  run  init  uninstall
+
+workbench> git.<TAB>
+add  branch  checkout  clone  commit  diff  fetch  
+init  log  pull  push  reset  stash  status
+
+workbench> provider <TAB>
+e2b  daytona  modal  runloop  vercel
+```
+
+## Supported Providers
+
+Install any combination of:
+
+- `@computesdk/e2b` - E2B sandboxes
+- `@computesdk/daytona` - Daytona workspaces
+- `@computesdk/modal` - Modal containers
+- `@computesdk/runloop` - Runloop instances
+- `@computesdk/vercel` - Vercel functions
+- `@computesdk/cloudflare` - Cloudflare Workers
+- `@computesdk/codesandbox` - CodeSandbox boxes
+- `@computesdk/blaxel` - Blaxel environments
+- `@computesdk/northflank` - Northflank deployment services
+- `@computesdk/boat` - Boat Ubuntu cloud sandboxes
+
+## Environment Variables
+
+Set provider credentials in `.env`:
+
+```bash
+# E2B
+E2B_API_KEY=e2b_xxx
+
+# Daytona
+DAYTONA_API_KEY=xxx
+
+# Modal
+MODAL_TOKEN_ID=xxx
+MODAL_TOKEN_SECRET=xxx
+
+# Runloop
+RUNLOOP_API_KEY=xxx
+
+# Vercel
+VERCEL_TOKEN=xxx
+VERCEL_TEAM_ID=xxx
+VERCEL_PROJECT_ID=xxx
+
+# Cloudflare
+CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
+CLOUDFLARE_SANDBOX_API_KEY=xxx
+
+# CodeSandbox
+CSB_API_KEY=xxx
+
+# Blaxel
+BL_API_KEY=xxx
+BL_WORKSPACE=xxx
+
+# Northflank
+NORTHFLANK_TOKEN=nf_xxx
+NORTHFLANK_PROJECT_ID=my-project
+NORTHFLANK_TEAM_ID=xxx       # optional — required only for organization API tokens
+NORTHFLANK_API_URL=xxx       # optional — defaults to https://api.northflank.com
+
+# Boat
+BOAT_API_KEY=boat_xxx
+BOAT_API_BASE=xxx            # optional — defaults to https://boat.dev/api/v1
+```
+
+## Tips
+
+- **Command history**: Use ↑/↓ arrows to navigate previous commands
+- **Exit gracefully**: Type `exit` or `.exit`, optionally destroy sandbox
+- **Check status**: Run `env` to see which providers are configured
+- **Auto-create**: First command automatically creates a sandbox
+- **Stay in context**: Workbench maintains "current sandbox" - no IDs to track
+
+## Debugging SDK Tests
+
+The workbench is a full Node.js REPL with the ComputeSDK pre-loaded. You can reproduce any SDK test by calling the same methods interactively.
+
+### SDK to Workbench Mapping
+
+| SDK Test Code | Workbench Equivalent |
+|---------------|---------------------|
+| `sandbox.runCommand('echo hi')` | `runCommand('echo hi')` or `getInstance().runCommand(...)` |
+| `sandbox.filesystem.readFile(path)` | `filesystem.readFile(path)` |
+| `sandbox.getInfo()` | `sandboxInfo()` |
+| `sandbox.getUrl({ port })` | `getUrl({ port: 3000 })` |
+
+### Example: Reproducing a Failing Test
+
+If this test fails:
+
+```typescript
+// From provider-compatibility.test.ts
+it('command with streaming callbacks', async () => {
+  let stdoutCalled = false;
+  const result = await sandbox.runCommand('echo "hello"', {
+    onStdout: () => { stdoutCalled = true; },
+  });
+  expect(stdoutCalled).toBe(true);
+});
+```
+
+Reproduce it in workbench:
+
+```javascript
+> ls('/home')  // Auto-creates sandbox
+> const sandbox = getInstance()
+> let stdoutCalled = false
+> const result = await sandbox.runCommand('echo "hello"', {
+    onStdout: (data) => { console.log('STDOUT:', data); stdoutCalled = true }
+  })
+> stdoutCalled  // Should be true
+> result
+```
+
+### Verbose Mode
+
+Enable verbose mode to see full response objects and WebSocket debug info:
+
+```javascript
+> verbose()  // Toggle on - shows full results and WebSocket frames
+> ls('/home')
+> verbose()  // Toggle off
+```
+
+### Direct Shell Commands
+
+Prefix with `$` to run shell commands directly (bypasses `@computesdk/cmd`):
+
+```javascript
+> $echo "hello" | tr 'a-z' 'A-Z'
+> $for i in 1 2 3; do echo $i; done
+```
+
+## License
+
+MIT

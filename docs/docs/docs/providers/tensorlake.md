@@ -1,0 +1,105 @@
+---
+description: >-
+  Tensorlake provider for ComputeSDK - Stateful MicroVM sandboxes for agentic
+  applications and LLM-generated code execution.
+layout:
+  width: default
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
+  tags:
+    visible: true
+  actions:
+    visible: true
+tags:
+  - tag: benchmarked
+    primary: true
+---
+
+# Tensorlake
+
+{% embed url="https://www.computesdk.com/benchmarks/sandboxes/tensorlake/" %}
+
+Tensorlake provider for ComputeSDK - Stateful MicroVM sandboxes for agentic applications and LLM-generated code execution.
+
+## Lifecycle
+
+Create with `{ ephemeral: false }` for pause/resume, which preserve memory and processes. Snapshot capabilities instead declare whole-rootfs **without** memory and keep the source. Restore with `snapshotId`; pause support does not imply memory snapshots.
+
+## Installation & Setup
+
+```bash
+npm install @computesdk/tensorlake
+```
+
+Add your Tensorlake credentials to a `.env` file:
+
+```bash
+TENSORLAKE_API_KEY=your_tensorlake_api_key
+```
+
+## Usage
+
+```typescript
+import { tensorlake } from '@computesdk/tensorlake';
+
+const compute = tensorlake({
+  apiKey: process.env.TENSORLAKE_API_KEY,
+});
+
+// Create sandbox
+const sandbox = await compute.instances.create();
+
+// Run a command
+const result = await sandbox.runCommand('echo "Hello from Tensorlake!"');
+console.log(result.stdout); // "Hello from Tensorlake!"
+
+// Clean up
+await sandbox.destroy();
+```
+
+### Configuration Options
+
+```typescript
+interface TensorlakeConfig {
+  /** Tensorlake API key - if not provided, will use TENSORLAKE_API_KEY env var */
+  apiKey?: string;
+  /** Override for the management API base URL */
+  apiUrl?: string;
+  /** Override for the sandbox proxy URL */
+  proxyUrl?: string;
+  /** Default container image for new sandboxes (default: ubuntu-minimal) */
+  image?: string;
+  /** Execution timeout in milliseconds */
+  timeout?: number;
+}
+```
+
+### Sandbox Images
+
+Tensorlake supports custom container images. The default is `ubuntu-minimal`:
+
+```typescript
+const sandbox = await compute.instances.create({ image: 'ubuntu-minimal' });
+```
+
+### Snapshots
+
+Tensorlake supports snapshotting sandboxes for fast restores:
+
+```typescript
+// Create a snapshot from a running sandbox
+const snapshot = await compute.snapshot.create(instanceId);
+
+// Restore from a snapshot
+const sandbox = await compute.instances.create({ snapshotId: snapshot.id });
+```

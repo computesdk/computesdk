@@ -1,0 +1,216 @@
+# @computesdk/test-utils
+
+## 2.0.6
+
+### Patch Changes
+
+- c0c3d94: Skip the process runtime expectation when a provider suite runs against the mock sandbox (no credentials).
+- 20be5cb: Add `COMPUTESDK_REQUIRE_INTEGRATION=1`: provider, browser and storage suites fail instead of silently skipping their live tests when credentials are missing.
+- 1904e82: Snapshot capabilities can say what happens to the source (`kept`, `stopped`, `destroyed`), which paths a restore leaves out, whether one snapshot forks into many instances, and whether it needs `snapshot.waitUntilReady()` before restoring. Providers can declare a lifetime (`provider.sandbox.lifetime`) and expose `instance.extendLifetime()`. The conformance suite runs the pause and snapshot tests whenever a provider declares them, and its pause test keeps its probe process alive with `startProcess`.
+- 1904e82: Add optional `instance.pause()`/`resume()` (providers implement `pause`/`resume` and declare `pauseCapabilities`, surfaced as `provider.sandbox.pause`) and `snapshot.capabilities` describing what a snapshot keeps (`scope`, `path`, `memory`, `destroysSource`, `createOptions`). The conformance suite gains opt-in `supportsPauseResume` and `supportsSnapshots` tests.
+- 4924af5: Background processes and streaming `runCommand` now default to a POSIX-shell process tier built on the provider's plain `runCommand` (no Node, daemon or download; works on Alpine/busybox). Order: provider-native `streamCommand`/`startProcess` hooks, then the shell tier, then daemond only with `processRuntime: 'daemond'`. Adds the `startProcess` provider hook, `instance.processRuntime`, `instance.attachProcess(jobId)`, and process-runtime coverage in the test-utils conformance suite.
+- 1904e82: `runProviderTestSuite` scopes its tests in a `<name> conformance` describe, the live-output test measures spread between chunks instead of time from call start, and CRUD tests are enabled for freestyle, sprites, superserve and upstash.
+- 1904e82: Live conformance now checks that `env` reaches every part of a compound command (with and without streaming) and that `cwd` is honored.
+
+## 2.0.5
+
+### Patch Changes
+
+- 5b47ddd: Add `skipSessionReads` to `runBrowserProviderTestSuite` for providers whose sessions materialize on client connect (or lack a sessions API); use it in the browserless suite.
+
+## 2.0.4
+
+### Patch Changes
+
+- aadc200: Rename `compute.sandbox` to `compute.instances` and `Sandbox` to `Instance` across the SDK so the abstraction covers all compute forms (sandbox, VM, baremetal). `kind: 'sandbox' | 'vm' | 'baremetal'` is now a field on `CreateInstanceOptions`, `InstanceInfo`, and provider configs. `compute.sandbox`, `methods.sandbox`, `sandboxId`, and all `Sandbox*` type names remain as deprecated aliases so existing providers and callers keep working unchanged. CLI: `compute sandboxes` is now `compute instances` (`sandboxes`/`sbx` aliases preserved).
+
+## 2.0.3
+
+### Patch Changes
+
+- f1a8578: Add `sandbox.startProcess()` for interactive long-running processes: daemond gains stdin-capable detached jobs (`stdin`/`closeStdin` messages, bounded output buffers, `command.stdin.closed` events), and the provider factory implements `startProcess` once for all providers.
+
+## 2.0.2
+
+### Patch Changes
+
+- 475cdc6: Add the Novita Sandbox provider with sandbox lifecycle, native command streaming,
+  filesystem operations, snapshot and template management, and Workbench configuration support.
+  Include E2B-equivalent shared provider contract tests and enable Novita's shared
+  CRUD integration suite only when NOVITA_RUN_INTEGRATION=1 and NOVITA_API_KEY are configured.
+
+## 2.0.1
+
+### Patch Changes
+
+- 6ec91ff: Add a shared live-output suite to the provider tests. A provider opting in with `supportsStreaming: true` is checked against its real sandbox for output arriving before the command exits, streamed text matching the final `stdout` exactly, stderr staying separate with a non-zero exit, and a streaming command being stopped at its timeout — so streaming becomes a conformance property rather than something each provider tests its own way. Enabled for tensorlake and tenki.
+
+## 2.0.0
+
+### Major Changes
+
+- aa4ca58: Remove `Runtime` concept from SDK
+
+  The `Runtime` type (`'node' | 'python' | 'deno' | 'bun'`) and associated
+  `getSupportedRuntimes()` method were originally designed to support a
+  `runCode()` API that has since been removed. With no runtime-dispatch logic
+  remaining in the SDK, these are dead API surface.
+
+  **Breaking changes:**
+
+  - `Runtime` type removed from `computesdk` public exports
+  - `runtime` field removed from `SandboxInfo`
+  - `getSupportedRuntimes(): Runtime[]` removed from the `Provider` interface
+  - Provider implementations no longer need to (and cannot) implement `getSupportedRuntimes()`
+  - Test suite no longer iterates per-runtime; tests run once per sandbox
+
+  **Migration:** Remove any calls to `provider.getSupportedRuntimes()` and any
+  references to `SandboxInfo.runtime` in your code.
+
+## 1.6.1
+
+### Patch Changes
+
+- 3e6a91a: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+## 1.6.1
+
+### Patch Changes
+
+- 9a312d2: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+## 1.6.1
+
+### Patch Changes
+
+- b34d97f: Add browser provider abstraction and Browserbase provider
+
+  - Add `BrowserProvider` interface and `defineBrowserProvider()` factory to `@computesdk/provider` for building cloud browser providers, parallel to the existing sandbox provider pattern
+  - Ship `@computesdk/browserbase` as the first browser provider, wrapping the `@browserbasehq/sdk` with support for session lifecycle, profiles (contexts), extensions, logs, and recordings
+  - Add `runBrowserProviderTestSuite()` to `@computesdk/test-utils` for integration testing browser providers
+  - Register `browserbase` in `BROWSER_PROVIDER_AUTH` and related config maps in `computesdk`
+
+## 1.6.0
+
+### Minor Changes
+
+- 45f918b: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
+## 1.6.0
+
+### Minor Changes
+
+- 0b97465: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
+## 1.6.0
+
+### Minor Changes
+
+- b1d5204: Add object storage providers for S3, R2, and Tigris with a unified storage provider test suite
+
+## 1.5.1
+
+### Patch Changes
+
+- acdc8c6: fix: align provider factory with clean command execution
+
+  Updates all providers to use the new clean command signature introduced in #192.
+
+  **Changes:**
+
+  - Provider factory `runCommand` signature simplified from `(command, args?, options?)` to `(command, options?)`
+  - All 13 providers updated to handle `cwd`, `env`, and `background` options by wrapping commands with shell constructs
+  - Test suite updated to use clean command strings instead of args arrays
+
+  **Related:**
+
+  - Follows #192 which updated the gateway client to send clean commands
+  - Part of the larger refactor to remove client-side command preprocessing
+
+  **Migration:**
+  Providers now receive clean command strings and handle options uniformly:
+
+  ```typescript
+  // Before
+  runCommand(sandbox, "npm", ["install"], { cwd: "/app" });
+
+  // After
+  runCommand(sandbox, "npm install", { cwd: "/app" });
+  ```
+
+## 1.5.0
+
+### Minor Changes
+
+- 64569f1: implement ports update for modal
+
+## 1.4.1
+
+### Patch Changes
+
+- 51b9259: Adding support for Compute CLI
+
+## 1.4.0
+
+### Minor Changes
+
+- 99b807c: Integrating packages w/ @computesdk/client
+
+## 1.3.1
+
+### Patch Changes
+
+- 763a9a7: Fix getInstance() typing to return provider-specific sandbox types
+
+  The `getInstance()` method now returns properly typed provider instances instead of the generic `Sandbox` type. This enables full TypeScript intellisense and type safety when working with provider-specific methods and properties.
+
+  **Before:**
+
+  ```typescript
+  const instance = sandbox.getInstance(); // Returns generic Sandbox
+  // No intellisense for E2B-specific methods
+  ```
+
+  **After:**
+
+  ```typescript
+  const compute = createCompute({
+    defaultProvider: e2b({ apiKey: "your-key" }),
+  });
+
+  const sandbox = await compute.sandbox.create();
+  const instance = sandbox.getInstance(); // Returns properly typed E2B Sandbox
+  // Full intellisense: instance.sandboxId, instance.commands, instance.files, etc.
+  ```
+
+  This change uses a phantom type approach (`__sandboxType`) to preserve type information through the provider chain, enabling TypeScript to correctly infer the native sandbox type.
+
+## 1.3.0
+
+### Minor Changes
+
+- fdb1271: Releasing sandbox instances via getInstance method
+
+## 1.2.0
+
+### Minor Changes
+
+- 1fa3690: Adding instance typing
+- 485f706: adding in getInstance w/ typing
+- 2b537df: improving standard methods on provider
+
+## 1.1.0
+
+### Minor Changes
+
+- d3ec023: improving core SDK to use provider factory methods

@@ -1,0 +1,379 @@
+# @computesdk/upstash
+
+## 0.3.31
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 0.3.30
+
+### Patch Changes
+
+- fc09449: Forward the native Box size when restoring full boxes from snapshots, matching fresh and ephemeral box creation.
+
+## 0.3.29
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 0.3.28
+
+### Patch Changes
+
+- 1904e82: Apply `runCommand` env and cwd to every part of a compound command, with safe single-quote escaping (also for background commands).
+- 1904e82: Pass absolute file paths (e.g. `/tmp`) through unchanged, follow symlinks in `readFile`, chunk files larger than the files API payload limit, report raw stdout for failing commands, and implement `snapshot.delete` via `Box.deleteSnapshots`.
+- 1904e82: Expose native pause/resume as `instance.pause()`/`resume()` and declare pause and snapshot capabilities: the root filesystem survives except tmpfs mounts (`/var/tmp`, `/var/cache`, `/var/log`, `/root`, `/run`, `/dev/shm`); running processes do not.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.3.27
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.3.26
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.3.25
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
+## 0.3.24
+
+### Patch Changes
+
+- Updated dependencies [ce95b5c]
+  - @computesdk/provider@2.1.18
+
+## 0.3.23
+
+### Patch Changes
+
+- Updated dependencies [4930f49]
+  - @computesdk/provider@2.1.17
+
+## 0.3.22
+
+### Patch Changes
+
+- Updated dependencies [cbabd5a]
+- Updated dependencies [a3de4ae]
+- Updated dependencies [2c5eb0c]
+  - @computesdk/provider@2.1.16
+
+## 0.3.21
+
+### Patch Changes
+
+- Updated dependencies [d7d8efc]
+- Updated dependencies [1b639da]
+  - computesdk@4.1.13
+  - @computesdk/provider@2.1.15
+
+## 0.3.20
+
+### Patch Changes
+
+- 0c30a8f: Fix `runCommand` contract violations found by the sandbox CI capabilities benchmark:
+
+  - **Timeout dropped**: modal, vercel, declaw, and tensorlake never forwarded `options.timeout` to the underlying SDK (`timeoutMs`/`timeout` fields). Beam has no native timeout option, so the adapter now kills the process when the deadline passes.
+  - **Merged stdout/stderr**: daytona, codesandbox, and sprites only expose one combined output stream; the adapters now redirect stderr to a temp file and parse it back behind a delimiter so `stderr` is populated correctly. Upstash already returns `stderr` — the adapter now forwards it.
+  - **Exit code collapsed**: codesandbox hardcoded `exitCode: 0`; it now captures the real exit code in-band.
+
+## 0.3.19
+
+### Patch Changes
+
+- ef8770f: Docs: update examples to the canonical `compute.instances` API (`Instance*` type names, `instanceId`, `methods.instances`). `compute.sandbox` / `Sandbox*` / `methods.sandbox` remain working deprecated aliases.
+- Updated dependencies [ef8770f]
+  - @computesdk/provider@2.1.14
+  - computesdk@4.1.12
+
+## 0.3.18
+
+### Patch Changes
+
+- aadc200: Rename `compute.sandbox` to `compute.instances` and `Sandbox` to `Instance` across the SDK so the abstraction covers all compute forms (sandbox, VM, baremetal). `kind: 'sandbox' | 'vm' | 'baremetal'` is now a field on `CreateInstanceOptions`, `InstanceInfo`, and provider configs. `compute.sandbox`, `methods.sandbox`, `sandboxId`, and all `Sandbox*` type names remain as deprecated aliases so existing providers and callers keep working unchanged. CLI: `compute sandboxes` is now `compute instances` (`sandboxes`/`sbx` aliases preserved).
+- Updated dependencies [aadc200]
+  - computesdk@4.1.11
+  - @computesdk/provider@2.1.13
+
+## 0.3.17
+
+### Patch Changes
+
+- Updated dependencies [16074f4]
+  - @computesdk/provider@2.1.12
+
+## 0.3.16
+
+### Patch Changes
+
+- Updated dependencies [7240d21]
+  - computesdk@4.1.10
+  - @computesdk/provider@2.1.11
+
+## 0.3.15
+
+### Patch Changes
+
+- Updated dependencies [f1a8578]
+  - @computesdk/provider@2.1.10
+  - computesdk@4.1.9
+
+## 0.3.14
+
+### Patch Changes
+
+- computesdk@4.1.8
+- @computesdk/provider@2.1.9
+
+## 0.3.13
+
+### Patch Changes
+
+- Updated dependencies [7e65fe7]
+  - @computesdk/provider@2.1.8
+  - computesdk@4.1.7
+
+## 0.3.12
+
+### Patch Changes
+
+- 0732fed: Add `execution: "persistent"` mode to the Archil provider: `create` provisions a
+  persistent Archil sandbox VM (waited to `running`), `runCommand` uses the
+  sandbox's interactive process API over a short-lived WebSocket connection
+  (fresh connection URL per command), `getById` auto-resumes paused sandboxes,
+  `destroy` deletes the sandbox, and `getUrl` resolves published endpoints.
+  Default `execution: "exec"` behavior is unchanged.
+
+  Also adds `ephemeral?: boolean` to the shared `CreateSandboxOptions` as the
+  standard flag for providers with both ephemeral and persistent compute
+  surfaces, and wires it through every dual-mode provider:
+
+  - Archil: `ephemeral: true` -> exec-mode disk handle, `false` -> persistent VM.
+  - Upstash: `ephemeral` -> `EphemeralBox`/`Box` (unchanged semantics, now typed).
+  - Cloud Run: `ephemeral` overrides configured `executionMode` per sandbox
+    (`true` -> `ephemeral`, `false` -> `stateful`).
+  - Freestyle: `ephemeral` overrides configured `persistent` per sandbox
+    (`true` -> deleted on stop, `false` -> kept).
+
+- Updated dependencies [0732fed]
+  - computesdk@4.1.6
+  - @computesdk/provider@2.1.7
+
+## 0.3.11
+
+### Patch Changes
+
+- Updated dependencies [3914faa]
+  - computesdk@4.1.5
+  - @computesdk/provider@2.1.6
+
+## 0.3.10
+
+### Patch Changes
+
+- Updated dependencies [6ec91ff]
+  - @computesdk/provider@2.1.5
+
+## 0.3.9
+
+### Patch Changes
+
+- b398632: Pass through the `size` option (and `env`) when creating ephemeral Upstash boxes, so sandbox sizing is honored on both the persistent and ephemeral creation paths.
+
+## 0.3.8
+
+### Patch Changes
+
+- c0ce001: Update `@upstash/box` dependency from `^0.1.28` to `^0.5.5`.
+
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [f3fe311]
+  - computesdk@4.1.4
+  - @computesdk/provider@2.1.4
+
+## 0.3.6
+
+### Patch Changes
+
+- Updated dependencies [607a11b]
+  - computesdk@4.1.3
+  - @computesdk/provider@2.1.3
+
+## 0.3.5
+
+### Patch Changes
+
+- computesdk@4.1.2
+- @computesdk/provider@2.1.2
+
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [eca5ec2]
+  - computesdk@4.1.1
+  - @computesdk/provider@2.1.1
+
+## 0.3.3
+
+### Patch Changes
+
+- Updated dependencies [cc79d78]
+  - computesdk@4.1.0
+  - @computesdk/provider@2.1.0
+
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [aa4ca58]
+  - computesdk@4.0.0
+  - @computesdk/provider@2.0.0
+
+## 0.3.1
+
+### Patch Changes
+
+- 371f667: Remove the legacy daemon/client subsystem.
+
+  **Breaking changes (`computesdk`):**
+
+  - Removed the `Sandbox` client class and its entire `src/client/` subsystem (WebSocket protocol, resources, terminal/run/server/watcher/file/env/sessionToken/magicLink/signal/auth/child namespaces).
+  - Removed re-exports: `Sandbox`, `SandboxStatus`, `ProviderSandboxInfo`, `CommandExitError`, `isCommandExitError`, `TerminalInstance`, `FileWatcher`, `SignalService`, `WebSocketConstructor`, `encodeBinaryMessage`, `decodeBinaryMessage`, `MessageType`, `buildSetupPayload`, `encodeSetupPayload`, `SetupPayload`, `SetupOverlayConfig`.
+  - Removed the 11 optional advanced namespaces (`terminal?`, `run?`, `server?`, `watcher?`, `file?`, `env?`, `sessionToken?`, `magicLink?`, `signal?`, `auth?`, `child?`) from the `SandboxInterface`.
+  - Removed `SandboxOverlayConfig`, `SandboxServerConfig`, `SandboxHealthCheckConfig` types.
+  - Removed `overlays` and `servers` fields from `CreateSandboxOptions`.
+
+  These APIs were only wired against the daemon transport, which was removed from the published package earlier. No shipped provider implemented them.
+
+  **Breaking changes (`@computesdk/workbench`):**
+
+  - Removed `workbench connect <url> [token]` (required the deleted `Sandbox` client class).
+  - Removed `workbench provider local` and local-daemon auto-attach (required the deleted `Sandbox` client class).
+  - Removed `mode gateway|direct` toggle and `provider direct <name>` / `provider gateway <name>` aliases.
+  - Dropped the `child`, `server`, and `terminal` REPL bindings — they delegated to daemon-only namespaces.
+  - Dropped `ws` runtime dependency.
+
+  **Breaking changes (`@computesdk/cli`):**
+
+  - Removed `pty` mode. `compute connect`, `compute sandbox connect`, `workspace attach`, and `sandbox create --connect` now drop into the REPL (`runCommand`-based) instead of an interactive PTY shell.
+  - Removed the `/shell` REPL command that dropped into PTY.
+
+  **Other:**
+
+  - `@computesdk/provider` drops the optional `findOrCreate` / `find` / `extendTimeout` fields from `SandboxMethods` (matching the earlier compute-wrapper cleanup).
+  - 14 provider packages get a patch bump for internal destructuring cleanup (removed unused `overlays` / `servers` destructure targets).
+
+- Updated dependencies [3ef4817]
+- Updated dependencies [371f667]
+  - @computesdk/provider@1.4.0
+  - computesdk@3.0.0
+
+## 0.3.0
+
+### Minor Changes
+
+- 8466e41: Add ephemeral box option to Upstash create and improve sandbox typing.
+
+  - `create()` now accepts an optional `ephemeral` flag for non-persistent boxes.
+  - Ephemeral mode is honored during snapshot restores.
+  - Narrow sandbox typing for box variants with exported native type guards.
+
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [a321f01]
+  - computesdk@2.6.0
+  - @computesdk/provider@1.3.0
+
+## 0.2.2
+
+### Patch Changes
+
+- 7c53d28: Add `buildShellCommand` utility to unify shell command building across providers
+
+  Centralizes cwd/env handling into a single `buildShellCommand` function in
+  `@computesdk/provider`, fixing bugs where env vars didn't work with cwd set
+  (docker, sprites, hopx) and where values weren't properly quoted (namespace,
+  sprites, hopx). All shell-based providers now use the shared utility.
+
+- Updated dependencies [7c53d28]
+  - @computesdk/provider@1.2.0
+
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [3e6a91a]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [9a312d2]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [b34d97f]
+  - @computesdk/provider@1.1.0
+  - computesdk@2.5.4
+
+## 0.2.0
+
+### Minor Changes
+
+- 45f918b: Add Upstash Box provider package with support for sandbox CRUD, code execution, shell commands, filesystem operations, preview URLs, and snapshots
+
+### Patch Changes
+
+- Updated dependencies [45f918b]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
+
+## 0.2.0
+
+### Minor Changes
+
+- 0b97465: Add Upstash Box provider package with support for sandbox CRUD, code execution, shell commands, filesystem operations, preview URLs, and snapshots
+
+### Patch Changes
+
+- Updated dependencies [0b97465]
+  - computesdk@2.5.3
+  - @computesdk/provider@1.0.33
