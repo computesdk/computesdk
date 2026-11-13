@@ -127,6 +127,11 @@ export class UnoClient {
     opts: { accept?: number[]; timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<{ status: number; body: T; headers: Headers }> {
     const accept = opts.accept ?? [200, 201]
+    // Let the previous response's socket go back to the pool first. A fetch
+    // started in the same tick as the last `res.text()` resolved opens a new
+    // connection, and a new connection can reach the API through a different
+    // edge server with a cold link to the origin (+0.2 s). Costs ~1 ms.
+    await sleep(0)
     const timeout = AbortSignal.timeout(opts.timeoutMs ?? this.requestTimeoutMs)
     const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout
     const res = await fetch(this.baseUrl + path, {

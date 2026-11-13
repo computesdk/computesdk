@@ -1,3 +1,5 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { UnoClient, UnoError } from '../client'
 import { uno } from '../index'
@@ -111,6 +113,33 @@ describe('UnoClient', () => {
   })
 })
 
+describe('connection reuse', () => {
+  it('sends back-to-back requests over one connection', async () => {
+    const ports: number[] = []
+    const server = createServer((req, res) => {
+      ports.push(req.socket.remotePort!)
+      req.resume()
+      req.on('end', () => {
+        res.writeHead(req.method === 'POST' ? 201 : 200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(box()))
+      })
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const c = new UnoClient({ apiKey: 'k', baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}` })
+      await c.createBox({ template: 't', vcpu: 1, ram_mb: 512, disk_gb: 4 })
+      await c.getBox(42)
+      await c.getBox(42)
+      await c.deleteBox(42)
+      expect(ports).toHaveLength(4)
+      expect(new Set(ports).size).toBe(1)
+    } finally {
+      server.closeAllConnections()
+      await new Promise(resolve => server.close(resolve))
+    }
+  })
+})
+
 /**
  * A box that turns ready `readyAt` ms after the first poll (fake clock); each
  * GET takes `rttMs`. Returns the times the GETs were sent, relative to the first.
@@ -135,6 +164,14 @@ function bootingBox(readyAt: number, rttMs: number) {
 describe('readiness polling', () => {
   const steps = (from: number, to: number, step: number) =>
     Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => from + i * step)
+  /** Each poll lands in its slot; the timer tick `request()` yields first may put poll i up to i ms later. */
+  const expectPolls = (polls: number[], slots: number[]) => {
+    expect(polls).toHaveLength(slots.length)
+    polls.forEach((at, i) => {
+      expect(at).toBeGreaterThanOrEqual(slots[i])
+      expect(at).toBeLessThanOrEqual(slots[i] + i)
+    })
+  }
 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
@@ -145,7 +182,7 @@ describe('readiness polling', () => {
     const ready = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).waitReady(42, 120_000)
     await vi.advanceTimersByTimeAsync(2_000)
     await expect(ready).resolves.toMatchObject({ status: 'running', provision_state: 'ready' })
-    expect(polls).toEqual(steps(0, 1_300, 100))
+    expectPolls(polls, steps(0, 1_300, 100))
   })
 
   it('sends the next poll at once when a round trip is longer than the interval', async () => {
@@ -153,7 +190,7 @@ describe('readiness polling', () => {
     const ready = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).waitReady(42, 120_000)
     await vi.advanceTimersByTimeAsync(1_000)
     await expect(ready).resolves.toMatchObject({ status: 'running' })
-    expect(polls).toEqual([0, 150, 300, 450, 600])
+    expectPolls(polls, [0, 150, 300, 450, 600])
   })
 
   it('slows to once a second after the first 10 s', async () => {
@@ -161,7 +198,7 @@ describe('readiness polling', () => {
     const ready = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' }).waitReady(42, 120_000)
     await vi.advanceTimersByTimeAsync(13_000)
     await expect(ready).resolves.toMatchObject({ status: 'running' })
-    expect(polls).toEqual([...steps(0, 10_000, 100), 11_000, 12_000])
+    expectPolls(polls, [...steps(0, 10_000, 100), 11_000, 12_000])
   })
 
   it('gives up with READY_TIMEOUT when the box is not ready in time', async () => {
@@ -171,7 +208,7 @@ describe('readiness polling', () => {
     const err = await ready
     expect(err).toBeInstanceOf(UnoError)
     expect(err).toMatchObject({ code: 'READY_TIMEOUT', status: 504 })
-    expect(polls).toEqual(steps(0, 1_000, 100))
+    expectPolls(polls, steps(0, 1_000, 100))
   })
 })
 
