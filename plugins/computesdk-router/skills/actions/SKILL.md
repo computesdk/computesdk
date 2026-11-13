@@ -41,7 +41,7 @@ returns data.
   `workflow_dispatch`.
 - `actions_rerun_run` and `actions_cancel_run` take a `runId`.
 
-**Confirm before dispatching or re-running** — a run consumes real compute.
+**Dispatching and re-running consume real compute.** When the user asked for the run, that is the go-ahead; when you decide to start one yourself, confirm first.
 A 403 is one of two things: `insufficient_scope` means the connection was
 authorized before `actions:write` existed — the user must reconnect the
 connector and re-consent; a permission message means the user isn't an org
