@@ -40,11 +40,8 @@
         "supportURL": "https://www.computesdk.com/support",
         "defaultPrompt": [
           "What can I run sandboxes on, and what does each size cost per hour?",
-          "Create a sandbox and run a Python script that prints system info.",
           "Spin up a sandbox, write a small web server, and give me its preview URL.",
-          "Analyze this CSV in a fresh sandbox: load it with pandas and summarize the columns.",
-          "Show me the latest failing CI run and pull the failing step's logs.",
-          "Which of my provider keys are connected, and what does each provider cost per hour?"
+          "Show me the latest failing CI run and pull the failing step's logs."
         ],
         "brandColor": "#111bf5",
         "composerIcon": "./assets/icon.png",
