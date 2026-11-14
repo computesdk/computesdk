@@ -41,6 +41,8 @@ import {
 import { formatMoney, formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits } from './rate-display.js';
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
 import { registerBillingCommands } from './sandbox-billing.js';
+import { creationClient } from './onboarding.js';
+import { execute, execCommand, execTimeout, type ExecOpts } from './exec.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
 // The definitions moved to @computesdk/platform in cli 2.x — re-exported here
@@ -57,8 +59,6 @@ export type {
   SandboxSummary,
 } from '@computesdk/platform';
 import type {
-  CommandResult,
-  FileEntry,
   PathView,
   SandboxDetail,
   SandboxProcess,
@@ -258,11 +258,18 @@ const AUTH_LEAD_OPTS: LeadOptSpec[] = [
   { aliases: ['--json'], key: 'json', flag: 'bool' },
 ];
 
-const EXEC_LEAD_OPTS: LeadOptSpec[] = [
+const COMMAND_LEAD_OPTS: LeadOptSpec[] = [
   ...AUTH_LEAD_OPTS,
   { aliases: ['--cwd'], key: 'cwd', flag: 'value' },
   { aliases: ['-e', '--env'], key: 'env', flag: 'repeat' },
   { aliases: ['--timeout-ms'], key: 'timeoutMs', flag: 'value' },
+];
+
+const EXEC_LEAD_OPTS: LeadOptSpec[] = [
+  ...COMMAND_LEAD_OPTS,
+  { aliases: ['--timeout'], key: 'timeout', flag: 'value' },
+  { aliases: ['--stream'], key: 'stream', flag: 'bool' },
+  { aliases: ['-d', '--detach'], key: 'detach', flag: 'bool' },
 ];
 
 const SPAWN_LEAD_OPTS: LeadOptSpec[] = [
@@ -352,7 +359,7 @@ function mergeLeadOpts<T>(opts: T, inline: Record<string, string | string[] | tr
 
 // ─── Output modes and current-instance resolution ────────────────────────────
 
-type QuietOpts = CommonOpts & { quiet?: boolean; verbose?: boolean };
+type QuietOpts = CommonOpts & { quiet?: boolean; verbose?: boolean; browser?: boolean };
 
 /** `--quiet` and `--json` together is a usage error. */
 function checkQuietJson(opts: QuietOpts): void {
@@ -374,7 +381,7 @@ function emitResult<T>(
 }
 
 const NO_INSTANCE_HINT =
-  'No instance given. Pass an ID, run `compute instances use <id>`, or set COMPUTE_INSTANCE.';
+  'No sandbox selected. Run `compute new`, pass an ID, or run `compute use <id>`.';
 
 interface ResolvedSandbox {
   id: string;
@@ -652,13 +659,18 @@ async function showSandboxOptions(opts: CommonOpts): Promise<void> {
 function registerCreate(command: Command, { providerShorthand = false }: { providerShorthand?: boolean } = {}): void {
   addCreateFlags(command)
     .option('--no-use', 'do not mark the new instance as this directory\'s current instance')
+    .option('--no-browser', 'print the sign-in URL instead of opening a browser')
     .option('-q, --quiet', 'print only the new instance ID')
     .option('--verbose', 'print the full instance details')
     .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
     .option('--base-url <url>', 'platform base URL')
     .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
     .option('--json', 'print the raw response');
-  if (providerShorthand) command.option('--list', 'list what you can create on, with prices, instead of creating (= compute sandboxes options)');
+  if (providerShorthand) {
+    command
+      .option('--org <slug>', 'organization slug for this command (or $COMPUTE_ORG)')
+      .option('--list', 'list what you can create on, with prices, instead of creating (= compute sandboxes options)');
+  }
   command
     .action(async (...args: unknown[]) => {
       const operands = providerShorthand ? (args[0] as string[]) : [];
@@ -676,7 +688,7 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
           opts.provider = named.join(',');
         }
         const body = buildCreateBody(opts);
-        const c = await client(opts);
+        const c = await creationClient(opts);
         if (!opts.json && !opts.quiet) await previewPlacement(c, opts);
         const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
         // Commander stores --no-use as `use: false`.
@@ -732,19 +744,17 @@ async function previewPlacement(c: Awaited<ReturnType<typeof client>>, opts: Cre
 }
 
 /**
- * After a create: how to use the sandbox. The commands always name it (and
- * repeat a one-off --org / --base-url): an id-free command would follow
- * COMPUTE_INSTANCE or another org's pick, and `destroy` could hit a
- * different sandbox while this one keeps billing. On stderr, so stdout stays
- * the sandbox line.
+ * Suggest commands for the newly selected instance. An explicit ID is needed
+ * when --no-use or COMPUTE_INSTANCE prevents it from becoming current.
+ * Keep one-off org/base URL flags and leave stdout available to scripts.
  */
-function printNextSteps(id: string, opts: { org?: string; baseUrl?: string }): void {
+function printNextSteps(id: string, opts: { org?: string; baseUrl?: string; use?: boolean }): void {
   const context = `${opts.org ? ` --org ${opts.org}` : ''}${opts.baseUrl ? ` --base-url ${opts.baseUrl}` : ''}`;
+  const target = opts.use === false || (process.env.COMPUTE_INSTANCE && process.env.COMPUTE_INSTANCE !== id) ? ` ${id}` : '';
   const steps: [string, string][] = [
-    [`compute sandboxes exec ${id}${context} -- node -v`, 'run a command'],
-    [`compute sandboxes spawn ${id}${context} -- npm run dev`, 'start a server'],
-    [`compute sandboxes url ${id}${context} --port 3000`, 'get its public URL'],
-    [`compute sandboxes destroy ${id}${context}`, 'stop billing'],
+    [`compute exec${target}${context} echo hello`, 'run your first command'],
+    [`compute list${context}`, 'see your sandboxes'],
+    [`compute destroy${target}${context}`, 'stop billing'],
   ];
   const width = Math.max(...steps.map(([command]) => command.length));
   console.error('');
@@ -792,6 +802,22 @@ export function registerSandboxesCommands(program: Command): void {
     { providerShorthand: true },
   );
 
+  registerSandboxOperations(cmd);
+
+  // Each spelling needs its own Command (Commander stores parser state and
+  // its parent on the object); both sets use the registrations below.
+  const shortcuts = new Command().enablePositionalOptions();
+  registerSandboxOperations(shortcuts);
+  const rootCommands = new Set(['list', 'get', 'use', 'destroy', 'run', 'serve', 'exec', 'spawn', 'ps', 'logs', 'kill', 'wait', 'cp', 'url']);
+  for (const sub of shortcuts.commands) {
+    if (rootCommands.has(sub.name())) {
+      sub.configureOutput({ outputError: usageErrorOutput });
+      program.addCommand(sub);
+    }
+  }
+}
+
+function registerSandboxOperations(cmd: Command): void {
   // `options`: everything a create can land on, with prices, in router order.
   cmd
     .command('options')
@@ -1001,9 +1027,10 @@ export function registerSandboxesCommands(program: Command): void {
       .command('run [command...]')
       .description(
         'Create an instance, run a command on it, and tear it down. ' +
-          '`run -- <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately.',
+          '`run <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately.',
       ),
   )
+    .option('--no-browser', 'print the sign-in URL instead of opening a browser')
     .option('--keep', 'keep the instance after the command exits (it becomes this directory\'s current instance)')
     .option('-d, --detach', 'start the command and return immediately (instance becomes current)')
     .option('--yes', 'non-interactive: Ctrl-C destroys without asking')
@@ -1016,7 +1043,7 @@ export function registerSandboxesCommands(program: Command): void {
       try {
         checkQuietJson(opts);
         if (opts.keep && opts.detach) throw new Error('--keep and --detach are mutually exclusive.');
-        const lead = takeLeadingOptions(rawCommand, EXEC_LEAD_OPTS);
+        const lead = takeLeadingOptions(rawCommand, COMMAND_LEAD_OPTS);
         opts = mergeLeadOpts(rawOpts, lead.inline);
         const command = lead.command;
         if (command.length === 0) throw new Error('missing command to run');
@@ -1063,14 +1090,17 @@ export function registerSandboxesCommands(program: Command): void {
 
   cmd
     .command('exec [sandboxId] [command...]')
-    .description('Run a one-shot command and print its result (options before the command; -- also works)')
+    .description('Run a shell command or argv in a sandbox; --stream follows output, --detach returns a job ID')
     .option('--cwd <dir>', 'working directory')
     .option('-e, --env <key=value>', 'environment variable (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
-    .option('--timeout-ms <ms>', 'command timeout in ms')
+    .option('--timeout <seconds>', 'command timeout in seconds (0: no command time limit)')
+    .option('--timeout-ms <ms>', 'command timeout in ms (legacy spelling)')
+    .option('--stream', 'print stdout and stderr while the command runs')
+    .option('-d, --detach', 'start a background process and print its job ID')
     .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
     .option('--json', 'print the raw response')
     .passThroughOptions()
-    .action(async (argId: string | undefined, rawCommand: string[], rawOpts: CommonOpts & { cwd?: string; env?: string[]; timeoutMs?: string }) => {
+    .action(async (argId: string | undefined, rawCommand: string[], rawOpts: ExecOpts) => {
       let opts = rawOpts;
       try {
         // A non-UUID first positional is the first word of the command, not
@@ -1083,24 +1113,15 @@ export function registerSandboxesCommands(program: Command): void {
         opts = mergeLeadOpts(rawOpts, lead.inline);
         const command = lead.command;
         if (command.length === 0) throw new Error('missing command to run');
+        // Reject incompatible options before resolving auth or starting work.
+        execTimeout(opts);
         const resolved = resolveSandbox(argId, opts);
         const c = await client(opts);
-        const res = await c.post<{ commandId: string } & CommandResult>(
-          `/api/v1/sandboxes/${resolved.id}/commands`,
-          {
-            command: command.map(shellQuote).join(' '),
-            ...(opts.cwd ? { cwd: opts.cwd } : {}),
-            ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
-            ...(opts.timeoutMs ? { timeoutMs: Number(opts.timeoutMs) } : {}),
-          },
-        ).catch((e) => { resolved.clearStale(e); throw e; });
-        output(opts, res, (r) => {
-          process.stdout.write(r.stdout);
-          if (r.stderr) process.stderr.write(r.stderr);
-          if (!r.stdout) console.log(`exit ${r.exitCode} (${r.durationMs}ms)`);
-        });
-        // exitCode, not exit(): a piped stdout flushes before the CLI exits.
-        if (res.exitCode !== 0) process.exitCode = res.exitCode;
+        await execute(c, resolved.id, {
+          command: execCommand(command),
+          ...(opts.cwd ? { cwd: opts.cwd } : {}),
+          ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
+        }, opts).catch((e) => { resolved.clearStale(e); throw e; });
       } catch (e) {
         fail(e, opts);
       }
@@ -1133,7 +1154,7 @@ export function registerSandboxesCommands(program: Command): void {
         const res = await c.post<{ process: SandboxProcess }>(
           `/api/v1/sandboxes/${resolved.id}/processes`,
           {
-            command: command.map(shellQuote).join(' '),
+            command: execCommand(command),
             ...(opts.cwd ? { cwd: opts.cwd } : {}),
             ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
             ...(opts.stdin ? { stdin: true } : {}),
@@ -1638,6 +1659,13 @@ function runTimeoutText(opts: { timeoutMs?: string }): string {
     : `instance timeout: ${fmtTimeout(PLATFORM_DEFAULT_TIMEOUT_MS)} (platform default)`;
 }
 
+function confirmedDestroyedSandbox(result: { sandbox: SandboxSummary }, id: string): SandboxSummary {
+  if (result?.sandbox?.status !== 'destroyed') {
+    throw new Error('Teardown was not confirmed; run compute destroy ' + id);
+  }
+  return result.sandbox;
+}
+
 /**
  * `compute instances run` — create, spawn, stream via repeated `wait` calls
  * (each returns the cumulative buffers; we print only the delta), then destroy
@@ -1648,12 +1676,14 @@ async function runInstanceCommand(
   command: string[],
   opts: QuietOpts & CreateFlagOpts & { keep?: boolean; detach?: boolean; yes?: boolean },
 ): Promise<void> {
-  const c = await client(opts);
-  const created = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', buildCreateBody(opts));
+  const startedAt = Date.now();
+  const body = buildCreateBody(opts);
+  const c = await creationClient(opts);
+  const created = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
   const sandbox = created.sandbox;
   const org = orgKey(opts);
   // Before anything else: the ID on stderr, so a `kill -9` leaves a handle.
-  console.error(pc.dim(`instance ${sandbox.id}`));
+  if (!opts.json) console.error(pc.dim(`instance ${sandbox.id}`));
 
   const spawned = await c.post<{ process: SandboxProcess }>(
     `/api/v1/sandboxes/${sandbox.id}/processes`,
@@ -1666,7 +1696,8 @@ async function runInstanceCommand(
 
   if (opts.detach) {
     setCurrentInstance(sandbox.id, org);
-    if (opts.quiet) console.log(sandbox.id);
+    if (opts.json) console.log(JSON.stringify({ type: 'detached', sandboxId: sandbox.id, jobId }));
+    else if (opts.quiet) console.log(sandbox.id);
     else printDetachSummary(sandbox.id, jobId, runTimeoutText(opts));
     return;
   }
@@ -1675,23 +1706,31 @@ async function runInstanceCommand(
   let destroyRequested = false;
   let detachRequested = false;
   let prompting = false;
+  let deleted = false;
+  let kept = false;
+  let settledCostUsd: number | undefined;
+  let cleanupError: string | undefined;
   let printedOut = 0;
   let printedErr = 0;
 
   const flush = (p: SandboxProcessStatus) => {
     if (prompting) return; // Ctrl-C prompt owns the terminal right now
     if (p.stdout.length > printedOut) {
-      process.stdout.write(p.stdout.slice(printedOut));
+      const data = p.stdout.slice(printedOut);
+      if (opts.json) console.log(JSON.stringify({ type: 'stdout', data }));
+      else process.stdout.write(data);
       printedOut = p.stdout.length;
     }
     if (p.stderr.length > printedErr) {
-      process.stderr.write(p.stderr.slice(printedErr));
+      const data = p.stderr.slice(printedErr);
+      if (opts.json) console.log(JSON.stringify({ type: 'stderr', data }));
+      else process.stderr.write(data);
       printedErr = p.stderr.length;
     }
   };
 
   const onSignal = () => {
-    if (!process.stdin.isTTY || opts.yes || prompting) {
+    if (!process.stdin.isTTY || opts.json || opts.yes || prompting) {
       // Non-TTY, --yes, or a 2nd Ctrl-C mid-prompt: destroy outright
       // (a mid-prompt Ctrl-C counts as N — keep waiting — unless readline
       // already closed, in which case fall through to destroy below).
@@ -1734,33 +1773,50 @@ async function runInstanceCommand(
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
     if (detachRequested) {
+      kept = true;
       setCurrentInstance(sandbox.id, org);
-      printDetachSummary(sandbox.id, jobId, runTimeoutText(opts));
+      if (!opts.json) printDetachSummary(sandbox.id, jobId, runTimeoutText(opts));
     } else if (opts.keep && exitCode !== null) {
+      kept = true;
       // --keep only keeps a run that reached an exit; a wait error or a
       // destroy request falls through to deletion so a failed run can't
       // leave a running instance behind.
       setCurrentInstance(sandbox.id, org);
-      if (opts.quiet) console.log(sandbox.id);
-      else {
+      if (!opts.json && opts.quiet) console.log(sandbox.id);
+      else if (!opts.json) {
         console.error(pc.dim(`kept instance ${shortId(sandbox.id)} (current for ${dirKey()})`));
         console.log(sandbox.id);
       }
     } else {
       try {
-        await c.del(`/api/v1/sandboxes/${sandbox.id}`);
+        const result = await c.del<{ sandbox: SandboxSummary }>(`/api/v1/sandboxes/${sandbox.id}`);
+        const cost = confirmedDestroyedSandbox(result, sandbox.id).cost;
+        deleted = true;
+        if (cost?.settled && cost.costUsd !== null && Number.isFinite(cost.costUsd)) settledCostUsd = cost.costUsd;
       } catch (e) {
-        console.error(
-          pc.red(`destroy failed for ${sandbox.id}: ${e instanceof Error ? e.message : String(e)}`),
-        );
-        if (exitCode === null || exitCode === 0) exitCode = 1;
+        cleanupError = e instanceof Error ? e.message : String(e);
+        if (!opts.json) console.error(pc.red(`destroy failed for ${sandbox.id}: ${safeTerm(cleanupError)}`));
       }
       const orgNow = orgKey(opts);
       if (readFileCurrent(orgNow) === sandbox.id) clearCurrentInstance(orgNow);
     }
+    const summary = {
+      type: 'summary', sandboxId: sandbox.id, jobId, exitCode,
+      elapsedSeconds: (Date.now() - startedAt) / 1000,
+      provider: sandbox.placement?.box?.provider ?? sandbox.provider,
+      deleted, kept,
+      ...(cleanupError ? { cleanupError } : {}),
+      ...(settledCostUsd !== undefined ? { costUsd: settledCostUsd } : {}),
+    };
+    if (opts.json) console.log(JSON.stringify(summary));
+    else console.error(pc.dim(
+      `exit ${exitCode ?? 'unknown'} · ${summary.elapsedSeconds.toFixed(1)}s · ${safeTerm(summary.provider ?? 'unknown provider')}` +
+      (settledCostUsd !== undefined ? ` · $${settledCostUsd.toFixed(4)}` : '') +
+      ` · ${sandbox.id} ${deleted ? 'deleted' : summary.kept ? 'kept' : 'cleanup unconfirmed'}`,
+    ));
   }
 
-  process.exitCode = detachRequested ? 0 : (exitCode ?? (destroyRequested ? 130 : 1));
+  process.exitCode = detachRequested ? 0 : (cleanupError && exitCode === 0 ? 1 : exitCode ?? (destroyRequested ? 130 : 1));
 }
 
 // ─── serve ───────────────────────────────────────────────────────────────────

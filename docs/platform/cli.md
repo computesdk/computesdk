@@ -22,11 +22,41 @@ The binary is `compute`. Pass `--json` on almost any platform command for machin
 
 `code` is one of `bad_request`, `unauthenticated`, `forbidden`, `not_found`, `conflict`, `payload_too_large`, `rate_limited`, `server_error`, `http_error` (API responses — `httpStatus` is set), or `no_credentials`, `untrusted_host`, `untrusted_host_stored_auth`, `insecure_transport`, `invalid_argument`, `workflow_not_found`, `network`, `unknown` (raised locally — no `httpStatus`). `retryable` is `true` for 429/502/503/504 and network failures. `details` is present only when the API returned a `details` object.
 
+## Your first sandbox
+
+```bash
+compute new                 # browser sign-in if needed, then create a sandbox
+compute exec echo hello     # run a command on the current sandbox
+compute list
+compute destroy             # destroy it and stop billing
+```
+
+Or use `compute run echo hello` to create a sandbox, execute a command and clean
+up automatically. A normal `compute new` keeps the sandbox running until its
+timeout or destruction. `compute -v` (or `compute --version`) prints the CLI version.
+
+The current sandbox is saved per repository/directory and organization. An
+explicit ID wins over `COMPUTE_INSTANCE`, which wins over the saved selection.
+Use `compute use <id>` to select an existing sandbox. `compute new --no-use`
+creates without changing the selection.
+
 ## Authentication
 
 Auth resolves in this order: `--api-key` flag → `COMPUTE_API_KEY` env var → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → stored platform OAuth credentials (`~/.benchsdk/credentials.json`, written by `compute login` or `compute bench auth login`; an expired access token is refreshed silently). Actions commands never start the login flow themselves; with no key anywhere they fail with `no_credentials`.
 
-`compute login` runs the platform's OAuth device flow (the same one `bench auth login` uses) and writes to `~/.benchsdk/credentials.json`; `compute logout` clears it. `compute --login` / `compute --logout` are shortcuts for the same thing. After login the CLI prints the active org; `compute whoami` (or `compute org current`) shows it again via `GET /api/v1/me`.
+`compute login` runs the platform's OAuth device flow (the same one `bench auth login` uses) and writes to `~/.benchsdk/credentials.json`; `compute logout` clears it. `compute --login` / `compute --logout` are shortcuts for the same thing. It opens the verification URL in your browser and prints a URL and code as a
+fallback. Use `compute login --no-browser` for manual sign-in. Press Ctrl-C to
+cancel; expiry or denial explains how to retry.
+
+Interactive `compute new`, `compute instances create`, and `compute run` start
+this flow when the credential store is empty and no key was supplied, then
+continue the original command after approval. `--no-browser` works on these
+commands too. No browser is opened in CI, without a terminal, or with
+`--json`/`--quiet`: missing credentials produce the existing `no_credentials`
+error. Failed refreshes, existing sessions and explicit keys are never silently
+replaced. Provisioning requests are not replayed after API failures.
+
+After login the CLI prints the active org; `compute whoami` (or `compute org current`) shows it again via `GET /api/v1/me`.
 
 ### Organizations
 
@@ -127,22 +157,92 @@ compute bench logs dax <runId> --participant e2b --max-lines 500
 
 `--json` prints the raw API response, including the `filter` echo showing what the server applied.
 
-## `compute sandboxes`
+## Sandboxes
+
+Everyday commands live directly under `compute`: `list`, `get`, `use`, `exec`,
+`run`, `serve`, `spawn`, `ps`, `logs`, `kill`, `wait`, `cp`, `url`, and `destroy`. The existing
+`compute instances`, `compute sandboxes`, and `compute sbx` paths remain
+compatible. Settings, billing and snapshots remain in those groups.
 
 ```bash
-compute sandboxes create                       # place a sandbox
-compute sandboxes list                         # list sandboxes
-compute sandboxes exec <id> uname -a           # run a one-shot command
-compute sandboxes spawn <id> --cwd /app -e NODE_ENV=production -- npm run dev
-compute sandboxes ps <id>                      # detached processes
-compute sandboxes url <id> --port 3000         # public URL for an exposed port
+compute new                                    # place and select a sandbox
+compute list                                   # list sandboxes
+compute exec <id> uname -a                      # run a one-shot command
+compute spawn <id> --cwd /app -e NODE_ENV=production npm run dev
+compute ps <id>                                # detached processes
+compute url <id> --port 3000                    # public URL for an exposed port
 ```
 
 For `exec` and `spawn`, everything after the command's first word goes to the
 sandbox untouched — flags like `uname -a` or `node -e` are not CLI options.
-Pass CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`,
+Pass CLI options (`--json`, `--timeout`/`--timeout-ms`, `--stream`, `--detach`, `--cwd`, `-e/--env`, `--stdin`,
 `--org`) before the command; a bare `--` before the command is optional but
 supported.
+
+### Executing commands
+
+```bash
+compute exec "npm test"                            # one argument: shell command
+compute exec node -v                               # multiple arguments: preserve argv
+compute exec "echo hello && echo world"            # shell operators run remotely
+compute exec --cwd /app --timeout 120 npm test
+compute exec --stream "npm run build"              # follow output while it runs
+compute exec --timeout 0 "long-running-command"    # no command time limit
+compute exec --detach "npm run dev"                # return a background job ID
+compute logs <sandbox-id> <job-id> --follow          # follow a detached job
+```
+
+Omit the sandbox ID to use the current selection, or place an explicit ID after
+`exec`. A single command argument is interpreted by the remote shell; two or
+more arguments are individually quoted, preserving spaces, quotes and shell
+metacharacters literally. Use `bash -lc '...'` when you want an explicit shell.
+The same command interpretation applies to `spawn`, which remains available.
+
+`--timeout` accepts seconds; `--timeout-ms` remains compatible. Use one spelling
+per invocation. Without either flag, the existing platform command timeout
+applies. A zero timeout removes the command time limit; the sandbox's own
+lifetime still applies. Limits longer than the buffered endpoint's 290-second
+maximum automatically use the process path and follow output, as does zero.
+
+`--stream` follows a tracked process and prints new stdout/stderr incrementally.
+The remote exit code becomes the CLI exit code. A streamed command that exceeds
+its time limit is killed and exits 124; Ctrl-C signals the process and exits 130.
+With `--json`, streamed output is JSON Lines with `stdout`, `stderr` and `exit`
+events. Buffered execution keeps its existing single JSON result.
+
+`--detach` returns immediately with a job ID (or process metadata with `--json`).
+It cannot be combined with `--stream` or a command timeout: the CLI must remain
+connected to enforce those limits. Existing `logs`, `ps`, and
+`compute kill <sandbox-id> <job-id>` and `compute wait <sandbox-id> <job-id>` manage the background job. If
+following output fails, the CLI reports the job ID for recovery without
+starting the command again.
+
+## Status, resumable login, and run summaries
+
+`compute status` shows verified authentication, the effective organization,
+credit balance and holds, the selected sandbox, and default routing readiness.
+It performs read-only checks, accepts `--org`, `--api-key`, `--base-url`, and
+`--json`, and preserves partial results if an endpoint fails. `--check` exits 1
+unless authentication is verified and the default sandbox route is ready; no
+selected sandbox is required. The routing quote creates nothing.
+
+Normal `compute login` opens the browser and waits. Pending sign-ins are stored
+privately per platform URL and reused after interruptions until approval, denial,
+or expiry. `--new` replaces a pending code; logout clears local pending attempts.
+For agents, `compute login --json` immediately returns `verificationUrl`, `code`,
+and ISO `expiresAt`, with no private device code or credentials. A subsequent
+`compute login --wait --json` waits for approval, saves the shared credentials,
+and returns `{ "signedIn": true, "organization": "<slug>" }`. JSON login does not
+open a browser. Without `--json`, login retains its normal human-readable flow.
+
+`compute run` prints a final summary on stderr: exit code, elapsed seconds,
+provider, and whether teardown was confirmed or the sandbox was kept. Cost is
+included only when the teardown response contains a settled amount. With
+`--json`, command output is stdout/stderr JSON Lines followed by a `summary`
+record with `sandboxId`, `jobId`, `exitCode`, `elapsedSeconds`, `provider`,
+`deleted`, `kept`, and optional `costUsd`. An unknown command exit code is null;
+cleanup failure makes a successful CLI invocation fail. `run --detach --json`
+returns `{ "type": "detached", "sandboxId": "...", "jobId": "..." }` immediately.
 
 ## `compute byok` — the org's BYOK provider keys and custom rates
 
