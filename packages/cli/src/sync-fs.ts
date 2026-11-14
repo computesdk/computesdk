@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 
 export interface SyncEntry {
   path: string;
@@ -15,6 +14,7 @@ export interface TreeRequest {
   destination?: boolean;
   remove?: SyncEntry[];
   directories?: SyncEntry[];
+  entries?: SyncEntry[];
 }
 
 /** Self-contained: the same function runs locally and in a sandbox's Node runtime. */
@@ -81,40 +81,28 @@ export async function treeOperation(input: TreeRequest, requireModule: NodeRequi
   }
   if (input.remove || input.directories) return [];
   const result: SyncEntry[] = [];
-  const walk = async (relative: string): Promise<void> => {
-    const entries = fs.readdirSync(path.join(root, relative), { withFileTypes: true });
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.name === '.git') {
-        if (input.destination && relative) {
-          const parent = result.find((e) => e.path === relative);
-          if (parent) parent.protected = true;
-        }
-        continue;
-      }
-      if (entry.name.includes('\\')) throw new Error('Unsupported sync filename: ' + entry.name);
-      const name = relative ? relative + '/' + entry.name : entry.name;
-      const full = path.join(root, name);
-      const stat = fs.lstatSync(full);
-      if (exclude?.(name, stat.isDirectory())) continue;
-      const mode = stat.mode & 0o777;
-      if (stat.isSymbolicLink()) {
-        const link = fs.readlinkSync(full);
-        const target = path.resolve(path.dirname(full), link);
-        if (!input.destination && (path.isAbsolute(link) || target !== root && !target.startsWith(root + path.sep))) {
-          throw new Error('Symlink points outside sync root: ' + name);
-        }
-        result.push({ path: name, type: 'symlink', mode, link });
-      } else if (stat.isDirectory()) {
-        result.push({ path: name, type: 'directory', mode });
-        await walk(name);
-      } else if (stat.isFile()) {
-        const hash = crypto.createHash('sha256');
-        for await (const chunk of fs.createReadStream(full)) hash.update(chunk);
-        result.push({ path: name, type: 'file', mode, hash: hash.digest('hex'), ...(input.destination && stat.nlink > 1 ? { links: stat.nlink } : {}) });
-      } else throw new Error('Unsupported file type: ' + name);
+  // The checkpoint engine owns traversal and hashing. This pass only checks
+  // planned paths against current filesystem metadata and sync's boundaries.
+  for (const entry of input.entries ?? []) {
+    const full = checked(entry.path);
+    const stat = fs.lstatSync(full);
+    const type = stat.isSymbolicLink() ? 'symlink' : stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : undefined;
+    if (!type || type !== entry.type || (stat.mode & 0o777) !== entry.mode) throw new Error('Project changed during snapshot scan: ' + entry.path);
+    if (exclude?.(entry.path, type === 'directory')) continue;
+    if (type === 'symlink') {
+      const link = fs.readlinkSync(full);
+      const target = path.resolve(path.dirname(full), link);
+      if (!input.destination && (path.isAbsolute(link) || target !== root && !target.startsWith(root + path.sep))) throw new Error('Symlink points outside sync root: ' + entry.path);
+      if (link !== entry.link) throw new Error('Project changed during snapshot scan: ' + entry.path);
     }
-  };
-  await walk('');
+    result.push({ ...entry,
+      ...(input.destination && type === 'file' && stat.nlink > 1 ? { links: stat.nlink } : {}),
+      ...(input.destination && type === 'directory' && fs.existsSync(path.join(full, '.git')) ? { protected: true } : {}),
+    });
+  }
   return result;
 }
-export const localTree = (input: TreeRequest, exclude?: (name: string, directory: boolean) => boolean): Promise<SyncEntry[]> => treeOperation(input, createRequire(import.meta.url), exclude);
+export const localTree = async (input: TreeRequest, exclude?: (name: string, directory: boolean) => boolean): Promise<SyncEntry[]> => {
+  const { scanLocalTree } = await import('./snapshot-engine.js');
+  return scanLocalTree(input, exclude);
+};

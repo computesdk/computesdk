@@ -66,7 +66,7 @@ Local uploads respect nested `.gitignore` files, including repository ancestor
 rules. `.git` data is always excluded. Destination-only files stay unless
 `--delete` is explicit; ignored source paths stay protected from deletion.
 Binary files, executable permissions, and relative symlinks within the project
-are supported. Internal hardlinks in downloaded archives are copied as files.
+are supported. Source hardlinks are copied as separate files.
 File/directory type conflicts and overwriting hard-linked destination files
 require manual resolution.
 
@@ -75,9 +75,11 @@ finishes its current pass before stopping on Ctrl-C; it cannot combine with
 `--dry-run`. `--json` returns one result with `dryRun`, `copied`, and `deleted`;
 watch mode emits a JSON line for each nonempty pass.
 
-Sandbox endpoints require Node.js and the platform transfer API. Downloads and
-sandbox-to-sandbox transfers stage a source archive through this CLI; only changed
-entries are applied to the destination. Filesystem roots, overlapping directories
+Sync reuses the platform OCI checkpoint engine for scanning, diffing, capture,
+and integrity-checked restore. Sandbox endpoints require Node.js and the platform
+transfer API. Only the OCI layers needed for planned writes travel through the
+CLI; a changed file can require its whole top-level directory layer. Sandbox-to-
+sandbox transfers relay through the CLI. Filesystem roots, overlapping directories
 on the same sandbox, symlink traversal, and links outside the project are refused.
 Avoid concurrent edits at the destination while a sync runs.
 
@@ -616,3 +618,14 @@ v2 removes the legacy console authentication and its commands:
   device flow and writes `~/.benchsdk/credentials.json` (the same store `bench
   auth login` uses). Run `compute login` once after upgrading.
 - `compute providers` is unchanged.
+
+### Maintaining the sync checkpoint engine
+
+The CLI bundles an exact copy of the platform checkpoint module;
+`checkpoint-provenance.json` records its upstream commit and SHA-256 digest.
+Refresh it with `node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform [revision]`
+from the repository root, then run the CLI tests. Do not edit the bundled engine
+directly. Sync-specific filtering and destination guards live in the adapter.
+Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
+selectors use glob syntax. Watch passes use fresh temporary stores; they skip
+capture when nothing changed, but do not share a persistent layer cache.

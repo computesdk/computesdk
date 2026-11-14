@@ -39,6 +39,11 @@ beforeEach(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   post.mockImplementation(async (url: string, body: Record<string, unknown>) => {
+    if (url.endsWith('/files')) {
+      fs.mkdirSync(path.dirname(body.path as string), { recursive: true });
+      fs.writeFileSync(body.path as string, body.content as string);
+      return {};
+    }
     if (url.endsWith('/commands')) {
       try {
         const result = await shell(body.command as string, { maxBuffer: 16 * 1024 * 1024 });
@@ -65,7 +70,7 @@ beforeEach(async () => {
     }
     throw new Error('Unexpected ' + url);
   });
-  c = { post } as unknown as ActionsClient;
+  c = { post, get: async (_url: string, params: { path: string }) => ({ type: 'file', content: fs.readFileSync(params.path, 'utf8') }) } as unknown as ActionsClient;
 });
 afterEach(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -78,6 +83,7 @@ const write = (root: string, relative: string, content: string | Buffer) => {
 };
 
 describe('one-way project sync', () => {
+  vi.setConfig({ testTimeout: 30_000 });
   it('uploads contents, ignores nested rules, and preserves binaries, links and executable bits', async () => {
     write(source, '.gitignore', 'node_modules/\n*.secret\n');
     write(source, 'node_modules/pkg/index.js', 'excluded');
@@ -109,7 +115,7 @@ describe('one-way project sync', () => {
     expect(plan.copy.map((e) => e.path)).toEqual(['new.txt']);
     expect(plan.remove.map((e) => e.path)).toEqual(['old.txt']);
     expect(await localTree({ root: destination })).toEqual(before);
-    expect(post.mock.calls.every(([url]) => url.endsWith('/commands'))).toBe(true);
+    expect(post.mock.calls.some(([url]) => url.includes('/transfers'))).toBe(false);
   });
 
   it('preserves destination-only files by default and ignored paths even with --delete', async () => {
@@ -177,7 +183,7 @@ describe('one-way project sync', () => {
       if (url.endsWith('/complete')) write(destination, 'keep', 'edited concurrently');
       return response;
     });
-    await expect(syncOnce(c, { local: source }, { id, remote: destination }, { delete: true })).rejects.toThrow('changed before deletion');
+    await expect(syncOnce(c, { local: source }, { id, remote: destination }, { delete: true })).rejects.toThrow('Destination changed during sync');
     expect(fs.readFileSync(path.join(destination, 'keep'), 'utf8')).toBe('edited concurrently');
   });
 
@@ -189,6 +195,40 @@ describe('one-way project sync', () => {
     await expect(syncOnce(c, { local: source }, { id, remote: destination }, {})).rejects.toThrow('hard-linked destination');
     expect(fs.readFileSync(path.join(dir, 'outside-hardlink'), 'utf8')).toBe('original');
     expect(transfers.size).toBe(0);
+  });
+
+  it('rejects a corrupted OCI layer before changing destination files or deleting extras', async () => {
+    write(source, 'file', 'new'); write(destination, 'file', 'old'); write(destination, 'keep', 'preserve');
+    const original = post.getMockImplementation()!;
+    post.mockImplementation(async (url, body) => {
+      const response = await original(url, body);
+      if (url.endsWith('/complete')) {
+        const transfer = transfers.get(url.split('/').at(-2)!)!;
+        for (const name of fs.readdirSync(path.join(transfer.path, 'blobs'))) {
+          const blob = path.join(transfer.path, 'blobs', name);
+          const data = fs.readFileSync(blob);
+          if (data[0] === 0x1f && data[1] === 0x8b) { data[10] ^= 1; fs.writeFileSync(blob, data); }
+        }
+      }
+      return response;
+    });
+    await expect(syncOnce(c, { local: source }, { id, remote: destination }, { delete: true })).rejects.toThrow('sha256 mismatch');
+    expect(fs.readFileSync(path.join(destination, 'file'), 'utf8')).toBe('old');
+    expect(fs.readFileSync(path.join(destination, 'keep'), 'utf8')).toBe('preserve');
+  });
+
+  it('restores only selected paths and preserves unchanged file timestamps and destination root permissions', async () => {
+    write(source, 'changed', 'new'); write(source, 'unchanged', 'same');
+    write(destination, 'changed', 'old'); write(destination, 'unchanged', 'same');
+    const file = path.join(destination, 'unchanged');
+    fs.utimesSync(file, new Date(1000), new Date(1000));
+    fs.chmodSync(destination, 0o705);
+    const before = fs.statSync(file).mtimeMs;
+    const plan = await syncOnce(c, { local: source }, { id, remote: destination }, {});
+    expect(plan.copy.map((e) => e.path)).toEqual(['changed']);
+    expect(fs.statSync(file).mtimeMs).toBe(before);
+    expect(fs.statSync(destination).mode & 0o777).toBe(0o705);
+    expect(fs.readFileSync(path.join(destination, 'changed'), 'utf8')).toBe('new');
   });
 
   it('refuses destination symlink traversal and filesystem roots', async () => {
@@ -225,13 +265,32 @@ describe('one-way project sync', () => {
     post.mockImplementation(async (url, body) => {
       const response = await original(url, body);
       if (url.endsWith('/transfers') && body.direction === 'download') {
-        fs.symlinkSync('/etc', path.join(source, 'bad-link'));
-        await tar.create({ file: path.join(dir, 'download.tar.gz'), gzip: true, cwd: path.dirname(source) }, [path.basename(source)]);
+        fs.symlinkSync('/etc', path.join(body.path as string, 'bad-link'));
+        await tar.create({ file: path.join(dir, 'download.tar.gz'), gzip: true, cwd: path.dirname(body.path as string) }, [path.basename(body.path as string)]);
       }
       return response;
     });
-    await expect(syncOnce(c, { id, remote: source }, { local: destination }, {})).rejects.toThrow('Unsafe symlink');
+    await expect(syncOnce(c, { id, remote: source }, { local: destination }, {})).rejects.toThrow('Unsupported sync archive');
     expect(fs.readdirSync(destination)).toEqual([]);
+  });
+
+  it('downloads only layers needed for changes and preserves untouched subtrees', async () => {
+    write(source, 'changed/file', 'new'); write(destination, 'changed/file', 'old');
+    write(source, 'unchanged/file', 'same'); write(destination, 'unchanged/file', 'same');
+    const before = fs.statSync(path.join(destination, 'unchanged/file')).mtimeMs;
+    const original = post.getMockImplementation()!;
+    let roots: string[] = [];
+    post.mockImplementation(async (url, body) => {
+      if (url.endsWith('/transfers') && body.direction === 'download') {
+        const manifest = JSON.parse(fs.readFileSync(path.join(body.path as string, 'manifests/selected.json'), 'utf8'));
+        roots = manifest.layers.map((layer: { annotations: Record<string, string> }) => layer.annotations['com.computesdk.checkpoint.root']);
+      }
+      return original(url, body);
+    });
+    await syncOnce(c, { id, remote: source }, { local: destination }, {});
+    expect(roots).toEqual([path.join(source, 'changed')]);
+    expect(fs.readFileSync(path.join(destination, 'changed/file'), 'utf8')).toBe('new');
+    expect(fs.statSync(path.join(destination, 'unchanged/file')).mtimeMs).toBe(before);
   });
 
   it('prints each JSON sync result on one line for watch consumers', () => {

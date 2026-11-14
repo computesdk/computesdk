@@ -12,7 +12,10 @@
     "dist",
     "bootstrap.sh",
     "cli-manifest.json",
-    "README.md"
+    "README.md",
+    "checkpoint.cjs",
+    "checkpoint-runner.cjs",
+    "checkpoint-provenance.json"
   ],
   "scripts": {
     "build": "tsup",

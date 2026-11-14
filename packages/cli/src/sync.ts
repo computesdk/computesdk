@@ -1,7 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -11,8 +10,9 @@ import { Command } from 'commander';
 import { client, fail, output, safeTerm, type CommonOpts } from './actions.js';
 import type { ActionsClient } from './actions-client.js';
 import { isUuid, resolveInstanceId } from './current-instance.js';
-import { execCommand } from './exec.js';
-import { localTree, treeOperation, type SyncEntry, type TreeRequest } from './sync-fs.js';
+import type { SyncEntry } from './sync-fs.js';
+import { SnapshotSession, selectSnapshot, endpointRoot, ignoredPaths, type CaptureResult } from './snapshot-engine.js';
+import { randomUUID } from 'node:crypto';
 
 export type SyncEndpoint = { local: string } | { id: string; remote: string };
 export interface SyncOptions extends CommonOpts { delete?: boolean; dryRun?: boolean; watch?: boolean }
@@ -59,14 +59,17 @@ export function sourceFilter(root: string): (name: string, directory: boolean) =
   };
 }
 
-export function planSync(source: SyncEntry[], destination: SyncEntry[], remove: boolean, excluded: (name: string, directory: boolean) => boolean = () => false): SyncPlan {
+export async function planSync(session: SnapshotSession, source: SyncEntry[], destination: SyncEntry[], remove: boolean, excluded: (name: string, directory: boolean) => boolean = () => false): Promise<SyncPlan> {
+  const difference = await session.diff(source, destination);
+  const changes = new Set([...difference.added, ...difference.changed.map((e) => e.path)]);
+  const deleted = new Set(difference.deleted);
   const src = new Map(source.map((e) => [e.path, e]));
   const dst = new Map(destination.map((e) => [e.path, e]));
   const copy: SyncEntry[] = [];
   for (const entry of source) {
     const previous = dst.get(entry.path);
     if (previous && previous.type !== entry.type) throw new Error(`Sync type conflict at ${entry.path}; move or remove the destination entry first.`);
-    if (!previous || entry.type !== 'directory' && (previous.hash !== entry.hash || previous.link !== entry.link || previous.mode !== entry.mode)) {
+    if (changes.has(entry.path) && (!previous || entry.type !== 'directory')) {
       if (previous?.links && previous.links > 1) throw new Error(`Sync cannot overwrite a hard-linked destination file: ${entry.path}. Move or unlink it first.`);
       copy.push(entry);
     }
@@ -74,27 +77,10 @@ export function planSync(source: SyncEntry[], destination: SyncEntry[], remove: 
   // Never delete ignored entries or a directory containing protected children.
   const ignoredPaths = destination.filter((e) => excluded(e.path, e.type === 'directory')).map((e) => e.path);
   const protectedPaths = destination.filter((e) => e.protected || excluded(e.path, e.type === 'directory')).map((e) => e.path);
-  const removed = remove ? destination.filter((e) => !e.protected && !src.has(e.path) && !ignoredPaths.some((p) => e.path === p || e.path.startsWith(p + '/')) &&
+  const removed = remove ? destination.filter((e) => !e.protected && deleted.has(e.path) && !src.has(e.path) && !ignoredPaths.some((p) => e.path === p || e.path.startsWith(p + '/')) &&
     !protectedPaths.some((p) => p.startsWith(e.path + '/'))) : [];
   removed.sort((a, b) => b.path.split('/').length - a.path.split('/').length || b.path.localeCompare(a.path));
   return { copy, remove: removed };
-}
-
-async function remoteTree(c: ActionsClient, endpoint: { id: string; remote: string }, request: Omit<TreeRequest, 'root'> = {}): Promise<SyncEntry[]> {
-  const payload = JSON.stringify({ root: endpoint.remote, ...request });
-  const script = `(${treeOperation.toString()})(${payload},require).then(entries=>console.log(JSON.stringify({entries}))).catch(e=>{console.error(e.message);process.exitCode=1})`;
-  const result = await c.post<{ exitCode: number; stdout: string; stderr: string }>(`/api/v1/sandboxes/${endpoint.id}/commands`, {
-    command: execCommand(['node', '--input-type=commonjs', '-e', script]), timeoutMs: 290_000,
-  });
-  if (result.exitCode !== 0) throw new Error(`Sync filesystem check failed: ${result.stderr || 'Node.js is required in the sandbox.'}`);
-  let entries: SyncEntry[];
-  try { entries = JSON.parse(result.stdout).entries; } catch { throw new Error('Incomplete sync manifest from sandbox. Reduce the project size and try again.'); }
-  if (!Array.isArray(entries)) throw new Error('Invalid sync manifest from sandbox.');
-  for (const entry of entries) {
-    if (!entry.path || entry.path.startsWith('/') || entry.path.includes('\0') || entry.path.includes('\\') || entry.path.split('/').some((p) => p === '..' || p === '.' || p === '.git' || p === '') ||
-        !['file', 'directory', 'symlink'].includes(entry.type) || !Number.isInteger(entry.mode) || entry.mode < 0 || entry.mode > 0o777) throw new Error('Unsafe sync manifest from sandbox.');
-  }
-  return entries;
 }
 
 function transferUrl(raw: string): string {
@@ -113,15 +99,7 @@ async function download(c: ActionsClient, source: { id: string; remote: string }
     const parts = name.replace(/\/$/, '').split('/');
     if (parts[0] !== wrapper || parts.some((p) => p === '..' || p === '' || p === '.') || name.includes('\\')) throw new Error('Unsafe sync archive entry.');
     if (parts.includes('.git')) return false;
-    if (!['File', 'Directory', 'SymbolicLink', 'Link'].includes(entry.type ?? '')) throw new Error('Unsupported sync archive entry.');
-    if (entry.type === 'Link') {
-      const link = entry.linkpath ?? '';
-      if (!link.startsWith(wrapper + '/') || link.includes('\\') || link.split('/').some((p) => p === '..' || p === '.' || p === '.git' || p === '')) throw new Error('Unsafe hardlink in sync archive.');
-    }
-    if (entry.type === 'SymbolicLink') {
-      const target = path.posix.normalize(path.posix.join(path.posix.dirname(name), entry.linkpath ?? ''));
-      if (!entry.linkpath || path.posix.isAbsolute(entry.linkpath) || !target.startsWith(wrapper + '/') && target !== wrapper) throw new Error('Unsafe symlink in sync archive.');
-    }
+    if (!['File', 'Directory'].includes(entry.type ?? '')) throw new Error('Unsupported sync archive entry.');
     return true;
   };
   // Validate the complete archive before writing any of its entries.
@@ -152,61 +130,92 @@ async function upload(c: ActionsClient, destination: { id: string; remote: strin
 
 export async function syncOnce(c: ActionsClient, source: SyncEndpoint, destination: SyncEndpoint, opts: SyncOptions): Promise<SyncPlan> {
   if ('local' in source && 'local' in destination) throw new Error('Sync requires at least one sandbox endpoint ([id]:/path).');
-  if ('id' in source && 'id' in destination && source.id === destination.id &&
+  if ('id' in source && 'id' in destination && source.id.toLowerCase() === destination.id.toLowerCase() &&
       (source.remote === destination.remote || source.remote.startsWith(destination.remote + '/') || destination.remote.startsWith(source.remote + '/'))) throw new Error('Source and destination sync directories must not overlap.');
-  const excluded = 'local' in source ? sourceFilter(source.local) : () => false;
-  const src = 'local' in source ? await localTree({ root: source.local }, excluded) : await remoteTree(c, source);
-  const dst = 'local' in destination ? await localTree({ root: destination.local, missing: true, destination: true }) : await remoteTree(c, destination, { missing: true, destination: true });
-  const plan = planSync(src, dst, !!opts.delete, excluded);
-  if (opts.dryRun) return plan;
-  if (!plan.copy.length && !plan.remove.length) {
-    if ('local' in destination) await localTree({ root: destination.local, missing: true, directories: [] });
-    else await remoteTree(c, destination, { missing: true, directories: [] });
-    return plan;
-  }
-  const temp = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'compute-sync-')));
+  const session = new SnapshotSession(c);
   try {
-    // Stage before touching the destination. Remote-to-remote relays through this CLI.
-    const sourceRoot = 'local' in source ? source.local : await download(c, source, temp);
-    const snapshot = path.join(temp, 'snapshot');
-    fs.mkdirSync(snapshot);
-    for (const entry of plan.copy) {
-      const from = path.join(sourceRoot, entry.path);
-      const to = path.join(snapshot, entry.path);
-      fs.mkdirSync(path.dirname(to), { recursive: true });
-      if (entry.type === 'directory') fs.mkdirSync(to, { recursive: true });
-      else if (entry.type === 'symlink') fs.symlinkSync(fs.readlinkSync(from), to);
-      else { fs.copyFileSync(from, to); fs.chmodSync(to, entry.mode); }
+    const excluded = 'local' in source ? sourceFilter(source.local) : () => false;
+    const src = await session.scan(source, false, 'local' in source ? excluded : undefined);
+    const dst = await session.scan(destination, true);
+    const plan = await planSync(session, src.entries, dst.entries, !!opts.delete, excluded);
+    if (opts.dryRun) return plan;
+    if (!plan.copy.length && !plan.remove.length) {
+      await session.guard(destination, { missing: true, directories: [] });
+      return plan;
     }
-    const staged = await localTree({ root: snapshot });
-    const stagedByPath = new Map(staged.map((e) => [e.path, e]));
-    for (const entry of plan.copy) {
-      const actual = stagedByPath.get(entry.path);
-      if (!actual || actual.type !== entry.type || actual.hash !== entry.hash || actual.link !== entry.link) throw new Error('Source changed during sync; rerun to try again.');
-    }
-    const current = 'local' in destination ? await localTree({ root: destination.local, missing: true, destination: true }) : await remoteTree(c, destination, { missing: true, destination: true });
-    if (JSON.stringify(current) !== JSON.stringify(dst)) throw new Error('Destination changed during sync; rerun to try again.');
-    const directories = plan.copy.filter((e) => e.type === 'directory');
-    if ('local' in destination) {
-      await localTree({ root: destination.local, missing: true, directories });
-      for (const entry of plan.copy.filter((e) => e.type !== 'directory')) {
-        const target = path.join(destination.local, entry.path);
-        const pending = path.join(path.dirname(target), `.compute-sync-${process.pid}-${Math.random().toString(16).slice(2)}`);
-        try {
-          if (entry.type === 'symlink') fs.symlinkSync(entry.link!, pending);
-          else { fs.copyFileSync(path.join(snapshot, entry.path), pending, fs.constants.COPYFILE_EXCL); fs.chmodSync(pending, entry.mode); }
-          fs.renameSync(pending, target);
-        } finally { fs.rmSync(pending, { force: true }); }
+    if (plan.copy.length) {
+      const sourceRoot = endpointRoot(source);
+      const captureRoot = 'id' in source ? await session.remoteRoot(source.id) : session.temp;
+      const sourceStore = path.posix.join(captureRoot, 'store');
+      const checkpointId = randomUUID();
+      const capture = await session.operation<CaptureResult & { missing?: string[] }>('id' in source ? source.id : undefined, 'capture', {
+        checkpointId, paths: [sourceRoot, ...src.entries.filter((e) => e.type === 'directory' && !e.path.includes('/')).map((e) => path.posix.join(sourceRoot, e.path))],
+        exclude: 'local' in source ? ignoredPaths(source.local, excluded) : ['**/.git', '**/.git/**'],
+        store: { kind: 'fs', root: sourceStore },
+      });
+      if (capture.missing?.length) throw new Error('Source changed during snapshot capture.');
+      if (capture.manifestKey !== `manifests/${checkpointId}.json`) throw new Error('Invalid snapshot manifest key.');
+      const store = 'local' in source ? sourceStore : path.join(session.temp, 'metadata');
+      if ('id' in source) {
+        fs.mkdirSync(path.join(store, 'manifests'), { recursive: true });
+        fs.mkdirSync(path.join(store, 'blobs'));
+        const manifestText = await session.read(source.id, path.posix.join(sourceStore, capture.manifestKey));
+        const metadata = JSON.parse(manifestText);
+        if (!/^sha256:[a-f0-9]{64}$/.test(metadata.config?.digest)) throw new Error('Invalid snapshot config digest.');
+        fs.writeFileSync(path.join(store, capture.manifestKey), manifestText);
+        fs.writeFileSync(path.join(store, 'blobs', metadata.config.digest.slice(7)), await session.read(source.id, path.posix.join(sourceStore, 'blobs', metadata.config.digest.slice(7))));
       }
-      if (plan.remove.length) await localTree({ root: destination.local, remove: plan.remove });
-    } else {
-      await remoteTree(c, destination, { missing: true, directories });
-      await upload(c, destination, snapshot, plan.copy, temp);
-      // Delete only after a successful upload/complete.
-      if (plan.remove.length) await remoteTree(c, destination, { remove: plan.remove });
+      const manifest = selectSnapshot(store, capture.manifestKey, sourceRoot, plan.copy, dst, endpointRoot(destination));
+      // Only the config and layers referenced by this selected OCI view travel.
+      let bundle = path.join(session.temp, 'bundle');
+      fs.mkdirSync(path.join(bundle, 'blobs'), { recursive: true });
+      fs.mkdirSync(path.join(bundle, 'manifests'));
+      const selected = JSON.parse(fs.readFileSync(path.join(store, manifest), 'utf8'));
+      const refs = [selected.config, ...selected.layers] as { digest: string }[];
+      const entries: SyncEntry[] = [
+        { path: 'blobs', type: 'directory', mode: 0o700 }, { path: 'manifests', type: 'directory', mode: 0o700 },
+        { path: manifest, type: 'file', mode: 0o600 },
+      ];
+      fs.copyFileSync(path.join(store, manifest), path.join(bundle, manifest));
+      for (const ref of refs) {
+        if (!/^sha256:[a-f0-9]{64}$/.test(ref.digest)) throw new Error('Invalid snapshot blob digest.');
+        const relative = 'blobs/' + ref.digest.slice(7);
+        if ('local' in source || ref === selected.config) fs.copyFileSync(path.join(store, relative), path.join(bundle, relative));
+        entries.push({ path: relative, type: 'file', mode: 0o600 });
+      }
+      if ('id' in source) {
+        const remoteBundle = path.posix.join(captureRoot, 'selected-store');
+        const layers = refs.slice(1).map((ref) => ref.digest.slice(7));
+        const layerList = path.posix.join(captureRoot, 'selected-layers.json');
+        await session.write(source.id, layerList, JSON.stringify(layers));
+        await session.command(source.id, `const fs=require('node:fs'),p=require('node:path'),dest=${JSON.stringify(remoteBundle)},src=${JSON.stringify(sourceStore)};fs.mkdirSync(p.join(dest,'blobs'),{recursive:true});fs.mkdirSync(p.join(dest,'manifests'));for(const hex of JSON.parse(fs.readFileSync(${JSON.stringify(layerList)},'utf8')))fs.copyFileSync(p.join(src,'blobs',hex),p.join(dest,'blobs',hex));`);
+        await session.write(source.id, path.posix.join(remoteBundle, manifest), fs.readFileSync(path.join(bundle, manifest), 'utf8'));
+        const configFile = 'blobs/' + selected.config.digest.slice(7);
+        await session.write(source.id, path.posix.join(remoteBundle, configFile), fs.readFileSync(path.join(bundle, configFile), 'utf8'));
+        bundle = await download(c, { id: source.id, remote: remoteBundle }, session.temp);
+      }
+      let restoreStore = bundle;
+      if ('id' in destination) {
+        restoreStore = path.posix.join(await session.remoteRoot(destination.id), 'bundle');
+        await session.guard({ id: destination.id, remote: restoreStore }, { missing: true, directories: entries.filter((e) => e.type === 'directory') });
+        await upload(c, { id: destination.id, remote: restoreStore }, bundle, entries, session.temp);
+      }
+      const current = await session.scan(destination, true);
+      if (JSON.stringify(current.entries) !== JSON.stringify(dst.entries)) throw new Error('Destination changed during sync; rerun to try again.');
+      await session.guard(destination, { missing: true, directories: plan.copy.filter((e) => e.type === 'directory') });
+      const restored = await session.operation<{ failures: unknown[] }>('id' in destination ? destination.id : undefined, 'restore', {
+        checkpointId: 'selected', manifestUrl: undefined,
+        // The engine reads the selected manifest from its fs object store.
+        store: { kind: 'fs', root: restoreStore }, destDir: endpointRoot(destination), strictArch: false,
+      });
+      if (restored.failures.length) throw new Error('Snapshot restore was incomplete.');
+    }
+    if (plan.remove.length) {
+      // Delete only after successful capture, transfer and integrity-checked restore.
+      await session.guard(destination, { remove: plan.remove });
     }
     return plan;
-  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+  } finally { await session.close(); }
 }
 
 export function printSync(plan: SyncPlan, opts: SyncOptions): void {

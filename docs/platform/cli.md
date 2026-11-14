@@ -249,8 +249,7 @@ nested `.gitignore` files and repository ancestor rules. `.git` is excluded;
 `--delete` removes destination-only entries while preserving ignored paths.
 Binary files, executable permissions, and project-contained relative symlinks
 are preserved. Filesystem roots, overlapping endpoints on the same sandbox,
-symlink traversal, and file/directory type conflicts are refused. Internal archive
-hardlinks are copied as files; overwriting hard-linked destination files is refused.
+symlink traversal, and file/directory type conflicts are refused. Source hardlinks are copied as separate files; overwriting hard-linked destination files is refused.
 
 `--dry-run` returns a plan without changing destination files. `--watch` polls
 every two seconds, serializes passes, and finishes the active pass before
@@ -258,9 +257,11 @@ stopping on Ctrl-C; `--dry-run --watch` is invalid. `--json` returns `dryRun`,
 `copied`, and `deleted` (relative path arrays); watch mode emits JSON Lines for
 passes with changes. Errors use the standard stderr JSON envelope.
 
-Sandbox filesystem checks require Node.js; bulk payloads use the existing
-transfer API. Remote sources stage a full archive through the CLI, then only
-changed entries are applied. Deletions occur after a successful copy. Transfers
+Sync uses the platform OCI checkpoint engine for scan, diff, capture, and
+integrity-checked restore. Node.js is required in each sandbox. The existing
+transfer API carries only selected OCI layers through the CLI, including sandbox
+relays; a changed file can require its whole top-level directory layer. Only
+planned entries are restored. Deletions occur after a successful restore. Transfers
 are not atomic across the entire directory; avoid concurrent destination edits.
 The sandbox working directory is unchanged: use `exec --cwd /app` for the synced
 project. Watch mode is one-way; it does not merge conflicting edits.
@@ -319,3 +320,14 @@ deprecated in favour of these.
 ```bash
 compute providers    # SDK provider credentials in this environment (local env vars)
 ```
+
+### Maintaining the sync checkpoint engine
+
+The CLI bundles an exact copy of the platform checkpoint module;
+`checkpoint-provenance.json` records its upstream commit and SHA-256 digest.
+Refresh it with `node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform [revision]`
+from the repository root, then run the CLI tests. Do not edit the bundled engine
+directly. Sync-specific filtering and destination guards live in the adapter.
+Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
+selectors use glob syntax. Watch passes use fresh temporary stores; they skip
+capture when nothing changed, but do not share a persistent layer cache.

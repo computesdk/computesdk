@@ -18,3 +18,7 @@ cleanup and settled cost when available. Machine-readable runs emit JSON Lines.
 Support provider-first project creation (`compute new e2b .`) and one-way sync
 between local directories and sandboxes, including sandbox relays, gitignore
 filtering, incremental copies, dry runs, explicit deletion, and polling watch mode.
+
+Reuse the pinned platform OCI checkpoint engine for sync scanning, diffing,
+capture and integrity-checked restore, with selected-layer transfers and guarded
+destination updates instead of a separate snapshot implementation.
