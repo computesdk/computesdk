@@ -76,13 +76,15 @@ async function streamJob(c: ActionsClient, sandboxId: string, jobId: string, tim
   const controller = new AbortController();
   let stopCode: number | undefined;
   let stopping: Promise<void> | undefined;
+  let killError: string | undefined;
   const stop = (code: number, signal: string) => {
     if (stopping) return;
     stopCode = code;
     stopping = c.post(`${base}/kill`, { signal }, { signal: AbortSignal.timeout(10_000) })
       .then(() => undefined)
       .catch(() => {
-        console.error(`Could not stop job ${jobId}; run compute instances kill ${sandboxId} ${jobId}.`);
+        killError = `Could not stop job ${jobId}; run compute instances kill ${sandboxId} ${jobId}.`;
+        if (!opts.json) console.error(killError);
       })
       .finally(() => controller.abort());
   };
@@ -121,8 +123,12 @@ async function streamJob(c: ActionsClient, sandboxId: string, jobId: string, tim
   } catch (error) {
     if (stopCode === undefined) {
       // The process may still be running. Do not replay the start request.
-      console.error(`Job ${jobId} remains available: compute logs ${sandboxId} ${jobId} --follow`);
-      throw error;
+      const recovery = `Job ${jobId} remains available: compute logs ${sandboxId} ${jobId} --follow`;
+      if (error instanceof Error) {
+        error.message += `. ${recovery}`;
+        throw error;
+      }
+      throw new Error(`${String(error)}. ${recovery}`);
     }
   } finally {
     clearTimeout(timer);
@@ -131,7 +137,7 @@ async function streamJob(c: ActionsClient, sandboxId: string, jobId: string, tim
     await stopping;
     if (stopCode !== undefined) {
       process.exitCode = stopCode;
-      if (opts.json) process.stdout.write(JSON.stringify({ event: 'exit', exitCode: stopCode }) + '\n');
+      if (opts.json) process.stdout.write(JSON.stringify({ event: 'exit', exitCode: stopCode, ...(killError ? { error: killError } : {}) }) + '\n');
     }
   }
 }

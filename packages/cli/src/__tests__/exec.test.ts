@@ -109,11 +109,17 @@ describe('exec modes', () => {
     expect(post).toHaveBeenCalledWith(`${base}/processes/job-1/kill`, { signal: 'SIGINT' }, expect.anything());
     expect(process.exitCode).toBe(130); expect(process.listenerCount('SIGINT')).toBe(before);
   });
+  it('keeps JSON error output clean and includes the job recovery command in the error', async () => {
+    const post = vi.fn().mockResolvedValueOnce({ process: job }).mockRejectedValueOnce(new Error('network failed'));
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(execute(client(post), id, { command: 'echo hello' }, { stream: true, json: true })).rejects.toThrow('compute logs');
+    expect(err).not.toHaveBeenCalled();
+  });
   it('reports a failed wait without starting another process', async () => {
     const post = vi.fn().mockResolvedValueOnce({ process: job }).mockRejectedValueOnce(new Error('network failed'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(execute(client(post), id, { command: 'echo hello' }, { stream: true })).rejects.toThrow('network failed');
     expect(post).toHaveBeenCalledTimes(2);
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('compute logs'));
+    expect(console.error).not.toHaveBeenCalled();
   });
 });
