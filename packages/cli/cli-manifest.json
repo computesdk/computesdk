@@ -2088,7 +2088,10 @@
       "flags": [
         "--cwd",
         "--env",
+        "--timeout",
         "--timeout-ms",
+        "--stream",
+        "--detach",
         "--api-key",
         "--base-url",
         "--allow-untrusted-host",
@@ -2096,7 +2099,7 @@
         "--org",
         "--help"
       ],
-      "summary": "Run a one-shot command and print its result (options before the command; -- also works)"
+      "summary": "Run a shell command or argv in a sandbox; --stream follows output, --detach returns a job ID"
     },
     {
       "path": [
@@ -2878,7 +2881,10 @@
       "flags": [
         "--cwd",
         "--env",
+        "--timeout",
         "--timeout-ms",
+        "--stream",
+        "--detach",
         "--api-key",
         "--base-url",
         "--allow-untrusted-host",
@@ -2886,7 +2892,7 @@
         "--org",
         "--help"
       ],
-      "summary": "Run a one-shot command and print its result (options before the command; -- also works)"
+      "summary": "Run a shell command or argv in a sandbox; --stream follows output, --detach returns a job ID"
     },
     {
       "path": [

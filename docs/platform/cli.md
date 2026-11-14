@@ -175,9 +175,47 @@ compute url <id> --port 3000                    # public URL for an exposed port
 
 For `exec` and `spawn`, everything after the command's first word goes to the
 sandbox untouched — flags like `uname -a` or `node -e` are not CLI options.
-Pass CLI options (`--json`, `--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`,
+Pass CLI options (`--json`, `--timeout`/`--timeout-ms`, `--stream`, `--detach`, `--cwd`, `-e/--env`, `--stdin`,
 `--org`) before the command; a bare `--` before the command is optional but
 supported.
+
+### Executing commands
+
+```bash
+compute exec "npm test"                            # one argument: shell command
+compute exec node -v                               # multiple arguments: preserve argv
+compute exec "echo hello && echo world"            # shell operators run remotely
+compute exec --cwd /app --timeout 120 npm test
+compute exec --stream "npm run build"              # follow output while it runs
+compute exec --timeout 0 "long-running-command"    # no command time limit
+compute exec --detach "npm run dev"                # return a background job ID
+compute logs <sandbox-id> <job-id> --follow          # follow a detached job
+```
+
+Omit the sandbox ID to use the current selection, or place an explicit ID after
+`exec`. A single command argument is interpreted by the remote shell; two or
+more arguments are individually quoted, preserving spaces, quotes and shell
+metacharacters literally. Use `bash -lc '...'` when you want an explicit shell.
+The same command interpretation applies to `spawn`, which remains available.
+
+`--timeout` accepts seconds; `--timeout-ms` remains compatible. Use one spelling
+per invocation. Without either flag, the existing platform command timeout
+applies. A zero timeout removes the command time limit; the sandbox's own
+lifetime still applies. Limits longer than the buffered endpoint's 290-second
+maximum automatically use the process path and follow output, as does zero.
+
+`--stream` follows a tracked process and prints new stdout/stderr incrementally.
+The remote exit code becomes the CLI exit code. A streamed command that exceeds
+its time limit is killed and exits 124; Ctrl-C signals the process and exits 130.
+With `--json`, streamed output is JSON Lines with `stdout`, `stderr` and `exit`
+events. Buffered execution keeps its existing single JSON result.
+
+`--detach` returns immediately with a job ID (or process metadata with `--json`).
+It cannot be combined with `--stream` or a command timeout: the CLI must remain
+connected to enforce those limits. Existing `logs`, `ps`, and
+`compute instances kill <sandbox-id> <job-id>` manage the background job. If
+following output fails, the CLI reports the job ID for recovery without
+starting the command again.
 
 ## `compute byok` — the org's BYOK provider keys and custom rates
 

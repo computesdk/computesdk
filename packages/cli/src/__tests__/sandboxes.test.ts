@@ -84,7 +84,7 @@ describe('exec/spawn pass-through command flags', () => {
   it('spawn <id> -eFOO=bar cmd accepts the attached short-option value', async () => {
     await buildProgram().parseAsync(['sandboxes', 'spawn', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '-eFOO=bar', 'cmd'], { from: 'user' });
     expect(post).toHaveBeenCalledWith('/api/v1/sandboxes/a1b2c3d4-e5f6-7890-abcd-ef1234567890/processes', {
-      command: `'cmd'`,
+      command: `cmd`,
       env: { FOO: 'bar' },
     });
   });
@@ -92,7 +92,7 @@ describe('exec/spawn pass-through command flags', () => {
   it('exec <id> -- --flaggy-command sends a dash-prefixed command through', async () => {
     await buildProgram().parseAsync(['sandboxes', 'exec', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '--', '-command'], { from: 'user' });
     expect(post).toHaveBeenCalledWith('/api/v1/sandboxes/a1b2c3d4-e5f6-7890-abcd-ef1234567890/commands', {
-      command: `'-command'`,
+      command: `-command`,
     });
   });
 
@@ -206,7 +206,7 @@ describe('current instance resolution', () => {
     expect(fakeClient.get).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}`);
     await buildProgram().parseAsync(['sandboxes', 'exec', 'uname'], { from: 'user' });
     expect(post).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}/commands`, {
-      command: `'uname'`,
+      command: `uname`,
     });
   });
 
@@ -903,5 +903,39 @@ describe('root sandbox commands', () => {
       write.mockRestore();
       process.exitCode = previous;
     }
+  });
+});
+
+describe('exec shell and background syntax', () => {
+  beforeEach(() => { post.mockReset(); });
+
+  it.each(['exec', 'instances exec', 'sandboxes exec', 'sbx exec'])('%s accepts a quoted shell command', async (path) => {
+    post.mockResolvedValue({ commandId: 'c1', exitCode: 0, stdout: 'ok\n', stderr: '', durationMs: 1 });
+    await buildProgram().parseAsync([...path.split(' '), 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'echo hello && echo world'], { from: 'user' });
+    expect(post).toHaveBeenCalledWith('/api/v1/sandboxes/a1b2c3d4-e5f6-7890-abcd-ef1234567890/commands', { command: 'echo hello && echo world' });
+  });
+
+  it('accepts --detach after an ID and preserves cwd and environment', async () => {
+    post.mockResolvedValue({ process: proc });
+    const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await buildProgram().parseAsync(['exec', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '--detach', '--json', '--cwd', '/app', '-e', 'PORT=3000', 'npm run dev'], { from: 'user' });
+      expect(post).toHaveBeenCalledWith('/api/v1/sandboxes/a1b2c3d4-e5f6-7890-abcd-ef1234567890/processes', {
+        command: 'npm run dev', cwd: '/app', env: { PORT: '3000' },
+      });
+      expect(JSON.parse(String(out.mock.calls[0][0]))).toEqual(proc);
+    } finally { out.mockRestore(); }
+  });
+
+  it('passes --stream and --detach through when they belong to the remote command', async () => {
+    post.mockResolvedValue({ commandId: 'c1', exitCode: 0, stdout: 'ok\n', stderr: '', durationMs: 1 });
+    await buildProgram().parseAsync(['exec', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'node', '--stream', '--detach'], { from: 'user' });
+    expect(post).toHaveBeenCalledWith('/api/v1/sandboxes/a1b2c3d4-e5f6-7890-abcd-ef1234567890/commands', { command: "'node' '--stream' '--detach'" });
+  });
+
+  it('parses --timeout in seconds before a remote command', async () => {
+    post.mockResolvedValue({ commandId: 'c1', exitCode: 0, stdout: 'ok\n', stderr: '', durationMs: 1 });
+    await buildProgram().parseAsync(['exec', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '--timeout', '120', '--', 'npm', 'test'], { from: 'user' });
+    expect(post).toHaveBeenCalledWith('/api/v1/sandboxes/a1b2c3d4-e5f6-7890-abcd-ef1234567890/commands', { command: "'npm' 'test'", timeoutMs: 120000 });
   });
 });

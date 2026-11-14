@@ -42,6 +42,7 @@ import { formatMoney, formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits 
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
 import { registerBillingCommands } from './sandbox-billing.js';
 import { creationClient } from './onboarding.js';
+import { execute, execCommand, execTimeout, type ExecOpts } from './exec.js';
 
 // ─── Wire types (mirror benchmarks-platform lib/sandboxes) ──────────────────
 // The definitions moved to @computesdk/platform in cli 2.x — re-exported here
@@ -58,7 +59,6 @@ export type {
   SandboxSummary,
 } from '@computesdk/platform';
 import type {
-  CommandResult,
   PathView,
   SandboxDetail,
   SandboxProcess,
@@ -258,11 +258,18 @@ const AUTH_LEAD_OPTS: LeadOptSpec[] = [
   { aliases: ['--json'], key: 'json', flag: 'bool' },
 ];
 
-const EXEC_LEAD_OPTS: LeadOptSpec[] = [
+const COMMAND_LEAD_OPTS: LeadOptSpec[] = [
   ...AUTH_LEAD_OPTS,
   { aliases: ['--cwd'], key: 'cwd', flag: 'value' },
   { aliases: ['-e', '--env'], key: 'env', flag: 'repeat' },
   { aliases: ['--timeout-ms'], key: 'timeoutMs', flag: 'value' },
+];
+
+const EXEC_LEAD_OPTS: LeadOptSpec[] = [
+  ...COMMAND_LEAD_OPTS,
+  { aliases: ['--timeout'], key: 'timeout', flag: 'value' },
+  { aliases: ['--stream'], key: 'stream', flag: 'bool' },
+  { aliases: ['-d', '--detach'], key: 'detach', flag: 'bool' },
 ];
 
 const SPAWN_LEAD_OPTS: LeadOptSpec[] = [
@@ -1036,7 +1043,7 @@ function registerSandboxOperations(cmd: Command): void {
       try {
         checkQuietJson(opts);
         if (opts.keep && opts.detach) throw new Error('--keep and --detach are mutually exclusive.');
-        const lead = takeLeadingOptions(rawCommand, EXEC_LEAD_OPTS);
+        const lead = takeLeadingOptions(rawCommand, COMMAND_LEAD_OPTS);
         opts = mergeLeadOpts(rawOpts, lead.inline);
         const command = lead.command;
         if (command.length === 0) throw new Error('missing command to run');
@@ -1083,14 +1090,17 @@ function registerSandboxOperations(cmd: Command): void {
 
   cmd
     .command('exec [sandboxId] [command...]')
-    .description('Run a one-shot command and print its result (options before the command; -- also works)')
+    .description('Run a shell command or argv in a sandbox; --stream follows output, --detach returns a job ID')
     .option('--cwd <dir>', 'working directory')
     .option('-e, --env <key=value>', 'environment variable (repeatable)', (v, a: string[]) => a.concat(v), [] as string[])
-    .option('--timeout-ms <ms>', 'command timeout in ms')
+    .option('--timeout <seconds>', 'command timeout in seconds (0: no command time limit)')
+    .option('--timeout-ms <ms>', 'command timeout in ms (legacy spelling)')
+    .option('--stream', 'print stdout and stderr while the command runs')
+    .option('-d, --detach', 'start a background process and print its job ID')
     .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
     .option('--json', 'print the raw response')
     .passThroughOptions()
-    .action(async (argId: string | undefined, rawCommand: string[], rawOpts: CommonOpts & { cwd?: string; env?: string[]; timeoutMs?: string }) => {
+    .action(async (argId: string | undefined, rawCommand: string[], rawOpts: ExecOpts) => {
       let opts = rawOpts;
       try {
         // A non-UUID first positional is the first word of the command, not
@@ -1103,24 +1113,15 @@ function registerSandboxOperations(cmd: Command): void {
         opts = mergeLeadOpts(rawOpts, lead.inline);
         const command = lead.command;
         if (command.length === 0) throw new Error('missing command to run');
+        // Reject incompatible options before resolving auth or starting work.
+        execTimeout(opts);
         const resolved = resolveSandbox(argId, opts);
         const c = await client(opts);
-        const res = await c.post<{ commandId: string } & CommandResult>(
-          `/api/v1/sandboxes/${resolved.id}/commands`,
-          {
-            command: command.map(shellQuote).join(' '),
-            ...(opts.cwd ? { cwd: opts.cwd } : {}),
-            ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
-            ...(opts.timeoutMs ? { timeoutMs: Number(opts.timeoutMs) } : {}),
-          },
-        ).catch((e) => { resolved.clearStale(e); throw e; });
-        output(opts, res, (r) => {
-          process.stdout.write(r.stdout);
-          if (r.stderr) process.stderr.write(r.stderr);
-          if (!r.stdout) console.log(`exit ${r.exitCode} (${r.durationMs}ms)`);
-        });
-        // exitCode, not exit(): a piped stdout flushes before the CLI exits.
-        if (res.exitCode !== 0) process.exitCode = res.exitCode;
+        await execute(c, resolved.id, {
+          command: execCommand(command),
+          ...(opts.cwd ? { cwd: opts.cwd } : {}),
+          ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
+        }, opts).catch((e) => { resolved.clearStale(e); throw e; });
       } catch (e) {
         fail(e, opts);
       }
@@ -1153,7 +1154,7 @@ function registerSandboxOperations(cmd: Command): void {
         const res = await c.post<{ process: SandboxProcess }>(
           `/api/v1/sandboxes/${resolved.id}/processes`,
           {
-            command: command.map(shellQuote).join(' '),
+            command: execCommand(command),
             ...(opts.cwd ? { cwd: opts.cwd } : {}),
             ...(opts.env && opts.env.length > 0 ? { env: parseInputs(opts.env) } : {}),
             ...(opts.stdin ? { stdin: true } : {}),
