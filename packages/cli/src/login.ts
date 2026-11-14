@@ -1,4 +1,8 @@
 /** Browser-assisted RFC 8628 login, using the shared compute/bench session. */
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
@@ -49,14 +53,64 @@ async function postForm(url: string, params: Record<string, string>, timeoutMs =
   return body;
 }
 
-export async function login(options: { baseUrl?: string; browser?: boolean; org?: string } = {}): Promise<void> {
+interface PendingLogin {
+  baseUrl: string;
+  device: OAuthResponse;
+  expiresAt: number;
+}
+function stateDir(): string {
+  return process.env.BENCHSDK_STATE_DIR ?? join(homedir(), '.benchsdk');
+}
+function pendingPath(baseUrl: string): string {
+  return join(stateDir(), `compute-login-${createHash('sha256').update(baseUrl).digest('hex')}.json`);
+}
+function readPending(baseUrl: string, includeExpired = false): PendingLogin | undefined {
+  try {
+    const pending = JSON.parse(readFileSync(pendingPath(baseUrl), 'utf8')) as PendingLogin;
+    if (pending.baseUrl === baseUrl && pending.device && Number.isFinite(pending.expiresAt) && (includeExpired || pending.expiresAt > Date.now())) return pending;
+  } catch { /* no pending login */ }
+  return undefined;
+}
+function savePending(pending: PendingLogin): void {
+  mkdirSync(stateDir(), { recursive: true });
+  const file = pendingPath(pending.baseUrl);
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(pending), { mode: 0o600 });
+  renameSync(tmp, file);
+}
+function removePending(baseUrl: string, deviceCode: string): void {
+  // A completed/denied attempt must not erase a newer login.
+  if (readPending(baseUrl, true)?.device.device_code === deviceCode) rmSync(pendingPath(baseUrl), { force: true });
+}
+export function clearPendingLogins(): void {
+  let files: string[];
+  try { files = readdirSync(stateDir()); } catch { return; }
+  for (const file of files) {
+    if (/^compute-login-[a-f0-9]{64}\.json$/.test(file)) rmSync(join(stateDir(), file), { force: true });
+  }
+}
+
+export interface LoginOptions {
+  baseUrl?: string;
+  browser?: boolean;
+  org?: string;
+  json?: boolean;
+  wait?: boolean;
+  new?: boolean;
+}
+
+export async function login(options: LoginOptions = {}): Promise<void> {
   const baseUrl = (options.baseUrl || envBaseUrl() || DEFAULT_BASE_URL).replace(/\/+$/, '').replace(/\/api\/v1$/, '');
   if (!isTrustedPlatformHost(baseUrl) || !isSecurePlatformTransport(baseUrl)) {
     throw new Error('Sign in against a trusted ComputeSDK HTTPS host (or localhost for development).');
   }
   const resource = `${baseUrl}/api/v1`;
   const authUrl = `${baseUrl}/api/auth`;
-  const device = await postForm(`${authUrl}/device/code`, {
+  const pending = options.new ? undefined : readPending(baseUrl);
+  if (options.json && options.wait && !pending) {
+    throw new Error('No pending sign-in. Run compute login --json first to get the sign-in URL.');
+  }
+  const device = pending?.device ?? await postForm(`${authUrl}/device/code`, {
     client_id: BENCH_OAUTH_CLIENT_ID, scope: BENCH_OAUTH_SCOPE, resource,
   });
   if (device.error) throw new Error(device.error_description || device.error);
@@ -70,12 +124,19 @@ export async function login(options: { baseUrl?: string; browser?: boolean; org?
   if (parsedUrl.origin !== new URL(baseUrl).origin || parsedUrl.username || parsedUrl.password) {
     throw new Error('The sign-in server returned an unexpected verification URL.');
   }
-  console.error(`Sign in to ComputeSDK: ${verificationUrl}`);
-  console.error(`Confirm code: ${device.user_code}`);
-  console.error('Waiting for approval. Press Ctrl-C to cancel.');
-  const expiresAt = Date.now() + device.expires_in! * 1000;
-  if (options.browser !== false && !(await openBrowser(verificationUrl))) {
-    console.error('Could not open a browser. Open the sign-in URL above to continue.');
+  const expiresAt = pending?.expiresAt ?? Date.now() + device.expires_in! * 1000;
+  savePending({ baseUrl, device, expiresAt });
+  if (options.json && !options.wait) {
+    console.log(JSON.stringify({ verificationUrl, code: device.user_code, expiresAt: new Date(expiresAt).toISOString() }));
+    return;
+  }
+  if (!options.json) {
+    console.error(`Sign in to ComputeSDK: ${verificationUrl}`);
+    console.error(`Confirm code: ${device.user_code}`);
+    console.error('Waiting for approval. Press Ctrl-C to cancel.');
+    if (options.browser !== false && !(await openBrowser(verificationUrl))) {
+      console.error('Could not open a browser. Open the sign-in URL above to continue.');
+    }
   }
 
   let intervalMs = (device.interval ?? 5) * 1000;
@@ -86,8 +147,16 @@ export async function login(options: { baseUrl?: string; browser?: boolean; org?
       device_code: device.device_code, client_id: BENCH_OAUTH_CLIENT_ID, resource,
     }, expiresAt - Date.now());
     if (token.error === 'authorization_pending') continue;
-    if (token.error === 'slow_down') { intervalMs += 5000; continue; }
-    if (token.error === 'access_denied') throw new Error('Sign-in was denied. Run compute login to try again.');
+    if (token.error === 'slow_down') {
+      intervalMs += 5000;
+      device.interval = intervalMs / 1000;
+      savePending({ baseUrl, device, expiresAt });
+      continue;
+    }
+    if (token.error === 'access_denied') {
+      removePending(baseUrl, device.device_code);
+      throw new Error('Sign-in was denied. Run compute login to try again.');
+    }
     if (token.error === 'expired_token') break;
     if (token.error) throw new Error(token.error_description || token.error);
     if (!token.access_token || !Number.isFinite(token.expires_in) || token.expires_in! <= 0) {
@@ -99,6 +168,7 @@ export async function login(options: { baseUrl?: string; browser?: boolean; org?
       kind: 'oauth' as const, clientId: BENCH_OAUTH_CLIENT_ID,
     };
     await saveCredentials(credentials);
+    removePending(baseUrl, device.device_code);
     // Approval normally binds the org server-side. Keep the shared store's
     // org cache current too, so directory-scoped sandbox selection is correct.
     // Use the token just issued, regardless of API keys in the environment.
@@ -120,8 +190,10 @@ export async function login(options: { baseUrl?: string; browser?: boolean; org?
     await saveCredentials({
       ...credentials, ...(active ? { orgSlug: active.slug, orgId: active.id } : {}),
     });
-    console.error(`Signed in. ${override ? 'Using' : 'Active'} organization: ${effective.slug}.`);
+    if (options.json) console.log(JSON.stringify({ signedIn: true, organization: effective.slug }));
+    else console.error(`Signed in. ${override ? 'Using' : 'Active'} organization: ${effective.slug}.`);
     return;
   }
+  removePending(baseUrl, device.device_code);
   throw new Error('Sign-in code expired. Run compute login to get a new code.');
 }

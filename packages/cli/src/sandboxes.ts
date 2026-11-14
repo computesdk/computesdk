@@ -808,7 +808,7 @@ export function registerSandboxesCommands(program: Command): void {
   // its parent on the object); both sets use the registrations below.
   const shortcuts = new Command().enablePositionalOptions();
   registerSandboxOperations(shortcuts);
-  const rootCommands = new Set(['list', 'get', 'use', 'destroy', 'run', 'serve', 'exec', 'spawn', 'ps', 'logs', 'cp', 'url']);
+  const rootCommands = new Set(['list', 'get', 'use', 'destroy', 'run', 'serve', 'exec', 'spawn', 'ps', 'logs', 'kill', 'wait', 'cp', 'url']);
   for (const sub of shortcuts.commands) {
     if (rootCommands.has(sub.name())) {
       sub.configureOutput({ outputError: usageErrorOutput });
@@ -1659,6 +1659,13 @@ function runTimeoutText(opts: { timeoutMs?: string }): string {
     : `instance timeout: ${fmtTimeout(PLATFORM_DEFAULT_TIMEOUT_MS)} (platform default)`;
 }
 
+function confirmedDestroyedSandbox(result: { sandbox: SandboxSummary }, id: string): SandboxSummary {
+  if (result?.sandbox?.status !== 'destroyed') {
+    throw new Error('Teardown was not confirmed; run compute destroy ' + id);
+  }
+  return result.sandbox;
+}
+
 /**
  * `compute instances run` — create, spawn, stream via repeated `wait` calls
  * (each returns the cumulative buffers; we print only the delta), then destroy
@@ -1669,13 +1676,14 @@ async function runInstanceCommand(
   command: string[],
   opts: QuietOpts & CreateFlagOpts & { keep?: boolean; detach?: boolean; yes?: boolean },
 ): Promise<void> {
+  const startedAt = Date.now();
   const body = buildCreateBody(opts);
   const c = await creationClient(opts);
   const created = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
   const sandbox = created.sandbox;
   const org = orgKey(opts);
   // Before anything else: the ID on stderr, so a `kill -9` leaves a handle.
-  console.error(pc.dim(`instance ${sandbox.id}`));
+  if (!opts.json) console.error(pc.dim(`instance ${sandbox.id}`));
 
   const spawned = await c.post<{ process: SandboxProcess }>(
     `/api/v1/sandboxes/${sandbox.id}/processes`,
@@ -1688,7 +1696,8 @@ async function runInstanceCommand(
 
   if (opts.detach) {
     setCurrentInstance(sandbox.id, org);
-    if (opts.quiet) console.log(sandbox.id);
+    if (opts.json) console.log(JSON.stringify({ type: 'detached', sandboxId: sandbox.id, jobId }));
+    else if (opts.quiet) console.log(sandbox.id);
     else printDetachSummary(sandbox.id, jobId, runTimeoutText(opts));
     return;
   }
@@ -1697,23 +1706,31 @@ async function runInstanceCommand(
   let destroyRequested = false;
   let detachRequested = false;
   let prompting = false;
+  let deleted = false;
+  let kept = false;
+  let settledCostUsd: number | undefined;
+  let cleanupError: string | undefined;
   let printedOut = 0;
   let printedErr = 0;
 
   const flush = (p: SandboxProcessStatus) => {
     if (prompting) return; // Ctrl-C prompt owns the terminal right now
     if (p.stdout.length > printedOut) {
-      process.stdout.write(p.stdout.slice(printedOut));
+      const data = p.stdout.slice(printedOut);
+      if (opts.json) console.log(JSON.stringify({ type: 'stdout', data }));
+      else process.stdout.write(data);
       printedOut = p.stdout.length;
     }
     if (p.stderr.length > printedErr) {
-      process.stderr.write(p.stderr.slice(printedErr));
+      const data = p.stderr.slice(printedErr);
+      if (opts.json) console.log(JSON.stringify({ type: 'stderr', data }));
+      else process.stderr.write(data);
       printedErr = p.stderr.length;
     }
   };
 
   const onSignal = () => {
-    if (!process.stdin.isTTY || opts.yes || prompting) {
+    if (!process.stdin.isTTY || opts.json || opts.yes || prompting) {
       // Non-TTY, --yes, or a 2nd Ctrl-C mid-prompt: destroy outright
       // (a mid-prompt Ctrl-C counts as N — keep waiting — unless readline
       // already closed, in which case fall through to destroy below).
@@ -1756,33 +1773,50 @@ async function runInstanceCommand(
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
     if (detachRequested) {
+      kept = true;
       setCurrentInstance(sandbox.id, org);
-      printDetachSummary(sandbox.id, jobId, runTimeoutText(opts));
+      if (!opts.json) printDetachSummary(sandbox.id, jobId, runTimeoutText(opts));
     } else if (opts.keep && exitCode !== null) {
+      kept = true;
       // --keep only keeps a run that reached an exit; a wait error or a
       // destroy request falls through to deletion so a failed run can't
       // leave a running instance behind.
       setCurrentInstance(sandbox.id, org);
-      if (opts.quiet) console.log(sandbox.id);
-      else {
+      if (!opts.json && opts.quiet) console.log(sandbox.id);
+      else if (!opts.json) {
         console.error(pc.dim(`kept instance ${shortId(sandbox.id)} (current for ${dirKey()})`));
         console.log(sandbox.id);
       }
     } else {
       try {
-        await c.del(`/api/v1/sandboxes/${sandbox.id}`);
+        const result = await c.del<{ sandbox: SandboxSummary }>(`/api/v1/sandboxes/${sandbox.id}`);
+        const cost = confirmedDestroyedSandbox(result, sandbox.id).cost;
+        deleted = true;
+        if (cost?.settled && cost.costUsd !== null && Number.isFinite(cost.costUsd)) settledCostUsd = cost.costUsd;
       } catch (e) {
-        console.error(
-          pc.red(`destroy failed for ${sandbox.id}: ${e instanceof Error ? e.message : String(e)}`),
-        );
-        if (exitCode === null || exitCode === 0) exitCode = 1;
+        cleanupError = e instanceof Error ? e.message : String(e);
+        if (!opts.json) console.error(pc.red(`destroy failed for ${sandbox.id}: ${safeTerm(cleanupError)}`));
       }
       const orgNow = orgKey(opts);
       if (readFileCurrent(orgNow) === sandbox.id) clearCurrentInstance(orgNow);
     }
+    const summary = {
+      type: 'summary', sandboxId: sandbox.id, jobId, exitCode,
+      elapsedSeconds: (Date.now() - startedAt) / 1000,
+      provider: sandbox.placement?.box?.provider ?? sandbox.provider,
+      deleted, kept,
+      ...(cleanupError ? { cleanupError } : {}),
+      ...(settledCostUsd !== undefined ? { costUsd: settledCostUsd } : {}),
+    };
+    if (opts.json) console.log(JSON.stringify(summary));
+    else console.error(pc.dim(
+      `exit ${exitCode ?? 'unknown'} · ${summary.elapsedSeconds.toFixed(1)}s · ${safeTerm(summary.provider ?? 'unknown provider')}` +
+      (settledCostUsd !== undefined ? ` · $${settledCostUsd.toFixed(4)}` : '') +
+      ` · ${sandbox.id} ${deleted ? 'deleted' : summary.kept ? 'kept' : 'cleanup unconfirmed'}`,
+    ));
   }
 
-  process.exitCode = detachRequested ? 0 : (exitCode ?? (destroyRequested ? 130 : 1));
+  process.exitCode = detachRequested ? 0 : (cleanupError && exitCode === 0 ? 1 : exitCode ?? (destroyRequested ? 130 : 1));
 }
 
 // ─── serve ───────────────────────────────────────────────────────────────────

@@ -35,6 +35,9 @@
       "flags": [
         "--base-url",
         "--no-browser",
+        "--json",
+        "--wait",
+        "--new",
         "--help"
       ],
       "summary": "Authenticate with ComputeSDK (OAuth device flow)"
@@ -1747,6 +1750,23 @@
     },
     {
       "path": [
+        "status"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--check",
+        "--help"
+      ],
+      "summary": "Show authentication, effective organization, credits, selected sandbox and routing readiness"
+    },
+    {
+      "path": [
         "instances"
       ],
       "aliases": [
@@ -2954,6 +2974,46 @@
         "--help"
       ],
       "summary": "Show a process's buffered output (--follow streams until exit)"
+    },
+    {
+      "path": [
+        "wait"
+      ],
+      "aliases": [],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--timeout-ms",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Block until a process exits"
+    },
+    {
+      "path": [
+        "kill"
+      ],
+      "aliases": [],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--signal",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Signal a process (default SIGTERM)"
     },
     {
       "path": [

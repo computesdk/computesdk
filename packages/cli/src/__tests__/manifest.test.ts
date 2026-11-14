@@ -86,7 +86,7 @@ describe('compute __manifest', () => {
   it('gives root sandbox commands the same arguments and flags as the existing paths', () => {
     const manifest = JSON.parse(computeManifest()) as CliManifest;
     const byPath = new Map(manifest.commands.map((c) => [c.path.join(' '), c]));
-    for (const name of ['list', 'get', 'use', 'destroy', 'run', 'serve', 'exec', 'spawn', 'ps', 'logs', 'cp', 'url']) {
+    for (const name of ['list', 'get', 'use', 'destroy', 'run', 'serve', 'exec', 'spawn', 'ps', 'logs', 'kill', 'wait', 'cp', 'url']) {
       const root = byPath.get(name)!;
       const nested = byPath.get(`instances ${name}`)!;
       expect(root.args).toEqual(nested.args);

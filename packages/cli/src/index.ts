@@ -34,7 +34,9 @@ import { registerCreditsCommands } from './credits.js';
 import { inheritParentOptions } from './option-inheritance.js';
 import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
-import { login } from './login.js';
+import { fail } from './actions.js';
+import { registerStatusCommand } from './status.js';
+import { login, clearPendingLogins, type LoginOptions } from './login.js';
 import { parseBenchDispatch, runBench } from './bench.js';
 import { registerManifestCommand } from './manifest.js';
 import { registerInvitationsCommands, registerOrgMemberCommands } from './org-members.js';
@@ -104,13 +106,14 @@ async function printSessionLine(options?: { baseUrl?: string }): Promise<void> {
 // `compute login` and `bench auth login` are the same login: the
 // `benchsdk-cli` OAuth client with the full first-party scope set, stored
 // once in ~/.benchsdk/credentials.json.
-async function runLogin(options?: { baseUrl?: string; browser?: boolean }): Promise<void> {
+async function runLogin(options?: LoginOptions): Promise<void> {
   await login(options);
 }
 
 async function runLogout(): Promise<void> {
   const { clearCredentials } = await import('@benchsdk/cli');
   await clearCredentials();
+  clearPendingLogins();
 }
 
 // ─── Default action: Show help ─────────────────────────────────────────────
@@ -180,10 +183,12 @@ program
   .description('Authenticate with ComputeSDK (OAuth device flow)')
   .option('--base-url <url>', 'platform URL to authenticate against')
   .option('--no-browser', 'print the sign-in URL instead of opening a browser')
+  .option('--json', 'return a sign-in URL and code immediately; use --wait to complete login')
+  .option('--wait', 'wait for approval (default without --json)')
+  .option('--new', 'replace the pending sign-in with a new code')
   .action(async (opts) => {
-    console.log();
-    p.intro(pc.cyan(`@computesdk/cli v${VERSION}`));
-    await runLogin({ baseUrl: opts.baseUrl, browser: opts.browser });
+    try { await runLogin(opts); } catch (error) { fail(error, opts); return; }
+    if (opts.json) return;
     await printSessionLine({ baseUrl: opts.baseUrl });
     p.outro(pc.green('Authenticated!'));
   });
@@ -316,6 +321,7 @@ registerMarketCommands(program);
 // `compute credits` — prepaid credit (balance, ledger, top-ups), which managed
 // accounts bill from (src/credits.ts).
 registerCreditsCommands(program);
+registerStatusCommand(program);
 
 // ─── sandboxes ───────────────────────────────────────────────────────────────
 // `compute instances` (alias `compute sandboxes`/`sbx`) drives

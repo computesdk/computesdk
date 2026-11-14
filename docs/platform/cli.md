@@ -160,7 +160,7 @@ compute bench logs dax <runId> --participant e2b --max-lines 500
 ## Sandboxes
 
 Everyday commands live directly under `compute`: `list`, `get`, `use`, `exec`,
-`run`, `serve`, `spawn`, `ps`, `logs`, `cp`, `url`, and `destroy`. The existing
+`run`, `serve`, `spawn`, `ps`, `logs`, `kill`, `wait`, `cp`, `url`, and `destroy`. The existing
 `compute instances`, `compute sandboxes`, and `compute sbx` paths remain
 compatible. Settings, billing and snapshots remain in those groups.
 
@@ -213,9 +213,36 @@ events. Buffered execution keeps its existing single JSON result.
 `--detach` returns immediately with a job ID (or process metadata with `--json`).
 It cannot be combined with `--stream` or a command timeout: the CLI must remain
 connected to enforce those limits. Existing `logs`, `ps`, and
-`compute instances kill <sandbox-id> <job-id>` manage the background job. If
+`compute kill <sandbox-id> <job-id>` and `compute wait <sandbox-id> <job-id>` manage the background job. If
 following output fails, the CLI reports the job ID for recovery without
 starting the command again.
+
+## Status, resumable login, and run summaries
+
+`compute status` shows verified authentication, the effective organization,
+credit balance and holds, the selected sandbox, and default routing readiness.
+It performs read-only checks, accepts `--org`, `--api-key`, `--base-url`, and
+`--json`, and preserves partial results if an endpoint fails. `--check` exits 1
+unless authentication is verified and the default sandbox route is ready; no
+selected sandbox is required. The routing quote creates nothing.
+
+Normal `compute login` opens the browser and waits. Pending sign-ins are stored
+privately per platform URL and reused after interruptions until approval, denial,
+or expiry. `--new` replaces a pending code; logout clears local pending attempts.
+For agents, `compute login --json` immediately returns `verificationUrl`, `code`,
+and ISO `expiresAt`, with no private device code or credentials. A subsequent
+`compute login --wait --json` waits for approval, saves the shared credentials,
+and returns `{ "signedIn": true, "organization": "<slug>" }`. JSON login does not
+open a browser. Without `--json`, login retains its normal human-readable flow.
+
+`compute run` prints a final summary on stderr: exit code, elapsed seconds,
+provider, and whether teardown was confirmed or the sandbox was kept. Cost is
+included only when the teardown response contains a settled amount. With
+`--json`, command output is stdout/stderr JSON Lines followed by a `summary`
+record with `sandboxId`, `jobId`, `exitCode`, `elapsedSeconds`, `provider`,
+`deleted`, `kept`, and optional `costUsd`. An unknown command exit code is null;
+cleanup failure makes a successful CLI invocation fail. `run --detach --json`
+returns `{ "type": "detached", "sandboxId": "...", "jobId": "..." }` immediately.
 
 ## `compute byok` — the org's BYOK provider keys and custom rates
 

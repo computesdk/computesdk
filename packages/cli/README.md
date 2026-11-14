@@ -21,7 +21,7 @@ compute -v                      # print the CLI version (--version also works)
 ```
 
 Common sandbox commands are available directly under `compute`: `list`, `get`,
-`use`, `exec`, `run`, `serve`, `spawn`, `ps`, `logs`, `cp`, `url`, and `destroy`.
+`use`, `exec`, `run`, `serve`, `spawn`, `ps`, `logs`, `kill`, `wait`, `cp`, `url`, and `destroy`.
 Existing `compute instances`, `compute sandboxes`, and `compute sbx` paths keep
 working. Advanced settings, billing and snapshots remain under `compute instances`.
 
@@ -53,6 +53,36 @@ approval they continue the original command once, with its original options.
 or with `--json`/`--quiet`, missing credentials fail promptly; run `compute login`
 separately or set `COMPUTE_API_KEY`. Existing expired sessions and invalid keys
 are reported rather than silently replaced with another identity.
+
+Pending sign-ins are saved privately on this machine and reused until approval,
+denial, or expiry. Restart `compute login` after an interruption to resume;
+`compute login --new` requests a fresh code. Logout clears pending sign-ins too.
+For scripts and agents, `compute login --json` returns only the verification URL,
+public code, and expiry immediately; `compute login --wait --json` resumes polling
+and saves the session without opening a browser. Normal login still opens the
+browser and waits for approval.
+
+## Status and jobs
+
+```bash
+compute status                 # auth, effective org, credits, selected sandbox, routing
+compute status --json          # structured diagnostics, including partial failures
+compute status --check         # exit 1 unless authenticated and routing is ready
+compute exec --detach "npm run dev"
+compute logs <job-id>
+compute wait <job-id>           # wait and return the process exit code
+compute kill <job-id>           # SIGTERM; override with --signal SIGKILL
+```
+
+Status checks the default sandbox route without creating a sandbox; no selected
+sandbox is required. It accepts the usual `--org`, `--api-key`, and `--base-url`.
+Job commands also accept an explicit sandbox ID before the job ID.
+
+`compute run` ends with an stderr summary of exit code, elapsed time, provider,
+and confirmed cleanup or retention. Cost appears only when teardown returns a
+settled amount. `run --json` emits stdout/stderr JSON Lines followed by a summary
+with `sandboxId`, `jobId`, `exitCode`, `elapsedSeconds`, `provider`, `deleted`,
+`kept`, and optional `costUsd`. `run --detach --json` returns a detached job record.
 
 ## Commands
 

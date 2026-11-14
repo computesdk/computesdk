@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,7 +30,11 @@ const fetchMock = vi.fn();
 function respond(body: unknown, status = 200) {
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body), { status }));
 }
+let stateDir: string;
 beforeEach(() => {
+  stateDir = mkdtempSync(join(tmpdir(), 'compute-login-test-'));
+  vi.stubEnv('BENCHSDK_STATE_DIR', stateDir);
+  vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.useFakeTimers();
   vi.clearAllMocks();
   fetchMock.mockReset();
@@ -35,7 +42,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   getMe.mockResolvedValue({ activeOrganizationId: org.id, organizations: [org] });
 });
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { rmSync(stateDir, { recursive: true, force: true }); vi.unstubAllEnvs(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function finish(promise: Promise<void>, milliseconds = 1000) {
   // Attach the rejection handler before timers can reject the login promise.
@@ -58,6 +65,46 @@ describe('ComputeSDK device login', () => {
     expect(init.body.get('device_code')).toBe(device.device_code);
     expect(init.body.get('resource')).toBe('http://localhost:3210/api/v1');
     expect(vi.mocked(console.error).mock.calls.flat().join(' ')).not.toContain(device.device_code);
+  });
+
+  it('returns only public JSON fields immediately and resumes the same pending code', async () => {
+    respond(device);
+    await login({ baseUrl: 'http://localhost:3210', json: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+    const first = JSON.parse(vi.mocked(console.log).mock.calls[0][0]);
+    expect(first).toEqual({ verificationUrl: device.verification_uri_complete, code: device.user_code, expiresAt: expect.any(String) });
+    const files = readdirSync(stateDir);
+    expect(files).toHaveLength(1);
+    expect(statSync(join(stateDir, files[0])).mode & 0o777).toBe(0o600);
+    expect(readFileSync(join(stateDir, files[0]), 'utf8')).toContain(device.device_code);
+    await login({ baseUrl: 'http://localhost:3210', json: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(vi.mocked(console.log).mock.calls[1][0])).toEqual(first);
+    respond(token);
+    expect(await finish(login({ baseUrl: 'http://localhost:3210', json: true, wait: true }))).toBeUndefined();
+    expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])).toEqual({ signedIn: true, organization: org.slug });
+    expect(readdirSync(stateDir)).toEqual([]);
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it('does not start an invisible approval flow with --wait --json and no pending link', async () => {
+    await expect(login({ baseUrl: 'http://localhost:3210', json: true, wait: true })).rejects.toThrow('compute login --json first');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('replaces pending codes only with --new or on expiry, and scopes them by host', async () => {
+    respond(device);
+    await login({ baseUrl: 'http://localhost:3210', json: true });
+    respond({ ...device, device_code: 'replacement' });
+    await login({ baseUrl: 'http://localhost:3210', json: true, new: true });
+    respond({ ...device, verification_uri_complete: 'http://localhost:3211/device' });
+    await login({ baseUrl: 'http://localhost:3211', json: true });
+    await vi.advanceTimersByTimeAsync(61_000);
+    respond(device);
+    await login({ baseUrl: 'http://localhost:3210', json: true });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('launches the browser without a shell and falls back if the opener fails', async () => {

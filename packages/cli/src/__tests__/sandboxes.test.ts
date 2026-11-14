@@ -524,6 +524,55 @@ describe('run', () => {
     process.exitCode = prev;
   });
 
+  it('run JSON emits output frames and a summary with confirmed teardown and settled cost', async () => {
+    post.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/sandboxes') return { sandbox };
+      if (path.endsWith('/processes')) return { process: proc };
+      if (path.endsWith('/wait')) return { process: { ...EXITED, stdout: 'hello', stderr: 'warning' } };
+      return {};
+    });
+    fakeClient.del.mockResolvedValueOnce({ sandbox: { ...sandbox, status: 'destroyed', cost: { ...sandbox.cost, settled: true } } });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const previous = process.exitCode;
+    try {
+      await buildProgram().parseAsync(['run', '--json', 'echo', 'hello'], { from: 'user' });
+      expect(log.mock.calls.map(([line]) => JSON.parse(line))).toEqual([
+        { type: 'stdout', data: 'hello' }, { type: 'stderr', data: 'warning' },
+        { type: 'summary', sandboxId: ID_A, jobId: 'j1', exitCode: 0, elapsedSeconds: expect.any(Number), provider: 'e2b', deleted: true, kept: false, costUsd: 0.002 },
+      ]);
+    } finally { log.mockRestore(); process.exitCode = previous; }
+  });
+
+  it('does not claim successful cleanup when the API does not confirm destruction', async () => {
+    post.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/sandboxes') return { sandbox };
+      if (path.endsWith('/processes')) return { process: proc };
+      return { process: EXITED };
+    });
+    fakeClient.del.mockResolvedValueOnce({ sandbox: { ...sandbox, destroyError: 'provider unavailable' } });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const previous = process.exitCode;
+    try {
+      await buildProgram().parseAsync(['run', 'true'], { from: 'user' });
+      expect(process.exitCode).toBe(1);
+      const text = err.mock.calls.flat().join(' ');
+      expect(text).toContain('cleanup unconfirmed');
+      expect(text).not.toContain(ID_A + ' deleted');
+      expect(text).not.toContain('$0.002');
+    } finally { err.mockRestore(); process.exitCode = previous; }
+  });
+
+  it.each(['kill', 'wait'])('exposes root %s with implicit sandbox resolution', async (name) => {
+    const { setCurrentInstance, orgKey } = await import('../current-instance.js');
+    setCurrentInstance(ID_A, orgKey({}));
+    post.mockResolvedValueOnce({ process: EXITED });
+    const previous = process.exitCode;
+    try {
+      await buildProgram().parseAsync([name, 'j1'], { from: 'user' });
+      expect(post).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}/processes/j1/${name}`, {});
+    } finally { process.exitCode = previous; }
+  });
+
   it('run -d detaches: no wait, no destroy, summary printed', async () => {
     post.mockImplementation(async (path: string) => {
       if (path === '/api/v1/sandboxes') return { sandbox };
