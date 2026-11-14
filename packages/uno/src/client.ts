@@ -9,8 +9,21 @@
  */
 
 export const DEFAULT_BASE_URL = 'https://console.uno4.dev'
-/** How long POST /boxes may take: a busy console can hold it well past the 30 s of plain calls. */
+/**
+ * How long POST /boxes may take: a busy console can hold it well past the 30 s
+ * of plain calls, plus up to 30 s more when it is asked to wait for readiness.
+ */
 const CREATE_TIMEOUT_MS = 120_000
+/** The longest readiness wait the API holds a response for (`wait_ready_s`). */
+export const MAX_WAIT_READY_S = 30
+/** Delete retries, see {@link UnoClient.deleteBox}. A delete normally answers in ~30 ms. */
+const DELETE_ATTEMPTS = 4
+const DELETE_RETRY_DELAYS_MS = [250, 1_000, 2_000]
+const DELETE_TIMEOUT_MS = 15_000
+/** Readiness polling cadence, see {@link UnoClient.waitReady}. */
+const READY_POLL_FAST_MS = 100
+const READY_POLL_FAST_WINDOW_MS = 10_000
+const READY_POLL_SLOW_MS = 1_000
 
 /** Box JSON as returned by `GET /api/v1/boxes/{id}` (fields this package reads). */
 export interface UnoBox {
@@ -29,6 +42,8 @@ export interface UnoBox {
   network_region?: string
   max_lifetime_s?: number
   comment?: string
+  /** How a `wait_ready_s` wait ended; present only when the request asked for one. */
+  wait?: { outcome: string; ready: boolean; waited_ms: number }
   [key: string]: unknown
 }
 
@@ -116,6 +131,11 @@ export class UnoClient {
     opts: { accept?: number[]; timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<{ status: number; body: T; headers: Headers }> {
     const accept = opts.accept ?? [200, 201]
+    // Let the previous response's socket go back to the pool first. A fetch
+    // started in the same tick as the last `res.text()` resolved opens a new
+    // connection, and a new connection can reach the API through a different
+    // edge server with a cold link to the origin (+0.2 s). Costs ~1 ms.
+    await sleep(0)
     const timeout = AbortSignal.timeout(opts.timeoutMs ?? this.requestTimeoutMs)
     const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout
     const res = await fetch(this.baseUrl + path, {
@@ -160,10 +180,16 @@ export class UnoClient {
     return { status: res.status, body: parsed as T, headers: res.headers }
   }
 
-  async createBox(req: UnoCreateBoxRequest, signal?: AbortSignal): Promise<UnoBox> {
-    return (
-      await this.request<UnoBox>('POST', '/api/v1/boxes', req, { accept: [201, 200], signal, timeoutMs: CREATE_TIMEOUT_MS })
-    ).body
+  /**
+   * Create a box. With `waitReadyS` the server holds the answer until the box
+   * is running and provisioned, its start fails, or that many seconds pass
+   * (at most {@link MAX_WAIT_READY_S}), and says how the wait ended in `wait`.
+   * A server that does not know the parameter answers at once, as without it.
+   */
+  async createBox(req: UnoCreateBoxRequest, signal?: AbortSignal, opts: { waitReadyS?: number } = {}): Promise<UnoBox> {
+    const waitS = Math.min(MAX_WAIT_READY_S, Math.max(0, Math.floor(opts.waitReadyS ?? 0)))
+    const path = waitS > 0 ? `/api/v1/boxes?wait_ready_s=${waitS}` : '/api/v1/boxes'
+    return (await this.request<UnoBox>('POST', path, req, { accept: [201, 200], signal, timeoutMs: CREATE_TIMEOUT_MS })).body
   }
 
   /**
@@ -193,38 +219,53 @@ export class UnoClient {
     return body.boxes ?? []
   }
 
-  /** Delete a box; a box that is already gone is not an error. */
+  /**
+   * Delete a box; a box that is already gone is not an error.
+   *
+   * A delete lost on the way (dropped connection, timeout, 429, a 5xx from the
+   * edge) would leave the machine running and fail the caller's cleanup, so it
+   * is tried again: up to {@link DELETE_ATTEMPTS} times over ~3 s. DELETE is
+   * idempotent, and a repeat of a delete that did land answers 404 — done.
+   */
   async deleteBox(id: string | number): Promise<void> {
-    await this.request('DELETE', `/api/v1/boxes/${encodeURIComponent(String(id))}?purge=now`, undefined, {
-      accept: [200, 202, 204, 404],
-    })
+    const path = `/api/v1/boxes/${encodeURIComponent(String(id))}?purge=now`
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.request('DELETE', path, undefined, { accept: [200, 202, 204, 404], timeoutMs: DELETE_TIMEOUT_MS })
+        return
+      } catch (err) {
+        if (attempt + 1 >= DELETE_ATTEMPTS || !isTransient(err)) throw err
+        await sleep(DELETE_RETRY_DELAYS_MS[attempt] ?? 2_000)
+      }
+    }
   }
 
   /**
-   * Poll until the box is running and provisioned. Create returns at once with
-   * `status: "provisioning"`; the machine boots from a warm snapshot in seconds.
+   * Poll until the box is running and provisioned. Create without a wait
+   * returns at once with `status: "provisioning"`; the machine is usually
+   * ready a second or two later. The box is checked every 100 ms for the
+   * first 10 s, then once a second. The interval counts from the start of
+   * each request, so the round trip does not add to it and a box is never
+   * polled more than 10 times a second.
+   *
+   * `waitedMs` is time already spent waiting for this box (by the server,
+   * while it held create) and counts against `timeoutMs`.
    */
-  async waitReady(id: string | number, timeoutMs: number, signal?: AbortSignal): Promise<UnoBox> {
-    const deadline = Date.now() + timeoutMs
-    let delay = 250
+  async waitReady(id: string | number, timeoutMs: number, signal?: AbortSignal, waitedMs = 0): Promise<UnoBox> {
+    const started = Date.now()
+    const deadline = started + timeoutMs - waitedMs
     for (;;) {
       signal?.throwIfAborted()
+      const polledAt = Date.now()
       const box = await this.getBox(id)
       if (!box) throw new UnoError(`Uno box ${id} disappeared while starting`, 404, 'NOT_FOUND')
-      if (box.status === 'running' && box.provision_state === 'ready') return box
-      if (box.status === 'error' || box.provision_state === 'failed') {
-        throw new UnoError(
-          `Uno box ${id} failed to start${box.provision_error ? `: ${box.provision_error}` : ''}`,
-          500,
-          'PROVISION_FAILED',
-          box,
-        )
-      }
+      if (isReadyOrThrow(box)) return box
+      const interval = polledAt - started < READY_POLL_FAST_WINDOW_MS ? READY_POLL_FAST_MS : READY_POLL_SLOW_MS
+      const delay = Math.max(0, polledAt + interval - Date.now())
       if (Date.now() + delay > deadline) {
         throw new UnoError(`Uno box ${id} not ready after ${timeoutMs} ms (status ${box.status})`, 504, 'READY_TIMEOUT', box)
       }
-      await sleep(delay)
-      delay = Math.min(delay * 2, 2_000)
+      if (delay > 0) await sleep(delay)
     }
   }
 
@@ -293,6 +334,23 @@ export class UnoClient {
     }
     return run
   }
+}
+
+/**
+ * True once a box is running and provisioned, false while it is still
+ * starting; throws `PROVISION_FAILED` if its start failed.
+ */
+export function isReadyOrThrow(box: UnoBox): boolean {
+  if (box.status === 'running' && box.provision_state === 'ready') return true
+  if (box.status === 'error' || box.provision_state === 'failed') {
+    throw new UnoError(
+      `Uno box ${box.id} failed to start${box.provision_error ? `: ${box.provision_error}` : ''}`,
+      500,
+      'PROVISION_FAILED',
+      box,
+    )
+  }
+  return false
 }
 
 /** Network failures and 5xx/524 from the edge, where trying again is harmless for reads. */
