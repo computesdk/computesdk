@@ -765,6 +765,9 @@ importers:
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
+      ignore:
+        specifier: ^7.0.5
+        version: 7.0.5
       picocolors:
         specifier: ^1.0.0
         version: 1.1.1

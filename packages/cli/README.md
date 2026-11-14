@@ -9,17 +9,132 @@ sandboxes, and the benchmarks toolchain.
 npm i -g @computesdk/cli        # or: pnpm dlx @computesdk/cli <cmd>
 ```
 
+## First sandbox
+
+```bash
+compute new                     # sign in if needed, create and select a sandbox
+compute exec echo hello         # run on the selected sandbox
+compute list                    # see your sandboxes
+compute destroy                 # destroy the selected sandbox and stop billing
+compute run echo hello          # or create, run, and clean up in one command
+compute -v                      # print the CLI version (--version also works)
+```
+
+Common sandbox commands are available directly under `compute`: `list`, `get`,
+`use`, `exec`, `run`, `serve`, `spawn`, `ps`, `logs`, `kill`, `wait`, `cp`, `url`, and `destroy`.
+Existing `compute instances`, `compute sandboxes`, and `compute sbx` paths keep
+working. Advanced settings, billing and snapshots remain under `compute instances`.
+
+Creation selects a sandbox for the current repository/directory and organization.
+An explicit ID wins over `COMPUTE_INSTANCE`, which wins over the stored selection.
+Use `compute use <id>` to change the selection, or `compute new --no-use` to leave
+it alone. A new sandbox bills until its timeout or destruction; `compute run`
+cleans up after its command finishes (unless you use `--keep` or `--detach`).
+
+## Bring your project
+
+Keep the provider first, then add a local directory:
+
+```bash
+compute new e2b .             # create on e2b and sync this directory into /app
+compute new daytona ./my-app
+compute new .                # let your configured router choose
+compute exec --cwd /app npm test
+```
+
+An optional project path must be last and use explicit path syntax (`.`,
+`./my-app`, `../my-app`, or an absolute path). Bare words keep meaning provider
+names. The project contents go directly into `/app`, without a wrapper folder.
+The sandbox becomes selected after sync succeeds (`--no-use` opts out). A failed
+initial sync attempts teardown and leaves the previous selection intact; any
+unconfirmed cleanup reports the sandbox ID for recovery.
+
+## Sync directories
+
+```bash
+compute sync . :/app                         # local → selected sandbox
+compute sync :/app ./results                 # selected sandbox → local
+compute sync <sandbox-a>:/app <sandbox-b>:/app # sandbox → sandbox
+compute sync . :/app --dry-run               # inspect changes
+compute sync . :/app --delete                # remove destination-only entries
+compute sync . :/app --watch                 # repeat until Ctrl-C
+```
+
+Each invocation syncs directory contents in one direction. New and changed
+files are compared by content and permissions; unchanged files are left alone.
+Local uploads respect nested `.gitignore` files, including repository ancestor
+rules. `.git` data is always excluded. Destination-only files stay unless
+`--delete` is explicit; ignored source paths stay protected from deletion.
+Binary files, executable permissions, and relative symlinks within the project
+are supported. Source hardlinks are copied as separate files.
+File/directory type conflicts and overwriting hard-linked destination files
+require manual resolution.
+
+`--dry-run` changes no destination files. `--watch` polls every two seconds and
+finishes its current pass before stopping on Ctrl-C; it cannot combine with
+`--dry-run`. `--json` returns one result with `dryRun`, `copied`, and `deleted`;
+watch mode emits a JSON line for each nonempty pass.
+
+Sync reuses the platform OCI checkpoint engine for scanning, diffing, capture,
+and integrity-checked restore. Sandbox endpoints require Node.js and the platform
+transfer API. Only the OCI layers needed for planned writes travel through the
+CLI; a changed file can require its whole top-level directory layer. Sandbox-to-
+sandbox transfers relay through the CLI. Filesystem roots, overlapping directories
+on the same sandbox, symlink traversal, and links outside the project are refused.
+Avoid concurrent edits at the destination while a sync runs.
+
 ## Login
 
 ```bash
-compute login                   # OAuth device flow → ~/.benchsdk/credentials.json
+compute login                   # browser sign-in → ~/.benchsdk/credentials.json
+compute login --no-browser      # print the URL and code for manual sign-in
 compute logout                  # clear stored credentials
 compute --login / --logout      # same, as flags
 ```
 
 Login uses the same OAuth device flow as `bench auth login` — every first-party
 CLI shares one credential store (`~/.benchsdk/credentials.json`) and refresh
-tokens renew automatically.
+tokens renew automatically. Login opens the verification URL and prints the URL
+and code as a fallback. Press Ctrl-C to cancel; denied or expired codes produce
+an actionable error.
+
+Interactive `compute new`, `compute instances create`, and `compute run` start
+login only when there are no stored credentials or explicit API keys. After
+approval they continue the original command once, with its original options.
+`--no-browser` prints the link without opening it. In CI, without a terminal,
+or with `--json`/`--quiet`, missing credentials fail promptly; run `compute login`
+separately or set `COMPUTE_API_KEY`. Existing expired sessions and invalid keys
+are reported rather than silently replaced with another identity.
+
+Pending sign-ins are saved privately on this machine and reused until approval,
+denial, or expiry. Restart `compute login` after an interruption to resume;
+`compute login --new` requests a fresh code. Logout clears pending sign-ins too.
+For scripts and agents, `compute login --json` returns only the verification URL,
+public code, and expiry immediately; `compute login --wait --json` resumes polling
+and saves the session without opening a browser. Normal login still opens the
+browser and waits for approval.
+
+## Status and jobs
+
+```bash
+compute status                 # auth, effective org, credits, selected sandbox, routing
+compute status --json          # structured diagnostics, including partial failures
+compute status --check         # exit 1 unless authenticated and routing is ready
+compute exec --detach "npm run dev"
+compute logs <job-id>
+compute wait <job-id>           # wait and return the process exit code
+compute kill <job-id>           # SIGTERM; override with --signal SIGKILL
+```
+
+Status checks the default sandbox route without creating a sandbox; no selected
+sandbox is required. It accepts the usual `--org`, `--api-key`, and `--base-url`.
+Job commands also accept an explicit sandbox ID before the job ID.
+
+`compute run` ends with an stderr summary of exit code, elapsed time, provider,
+and confirmed cleanup or retention. Cost appears only when teardown returns a
+settled amount. `run --json` emits stdout/stderr JSON Lines followed by a summary
+with `sandboxId`, `jobId`, `exitCode`, `elapsedSeconds`, `provider`, `deleted`,
+`kept`, and optional `costUsd`. `run --detach --json` returns a detached job record.
 
 ## Commands
 
@@ -47,16 +162,54 @@ override, pass `--org <slug>` (on the root command or any `sandboxes` /
 on the request. Precedence: `--org` > `COMPUTE_ORG` > the stored login's org.
 The platform ignores the header for org API keys.
 
-For `compute sandboxes exec` and `compute sandboxes spawn`, everything after
+For `compute exec` and `compute spawn`, everything after
 the command's first word goes to the sandbox untouched — flags like `uname
 -a` or `node -e` are not CLI options. Pass CLI options (`--json`,
-`--timeout-ms`, `--cwd`, `-e/--env`, `--stdin`, `--org`) before the command;
+`--timeout`/`--timeout-ms`, `--stream`, `--detach`, `--cwd`, `-e/--env`, `--stdin`, `--org`) before the command;
 a bare `--` before the command is optional but supported.
 
 ```bash
-compute sandboxes exec sb1 uname -a
-compute sandboxes spawn sb1 --cwd /app -e NODE_ENV=production -- npm run dev
+compute exec <id> uname -a
+compute spawn <id> --cwd /app -e NODE_ENV=production npm run dev
 ```
+
+### Executing commands
+
+```bash
+compute exec "npm test"                            # one argument: shell command
+compute exec node -v                               # multiple arguments: preserve argv
+compute exec "echo hello && echo world"            # shell operators run remotely
+compute exec --cwd /app --timeout 120 npm test
+compute exec --stream "npm run build"              # follow output while it runs
+compute exec --timeout 0 "long-running-command"    # no command time limit
+compute exec --detach "npm run dev"                # return a background job ID
+compute logs <sandbox-id> <job-id> --follow          # follow a detached job
+```
+
+Omit the sandbox ID to use the current selection, or place an explicit ID after
+`exec`. A single command argument is interpreted by the remote shell; two or
+more arguments are individually quoted, preserving spaces, quotes and shell
+metacharacters literally. Use `bash -lc '...'` when you want an explicit shell.
+The same command interpretation applies to `spawn`, which remains available.
+
+`--timeout` accepts seconds; `--timeout-ms` remains compatible. Use one spelling
+per invocation. Without either flag, the existing platform command timeout
+applies. A zero timeout removes the command time limit; the sandbox's own
+lifetime still applies. Limits longer than the buffered endpoint's 290-second
+maximum automatically use the process path and follow output, as does zero.
+
+`--stream` follows a tracked process and prints new stdout/stderr incrementally.
+The remote exit code becomes the CLI exit code. A streamed command that exceeds
+its time limit is killed and exits 124; Ctrl-C signals the process and exits 130.
+With `--json`, streamed output is JSON Lines with `stdout`, `stderr` and `exit`
+events. Buffered execution keeps its existing single JSON result.
+
+`--detach` returns immediately with a job ID (or process metadata with `--json`).
+It cannot be combined with `--stream` or a command timeout: the CLI must remain
+connected to enforce those limits. Existing `logs`, `ps`, and
+`compute instances kill <sandbox-id> <job-id>` manage the background job. If
+following output fails, the CLI reports the job ID for recovery without
+starting the command again.
 
 ## compute actions runs
 
@@ -465,3 +618,27 @@ v2 removes the legacy console authentication and its commands:
   device flow and writes `~/.benchsdk/credentials.json` (the same store `bench
   auth login` uses). Run `compute login` once after upgrading.
 - `compute providers` is unchanged.
+
+### Maintaining the sync checkpoint engine
+
+The CLI bundles an exact copy of the platform checkpoint module;
+`checkpoint-provenance.json` records its upstream commit and SHA-256 digest.
+Refresh it with `node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform [revision]`
+from the repository root, then run the CLI tests. Do not edit the bundled engine
+directly. Every invocation uses a private temporary directory and restrictive
+file permissions for upstream scratch archives. Sync-specific filtering and destination guards live in the adapter.
+Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
+selectors use glob syntax. Watch passes skip capture when nothing changed. Each pass that copies entries
+retains its full filtered source capture in platform-owned Tigris storage for
+30 days. Snapshot namespaces are isolated, so expiring a sync capture cannot
+delete permanent snapshot layers. Cross-snapshot layer deduplication is not yet
+implemented. Only local and sandbox scratch files are removed after the pass.
+
+Retained sync snapshots must finish uploading and pass platform integrity checks
+before destination changes begin. `sync --json` includes `snapshot: {id, expiresAt}`
+when a capture is created; project creation includes `syncSnapshot` in its JSON
+result. Human output shows the same ID and expiry. Dry runs, unchanged passes and
+delete-only passes do not create captures. A failed destination copy leaves the
+retained capture available until expiry. There is no new storage charge in this
+release. Deploy the managed sync snapshot API before releasing this CLI; failure
+to retain a capture stops sync rather than falling back to disposable snapshots.

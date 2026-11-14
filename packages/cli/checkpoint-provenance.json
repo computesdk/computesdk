@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/computesdk/benchmarks-platform",
+  "revision": "02f7adc9e77ed47a3e7aba1ed9dd0259dae4a1af",
+  "path": "lib/sandboxes/snapshot-oci-module.cjs",
+  "sha256": "5e7485b27f22b9458c7791da679a9525637c236147d96606dbde72de55a99f1b"
+}

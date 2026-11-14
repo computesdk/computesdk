@@ -12,7 +12,10 @@
     "dist",
     "bootstrap.sh",
     "cli-manifest.json",
-    "README.md"
+    "README.md",
+    "checkpoint.cjs",
+    "checkpoint-runner.cjs",
+    "checkpoint-provenance.json"
   ],
   "scripts": {
     "build": "tsup",
@@ -50,9 +53,10 @@
     "@computesdk/platform": "workspace:*",
     "commander": "^11.1.0",
     "computesdk": "workspace:*",
+    "dotenv": "^16.4.5",
+    "ignore": "^7.0.5",
     "picocolors": "^1.0.0",
-    "tar": "^7.4.3",
-    "dotenv": "^16.4.5"
+    "tar": "^7.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
