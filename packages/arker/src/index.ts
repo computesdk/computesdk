@@ -161,6 +161,9 @@ export const arker = defineProvider<VM, ArkerConfig>({
     if (options?.snapshotId) {
       return { status: 'unknown', reason: 'A snapshot fork keeps its source VM\'s resource bounds, which this adapter has not verified.' };
     }
+    if (options?.image) {
+      return { status: 'unknown', reason: 'An OCI image fork does not use a golden source VM, so its resource bounds are not the golden bounds this adapter verifies.' };
+    }
     const pinned = options?.templateId || config.source || env('ARKER_SOURCE');
     if (pinned) {
       if (GOLDEN_BOUNDS[pinned] && !fitsGolden(pinned, vcpus, memoryMiB)) {
@@ -196,12 +199,19 @@ export const arker = defineProvider<VM, ArkerConfig>({
         try {
           vm = options?.snapshotId
             ? await client.fork({ source_vm_id: options.snapshotId, name, ...(resources ? { resources } : {}) })
-            : await client.fork({
-                source_vm_name: source,
-                name,
-                ...(platforms?.length ? { platforms } : {}),
-                ...(resources ? { resources } : {}),
-              });
+            : options?.image
+              ? await client.fork({
+                  image: options.image,
+                  name,
+                  ...(platforms?.length ? { platforms } : {}),
+                  ...(resources ? { resources } : {}),
+                })
+              : await client.fork({
+                  source_vm_name: source,
+                  name,
+                  ...(platforms?.length ? { platforms } : {}),
+                  ...(resources ? { resources } : {}),
+                });
         } catch (err) {
           // The source VM bounds the resources a fork can take; Arker enforces them.
           if (resources && err instanceof ArkerError && (err.status === 400 || err.status === 422) &&
