@@ -117,6 +117,7 @@ describe('one-way project sync', () => {
     write(source, 'cache/.gitignore', '!keep\n');
     write(destination, 'stale/sub/file', 'old'); write(destination, 'cache/keep', 'important');
     write(destination, '.git/config', 'important');
+    fs.linkSync(path.join(destination, 'cache/keep'), path.join(dir, 'outside-hardlink'));
     await syncOnce(c, { local: source }, { id, remote: destination }, {});
     expect(fs.existsSync(path.join(destination, 'stale/sub/file'))).toBe(true);
     await syncOnce(c, { local: source }, { id, remote: destination }, { delete: true });
@@ -138,9 +139,11 @@ describe('one-way project sync', () => {
 
   it('relays sandbox-to-sandbox and can create a missing destination directory', async () => {
     write(source, 'file', 'remote source');
+    fs.linkSync(path.join(source, 'file'), path.join(source, 'hardlink'));
     const target = path.join(destination, 'new-project');
     await syncOnce(c, { id, remote: source }, { id: id2, remote: target }, {});
     expect(fs.readFileSync(path.join(target, 'file'), 'utf8')).toBe('remote source');
+    expect(fs.readFileSync(path.join(target, 'hardlink'), 'utf8')).toBe('remote source');
     expect(post.mock.calls.filter(([url]) => url.includes('/transfers')).map(([url]) => url)).toEqual([
       `/api/v1/sandboxes/${id}/transfers`, `/api/v1/sandboxes/${id2}/transfers`, `/api/v1/sandboxes/${id2}/transfers/0/complete`,
     ]);
@@ -176,6 +179,16 @@ describe('one-way project sync', () => {
     });
     await expect(syncOnce(c, { local: source }, { id, remote: destination }, { delete: true })).rejects.toThrow('changed before deletion');
     expect(fs.readFileSync(path.join(destination, 'keep'), 'utf8')).toBe('edited concurrently');
+  });
+
+  it('preserves destination-only hardlinks but refuses to overwrite them through archive extraction', async () => {
+    write(destination, 'linked', 'original');
+    fs.linkSync(path.join(destination, 'linked'), path.join(dir, 'outside-hardlink'));
+    await syncOnce(c, { local: source }, { id, remote: destination }, {});
+    write(source, 'linked', 'replacement');
+    await expect(syncOnce(c, { local: source }, { id, remote: destination }, {})).rejects.toThrow('hard-linked destination');
+    expect(fs.readFileSync(path.join(dir, 'outside-hardlink'), 'utf8')).toBe('original');
+    expect(transfers.size).toBe(0);
   });
 
   it('refuses destination symlink traversal and filesystem roots', async () => {

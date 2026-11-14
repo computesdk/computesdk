@@ -66,7 +66,10 @@ export function planSync(source: SyncEntry[], destination: SyncEntry[], remove: 
   for (const entry of source) {
     const previous = dst.get(entry.path);
     if (previous && previous.type !== entry.type) throw new Error(`Sync type conflict at ${entry.path}; move or remove the destination entry first.`);
-    if (!previous || entry.type !== 'directory' && (previous.hash !== entry.hash || previous.link !== entry.link || previous.mode !== entry.mode)) copy.push(entry);
+    if (!previous || entry.type !== 'directory' && (previous.hash !== entry.hash || previous.link !== entry.link || previous.mode !== entry.mode)) {
+      if (previous?.links && previous.links > 1) throw new Error(`Sync cannot overwrite a hard-linked destination file: ${entry.path}. Move or unlink it first.`);
+      copy.push(entry);
+    }
   }
   // Never delete ignored entries or a directory containing protected children.
   const ignoredPaths = destination.filter((e) => excluded(e.path, e.type === 'directory')).map((e) => e.path);
@@ -110,7 +113,11 @@ async function download(c: ActionsClient, source: { id: string; remote: string }
     const parts = name.replace(/\/$/, '').split('/');
     if (parts[0] !== wrapper || parts.some((p) => p === '..' || p === '' || p === '.') || name.includes('\\')) throw new Error('Unsafe sync archive entry.');
     if (parts.includes('.git')) return false;
-    if (!['File', 'Directory', 'SymbolicLink'].includes(entry.type ?? '')) throw new Error('Unsupported sync archive entry.');
+    if (!['File', 'Directory', 'SymbolicLink', 'Link'].includes(entry.type ?? '')) throw new Error('Unsupported sync archive entry.');
+    if (entry.type === 'Link') {
+      const link = entry.linkpath ?? '';
+      if (!link.startsWith(wrapper + '/') || link.includes('\\') || link.split('/').some((p) => p === '..' || p === '.' || p === '.git' || p === '')) throw new Error('Unsafe hardlink in sync archive.');
+    }
     if (entry.type === 'SymbolicLink') {
       const target = path.posix.normalize(path.posix.join(path.posix.dirname(name), entry.linkpath ?? ''));
       if (!entry.linkpath || path.posix.isAbsolute(entry.linkpath) || !target.startsWith(wrapper + '/') && target !== wrapper) throw new Error('Unsafe symlink in sync archive.');

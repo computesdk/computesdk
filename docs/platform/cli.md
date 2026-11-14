@@ -249,7 +249,8 @@ nested `.gitignore` files and repository ancestor rules. `.git` is excluded;
 `--delete` removes destination-only entries while preserving ignored paths.
 Binary files, executable permissions, and project-contained relative symlinks
 are preserved. Filesystem roots, overlapping endpoints on the same sandbox,
-symlink traversal, and file/directory type conflicts are refused.
+symlink traversal, and file/directory type conflicts are refused. Internal archive
+hardlinks are copied as files; overwriting hard-linked destination files is refused.
 
 `--dry-run` returns a plan without changing destination files. `--watch` polls
 every two seconds, serializes passes, and finishes the active pass before

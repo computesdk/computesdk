@@ -5,6 +5,7 @@ export interface SyncEntry {
   type: 'file' | 'directory' | 'symlink';
   mode: number;
   protected?: boolean;
+  links?: number;
   hash?: string;
   link?: string;
 }
@@ -107,10 +108,9 @@ export async function treeOperation(input: TreeRequest, requireModule: NodeRequi
         result.push({ path: name, type: 'directory', mode });
         await walk(name);
       } else if (stat.isFile()) {
-        if (input.destination && stat.nlink > 1) throw new Error('Sync destination contains a hard-linked file: ' + name);
         const hash = crypto.createHash('sha256');
         for await (const chunk of fs.createReadStream(full)) hash.update(chunk);
-        result.push({ path: name, type: 'file', mode, hash: hash.digest('hex') });
+        result.push({ path: name, type: 'file', mode, hash: hash.digest('hex'), ...(input.destination && stat.nlink > 1 ? { links: stat.nlink } : {}) });
       } else throw new Error('Unsupported file type: ' + name);
     }
   };

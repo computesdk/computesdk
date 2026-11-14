@@ -66,7 +66,9 @@ Local uploads respect nested `.gitignore` files, including repository ancestor
 rules. `.git` data is always excluded. Destination-only files stay unless
 `--delete` is explicit; ignored source paths stay protected from deletion.
 Binary files, executable permissions, and relative symlinks within the project
-are supported. File/directory type conflicts require manual resolution.
+are supported. Internal hardlinks in downloaded archives are copied as files.
+File/directory type conflicts and overwriting hard-linked destination files
+require manual resolution.
 
 `--dry-run` changes no destination files. `--watch` polls every two seconds and
 finishes its current pass before stopping on Ctrl-C; it cannot combine with
