@@ -625,7 +625,8 @@ The CLI bundles an exact copy of the platform checkpoint module;
 `checkpoint-provenance.json` records its upstream commit and SHA-256 digest.
 Refresh it with `node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform [revision]`
 from the repository root, then run the CLI tests. Do not edit the bundled engine
-directly. Sync-specific filtering and destination guards live in the adapter.
+directly. Every invocation uses a private temporary directory and restrictive
+file permissions for upstream scratch archives. Sync-specific filtering and destination guards live in the adapter.
 Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
 selectors use glob syntax. Watch passes use fresh temporary stores; they skip
 capture when nothing changed, but do not share a persistent layer cache.
