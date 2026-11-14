@@ -9,6 +9,21 @@ sandboxes, and the benchmarks toolchain.
 npm i -g @computesdk/cli        # or: pnpm dlx @computesdk/cli <cmd>
 ```
 
+## Version and availability
+
+The sandbox onboarding and sync additions described here are an unreleased
+source preview from [PR #1145](https://github.com/computesdk/computesdk/pull/1145).
+They are not included in `@computesdk/cli` 2.6.13. This includes the root sandbox
+command shortcuts, provider-first project creation, directory sync, automatic
+sign-in during creation, resumable/JSON login, status diagnostics, and the new
+execution options and run summaries. Installing the latest published package
+does not yet provide these additions; no release version is confirmed here.
+For 2.6.13, use the existing `compute instances` command paths and their `--help`.
+
+Project sync also requires a platform deployment with managed sync snapshot
+support. Hosted availability and retention configuration have not been verified;
+source examples below do not establish deployment availability.
+
 ## First sandbox
 
 ```bash
@@ -608,10 +623,11 @@ manifest (the `linked` / `released` fields disappear).
 
 v2 removes the legacy console authentication and its commands:
 
-- **Removed commands**: `compute create`, `compute sandbox`, `compute connect`,
-  `compute workspace`, `compute run`, and the interactive REPL. Sandbox
+- **Removed legacy commands**: `compute create`, `compute sandbox`, `compute connect`,
+  `compute workspace`, the v1 `compute run`, and the interactive REPL. Sandbox
   management moved to `compute sandboxes`, which drives the platform's
-  `/api/v1/sandboxes` API.
+  `/api/v1/sandboxes` API. The sandbox `compute run` workflow described above is
+  a new command in the unreleased source preview.
 - **Auth**: `compute login` no longer opens a browser flow against
   console.computesdk.com or writes `~/.computesdk/credentials.json` — that
   credential store is gone. `compute login` now runs the platform's OAuth
@@ -628,17 +644,13 @@ from the repository root, then run the CLI tests. Do not edit the bundled engine
 directly. Every invocation uses a private temporary directory and restrictive
 file permissions for upstream scratch archives. Sync-specific filtering and destination guards live in the adapter.
 Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
-selectors use glob syntax. Watch passes skip capture when nothing changed. Each pass that copies entries
-retains its full filtered source capture in platform-owned Tigris storage for
-30 days. Snapshot namespaces are isolated, so expiring a sync capture cannot
-delete permanent snapshot layers. Cross-snapshot layer deduplication is not yet
-implemented. Only local and sandbox scratch files are removed after the pass.
+selectors use glob syntax. Watch passes skip capture when nothing changed.
 
-Retained sync snapshots must finish uploading and pass platform integrity checks
-before destination changes begin. `sync --json` includes `snapshot: {id, expiresAt}`
-when a capture is created; project creation includes `syncSnapshot` in its JSON
-result. Human output shows the same ID and expiry. Dry runs, unchanged passes and
-delete-only passes do not create captures. A failed destination copy leaves the
-retained capture available until expiry. There is no new storage charge in this
-release. Deploy the managed sync snapshot API before releasing this CLI; failure
-to retain a capture stops sync rather than falling back to disposable snapshots.
+Managed retention requires platform support that is not verified as deployed.
+The CLI completes capture uploads before destination changes begin and reports
+the platform-provided snapshot ID and expiry: `sync --json` includes
+`snapshot: {id, expiresAt}`, and project creation includes `syncSnapshot`.
+Human output shows the same metadata. Dry runs, unchanged passes and delete-only
+passes do not create captures. A failed destination copy does not delete the
+retained capture. Only local and sandbox scratch files are removed after the pass.
+Retention failure stops sync rather than falling back to disposable snapshots.
