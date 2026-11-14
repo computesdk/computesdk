@@ -21,15 +21,18 @@ let origin: string;
 const post = vi.fn();
 const transfers = new Map<string, { path: string; file: string }>();
 let uploaded = Buffer.alloc(0);
+const retained = new Map<string, Buffer>();
+let completedSnapshots = 0;
 beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(tmpdir(), 'compute-sync-test-'));
   source = path.join(dir, 'source'); destination = path.join(dir, 'destination');
   fs.mkdirSync(source); fs.mkdirSync(destination);
-  transfers.clear(); post.mockReset(); uploaded = Buffer.alloc(0);
+  transfers.clear(); retained.clear(); completedSnapshots = 0; post.mockReset(); uploaded = Buffer.alloc(0);
   server = createServer(async (req, res) => {
     if (req.method === 'PUT') {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
+      if (req.url?.startsWith('/retained/')) { retained.set(req.url.slice('/retained/'.length), Buffer.concat(chunks)); res.end(); return; }
       uploaded = Buffer.concat(chunks);
       res.end();
     } else {
@@ -39,6 +42,17 @@ beforeEach(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   post.mockImplementation(async (url: string, body: Record<string, unknown>) => {
+    if (url.endsWith('/sync-snapshots')) {
+      const manifest = body.manifest as { config: { digest: string }; layers: { digest: string }[] };
+      return { snapshot: { id: 'retained-id', expiresAt: '2026-12-14T00:00:00.000Z' }, upload: {
+        objects: [manifest.config, ...manifest.layers].map((r) => ({ key: 'blobs/' + r.digest.slice(7), url: origin + '/retained/blobs/' + r.digest.slice(7) })),
+        manifestPutUrl: origin + '/retained/manifest', manifestJson: JSON.stringify(manifest),
+      } };
+    }
+    if (url === '/api/v1/snapshots/retained-id/sync') {
+      completedSnapshots++;
+      return { snapshot: { id: 'retained-id', expiresAt: '2026-12-14T00:00:00.000Z' } };
+    }
     if (url.endsWith('/files')) {
       fs.mkdirSync(path.dirname(body.path as string), { recursive: true });
       fs.writeFileSync(body.path as string, body.content as string);
@@ -291,6 +305,29 @@ describe('one-way project sync', () => {
     expect(roots).toEqual([path.join(source, 'changed')]);
     expect(fs.readFileSync(path.join(destination, 'changed/file'), 'utf8')).toBe('new');
     expect(fs.statSync(path.join(destination, 'unchanged/file')).mtimeMs).toBe(before);
+  });
+
+  it('retains the complete capture after staging cleanup and reports its lifetime', async () => {
+    write(source, 'changed/file', 'new'); write(destination, 'changed/file', 'old');
+    write(source, 'unchanged/file', 'same'); write(destination, 'unchanged/file', 'same');
+    const plan = await syncOnce(c, { local: source }, { id, remote: destination }, {});
+    expect(plan.snapshot).toEqual({ id: 'retained-id', expiresAt: '2026-12-14T00:00:00.000Z' });
+    expect(completedSnapshots).toBe(1);
+    const manifest = JSON.parse(retained.get('manifest')!.toString());
+    for (const ref of [manifest.config, ...manifest.layers]) expect(retained.has('blobs/' + ref.digest.slice(7))).toBe(true);
+    expect(manifest.layers).toHaveLength(3);
+  });
+
+  it('does not update the destination if retained storage is unavailable', async () => {
+    write(source, 'file', 'new'); write(destination, 'file', 'old');
+    const original = post.getMockImplementation()!;
+    post.mockImplementation((url, body) => {
+      if (url.endsWith('/sync-snapshots')) throw new Error('Managed retention unavailable');
+      return original(url, body);
+    });
+    await expect(syncOnce(c, { local: source }, { id, remote: destination }, {})).rejects.toThrow('Managed retention unavailable');
+    expect(fs.readFileSync(path.join(destination, 'file'), 'utf8')).toBe('old');
+    expect(completedSnapshots).toBe(0);
   });
 
   it('prints each JSON sync result on one line for watch consumers', () => {

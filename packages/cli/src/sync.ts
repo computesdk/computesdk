@@ -13,10 +13,11 @@ import { isUuid, resolveInstanceId } from './current-instance.js';
 import type { SyncEntry } from './sync-fs.js';
 import { SnapshotSession, selectSnapshot, endpointRoot, ignoredPaths, type CaptureResult } from './snapshot-engine.js';
 import { randomUUID } from 'node:crypto';
+import { retainCapture, type RetainedSnapshot } from './sync-retention.js';
 
 export type SyncEndpoint = { local: string } | { id: string; remote: string };
 export interface SyncOptions extends CommonOpts { delete?: boolean; dryRun?: boolean; watch?: boolean }
-export interface SyncPlan { copy: SyncEntry[]; remove: SyncEntry[] }
+export interface SyncPlan { copy: SyncEntry[]; remove: SyncEntry[]; snapshot?: RetainedSnapshot }
 
 export function syncEndpoint(value: string, opts: CommonOpts): SyncEndpoint {
   const match = /^([^:]*):(\/.*)$/.exec(value);
@@ -165,6 +166,7 @@ export async function syncOnce(c: ActionsClient, source: SyncEndpoint, destinati
         fs.writeFileSync(path.join(store, capture.manifestKey), manifestText);
         fs.writeFileSync(path.join(store, 'blobs', metadata.config.digest.slice(7)), await session.read(source.id, path.posix.join(sourceStore, 'blobs', metadata.config.digest.slice(7))));
       }
+      plan.snapshot = await retainCapture(c, session, source, sourceStore, store, capture.manifestKey, 'id' in source ? source.id : (destination as { id: string }).id, [sourceRoot]);
       const manifest = selectSnapshot(store, capture.manifestKey, sourceRoot, plan.copy, dst, endpointRoot(destination));
       // Only the config and layers referenced by this selected OCI view travel.
       let bundle = path.join(session.temp, 'bundle');
@@ -219,13 +221,14 @@ export async function syncOnce(c: ActionsClient, source: SyncEndpoint, destinati
 }
 
 export function printSync(plan: SyncPlan, opts: SyncOptions): void {
-  const result = { dryRun: !!opts.dryRun, copied: plan.copy.map((e) => e.path), deleted: plan.remove.map((e) => e.path) };
+  const result = { dryRun: !!opts.dryRun, copied: plan.copy.map((e) => e.path), deleted: plan.remove.map((e) => e.path), ...(plan.snapshot ? { snapshot: plan.snapshot } : {}) };
   if (opts.json) { console.log(JSON.stringify(result)); return; }
   output(opts, result, () => {
     if (opts.dryRun) {
       for (const entry of plan.copy) console.log(`copy ${safeTerm(entry.path)}`);
       for (const entry of plan.remove) console.log(`delete ${safeTerm(entry.path)}`);
     }
+    if (plan.snapshot) console.log(`Snapshot ${plan.snapshot.id} retained until ${plan.snapshot.expiresAt}.`);
     console.log(`${opts.dryRun ? 'Would sync' : 'Synced'} ${plan.copy.length} entries; ${plan.remove.length} deleted${opts.dryRun ? ' (dry run)' : ''}.`);
   });
 }

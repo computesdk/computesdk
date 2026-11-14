@@ -41,7 +41,7 @@ import {
 import { formatMoney, formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits } from './rate-display.js';
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
 import { registerBillingCommands } from './sandbox-billing.js';
-import { syncOnce, sourceFilter } from './sync.js';
+import { syncOnce, sourceFilter, type SyncPlan } from './sync.js';
 import { localTree } from './sync-fs.js';
 import { creationClient } from './onboarding.js';
 import { execute, execCommand, execTimeout, type ExecOpts } from './exec.js';
@@ -695,9 +695,10 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
         const c = await creationClient(opts);
         if (!opts.json && !opts.quiet) await previewPlacement(c, opts);
         const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
+        let projectSync: SyncPlan | undefined;
         if (project) {
           try {
-            await syncOnce(c, { local: project }, { id: res.sandbox.id, remote: '/app' }, opts);
+            projectSync = await syncOnce(c, { local: project }, { id: res.sandbox.id, remote: '/app' }, opts);
           } catch (error) {
             let destroyed = false;
             try {
@@ -715,7 +716,11 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
             console.error(pc.dim(`instance ${shortId(res.sandbox.id)} (current for ${dirKey()})`));
           }
         }
-        emitResult(opts, res.sandbox, (s) => s.id, (s) => printSandbox(s, opts.verbose));
+        const detail = { ...res.sandbox, ...(projectSync?.snapshot ? { syncSnapshot: projectSync.snapshot } : {}) };
+        emitResult(opts, detail, (s) => s.id, (s) => {
+          printSandbox(s, opts.verbose);
+          if (s.syncSnapshot) console.log(`Snapshot ${s.syncSnapshot.id} retained until ${s.syncSnapshot.expiresAt}.`);
+        });
         if (!opts.json && !opts.quiet) printNextSteps(res.sandbox.id, opts, project ? '/app' : undefined);
       } catch (e) {
         fail(e, opts);

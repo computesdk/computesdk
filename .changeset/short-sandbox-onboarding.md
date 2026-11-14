@@ -22,3 +22,7 @@ filtering, incremental copies, dry runs, explicit deletion, and polling watch mo
 Reuse the pinned platform OCI checkpoint engine for sync scanning, diffing,
 capture and integrity-checked restore, with selected-layer transfers and guarded
 destination updates instead of a separate snapshot implementation.
+
+Retain full sync captures in platform-managed storage for 30 days before applying
+destination changes, and report snapshot IDs and expiry while cleaning only
+filesystem staging. Storage billing is unchanged.

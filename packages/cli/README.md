@@ -628,5 +628,17 @@ from the repository root, then run the CLI tests. Do not edit the bundled engine
 directly. Every invocation uses a private temporary directory and restrictive
 file permissions for upstream scratch archives. Sync-specific filtering and destination guards live in the adapter.
 Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
-selectors use glob syntax. Watch passes use fresh temporary stores; they skip
-capture when nothing changed, but do not share a persistent layer cache.
+selectors use glob syntax. Watch passes skip capture when nothing changed. Each pass that copies entries
+retains its full filtered source capture in platform-owned Tigris storage for
+30 days. Snapshot namespaces are isolated, so expiring a sync capture cannot
+delete permanent snapshot layers. Cross-snapshot layer deduplication is not yet
+implemented. Only local and sandbox scratch files are removed after the pass.
+
+Retained sync snapshots must finish uploading and pass platform integrity checks
+before destination changes begin. `sync --json` includes `snapshot: {id, expiresAt}`
+when a capture is created; project creation includes `syncSnapshot` in its JSON
+result. Human output shows the same ID and expiry. Dry runs, unchanged passes and
+delete-only passes do not create captures. A failed destination copy leaves the
+retained capture available until expiry. There is no new storage charge in this
+release. Deploy the managed sync snapshot API before releasing this CLI; failure
+to retain a capture stops sync rather than falling back to disposable snapshots.
