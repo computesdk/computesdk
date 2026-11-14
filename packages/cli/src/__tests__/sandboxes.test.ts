@@ -1,8 +1,17 @@
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
 
 const post = vi.fn(async (_path: string, _body: unknown): Promise<unknown> => ({}));
 const fakeClient = { post, get: vi.fn(), del: vi.fn() };
+
+const initialSync = vi.fn();
+vi.mock('../sync.js', async (original) => ({
+  ...await original<typeof import('../sync.js')>(),
+  syncOnce: (...args: unknown[]) => initialSync(...args),
+}));
 
 vi.mock('../actions.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../actions.js')>();
@@ -353,6 +362,54 @@ describe('quiet and verbose output', () => {
       out.mockRestore();
       err.mockRestore();
     }
+  });
+
+  it('new keeps providers first and selects the sandbox only after the initial project sync succeeds', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'compute-new-project-'));
+    writeFileSync(join(project, 'app.js'), 'hello');
+    const { readFileCurrent, setCurrentInstance, orgKey } = await import('../current-instance.js');
+    setCurrentInstance(ID_B, orgKey({}));
+    post.mockResolvedValueOnce({ sandbox });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    initialSync.mockImplementationOnce(async () => {
+      expect(readFileCurrent(orgKey({}))).toBe(ID_B);
+      return { copy: [], remove: [] };
+    });
+    try {
+      await buildProgram().parseAsync(['new', 'e2b', project, '-q'], { from: 'user' });
+      expect(post).toHaveBeenCalledWith('/api/v1/sandboxes', { only: ['e2b'] });
+      expect(initialSync).toHaveBeenCalledWith(fakeClient, { local: project }, { id: ID_A, remote: '/app' }, expect.any(Object));
+      expect(readFileCurrent(orgKey({}))).toBe(ID_A);
+    } finally { rmSync(project, { recursive: true, force: true }); log.mockRestore(); }
+  });
+
+  it('new cleans up after failed initial sync and leaves the previous selection intact', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'compute-new-project-'));
+    const { readFileCurrent, setCurrentInstance, orgKey } = await import('../current-instance.js');
+    setCurrentInstance(ID_B, orgKey({}));
+    post.mockResolvedValueOnce({ sandbox });
+    fakeClient.del.mockResolvedValueOnce({ sandbox: { ...sandbox, status: 'destroyed' } });
+    initialSync.mockRejectedValueOnce(new Error('upload failed'));
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      await buildProgram().parseAsync(['new', 'e2b', project, '-q'], { from: 'user' });
+      expect(fakeClient.del).toHaveBeenCalledWith(`/api/v1/sandboxes/${ID_A}`);
+      expect(readFileCurrent(orgKey({}))).toBe(ID_B);
+      expect(err.mock.calls.flat().join(' ')).toContain('new sandbox was destroyed');
+      expect(exit).toHaveBeenCalledWith(1);
+    } finally { rmSync(project, { recursive: true, force: true }); err.mockRestore(); exit.mockRestore(); }
+  });
+
+  it('new validates the local project before provisioning a sandbox', async () => {
+    post.mockClear();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      await buildProgram().parseAsync(['new', 'e2b', '/does-not-exist/compute-project', '-q'], { from: 'user' });
+      expect(post).not.toHaveBeenCalled();
+      expect(exit).toHaveBeenCalledWith(1);
+    } finally { err.mockRestore(); exit.mockRestore(); }
   });
 
   it('sandboxes options and new --list show what you can create on, in router order', async () => {

@@ -35,6 +35,7 @@ import { inheritParentOptions } from './option-inheritance.js';
 import { registerSandboxesCommands } from './sandboxes.js';
 import { registerAgentsCommands } from './agents.js';
 import { fail } from './actions.js';
+import { registerSyncCommand } from './sync.js';
 import { registerStatusCommand } from './status.js';
 import { login, clearPendingLogins, type LoginOptions } from './login.js';
 import { parseBenchDispatch, runBench } from './bench.js';
@@ -329,6 +330,7 @@ registerStatusCommand(program);
 // (create/exec/processes/files/urls). Same auth as actions.
 
 registerSandboxesCommands(program);
+registerSyncCommand(program);
 
 // ─── agents ──────────────────────────────────────────────────────────────────
 // `compute agents` (alias `ag`) drives /api/v1/agents — managed agents:

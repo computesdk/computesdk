@@ -2720,7 +2720,7 @@
       ],
       "aliases": [],
       "args": [
-        "[providers...]"
+        "[providersAndPath...]"
       ],
       "flags": [
         "--provider",
@@ -2747,7 +2747,7 @@
         "--list",
         "--help"
       ],
-      "summary": "Create a sandbox (short for `compute sandboxes create`); `compute new vercel` or `--vercel` picks the provider"
+      "summary": "Create a sandbox; compute new e2b . creates on e2b and syncs a local project to /app"
     },
     {
       "path": [
@@ -3055,6 +3055,28 @@
         "--help"
       ],
       "summary": "Resolve the provider's public URL for a port"
+    },
+    {
+      "path": [
+        "sync"
+      ],
+      "aliases": [],
+      "args": [
+        "<source>",
+        "<destination>"
+      ],
+      "flags": [
+        "--delete",
+        "--dry-run",
+        "--watch",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "One-way directory sync: local paths or [sandbox-id]:/path (empty ID selects the current sandbox)"
     },
     {
       "path": [

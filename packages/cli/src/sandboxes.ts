@@ -41,6 +41,8 @@ import {
 import { formatMoney, formatRateAllUnits, formatUsd, formatUsdPer, rateAllUnits } from './rate-display.js';
 import { parseMaxPrice, registerSettingsCommands } from './settings.js';
 import { registerBillingCommands } from './sandbox-billing.js';
+import { syncOnce, sourceFilter } from './sync.js';
+import { localTree } from './sync-fs.js';
 import { creationClient } from './onboarding.js';
 import { execute, execCommand, execTimeout, type ExecOpts } from './exec.js';
 
@@ -682,7 +684,9 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
           return;
         }
         checkQuietJson(opts);
-        const named = shorthandProviders(operands);
+        const { providers, project } = splitCreateOperands(operands);
+        if (project) await localTree({ root: project }, sourceFilter(project));
+        const named = shorthandProviders(providers);
         if (named.length > 0) {
           if (opts.provider) throw new Error('Name providers either as words/flags or with --provider, not both.');
           opts.provider = named.join(',');
@@ -691,6 +695,19 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
         const c = await creationClient(opts);
         if (!opts.json && !opts.quiet) await previewPlacement(c, opts);
         const res = await c.post<{ sandbox: SandboxDetail }>('/api/v1/sandboxes', body);
+        if (project) {
+          try {
+            await syncOnce(c, { local: project }, { id: res.sandbox.id, remote: '/app' }, opts);
+          } catch (error) {
+            let destroyed = false;
+            try {
+              const cleanup = await c.del<{ sandbox: SandboxSummary }>(`/api/v1/sandboxes/${res.sandbox.id}`);
+              destroyed = cleanup.sandbox.status === 'destroyed';
+            } catch { /* include the handle for manual cleanup below */ }
+            throw new Error(`Initial sync failed for ${res.sandbox.id}: ${error instanceof Error ? error.message : String(error)}. ` +
+              (destroyed ? 'The new sandbox was destroyed.' : `Cleanup unconfirmed; run compute destroy ${res.sandbox.id}.`));
+          }
+        }
         // Commander stores --no-use as `use: false`.
         if (opts.use !== false) {
           setCurrentInstance(res.sandbox.id, orgKey(opts));
@@ -699,7 +716,7 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
           }
         }
         emitResult(opts, res.sandbox, (s) => s.id, (s) => printSandbox(s, opts.verbose));
-        if (!opts.json && !opts.quiet) printNextSteps(res.sandbox.id, opts);
+        if (!opts.json && !opts.quiet) printNextSteps(res.sandbox.id, opts, project ? '/app' : undefined);
       } catch (e) {
         fail(e, opts);
       }
@@ -748,11 +765,11 @@ async function previewPlacement(c: Awaited<ReturnType<typeof client>>, opts: Cre
  * when --no-use or COMPUTE_INSTANCE prevents it from becoming current.
  * Keep one-off org/base URL flags and leave stdout available to scripts.
  */
-function printNextSteps(id: string, opts: { org?: string; baseUrl?: string; use?: boolean }): void {
+function printNextSteps(id: string, opts: { org?: string; baseUrl?: string; use?: boolean }, cwd?: string): void {
   const context = `${opts.org ? ` --org ${opts.org}` : ''}${opts.baseUrl ? ` --base-url ${opts.baseUrl}` : ''}`;
   const target = opts.use === false || (process.env.COMPUTE_INSTANCE && process.env.COMPUTE_INSTANCE !== id) ? ` ${id}` : '';
   const steps: [string, string][] = [
-    [`compute exec${target}${context} echo hello`, 'run your first command'],
+    [`compute exec${target}${context}${cwd ? ` --cwd ${cwd}` : ''} echo hello`, 'run your first command'],
     [`compute list${context}`, 'see your sandboxes'],
     [`compute destroy${target}${context}`, 'stop billing'],
   ];
@@ -761,6 +778,14 @@ function printNextSteps(id: string, opts: { org?: string; baseUrl?: string; use?
   console.error('Use it:');
   for (const [command, does] of steps) console.error(`  ${command.padEnd(width)}  ${pc.dim(does)}`);
   console.error(pc.dim('It runs and bills until it times out or is destroyed.'));
+}
+
+/** Explicit path syntax avoids confusing provider names with local folder names. */
+export function splitCreateOperands(operands: string[]): { providers: string[]; project?: string } {
+  const index = operands.findIndex((value) => value === '.' || value === '..' || value.startsWith('./') || value.startsWith('../') || path.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value));
+  if (index === -1) return { providers: operands };
+  if (index !== operands.length - 1) throw new Error('Put the local project directory after the providers: compute new e2b ./my-app.');
+  return { providers: operands.slice(0, index), project: path.resolve(operands[index]) };
 }
 
 /** `['--vercel', 'e2b']` → `['vercel', 'e2b']`; anything else is a usage error. */
@@ -795,8 +820,8 @@ export function registerSandboxesCommands(program: Command): void {
   registerCreate(
     program
       .command('new')
-      .description('Create a sandbox (short for `compute sandboxes create`); `compute new vercel` or `--vercel` picks the provider')
-      .argument('[providers...]', 'only these providers, through your router (vercel, --vercel, e2b, …)')
+      .description('Create a sandbox; compute new e2b . creates on e2b and syncs a local project to /app')
+      .argument('[providersAndPath...]', 'provider names followed by an optional local directory (e.g. e2b ./my-app)')
       .allowUnknownOption()
       .configureOutput({ outputError: usageErrorOutput }),
     { providerShorthand: true },

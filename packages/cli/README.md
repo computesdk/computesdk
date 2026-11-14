@@ -31,6 +31,54 @@ Use `compute use <id>` to change the selection, or `compute new --no-use` to lea
 it alone. A new sandbox bills until its timeout or destruction; `compute run`
 cleans up after its command finishes (unless you use `--keep` or `--detach`).
 
+## Bring your project
+
+Keep the provider first, then add a local directory:
+
+```bash
+compute new e2b .             # create on e2b and sync this directory into /app
+compute new daytona ./my-app
+compute new .                # let your configured router choose
+compute exec --cwd /app npm test
+```
+
+An optional project path must be last and use explicit path syntax (`.`,
+`./my-app`, `../my-app`, or an absolute path). Bare words keep meaning provider
+names. The project contents go directly into `/app`, without a wrapper folder.
+The sandbox becomes selected after sync succeeds (`--no-use` opts out). A failed
+initial sync attempts teardown and leaves the previous selection intact; any
+unconfirmed cleanup reports the sandbox ID for recovery.
+
+## Sync directories
+
+```bash
+compute sync . :/app                         # local → selected sandbox
+compute sync :/app ./results                 # selected sandbox → local
+compute sync <sandbox-a>:/app <sandbox-b>:/app # sandbox → sandbox
+compute sync . :/app --dry-run               # inspect changes
+compute sync . :/app --delete                # remove destination-only entries
+compute sync . :/app --watch                 # repeat until Ctrl-C
+```
+
+Each invocation syncs directory contents in one direction. New and changed
+files are compared by content and permissions; unchanged files are left alone.
+Local uploads respect nested `.gitignore` files, including repository ancestor
+rules. `.git` data is always excluded. Destination-only files stay unless
+`--delete` is explicit; ignored source paths stay protected from deletion.
+Binary files, executable permissions, and relative symlinks within the project
+are supported. File/directory type conflicts require manual resolution.
+
+`--dry-run` changes no destination files. `--watch` polls every two seconds and
+finishes its current pass before stopping on Ctrl-C; it cannot combine with
+`--dry-run`. `--json` returns one result with `dryRun`, `copied`, and `deleted`;
+watch mode emits a JSON line for each nonempty pass.
+
+Sandbox endpoints require Node.js and the platform transfer API. Downloads and
+sandbox-to-sandbox transfers stage a source archive through this CLI; only changed
+entries are applied to the destination. Filesystem roots, overlapping directories
+on the same sandbox, symlink traversal, and links outside the project are refused.
+Avoid concurrent edits at the destination while a sync runs.
+
 ## Login
 
 ```bash
