@@ -48,4 +48,6 @@ export type {
   SandboxProcessStatus,
   SandboxSnapshot,
   SandboxSummary,
+  PersistentDisk,
+  CreatePersistentDiskOptions,
 } from './types.js';

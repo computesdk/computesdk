@@ -58,8 +58,8 @@ export interface PlatformCreateOptions extends CreateInstanceOptions {
   providerOrder?: string[];
   /** Org vault secret names to inject, up to 100. */
   secrets?: string[];
-  /** Disk v1: `{ diskId, path, readonly?, branch? }`; diskId must be under `<orgSlug>/`. */
-  disk?: { diskId: string; path: string; readonly?: boolean; branch?: string };
+  /** Explicit retained native disk. Omit diskId to create; region controls storage only. */
+  disk?: false | true | { diskId?: string; region?: string; path?: string; readonly?: boolean };
   /** Sandbox label (falls back to universal `name`); max 200 characters. */
   label?: string;
   /** Makes the create safe to replay across process restarts. */
@@ -247,6 +247,7 @@ function toInfo(detail: SandboxDetail, createTimeout?: number): InstanceInfo {
       provider: detail.provider,
       providerSandboxId: detail.providerSandboxId,
       platformStatus: detail.status,
+      disk: detail.disk ?? null,
       placement: detail.placement,
       cost: detail.cost,
       label: detail.label,

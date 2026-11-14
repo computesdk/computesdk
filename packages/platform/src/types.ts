@@ -50,6 +50,7 @@ export interface SandboxSummary {
 
 /** `toDetail` — POST /sandboxes and GET /sandboxes/{id}. */
 export interface SandboxDetail extends SandboxSummary {
+  disk?: { diskId: string; region?: string; path: string; readonly: boolean; state?: string; retained?: boolean; attachmentState?: string; backend?: string } | null;
   /** BYOK direct-attach descriptor — null on managed accounts and ambient providers. */
   attach: { provider: string; providerSandboxId: string; region: string | null } | null;
 }
@@ -106,4 +107,20 @@ export interface SandboxSnapshot {
   expiresAt: string | null;
   createdAt: string;
   deletedAt: string | null;
+}
+
+/** Native Archil storage owned independently of compute. */
+export interface PersistentDisk {
+  id: string;
+  region: string;
+  regionSource: 'explicit' | 'inferred' | 'fallback';
+  state: 'provisioning' | 'ready' | 'deleting' | 'deleted';
+  createdAt: string;
+  attachment: { sandboxId: string; path: string; readonly: boolean; state: string } | null;
+}
+export interface CreatePersistentDiskOptions {
+  idempotencyKey: string;
+  region?: string;
+  provider?: string;
+  computeRegion?: string;
 }

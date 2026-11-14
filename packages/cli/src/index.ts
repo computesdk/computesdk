@@ -1,3 +1,4 @@
+import { registerDiskCommands } from './disks.js';
 /**
  * @computesdk/cli
  *
@@ -330,6 +331,7 @@ registerStatusCommand(program);
 // (create/exec/processes/files/urls). Same auth as actions.
 
 registerSandboxesCommands(program);
+registerDiskCommands(program);
 registerSyncCommand(program);
 
 // ─── agents ──────────────────────────────────────────────────────────────────

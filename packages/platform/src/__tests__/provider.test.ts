@@ -125,7 +125,7 @@ describe('create', () => {
       orderType: 'limit',
       providerOrder: ['e2b', 'daytona'],
       secrets: ['GH_TOKEN'],
-      disk: { diskId: 'my-org/disk-1', path: '/data', readonly: true },
+      disk: { diskId: '11111111-1111-4111-8111-111111111111', path: '/data', readonly: true },
       label: 'my box',
       envs: { FOO: 'bar' },
     } as never);
@@ -135,7 +135,7 @@ describe('create', () => {
     expect(body.orderType).toBe('limit');
     expect(body.providerOrder).toEqual(['e2b', 'daytona']);
     expect(body.secrets).toEqual(['GH_TOKEN']);
-    expect(body.disk).toEqual({ diskId: 'my-org/disk-1', path: '/data', readonly: true });
+    expect(body.disk).toEqual({ diskId: '11111111-1111-4111-8111-111111111111', path: '/data', readonly: true });
     expect(body.label).toBe('my box');
     // envs are runtime-side only — never in the create body.
     expect(body.envs).toBeUndefined();
@@ -682,5 +682,16 @@ describe('signal propagation', () => {
     const controller = new AbortController();
     await provider.sandbox.create({ signal: controller.signal } as never);
     expect(calls[0].signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe('persistent disk placement serialization', () => {
+  it('keeps storage region inside disk for a provider without compute-region controls', async () => {
+    const disk = { diskId: '11111111-1111-4111-8111-111111111111', region: 'aws-us-east-1', path: '/work', readonly: true };
+    const { fetchImpl, calls } = mockFetch(() => json({ sandbox: detail({ disk: { ...disk, retained: true, attachmentState: 'mounted', state: 'ready' } }) }, 201));
+    const sbx = await platform(config(fetchImpl)).instances.create({ providerOrder: ['namespace'], disk });
+    expect(calls[0].body?.disk).toEqual(disk);
+    expect(calls[0].body?.region).toBeUndefined();
+    expect((await sbx.getInfo()).metadata?.disk).toMatchObject({ diskId: disk.diskId, region: disk.region, attachmentState: 'mounted' });
   });
 });

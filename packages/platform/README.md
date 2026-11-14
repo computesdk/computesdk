@@ -152,3 +152,45 @@ If the outcome can't be determined within ~6 minutes, create throws `create_outc
 | `filesystem.*` | `GET/POST/DELETE /api/v1/sandboxes/:id/files` |
 
 Templates are not supported by this provider.
+
+## Retained disks
+
+Retained native Archil storage has its own identity and immutable home region.
+Compute placement is independent: `disk.region` never pins the compute region.
+This requires the platform's retained-disk API and an image with Runtime, Archil
+and working FUSE; provider geography alone does not establish mount support.
+
+```typescript
+import { PlatformClient } from '@computesdk/platform';
+
+const client = new PlatformClient({
+  apiKey: process.env.COMPUTE_API_KEY!,
+  baseUrl: 'https://platform.computesdk.com',
+});
+const disk = await client.disks.create({
+  idempotencyKey: 'my-workspace-v1',
+  region: 'aws-us-east-1',
+  provider: 'namespace',
+});
+// Use the provider instance's existing instances.create API:
+const provider = platform({ apiKey: process.env.COMPUTE_API_KEY });
+const instance = await provider.instances.create({
+  providerOrder: ['namespace'],
+  disk: { diskId: disk.id, path: '/work' },
+});
+// Destroy compute before reattaching the same disk on another provider.
+await instance.destroy();
+console.log(await client.disks.get(disk.id));
+// Explicitly delete only when the retained files are no longer needed.
+await client.disks.delete(disk.id);
+```
+
+Omit `region` to infer it from expected compute placement, then the deployment's
+configured fallback. New sandbox `disk: true` or `disk: { region, path }` creates
+retained storage; omitted `disk` or `disk: false` creates no disk. An existing
+`diskId` preserves its region; a conflicting explicit region is rejected. One
+active attachment is permitted. Reuse the same idempotency key after unresolved
+creation and retry DELETE after unresolved deletion. Disk records expose the
+actual region, its source, lifecycle state and current attachment. Files are
+handed off through Archil, without a Tigris restore. Recovery preserves writes
+committed to Archil; VM crashes can lose unflushed client buffers.

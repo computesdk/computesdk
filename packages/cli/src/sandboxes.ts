@@ -484,6 +484,7 @@ interface CreateFlagOpts {
   size?: string; cpus?: string; memoryMb?: string; diskMb?: string; timeoutMs?: string;
   maxPrice?: string; maxPricePer?: string; market?: boolean; orderType?: string;
   secret?: string[];
+  diskId?: string; diskRegion?: string; diskPath?: string; diskReadonly?: boolean;
 }
 
 /** `--provider daytona,e2b` → ['daytona', 'e2b']; empty is a usage error. */
@@ -520,6 +521,10 @@ function buildCreateBody(opts: CreateFlagOpts): Record<string, unknown> {
   if (opts.label) body.label = opts.label;
   if (opts.image) body.image = opts.image;
   if (opts.snapshotId) body.snapshotId = opts.snapshotId;
+  if (opts.diskId || opts.diskRegion || opts.diskPath || opts.diskReadonly) body.disk = {
+    ...(opts.diskId ? { diskId: opts.diskId } : {}), ...(opts.diskRegion ? { region: opts.diskRegion } : {}),
+    path: opts.diskPath ?? '/work', ...(opts.diskReadonly ? { readonly: true } : {}),
+  };
   if (opts.timeoutMs) body.timeoutMs = Number(opts.timeoutMs);
   if (opts.secret && opts.secret.length > 0) body.secrets = opts.secret;
   if (Object.keys(resources).length > 0) body.resources = resources;
@@ -667,6 +672,10 @@ function registerCreate(command: Command, { providerShorthand = false }: { provi
     .option('--api-key <key>', 'platform API key (or COMPUTE_API_KEY)')
     .option('--base-url <url>', 'platform base URL')
     .option('--allow-untrusted-host', 'allow non-computesdk.com base URLs')
+    .option('--disk-id <uuid>', 'attach an existing retained platform disk')
+    .option('--disk-region <region>', 'new disk storage region, independent of compute placement')
+    .option('--disk-path <path>', 'mount a retained disk (default /work); creates one if no ID')
+    .option('--disk-readonly', 'mount the disk read-only')
     .option('--json', 'print the raw response');
   if (providerShorthand) {
     command

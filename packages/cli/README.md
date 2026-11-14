@@ -642,3 +642,25 @@ delete-only passes do not create captures. A failed destination copy leaves the
 retained capture available until expiry. There is no new storage charge in this
 release. Deploy the managed sync snapshot API before releasing this CLI; failure
 to retain a capture stops sync rather than falling back to disposable snapshots.
+
+### Retained regional disks
+
+```bash
+compute disks create --region aws-us-east-1 --provider namespace --idempotency-key my-workspace-v1
+compute disks list --json
+compute disks get <disk-id> --json
+compute sandboxes create --provider namespace --disk-id <disk-id> --disk-path /work
+# Destroy the old compute before attaching the same disk elsewhere.
+compute sandboxes create --provider modal --disk-id <disk-id> --disk-path /work
+compute disks delete <disk-id>
+```
+
+`--disk-region` on sandbox create provisions new retained storage in a canonical
+Archil region, independently of compute placement. `--disk-readonly` requests a
+read-only mount. Omit a new disk's region for provider-locality inference and a
+configured fallback. Disk creation supports `--compute-region` as an expected
+location hint; it does not allocate compute. Reuse the same create idempotency
+key on retries. Compute deletion retains disks; disk deletion is explicit and
+requires no attachment. Mounts require a compatible image with Runtime, Archil
+and FUSE; Modal uses VM runtime. These commands require the retained-disk server
+API. Existing snapshots and managed-agent Tigris storage are separate.

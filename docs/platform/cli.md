@@ -344,3 +344,15 @@ delete-only passes do not create captures. A failed destination copy leaves the
 retained capture available until expiry. There is no new storage charge in this
 release. Deploy the managed sync snapshot API before releasing this CLI; failure
 to retain a capture stops sync rather than falling back to disposable snapshots.
+
+## Retained disks
+
+`compute disks create|list|get|delete` manages storage independently of compute.
+Create accepts `--region` (canonical Archil storage region), `--provider`,
+`--compute-region` (expected locality only), and `--idempotency-key`. Omitted
+storage region uses deployment inference/fallback. A sandbox create accepts
+`--disk-id`, `--disk-region`, `--disk-path` and `--disk-readonly`; a disk region
+never becomes a compute-region pin. Destroy the first compute before attaching
+the same disk to another provider. Compute deletion retains storage; explicitly
+run `compute disks delete <id>` to remove it. Provider support requires validated
+FUSE, Runtime and Archil images, independently of selectable compute regions.

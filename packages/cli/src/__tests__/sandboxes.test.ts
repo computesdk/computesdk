@@ -230,6 +230,15 @@ describe('current instance resolution', () => {
     }
   });
 
+  it('create sends an explicit disk region to Namespace without a compute-region pin', async () => {
+    post.mockResolvedValueOnce({ sandbox });
+    await buildProgram().parseAsync(['sandboxes', 'create', '-q', '--no-use', '--provider', 'namespace', '--disk-region', 'aws-us-east-1', '--disk-path', '/work', '--disk-readonly'], { from: 'user' });
+    const body = post.mock.calls[0][1] as Record<string, unknown>;
+    expect(body.only).toEqual(['namespace']);
+    expect(body.region).toBeUndefined();
+    expect(body.disk).toEqual({ region: 'aws-us-east-1', path: '/work', readonly: true });
+  });
+
   it('create sets the current instance; destroy clears it', async () => {
     post.mockResolvedValueOnce({ sandbox });
     await buildProgram().parseAsync(['sandboxes', 'create'], { from: 'user' });

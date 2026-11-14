@@ -1,3 +1,4 @@
+import type { PersistentDisk, CreatePersistentDiskOptions } from './types.js';
 /**
  * Thin client for the hosted ComputeSDK platform API.
  *
@@ -203,6 +204,19 @@ export class PlatformClient {
     private readonly auth: PlatformAuth,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
+
+  /** Organization-scoped retained storage; deleting compute never deletes these disks. */
+  readonly disks = {
+    create: async (options: CreatePersistentDiskOptions): Promise<PersistentDisk> =>
+      (await this.post<{ disk: PersistentDisk }>('/api/v1/disks', { ...options })).disk,
+    list: async (): Promise<PersistentDisk[]> => (await this.get<{ disks: PersistentDisk[] }>('/api/v1/disks')).disks,
+    get: async (id: string): Promise<PersistentDisk> => (await this.get<{ disk: PersistentDisk }>(this.diskPath(id))).disk,
+    delete: async (id: string): Promise<PersistentDisk> => (await this.del<{ disk: PersistentDisk }>(this.diskPath(id))).disk,
+  };
+  private diskPath(id: string): string {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new PlatformClientError('invalid_argument', 'disk ID must be a platform UUID');
+    return `/api/v1/disks/${id}`;
+  }
 
   get baseUrl(): string {
     return this.auth.baseUrl;

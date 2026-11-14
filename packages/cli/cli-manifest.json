@@ -1819,6 +1819,10 @@
         "--api-key",
         "--base-url",
         "--allow-untrusted-host",
+        "--disk-id",
+        "--disk-region",
+        "--disk-path",
+        "--disk-readonly",
         "--json",
         "--org",
         "--help"
@@ -2742,6 +2746,10 @@
         "--api-key",
         "--base-url",
         "--allow-untrusted-host",
+        "--disk-id",
+        "--disk-region",
+        "--disk-path",
+        "--disk-readonly",
         "--json",
         "--org",
         "--list",
@@ -3055,6 +3063,93 @@
         "--help"
       ],
       "summary": "Resolve the provider's public URL for a port"
+    },
+    {
+      "path": [
+        "disks"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "Persistent native storage independent of compute"
+    },
+    {
+      "path": [
+        "disks",
+        "create"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--region",
+        "--provider",
+        "--compute-region",
+        "--idempotency-key",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Create retained storage; omitted region uses provider locality then configured fallback"
+    },
+    {
+      "path": [
+        "disks",
+        "list"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "List up to 200 disks"
+    },
+    {
+      "path": [
+        "disks",
+        "get"
+      ],
+      "aliases": [],
+      "args": [
+        "<id>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Inspect a disk and attachment"
+    },
+    {
+      "path": [
+        "disks",
+        "delete"
+      ],
+      "aliases": [],
+      "args": [
+        "<id>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Permanently delete an unattached disk"
     },
     {
       "path": [
