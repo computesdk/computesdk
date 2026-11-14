@@ -47,11 +47,55 @@ interface Origin {
   session?: Promise<Session | null>;
   /** Set once a session could not be opened: `fetch` for this origin from then on. */
   failed?: boolean;
-  /** Requests in progress; the socket is referenced only while this is above zero. */
-  active: number;
 }
 
 const origins = new Map<string, Origin>();
+
+/**
+ * Requests in progress on each session. A session's socket is referenced only while this is above
+ * zero, so an idle session never keeps the process alive. Counted per session, not per origin: a
+ * session the origin has stopped using (GOAWAY) is still released by the requests that were on it.
+ */
+const inFlight = new WeakMap<Session, number>();
+/** Sessions that received GOAWAY: closed once their last request finishes. */
+const retired = new WeakSet<Session>();
+
+function hold(s: Session): void {
+  inFlight.set(s, (inFlight.get(s) ?? 0) + 1);
+  s.ref();
+}
+
+function release(s: Session): void {
+  const n = (inFlight.get(s) ?? 1) - 1;
+  inFlight.set(s, n);
+  if (n > 0 || s.destroyed) return;
+  if (retired.has(s)) s.close();
+  else s.unref();
+}
+
+function abortError(signal: AbortSignal): unknown {
+  return signal.reason ?? new Error('The operation was aborted');
+}
+
+/** p, or the signal's abort, whichever comes first; p itself is left to settle for its other waiters. */
+function untilAborted<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) return Promise.reject(abortError(signal));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      },
+    );
+  });
+}
 
 /** How long opening a session may take before the origin falls back to `fetch`. */
 const CONNECT_TIMEOUT_MS = 10_000;
@@ -86,7 +130,7 @@ function useHttp2(): boolean {
 function session(origin: string): Promise<Session | null> {
   let o = origins.get(origin);
   if (!o) {
-    o = { active: 0 };
+    o = {};
     origins.set(origin, o);
   }
   if (o.failed) return Promise.resolve(null);
@@ -115,7 +159,9 @@ function session(origin: string): Promise<Session | null> {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        if (entry.active === 0) s.unref();
+        // Unreferenced until a request holds it (hold), so a preconnect alone never keeps the
+        // process alive.
+        if (!inFlight.get(s)) s.unref();
         resolve(s);
       });
       s.on('error', () => {
@@ -127,7 +173,13 @@ function session(origin: string): Promise<Session | null> {
           resolve(null);
         }
       });
-      s.once('goaway', forget);
+      s.once('goaway', () => {
+        // No new streams on it: later requests open a new session, and this one is closed once
+        // the requests already on it finish.
+        forget();
+        retired.add(s);
+        if (!inFlight.get(s)) s.close();
+      });
       s.once('close', forget);
     });
   });
@@ -158,29 +210,21 @@ async function viaFetch(url: string, init: HttpInit): Promise<HttpResponse> {
 export async function httpRequest(url: string, init: HttpInit): Promise<HttpResponse> {
   const origin = originOf(url);
   if (!origin || !useHttp2()) return viaFetch(url, init);
-  const o = origins.get(origin) ?? { active: 0 };
-  origins.set(origin, o);
-  o.active++;
+  // Waiting for the session honours this request's abort; the opening itself goes on for the
+  // other requests sharing it.
+  const s = await untilAborted(session(origin), init.signal);
+  if (!s || s.closed || s.destroyed) return viaFetch(url, init);
+  hold(s);
   try {
-    const s = await session(origin);
-    if (!s || s.closed || s.destroyed) return await viaFetch(url, init);
-    s.ref(); // held while any request is in progress; unref'd once none is (below)
-    try {
-      return await viaSession(s, url, init);
-    } catch (e) {
-      // The server took no part in the request (refused stream, or the session was going away
-      // or gone when it was sent): sent once more, over fetch. Anything else may have been
-      // processed and is reported, never repeated.
-      if (notProcessed(e) && !init.signal?.aborted) return await viaFetch(url, init);
-      throw e;
-    }
+    return await viaSession(s, url, init);
+  } catch (e) {
+    // The server took no part in the request (refused stream, or the session was going away
+    // or gone when it was sent): sent once more, over fetch. Anything else may have been
+    // processed and is reported, never repeated.
+    if (notProcessed(e) && !init.signal?.aborted) return await viaFetch(url, init);
+    throw e;
   } finally {
-    o.active--;
-    if (o.active === 0) {
-      void o.session?.then((s) => {
-        if (s && !s.destroyed && o.active === 0) s.unref();
-      });
-    }
+    release(s);
   }
 }
 
@@ -216,7 +260,7 @@ function viaSession(s: Session, url: string, init: HttpInit): Promise<HttpRespon
       init.signal?.removeEventListener('abort', onAbort);
       f();
     };
-    const aborted = () => init.signal?.reason ?? new Error('The operation was aborted');
+    const aborted = () => (init.signal ? abortError(init.signal) : new Error('The operation was aborted'));
     const onAbort = () => {
       finish(() => reject(aborted()));
       req.close(0x8); // NGHTTP2_CANCEL
@@ -236,10 +280,17 @@ function viaSession(s: Session, url: string, init: HttpInit): Promise<HttpRespon
       for (const [k, v] of Object.entries(h)) if (!k.startsWith(':') && v !== undefined) got[k] = String(v);
     });
     req.on('data', (c: Buffer) => chunks.push(c));
+    // Settled on 'close', the last event. Node emits 'end' even when the connection drops part way
+    // through the body (the session is already destroyed by then), so only a stream that ended
+    // while its session was alive, and closed without a reset (rstCode 0, NO_ERROR), is an answer.
+    // Anything else (no response, an interrupted body) is an error, never a truncated answer and
+    // never left pending. finish ignores this after 'error'.
+    let ended = false;
     req.on('end', () => {
-      // A stream reset before any response (status 0) is a failure, not an answer.
-      if (status === 0) finish(() => reject(new Error('kosa8: the HTTP/2 stream closed without a response')));
-      else
+      ended = !s.destroyed;
+    });
+    req.on('close', () => {
+      if (status !== 0 && ended && !req.rstCode) {
         finish(() =>
           resolve({
             status,
@@ -248,9 +299,10 @@ function viaSession(s: Session, url: string, init: HttpInit): Promise<HttpRespon
             headers: got,
           }),
         );
-    });
-    req.on('close', () => {
-      if (status === 0) finish(() => reject(new Error('kosa8: the HTTP/2 stream closed without a response')));
+        return;
+      }
+      const why = status === 0 ? 'without a response' : 'before the response completed';
+      finish(() => reject(new Error(`kosa8: the HTTP/2 stream closed ${why}`)));
     });
     req.on('error', (e) =>
       finish(() => reject(init.signal?.aborted ? aborted() : Object.assign(e, { rstCode: req.rstCode }))),

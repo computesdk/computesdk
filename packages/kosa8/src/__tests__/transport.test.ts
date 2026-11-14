@@ -7,14 +7,17 @@ import { closeSessions, httpRequest, preconnect } from '../transport';
 let server: http2.Http2Server;
 let base = '';
 let sessions = 0;
+let sessionsClosed = 0;
 const seen: { method: string; path: string; auth: string; body: string }[] = [];
 
 beforeAll(async () => {
   server = http2.createServer();
-  server.on('session', () => {
+  server.on('session', (sess) => {
     sessions += 1;
+    sess.on('close', () => (sessionsClosed += 1));
   });
   server.on('stream', (stream, headers) => {
+    stream.on('error', () => {}); // the /partial reset, seen from the server side
     let body = '';
     stream.on('data', (c) => (body += c));
     stream.on('end', () => {
@@ -26,7 +29,16 @@ beforeAll(async () => {
         stream.end(JSON.stringify({ ok: true, path }));
       };
       if (path === '/slow') setTimeout(reply, 500);
-      else reply();
+      else if (path === '/partial') {
+        // Headers and part of the body, then the connection drops.
+        stream.respond({ ':status': 200 });
+        stream.write('{"ok":');
+        setTimeout(() => stream.session?.destroy(), 20);
+      } else if (path === '/goaway') {
+        // GOAWAY while this stream is still in progress, which then completes.
+        stream.session?.goaway(http2.constants.NGHTTP2_NO_ERROR, stream.id);
+        setTimeout(reply, 50);
+      } else reply();
     });
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -42,6 +54,7 @@ afterEach(() => {
   closeSessions();
   vi.unstubAllEnvs();
   sessions = 0;
+  sessionsClosed = 0;
   seen.length = 0;
 });
 
@@ -83,6 +96,40 @@ describe('kosa8 HTTP/2 transport', () => {
     await expect(
       httpRequest(`${base}/slow`, { method: 'GET', headers: {}, signal: AbortSignal.timeout(50) }),
     ).rejects.toThrow();
+  });
+
+  it('rejects a response whose connection drops after its headers', async () => {
+    vi.stubEnv('KOSA8_HTTP_TRANSPORT', 'http2');
+    await expect(httpRequest(`${base}/partial`, { method: 'GET', headers: {} })).rejects.toThrow(
+      /before the response completed/,
+    );
+  });
+
+  it('closes a session that sent GOAWAY once its request finishes', async () => {
+    vi.stubEnv('KOSA8_HTTP_TRANSPORT', 'http2');
+    const r = await httpRequest(`${base}/goaway`, { method: 'GET', headers: {} });
+    expect(r.status).toBe(200);
+    for (let i = 0; i < 50 && sessionsClosed === 0; i++) await new Promise((res) => setTimeout(res, 20));
+    expect(sessionsClosed).toBe(1);
+    // The next request opens a new session.
+    expect((await httpRequest(`${base}/after`, { method: 'GET', headers: {} })).status).toBe(200);
+    expect(sessions).toBe(2);
+  });
+
+  it('honours an abort while the session is still opening', async () => {
+    vi.stubEnv('KOSA8_HTTP_TRANSPORT', 'http2');
+    const net = await import('node:net');
+    // Accepts TCP and never answers the TLS handshake.
+    const silent = net.createServer(() => {});
+    await new Promise<void>((r) => silent.listen(0, '127.0.0.1', r));
+    const port = (silent.address() as AddressInfo).port;
+    const t0 = Date.now();
+    await expect(
+      httpRequest(`https://127.0.0.1:${port}/x`, { method: 'GET', headers: {}, signal: AbortSignal.timeout(100) }),
+    ).rejects.toThrow();
+    expect(Date.now() - t0).toBeLessThan(2000);
+    closeSessions();
+    silent.close();
   });
 
   it('uses fetch when told to, and for plain http without the test mode', async () => {

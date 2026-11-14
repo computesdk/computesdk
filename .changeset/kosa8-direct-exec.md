@@ -1,5 +1,5 @@
 ---
-"@computesdk/kosa8": minor
+"@computesdk/kosa8": patch
 ---
 
 Run commands on the sandbox's host directly when the create answer offers it (`direct`), falling back to the API when the host did not run the command.
