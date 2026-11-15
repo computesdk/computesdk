@@ -64,7 +64,6 @@ function createOptions(config: TangleConfig, options: CreateInstanceOptions): Cr
   const idempotencyKey = typeof options.idempotencyKey === 'string' ? options.idempotencyKey : randomUUID();
   return {
     name: options.name ?? `computesdk-${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 8)}`,
-    agent: false,
     ...(environment !== undefined ? { environment } : {}),
     ...(options.templateId !== undefined ? { templateId: options.templateId } : {}),
     ...(cpuCores !== undefined || memoryMB !== undefined || diskGB !== undefined
