@@ -542,8 +542,8 @@ importers:
   packages/briq:
     dependencies:
       '@briq-cloud/sdk':
-        specifier: ^0.1.2
-        version: 0.1.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^0.2.0
+        version: 0.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
@@ -3571,8 +3571,8 @@ packages:
   '@borewit/text-codec@0.2.1':
     resolution: {integrity: sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw==}
 
-  '@briq-cloud/sdk@0.1.2':
-    resolution: {integrity: sha512-t9opzVTALWVKADZzMWB9Mep3yhB1efedpfbXwzvVex2WFeBHY00e2hSfn1N7fhC9OzuuizBYBy3CG3jCftXcfA==}
+  '@briq-cloud/sdk@0.2.0':
+    resolution: {integrity: sha512-YS2/SJbarLnMfnW0ZVhGFMSTbUF73qnK7aG+eYEiTnNu/qpj3vS3xPjOMP1NpQ04BTGI1PwjPVgdmGrxvlqovA==}
     engines: {node: '>=22.6'}
 
   '@browserbasehq/sdk@2.9.0':
@@ -10885,9 +10885,9 @@ snapshots:
 
   '@borewit/text-codec@0.2.1': {}
 
-  '@briq-cloud/sdk@0.1.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@briq-cloud/sdk@0.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
-      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.23.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
