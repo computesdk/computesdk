@@ -56,6 +56,16 @@ interface BriqConfig {
 
 Without a key, the first call fails with the setup steps.
 
+## Where commands go
+
+A synchronous `runCommand` with a timeout from 1 to 60 seconds and no `onStdout`/`onStderr`
+callbacks goes to the regional origin the API returns with its scoped access; the API key never
+goes there. Other commands, files and creates use `baseUrl`. With a custom `fetch`, every request
+uses `baseUrl`: use one if your egress allows only the API address.
+
+Once a command has been sent to the regional origin, any failure (no answer, a non-2xx status) is
+`outcome_unknown`: the command may have run, so it is never sent again through another route.
+
 ## Create options
 
 | Option | Notes |
