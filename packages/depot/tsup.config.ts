@@ -1,10 +1,14 @@
 import { defineConfig } from 'tsup'
 
-export default defineConfig({
+const shared = {
   entry: ['src/index.ts'],
-  format: ['cjs', 'esm'],
-  dts: true,
   splitting: false,
   sourcemap: true,
-  clean: true,
-})
+  dts: true,
+}
+
+export default defineConfig([
+  { ...shared, format: ['esm'] },
+  // @depot/sandbox is ESM-only (no `require` export), so the CJS build bundles it.
+  { ...shared, format: ['cjs'], noExternal: ['@depot/sandbox'] },
+])
