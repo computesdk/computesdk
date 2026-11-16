@@ -42,6 +42,7 @@
   * [Lelantos](providers/lelantos.md)
   * [Lightning](providers/lightning.md)
   * [Lizard](providers/lizard.md)
+  * [Maritime](providers/maritime.md)
   * [Modal](providers/modal.md)
   * [Microsandbox](providers/microsandbox.md)
   * [MIOSA](providers/miosa.md)
