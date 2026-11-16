@@ -222,6 +222,10 @@ interface ExecResult {
   oom_kills?: number
   truncated?: boolean
   error?: string
+  /** `{outcome: 'void', cause}`: an infrastructure failure, not a fact about the command. */
+  outcome?: { outcome?: string; cause?: string }
+  /** A delete won a race against the exec; its verdict is unknowable. */
+  cancelled?: boolean
 }
 
 interface StatsResponse {
@@ -768,6 +772,17 @@ const RETRYABLE_EXEC_ERROR = 'did not answer the exec call'
 /** Retries for that one error. One is the contract; 0 opts out. */
 export const DEFAULT_EXEC_RETRIES = 1
 
+function describeMissingExitCode(sandboxId: string, result: ExecResult): string {
+  if (result.outcome?.outcome === 'void') {
+    return (
+      `givemeanode voided the exec for ${sandboxId} (${result.outcome.cause ?? 'no cause given'}): ` +
+      'an infrastructure failure on the provider side, unbilled, not a verdict on the command'
+    )
+  }
+  if (result.cancelled) return `givemeanode exec for ${sandboxId} was cancelled by a delete of the sandbox`
+  return `givemeanode exec failed for ${sandboxId}`
+}
+
 export async function runCommand(
   sandbox: SandboxHandle,
   command: string,
@@ -802,7 +817,7 @@ export async function runCommand(
     // failure into a silent success, which is the exact bug that cost a
     // whole benchmark run once already.
     if (result.exit_code === undefined || result.exit_code === null) {
-      lastError = result.error ?? `givemeanode exec failed for ${sandbox.id}`
+      lastError = result.error ?? describeMissingExitCode(sandbox.id, result)
       // Retry ONLY the reconnect case. A command that ran and failed has
       // an exit code and never reaches here; anything else with no exit
       // code is a condition a retry cannot change.
@@ -924,9 +939,15 @@ export async function deleteSnapshot(client: GmnClient, snapshotId: string): Pro
 /** Base64, without assuming a Node `Buffer` is in scope. */
 export function toBase64(content: string): string {
   const bytes = new TextEncoder().encode(content)
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
+  let encoded = ''
+  for (let offset = 0; offset < bytes.length; offset += 24 * 1024) {
+    encoded += encodeBytes(bytes.subarray(offset, offset + 24 * 1024))
+  }
+  return encoded
+}
+
+function encodeBytes(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes))
 }
 
 /** The command a `writeFile` runs. Separated so a test can read it. */
@@ -951,30 +972,120 @@ export function writeFileCommand(path: string, content: string): string {
   return `mkdir -p "$(dirname "${quoted}")" && printf %s '${toBase64(content)}' | base64 -d > "${quoted}"`
 }
 
+/**
+ * Base64 characters carried by one exec when writing a file. The exec
+ * channel drops a command much larger than this: a 100 KiB write (about
+ * 137 KB of base64) came back `{outcome: 'void', cause: 'exec_channel_lost'}`
+ * every time, on every shape. A multiple of 4, so each slice decodes alone.
+ */
+export const WRITE_CHUNK_BASE64_CHARS = 32 * 1024
+
+/**
+ * The commands a `writeFile` runs, in order. Content that fits one exec is
+ * one command; larger content is appended to a sibling part file slice by
+ * slice and renamed over the target by the last, so a reader never sees a
+ * half-written file.
+ */
+export function* writeFileCommands(
+  path: string,
+  content: string,
+  chunkChars: number = WRITE_CHUNK_BASE64_CHARS,
+): Generator<string> {
+  yield* writeFileBytesCommands(path, new TextEncoder().encode(content), chunkChars)
+}
+
+function* writeFileBytesCommands(
+  path: string,
+  bytes: Uint8Array,
+  chunkChars = WRITE_CHUNK_BASE64_CHARS,
+): Generator<string> {
+  if (!Number.isSafeInteger(chunkChars) || chunkChars < 4 || chunkChars > WRITE_CHUNK_BASE64_CHARS) {
+    throw new Error(`Invalid givemeanode write chunk size: ${chunkChars}`)
+  }
+  const size = Math.floor(chunkChars / 4) * 3
+  const quoted = escapeShellArg(path)
+  if (bytes.length <= size) {
+    yield `mkdir -p "$(dirname "${quoted}")" && printf %s '${encodeBytes(bytes)}' | base64 -d > "${quoted}"`
+    return
+  }
+  const part = `${quoted}${WRITE_PART_SUFFIX}`
+  for (let offset = 0; offset < bytes.length; offset += size) {
+    const slice = encodeBytes(bytes.subarray(offset, offset + size))
+    const first = offset === 0
+    const last = offset + size >= bytes.length
+    const write = `printf %s '${slice}' | base64 -d ${first ? '>' : '>>'} "${part}"`
+    yield (first ? `mkdir -p "$(dirname "${quoted}")" && ` : '') + write + (last ? ` && mv -f "${part}" "${quoted}"` : '')
+  }
+}
+
+export const WRITE_PART_SUFFIX = '.gmn-part'
+
 type Run = (sandbox: SandboxHandle, command: string, options?: RunOptions) => Promise<CommandResultShape>
+
+// Base64 plus the read status must stay below the 1 MiB exec output cap.
+export const READ_CHUNK_BYTES = 512 * 1024
+
+async function fileSize(sandbox: SandboxHandle, path: string, run: Run): Promise<number> {
+  const r = await run(sandbox, `wc -c < "${escapeShellArg(path)}"`)
+  if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot read file: ${path}`)
+  const size = Number(r.stdout.trim())
+  if (r.truncated || !/^\s*\d+\s*$/.test(r.stdout) || !Number.isSafeInteger(size)) {
+    throw new Error(`Invalid file size while reading: ${path}`)
+  }
+  return size
+}
 
 export const filesystem = {
   readFile: async (sandbox: SandboxHandle, path: string, run: Run): Promise<string> => {
-    const r = await run(sandbox, `cat "${escapeShellArg(path)}"`)
-    if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot read file: ${path}`)
-    // A read that hit the exec channel's 1 MiB output cap is a PREFIX,
-    // and returning it as the file is the worst shape of wrong: a caller
-    // that reads, edits and writes back would silently truncate the
-    // file on disk. The cap is the transport's, so the answer is a
-    // different transport (an export), not a bigger buffer.
-    if (r.truncated) {
-      throw new Error(
-        `${path} is larger than the 1 MiB an exec can return, so reading it here would ` +
-          'give you a prefix rather than the file. Split it in the sandbox, or move it out ' +
-          'with an export instead.',
+    const size = await fileSize(sandbox, path, run)
+    const bytes = new Uint8Array(size)
+    for (let offset = 0; offset < size; offset += READ_CHUNK_BYTES) {
+      // Carry dd's status inside the encoding: a POSIX pipeline otherwise
+      // reports only base64's success, hiding unreadable files and I/O errors.
+      const r = await run(
+        sandbox,
+        `{ dd if="${escapeShellArg(path)}" bs=${READ_CHUNK_BYTES} skip=${offset / READ_CHUNK_BYTES} count=1 status=none; printf '\\n%s' "$?"; } | base64`,
       )
+      if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot read file: ${path}`)
+      if (r.truncated) throw new Error(`Truncated file read at byte ${offset}: ${path}`)
+      let decoded: string
+      try {
+        decoded = atob(r.stdout.replace(/\s/g, ''))
+      } catch {
+        throw new Error(`Invalid base64 file read at byte ${offset}: ${path}`)
+      }
+      const statusAt = decoded.lastIndexOf('\n')
+      if (statusAt < 0 || decoded.slice(statusAt + 1) !== '0') {
+        throw new Error(r.stderr || `Cannot read file at byte ${offset}: ${path}`)
+      }
+      const expected = Math.min(READ_CHUNK_BYTES, size - offset)
+      if (statusAt !== expected) throw new Error(`Short or oversized file read at byte ${offset}: ${path}`)
+      for (let i = 0; i < expected; i += 1) bytes[offset + i] = decoded.charCodeAt(i)
     }
-    return r.stdout
+    if (await fileSize(sandbox, path, run) !== size) throw new Error(`File size changed while reading: ${path}`)
+    return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes)
   },
 
   writeFile: async (sandbox: SandboxHandle, path: string, content: string, run: Run): Promise<void> => {
-    const r = await run(sandbox, writeFileCommand(path, content))
-    if (r.exitCode !== 0) throw new Error(r.stderr || `Cannot write file: ${path}`)
+    const bytes = new TextEncoder().encode(content)
+    const commands = writeFileBytesCommands(path, bytes)
+    const cleanUp = async () => {
+      if (bytes.length <= WRITE_CHUNK_BASE64_CHARS / 4 * 3) return
+      await run(sandbox, `rm -f "${escapeShellArg(path)}${WRITE_PART_SUFFIX}"`).catch(() => undefined)
+    }
+    for (const command of commands) {
+      let r: CommandResultShape
+      try {
+        r = await run(sandbox, command)
+      } catch (err) {
+        await cleanUp()
+        throw err
+      }
+      if (r.exitCode !== 0) {
+        await cleanUp()
+        throw new Error(r.stderr || `Cannot write file: ${path}`)
+      }
+    }
   },
 
   mkdir: async (sandbox: SandboxHandle, path: string, run: Run): Promise<void> => {

@@ -44,9 +44,9 @@ interface FreestyleConfig {
   baseUrl?: string;
   /** Idle seconds before Freestyle stops the VM (default 300). */
   idleTimeoutSeconds?: number;
-  /** Default wall-clock limit for a single command, ms (default 300000). */
+  /** Default wall-clock limit for a single command, ms (default 300000; up to 24h per call). */
   timeout?: number;
-  /** Keep the VM after it stops instead of deleting it (default: ephemeral). */
+  /** Keep the VM after it stops instead of deleting it (default: kept 5 min after stop/pause, so it can be resumed). */
   persistent?: boolean;
   /** Outbound firewall. Defaults to allow-all outbound; pass { rules: [] } to seal. */
   firewall?: { rules: unknown[] };
@@ -62,7 +62,17 @@ interface FreestyleConfig {
 | Snapshots: create, list, delete | ✅ |
 | Reconnect by id (`compute.instances.getById`) | ✅ |
 | List sandboxes | ✅ (VMs this provider created) |
+| Long-running commands (`timeout` up to 24h) | ✅ |
+| Standard sizes (`sizeClass: 'lg' \| 'xl'`) and `cpu` / `memory` (MiB) | ✅ (grow-only from the 4 vCPU / 8 GiB runtime snapshot) |
+| Pause / resume (`getInstance().pause()` / `.start()`) | ✅ (default sandboxes; `ephemeral: true` VMs cannot pause) |
 | `getUrl` (per-port URL) | ❌ — map a domain via [`freestyle.domains`](https://docs.freestyle.sh) |
+
+CPU and memory requests must be at least the snapshot's existing resources:
+Freestyle can only grow a VM. A smaller requested axis fails creation and the
+new VM is deleted, rather than silently keeping the larger snapshot resources.
+For custom snapshots (including `FREESTYLE_SNAPSHOT_ID`), use native `cpu` and
+`memory` options; standard size classes apply only to the default runtime snapshot.
+See [Freestyle resizing](https://www.freestyle.sh/docs/vms/lifecycle#resize).
 
 ## License
 

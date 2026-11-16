@@ -65,3 +65,33 @@ const sandbox = await compute.instances.create({
 - All operations use Namespace's compute API
 - Environment variables take precedence over config options
 - Instances are immediately deleted when destroyed (no delayed deletion)
+
+## Standard sizes (local discovery)
+
+`provider.sizes.list()` / `resolve('sm', context?)` declares exact `sm`, `md`, `lg`,
+and `xl` CPU/RAM requests for **Linux amd64 only**. `create({ sizeClass: 'sm' })`
+requests `instanceOptions.shape.virtual_cpu: 1` and `memory_megabytes: 2048`.
+Per-create standard requests override factory CPU/RAM defaults while preserving
+other instance options. Combining them with explicit native CPU/RAM fields is an
+error, even when the numbers match. Non-Linux/unverified architectures and
+`xs`/`2xl` remain `unknown`. Legacy native shape overrides are unchanged.
+
+These are adapter-declared requests based on the documented Linux machine-shape
+catalog, not account/region availability checks or observed resources. Discovery
+never reads token files or calls Namespace. Successful standardized creates expose
+frozen `instance.sizing` request metadata.
+
+Unit boundary: the [official Namespace TypeScript SDK compute example](https://namespace.so/docs/reference/typescript-sdk/compute/index.md)
+explicitly describes 4 GiB using `memoryMegabytes: 4 * 1024`. Accordingly the
+resolver sends canonical MiB numbers unchanged to the corresponding native
+`memory_megabytes` field (2048/4096/8192/16384); no decimal-MB conversion is
+performed. This is documented request-unit evidence, not a measurement of
+delivered bytes or an inference solely from machine-shape “GB” labels. Factory
+CPU/RAM values are defaults overridden by `sizeClass`; explicit per-create
+CPU/RAM selectors, including ambiguous aliases, are rejected instead.
+
+Standard platform context must use enumerable own data properties; present
+`os`/`machine_arch` selectors must be strings, not null/undefined. The resolved
+patch explicitly carries the verified Linux/amd64 platform into the native
+request, so a factory default cannot diverge from the declared mapping. Legacy
+creates without `sizeClass` retain their original descriptor behavior.

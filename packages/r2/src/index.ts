@@ -43,16 +43,15 @@ export interface R2 extends StorageProvider {
 }
 
 interface ListedObject {
-  key?: string;
+  name?: string;
   size?: number;
-  etag?: string;
   lastModified?: string | Date;
 }
 
 interface ListData {
-  objects?: ListedObject[];
-  truncated?: boolean;
-  nextContinuationToken?: string;
+  items?: ListedObject[];
+  hasMore?: boolean;
+  paginationToken?: string;
 }
 
 interface HeadData {
@@ -221,7 +220,7 @@ export function r2(config: R2Config): R2 {
         const result = await tigrisList(withConfig(bucket, {
           prefix: options?.prefix,
           limit: options?.maxKeys,
-          cursor: options?.continuationToken,
+          paginationToken: options?.continuationToken,
         }));
         if (result.error) {
           throw new Error(result.error.message);
@@ -229,15 +228,14 @@ export function r2(config: R2Config): R2 {
         const responseData = (result.data ?? {}) as ListData;
 
         return {
-          objects: (responseData.objects || []).map((obj) => ({
+          objects: (responseData.items || []).map((obj) => ({
             bucket,
-            key: obj.key || '',
+            key: obj.name || '',
             size: obj.size || 0,
-            etag: obj.etag,
             lastModified: obj.lastModified ? new Date(obj.lastModified) : undefined,
           })),
-          truncated: responseData?.truncated || false,
-          continuationToken: responseData?.nextContinuationToken,
+          truncated: responseData.hasMore || false,
+          continuationToken: responseData.paginationToken,
         };
       } catch (error) {
         throw new Error(

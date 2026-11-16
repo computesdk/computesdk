@@ -27,11 +27,15 @@ export type {
   CommandResult,
   InstanceInfo,
   Snapshot,
+  SnapshotCapabilities,
+  PauseCapabilities,
+  LifetimeCapabilities,
   FileEntry,
   RunCommandOptions,
   StartProcessOptions,
   ProcessStatus,
   ProcessHandle,
+  ProcessTier,
   InstanceFileSystem,
   CreateInstanceOptions,
   Volume,
@@ -92,3 +96,5 @@ export type {
 // `compute.setConfig({...}); compute.sandbox.create()`.
 export { compute } from './compute';
 export type { CallableCompute, ExplicitComputeConfig, ComputeCreateVolumeOptions } from './compute';
+
+export * from './sizes';

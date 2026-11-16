@@ -58,6 +58,9 @@ jobs:
           # long-lived NPM_TOKEN. --provenance signs the attestation.
           # TODO: once every package has a trusted publisher configured, remove
           # NPM_TOKEN entirely.
+          # Regenerates packages/cli/cli-manifest.json after the version bump
+          # so the release PR passes the CLI's manifest test.
+          version: pnpm run version-packages
           publish: pnpm changeset publish --provenance
           title: "Version Packages"
           commit: "Version Packages"

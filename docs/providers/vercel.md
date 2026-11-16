@@ -31,6 +31,12 @@ tags:
 
 Vercel provider for ComputeSDK - Execute code in globally distributed serverless environments.
 
+## Lifecycle
+
+Create with `{ persistent: true }` to use `pause()`/`resume()`. Pause stops the session; resume restores the filesystem into a fresh session, **not** its memory or processes (`provider.instances.pause.memory: false`).
+
+Snapshots capture the rootfs without memory. `snapshot.capabilities` has `destroysSource: true` and `source: 'stopped'`: the source still exists and needs explicit destruction. `destroy()` deletes the sandbox and its automatic snapshots rather than merely stopping it.
+
 ## Installation & Setup
 
 ```bash
@@ -81,10 +87,14 @@ interface VercelConfig {
   timeout?: number;
   /** Ports to expose on the sandbox */
   ports?: number[];
-  /** Port for the daemon SSE channel (defaults to 38989); set false to disable */
+  /** Optional-daemond SSE port (defaults to 38989); false disables port exposure, not runtime selection */
   daemonSsePort?: number | false;
 }
 ```
+
+Streaming/processes use native hooks where implemented, otherwise the shell tier.
+Opt into the daemon fallback with provider config `processRuntime: 'daemond'`;
+`daemonSsePort` alone does not enable it.
 
 ### Authentication
 

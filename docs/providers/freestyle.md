@@ -26,6 +26,12 @@ layout:
 
 [Freestyle](https://www.freestyle.sh) provider for ComputeSDK: full Linux virtual machines designed for long-running, complex agent tasks, with instant startup, persistence, and cheap snapshotting.
 
+## Sizes and lifecycle
+
+`sizeClass` supports `lg` and `xl` by grow-only resizing the default 4-vCPU/8192-MiB runtime snapshot. Smaller tiers are `unavailable`, `2xl` is `unknown`, and explicit sandbox/snapshot/template selection is `unsupported` with standard sizing. See [Sandbox sizes](../reference/sizes.md).
+
+`pause()`/`resume()` preserve memory and processes. Snapshots declare rootfs and memory preservation with the source kept; restore with `snapshotId`.
+
 ## Installation & Setup
 
 ```bash

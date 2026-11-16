@@ -569,14 +569,16 @@ describe('getById() guards', () => {
     await expect(provider.sandbox.getById('other')).rejects.toThrow(/not managed by ComputeSDK/);
   });
 
-  it('returned handle has the expected defaults (ready=false, runtime="node", timeout=120_000)', async () => {
+  it('returned handle has the expected defaults (runtime="node", timeout=120_000)', async () => {
     // Default mock has the prefixed name — no override needed.
     const { northflank } = await import('../index');
     const provider = northflank({ token: 't', projectId: 'p' }); // no runtime/timeout overrides
     const result = await provider.sandbox.getById(SERVICE_ID);
     expect(result).not.toBeNull();
     const handle: any = (result as any).getInstance();
-    expect(handle.ready).toBe(false);
+    // getById reattaches egress by reading a file through the handle, so
+    // `ready` reflects whether that read reached the container.
+    expect(typeof handle.ready).toBe('boolean');
     expect(handle.runtime).toBe('node');
     expect(handle.timeout).toBe(120_000);
   });

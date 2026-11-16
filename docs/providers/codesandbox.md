@@ -31,6 +31,10 @@ tags:
 
 CodeSandbox provider for ComputeSDK - Execute code in CodeSandbox development environments.
 
+## Lifecycle
+
+`pause()`/`resume()` preserve memory and processes. Snapshot capabilities declare `scope: 'rootfs'`, `memory: true`, `source: 'kept'`, `fork: true`, and `readiness: 'immediate'`. A snapshot can restore into multiple independent instances using `snapshotId`; capture keeps the source running. See [snapshot cleanup](../reference/compute.md#restore-and-fork).
+
 ## Installation & Setup
 
 ```bash

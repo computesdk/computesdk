@@ -1,5 +1,60 @@
 # @computesdk/gravixlayer
 
+## 1.0.19
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 1.0.18
+
+### Patch Changes
+
+- dfda0fc: Add bucket-mount volume support: `compute.volume` (managed buckets via `storage.buckets`), `volumes` create-option mounts, and `attachVolume`/`detachVolume`. Bumps `gravixlayer` to ^0.1.51 for the mounts/storage APIs.
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 1.0.17
+
+### Patch Changes
+
+- 1904e82: Snapshots now default to `hot` (filesystem and memory), so `/tmp` contents are restored. Pass `metadata: { kind: 'cold' }` for a filesystem-only snapshot.
+- 1904e82: Native pause/resume (`instance.pause()`/`resume()`, keeping memory and running processes), declared `snapshot.capabilities` (hot rootfs snapshots that keep processes and leave the source running), and a generated snapshot name when none is given.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.0.16
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.0.15
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.0.14
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.0.13
 
 ### Patch Changes

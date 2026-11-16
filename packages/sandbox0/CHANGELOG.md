@@ -1,5 +1,82 @@
 # @computesdk/sandbox0
 
+## 1.0.25
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 1.0.24
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 1.0.23
+
+### Patch Changes
+
+- c9718e9: Map the unified `timeout` create option onto the claim's `ttl`/`hardTtl` (seconds), so a requested lifetime is honored instead of ending at the platform default TTL. Native `ttl`/`hardTtl` still take precedence.
+
+## 1.0.22
+
+### Patch Changes
+
+- 1904e82: Read `runCommand` output capture files over the file API in one parallel round trip instead of six follow-up commands, falling back to byte-verified command reads on a short or failed read.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.0.21
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.0.20
+
+### Patch Changes
+
+- d4424cd: runCommand: capture output via guest files instead of streamed exec output. Provider exec transports can drop a contiguous chunk mid-stream (observed across all five providers during a CPU-bound quiet stretch) while still reporting success, silently corrupting captured stdout/stderr. Commands now redirect output to files inside the sandbox and the adapter reads them back with short-lived commands, verified against byte counts the command writes alongside. Microsandbox additionally records byte counts and re-reads through the alternate transport on a mismatch.
+
+## 1.0.19
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.0.18
+
+### Patch Changes
+
+- 7668bf8: tensorlake: default `runCommand`/`streamCommand` cwd to the writable workdir already probed for filesystem paths — the sandbox default cwd is `/`, which isn't writable, so relative-path commands (e.g. `mkdir bench-rootfs`) failed with EACCES.
+
+  sandbox0: retry `sandbox.cmd` context creation on the transient "runtime access is not ready for this generation" response (and retryable 429/5xx), bounded by the command deadline — a claimed sandbox can race its runtime coming up.
+
+## 1.0.17
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.0.16
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 import { CommandExitError, FileType, NotFoundError, Novita, TimeoutError, Volume as NovitaVolume } from 'novita-sandbox';
 import type { BuildOptions, SandboxOpts, SnapshotInfo, TemplateClass, TemplateInfo } from 'novita-sandbox';
-import { defineProvider, resolveVolumeRef, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
 import type {
   CommandResult, CreateTemplateOptions, Provider, ProviderTemplateManager,
   RunCommandOptions, InstanceInfo,
@@ -105,6 +105,9 @@ async function runCommand(
   }
 }
 
+// Resuming re-arms the sandbox lifetime, so remember the one it was created with.
+const sandboxTimeouts = new WeakMap<NovitaSandbox, number>();
+
 function snapshotInfo(snapshot: SnapshotInfo): NovitaSnapshot {
   return { ...snapshot, id: snapshot.snapshotId, provider: 'novita' };
 }
@@ -127,8 +130,8 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
           network: options?.network,
           lifecycle: options?.lifecycle,
           // Unified mounts → novita's {path: volumeName} wire shape.
-          ...(Array.isArray(options?.volumes) && options.volumes.length > 0 && {
-            volumeMounts: Object.fromEntries(options.volumes.map((m: any) => {
+          ...(isUnifiedVolumeMounts(options?.volumes) && {
+            volumeMounts: Object.fromEntries(options.volumes!.map((m: any) => {
               const ref = resolveVolumeRef(m.volume);
               // Wire wants the volume NAME — a Volume handle's `native` is the
               // NovitaVolume object, not a mountable string.
@@ -138,6 +141,7 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
         };
         const sandbox = await sdk.sandbox.create(options?.templateId || options?.snapshotId || 'base', createOptions);
         if (!sandbox.sandboxId) throw new Error('Novita create() returned a sandbox without an ID.');
+        sandboxTimeouts.set(sandbox, createOptions.timeoutMs!);
         return { instance: sandbox, instanceId: sandbox.sandboxId };
       },
       getById: async (config, sandboxId) => {
@@ -198,6 +202,11 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
       },
       getInstance: sandbox => sandbox,
 
+      pause: async (sandbox) => { await sandbox.pause(); },
+      // Connecting resumes a paused sandbox and refreshes its traffic token.
+      resume: (sandbox) => sandbox.connect({ timeoutMs: sandboxTimeouts.get(sandbox) }),
+      pauseCapabilities: { memory: true },
+
       attachVolume: async (sandbox, volume, mountPath) => {
         const ref = resolveVolumeRef(volume);
         await sandbox.mountVolume(ref.name ?? ref.id!, mountPath);
@@ -251,9 +260,10 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
     },
     snapshot: {
       create: async (config, sandboxId, options) => {
-        if (options?.name !== undefined || options?.metadata !== undefined) {
-          throw new Error('Novita snapshots do not support name or metadata.');
-        }
+        // The API takes no label: name/metadata are caller-side tags, so they
+        // are accepted and dropped rather than rejected (a caller that always
+        // names its snapshots — e.g. the fidelity bench — must not fail).
+        void options;
         return snapshotInfo(await client(config).sandbox.createSnapshot(sandboxId));
       },
       list: async (config, options) => {
@@ -265,6 +275,7 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
         return (await collectPages(paginator, options?.limit)).map(snapshotInfo);
       },
       delete: async (config, snapshotId) => { await client(config).sandbox.deleteSnapshot(snapshotId); },
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
     },
 
     volume: {

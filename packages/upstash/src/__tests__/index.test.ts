@@ -5,6 +5,8 @@ runProviderTestSuite({
   name: 'upstash',
   provider: upstash({}),
   supportsFilesystem: true,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   skipIntegration: !process.env.UPSTASH_BOX_API_KEY,
   ports: [3000, 8080]
 });

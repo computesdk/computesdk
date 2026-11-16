@@ -28,6 +28,12 @@ layout:
 sandboxes for running agent and developer workloads. They can live forever and bill only for active 
 CPU, memory, and disk usage.
 
+## Lifecycle
+
+`pause()`/`resume()` preserve memory and processes. `snapshot.create()` uses a checkpoint, preserves rootfs (including `/tmp`) and memory, and leaves the source running. `instances.create({ snapshotId })` starts a new Sailbox from that checkpoint.
+
+Create-time `timeout` is rejected: Sail does not expose a hard sandbox lifetime through this adapter. Bound commands with `runCommand(..., { timeout })` and destroy the sandbox when finished. A checkpoint restore retains the source's resources, so do not combine `snapshotId` with `size` or `memoryGib`.
+
 ## Installation & Setup
 
 ```bash
@@ -91,10 +97,10 @@ ignored.
 | `getUrl` | Yes | Supports public HTTP/HTTPS and TCP listeners. |
 | `filesystem` | Yes | Native read, write, mkdir, list, exists, and remove. |
 | Templates | No | Configure a Sail `Image` on the provider. |
-| Snapshots | No | Use the native Sail SDK for checkpoints. |
+| Snapshots | Yes | Unified create/list/delete use Sail checkpoints; restore with `snapshotId`. |
 
 `getUrl` preserves existing listener policy and rejects protocol conflicts
 instead of replacing a listener's allowlist.
 
-Use `sandbox.getInstance()` for Sail-specific checkpoint, sleep, resume, SSH,
+Use `sandbox.getInstance()` for Sail-specific SSH,
 listener allowlist, and credential-injection APIs.

@@ -22,7 +22,7 @@ describe('r2 config forwarding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     putMock.mockResolvedValue({ data: {}, error: null });
-    getMock.mockResolvedValue({ data: new ReadableStream(), error: null });
+    getMock.mockResolvedValue({ data: new ReadableStream({ start: (c) => c.close() }), error: null });
     listMock.mockResolvedValue({ data: { objects: [] }, error: null });
     removeMock.mockResolvedValue({ data: {}, error: null });
     headMock.mockResolvedValue({ data: {}, error: null });
@@ -73,5 +73,34 @@ describe('r2 config forwarding', () => {
         config: expect.objectContaining({ bucket: 'bucket-d' }),
       })
     );
+  });
+
+  it('maps the storage SDK list response and forwards the continuation token', async () => {
+    const lastModified = new Date('2026-01-01T00:00:00Z');
+    listMock.mockResolvedValue({
+      data: {
+        items: [{ id: 'p/a.txt', name: 'p/a.txt', size: 3, lastModified }],
+        commonPrefixes: [],
+        paginationToken: 'next-token',
+        hasMore: true,
+      },
+      error: null,
+    });
+    const provider = r2({
+      accessKeyId: 'r2-akid',
+      secretAccessKey: 'r2-secret',
+      endpoint: 'https://account.r2.cloudflarestorage.com',
+    });
+
+    const result = await provider.list('bucket-e', { prefix: 'p/', maxKeys: 1, continuationToken: 'prev-token' });
+
+    expect(listMock).toHaveBeenCalledWith(
+      expect.objectContaining({ prefix: 'p/', limit: 1, paginationToken: 'prev-token' })
+    );
+    expect(result).toEqual({
+      objects: [{ bucket: 'bucket-e', key: 'p/a.txt', size: 3, lastModified }],
+      truncated: true,
+      continuationToken: 'next-token',
+    });
   });
 });

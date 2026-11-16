@@ -146,7 +146,7 @@ function makeSandbox(state: FakeState, withFilesystem = true) {
   daemonSeedScriptCommand.mockImplementation((_config: unknown, payload: unknown) =>
     typeof payload === 'string' ? payload : JSON.stringify(payload)
   )
-  const provider = defineProvider({ name: 'mock', methods: { sandbox: methods } })({ apiKey: 'k' })
+  const provider = defineProvider({ name: 'mock', methods: { sandbox: methods } })({ apiKey: 'k', processRuntime: 'daemond' })
   return { methods, provider, withFilesystem }
 }
 

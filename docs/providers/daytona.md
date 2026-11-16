@@ -31,6 +31,10 @@ tags:
 
 Daytona provider for ComputeSDK - Execute code in Daytona development workspaces.
 
+## Lifecycle
+
+`pause()`/`resume()` perform a stop/start and do not preserve running processes or memory. Snapshots capture the rootfs without memory and keep the source. Restore with `snapshotId`; disk preservation is not process suspension.
+
 ## Installation & Setup
 
 ```bash

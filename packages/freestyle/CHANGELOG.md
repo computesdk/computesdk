@@ -1,5 +1,66 @@
 # @computesdk/freestyle
 
+## 0.2.22
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 0.2.21
+
+### Patch Changes
+
+- fc09449: Reject CPU or memory requests below the boot snapshot's resources instead of silently returning a larger VM, and honor environment-selected snapshots when checking standard size availability.
+
+## 0.2.20
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 0.2.19
+
+### Patch Changes
+
+- 1904e82: Snapshot-resolution unit tests no longer pick up `FREESTYLE_SNAPSHOT_ID`/`FREESTYLE_API_URL` from the environment, and the live conformance suite now covers streaming output and interactive processes.
+- 1904e82: Expose Freestyle's native pause/resume as `instance.pause()`/`resume()` (memory kept) and declare snapshot capabilities (whole rootfs plus memory, source keeps running).
+- 1904e82: Default sandboxes can now be paused and resumed (kept 5 minutes after stop instead of deleted on stop; `ephemeral: true` keeps the old behaviour), honour `sizeClass` `lg`/`xl` and `cpu`/`memory` by growing the VM with `resize`, and run commands longer than five minutes on a re-baked runtime snapshot with the current guest agent.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.2.18
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.2.17
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.2.16
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 0.2.15
 
 ### Patch Changes

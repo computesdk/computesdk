@@ -273,6 +273,7 @@ await compute.instances.create();
 
 * When a caller specifies `{ provider: 'modal' }` explicitly, `fallbackOnError` is ignored for that call — the target provider is the only one tried.
 * Failover only applies to `create`. Operations on an existing sandbox (`destroy`, snapshot work) use provider affinity instead — see below.
+* A defined `sizeClass` disables failover, even for native authentication/capacity errors. It pins the normally selected provider rather than searching for a provider that supports the tier. See [Sandbox sizes](./sizes.md).
 
 <br>
 
@@ -338,6 +339,11 @@ All of these accept a `provider` override where applicable. See [Instance](./Ins
 
 Available when at least one configured provider supports snapshots.
 
+Core `compute.snapshot` routes `create`/`list`/`delete`. Capability discovery and
+`waitUntilReady` belong to the **direct provider's** snapshot manager; they are
+not aggregated by core `compute`. The same applies to `provider.sizes`,
+`provider.instances.pause`, and `provider.instances.lifetime`.
+
 | Method                        | Purpose                                              |
 | ----------------------------- | ---------------------------------------------------- |
 | `create(instanceId, options?)` | Capture a snapshot of a running sandbox              |
@@ -360,6 +366,64 @@ await compute.snapshot.delete(snap.id);
 * `create` routes to the sandbox's owning provider first; otherwise tries any snapshot-capable provider.
 * `delete` tracks the owning provider of each snapshot so deletes land on the right platform.
 * If no configured provider supports snapshots, calls throw a descriptive error.
+
+### Snapshot capabilities
+
+Read `provider.snapshot?.capabilities` on the provider you intend to use:
+
+| Field | Meaning |
+| --- | --- |
+| `scope` | `rootfs` captures the root filesystem; `volume` captures only the volume at `path`. |
+| `path` | Preserved directory; required for `volume` scope. Write state inside this path. |
+| `memory` | Whether running processes and memory survive restore. Disk-only snapshots restart processes rather than continuing them. |
+| `destroysSource` | Historical boolean: `true` means capture stops **or** destroys the source. It does not necessarily mean deletion. |
+| `source` | `kept` (running), `stopped` (still exists and needs destroying), or `destroyed`. If omitted, defaults to `destroyed` when `destroysSource` is true, otherwise `kept`. |
+| `excludes` | Paths within the scope not preserved on restore, such as `/tmp` or mounts. |
+| `fork` | Whether one snapshot of a live source can restore into multiple instances. An absent flag is not a positive fork guarantee. |
+| `readiness` | `immediate` by default; for `eventual`, call the direct manager's optional `waitUntilReady(id, { timeoutMs })` before restoring. |
+| `createOptions` | Requirements to apply when **creating the source**, not options for `snapshot.create`. The framework does not merge them automatically. |
+
+Snapshot method availability alone does not prove memory preservation, live
+forking, or support on every backend. For example, Namespace captures only its
+snapshot volume and destroys the source; Vercel leaves the source stopped;
+Cloud Run keeps the source but excludes `/tmp` and does not preserve memory.
+
+### Restore and fork
+
+This direct-provider example uses Cloud Run's declared disk-only fork support
+(a configured remote gateway with snapshot support is required):
+
+```typescript
+import { cloudRun } from '@computesdk/gcp/cloud-run';
+
+const provider = cloudRun({});
+const snapshots = provider.snapshot!;
+const caps = snapshots.capabilities!;
+const source = await provider.instances.create({ ...caps.createOptions });
+await source.filesystem.writeFile('/root/state.txt', 'ready');
+const snapshot = await snapshots.create(source.instanceId);
+if (caps.readiness === 'eventual') {
+  if (!snapshots.waitUntilReady) throw new Error('No snapshot readiness waiter');
+  await snapshots.waitUntilReady(snapshot.id);
+}
+const restored = await provider.instances.create({ snapshotId: snapshot.id });
+// Only fork-capable providers promise independent repeated restores.
+if (caps.fork) {
+  const fork = await provider.instances.create({ snapshotId: snapshot.id });
+  await fork.destroy();
+}
+await restored.destroy();
+await snapshots.delete(snapshot.id);
+const sourceState = caps.source ?? (caps.destroysSource ? 'destroyed' : 'kept');
+if (sourceState !== 'destroyed') await source.destroy();
+```
+
+In multi-provider mode, pass `{ provider: '<name>', snapshotId }` to
+`compute.instances.create`; snapshot affinity does not choose the provider for a
+new create. Snapshot names/metadata are provider-dependent and may be ignored.
+Use `try`/`finally` in applications: destroy restored children first, delete the
+snapshot next, and destroy any kept or stopped source last. This order also
+respects providers with parent/child deletion dependencies.
 
 <br>
 

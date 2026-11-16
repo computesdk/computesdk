@@ -92,6 +92,12 @@ Numeric memory values are interpreted as MiB. `ttl` and `hardTtl` use seconds; `
 
 Per-create `templateId`, `snapshotId`, `memory`, `envs`, `ttl`, `hardTtl`, and `autoResume` options override provider defaults where applicable.
 
+Unified create `timeout` is a sandbox lifetime in milliseconds: positive finite
+values are rounded up to seconds and applied to both claim `ttl` and `hardTtl`.
+Explicit native per-create `ttl`/`hardTtl` take precedence over `timeout`, which
+otherwise takes precedence over the configured defaults. Command timeouts remain
+separate and use milliseconds.
+
 ## Supported Operations
 
 | Method | Supported | Notes |

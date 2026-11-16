@@ -62,6 +62,7 @@ class FakeSession {
   }
 
   async writeFile(path: string, data: Uint8Array | string) {
+    if (path.startsWith('/tmp/')) throw new Error(`[permission_denied] guest_error: path outside workdir: ${path} (workdir: /home/tenki)`);
     this.files.set(path, typeof data === 'string' ? enc.encode(data) : data);
   }
   async readFile(path: string): Promise<Uint8Array> {
@@ -95,6 +96,18 @@ class FakeSession {
   async close() {
     this.closed = true;
   }
+  async pause() {
+    this.state = 'PAUSING';
+  }
+  async waitPaused() {
+    this.state = 'PAUSED';
+  }
+  async resume() {
+    this.state = 'RESUMING';
+  }
+  async waitResumed() {
+    this.state = 'RUNNING';
+  }
 }
 
 let shouldNotFind = false;
@@ -117,7 +130,23 @@ class FakeTenkiSandbox {
   async list() {
     return [sharedSession];
   }
+  async createSnapshotAndWait(sessionId: string, opts: any) {
+    lastSnapshotCall = { sessionId, opts };
+    return { id: 'snap_1', sessionId, state: 'READY', createdAt: new Date(0) };
+  }
+  async listSessionSnapshots(sessionId: string) {
+    return [{ id: `snap_of_${sessionId}`, createdAt: new Date(0) }];
+  }
+  async listSnapshots() {
+    return [{ id: 'snap_a', createdAt: new Date(0) }, { id: 'snap_b', createdAt: new Date(0) }];
+  }
+  async deleteSnapshot(snapshotId: string) {
+    lastSnapshotCall = { deleted: snapshotId };
+    return { id: snapshotId };
+  }
 }
+
+let lastSnapshotCall: any = null;
 
 vi.mock('@tenkicloud/sandbox', () => ({
   TenkiSandbox: FakeTenkiSandbox,
@@ -146,6 +175,52 @@ describe('tenki provider (mocked SDK)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it('snapshot.create waits for READY and returns the snapshot id', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    const snap: any = await provider.snapshot!.create('sbx_123', { name: 'pre' });
+    expect(snap.id).toBe('snap_1');
+    expect(lastSnapshotCall).toEqual({ sessionId: 'sbx_123', opts: { name: 'pre' } });
+  });
+
+  it('snapshot.list scopes by instance, and delete forwards the id', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    expect((await provider.snapshot!.list({ instanceId: 'sbx_9' })).map((s: any) => s.id)).toEqual(['snap_of_sbx_9']);
+    expect((await provider.snapshot!.list({ limit: 1 })).map((s: any) => s.id)).toEqual(['snap_a']);
+    await provider.snapshot!.delete('snap_1');
+    expect(lastSnapshotCall).toEqual({ deleted: 'snap_1' });
+  });
+
+  it('pauses and resumes through the native session, waiting for each state', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    expect(provider.snapshot!.capabilities).toMatchObject({ scope: 'rootfs', memory: true, destroysSource: false });
+    const sandbox = await provider.sandbox.create();
+    await sandbox.pause!();
+    expect(sharedSession.state).toBe('PAUSED');
+    await sandbox.resume!();
+    expect(sharedSession.state).toBe('RUNNING');
+  });
+
+  it('restores from a snapshot via create({ snapshotId })', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    await provider.sandbox.create({ snapshotId: 'snap_1' });
+    expect(lastCreateOptions).toMatchObject({ snapshotId: 'snap_1' });
+  });
+
+  it('writeFile outside the workdir falls back to the shell', async () => {
+    const provider = tenki({ apiKey: 'tk_test' });
+    const sandbox = await provider.sandbox.create();
+    const lines: string[] = [];
+    const exec = vi.spyOn(sharedSession, 'exec').mockImplementation(async (_cmd: any, options: any) => {
+      lines.push(options.args[1]);
+      return { stdout: new Uint8Array(), stderr: new Uint8Array(), exitCode: 0, durationMs: 1 } as any;
+    });
+    await sandbox.filesystem.writeFile('/tmp/a b.txt', 'hi');
+    expect(exec).toHaveBeenCalledTimes(2);
+    expect(lines[0]).toBe(`mkdir -p "$(dirname '/tmp/a b.txt')" && : > '/tmp/a b.txt'`);
+    expect(lines[1]).toBe(`printf '%s' '${Buffer.from('hi').toString('base64')}' | base64 -d >> '/tmp/a b.txt'`);
   });
 
   it('has the right name', () => {

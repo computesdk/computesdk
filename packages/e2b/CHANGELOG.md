@@ -1,5 +1,70 @@
 # @computesdk/e2b
 
+## 1.7.73
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 1.7.72
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 1.7.71
+
+### Patch Changes
+
+- c9718e9: Standard `sizeClass` sm/md/lg/xl boots per-size team templates (`csdk-node22-<cpu>cpu-<gb>gb`, built by `provider-setup.yml`); `template.create` builds with cpuCount/memoryMB, and `template.list`/`delete` use the E2B templates API.
+
+## 1.7.70
+
+### Patch Changes
+
+- 1904e82: Native `instance.pause()`/`resume()` (memory and processes survive) and declared `snapshot.capabilities` (`rootfs` scope with memory; the source keeps running). The conformance suite now exercises pause/resume and snapshot restore.
+- 1904e82: Serve streaming `runCommand` and `startProcess` natively over E2B's process API (live output, stdin, signals) instead of the shell process tier. Commands run in their own process group so timeouts and kills stop the whole tree; `runCommand` no longer stops at E2B's 60s default, reports timeouts as exit 124, and passes `env`/`cwd` natively (fixing `background` with `env`/`cwd`).
+- 1904e82: e2b: list and delete snapshots through the SDK's snapshot API (delete was a silent no-op), report real sandbox info from `getInfo`, and upload files as a raw octet-stream body.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.7.69
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.7.68
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.7.67
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.7.66
 
 ### Patch Changes

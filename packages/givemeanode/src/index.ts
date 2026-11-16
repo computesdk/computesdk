@@ -245,7 +245,12 @@ const provider = defineProvider<
         ops.deleteSnapshot(getClient(config), templateId),
     },
 
+    // `snapshot_sandbox` captures a running sandbox without stopping it,
+    // and a fork resumes that exact state: the whole disk (`/tmp` is on
+    // it), memory, and running processes. There is no pause call to map:
+    // an idle sandbox parks itself and wakes on the next command.
     snapshot: {
+      capabilities: { scope: 'rootfs', memory: true, destroysSource: false },
       create: (config: ConfigWithClient, sandboxId: string) => ops.createSnapshot(getClient(config), sandboxId),
       list: (config: ConfigWithClient, options?: { sandboxId?: string; limit?: number }) =>
         ops.listSnapshots(getClient(config), options),

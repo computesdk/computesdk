@@ -28,9 +28,15 @@ import type {
   ProcessHandle,
   InstanceEgressInfo,
   Volume,
+  SnapshotCapabilities,
+  PauseCapabilities,
+  LifetimeCapabilities,
   CreateVolumeOptions,
   ListVolumesOptions,
+  ProcessRuntimeOptions,
+  ProcessTier,
 } from './types/index.js';
+import { ShellProcessRuntime } from './shell-process.js';
 import {
   daemonSeedScriptCommand,
   parseSeedInvocationOutput,
@@ -41,6 +47,9 @@ import {
 } from 'daemond';
 import { readInstanceEgress, setupInstanceEgress } from './egress.js';
 import { withVolumeSettle } from './utils.js';
+import { ShellFileSystem } from './shell-filesystem';
+import { InstanceSizeError, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeMetadata } from 'computesdk';
+import { applyInstanceSizePatch, createInstanceSizeManager, type InstanceSizeResolver } from './sizes.js';
 
 type DaemonStreamState = {
   token: string;
@@ -308,6 +317,15 @@ export interface InstanceMethods<TInstance = any, TConfig = any> {
    * a provider that can only deliver output at exit should leave this unset.
    */
   streamCommand?: (instance: TInstance, command: string, options: RunCommandOptions) => Promise<CommandResult>;
+
+  /**
+   * Optional native background-process implementation, used for
+   * `instance.startProcess` instead of the shell process tier. Same contract
+   * as the framework's handle: stdin writes (when `options.stdin`), status
+   * snapshots with all output so far, callbacks, wait and kill. Leave unset
+   * unless the provider's API runs detached processes with live output.
+   */
+  startProcess?: (instance: TInstance, command: string, options: StartProcessOptions) => Promise<ProcessHandle>;
   getInfo: (instance: TInstance) => Promise<InstanceInfo>;
   getUrl: (instance: TInstance, options: { port: number; protocol?: string }) => Promise<string>;
 
@@ -320,6 +338,20 @@ export interface InstanceMethods<TInstance = any, TConfig = any> {
    */
   attachVolume?: (instance: TInstance, volume: string | Volume, mountPath: string) => Promise<void>;
   detachVolume?: (instance: TInstance, volume: string | Volume, mountPath?: string) => Promise<void>;
+
+  /**
+   * Optional native pause/resume, exposed as `instance.pause()`/`resume()`.
+   * Implement both or neither. `resume` may return a fresh native handle,
+   * which replaces the old one. Declare what survives in `pauseCapabilities`.
+   */
+  pause?: (instance: TInstance) => Promise<void>;
+  resume?: (instance: TInstance) => Promise<TInstance | void>;
+  pauseCapabilities?: PauseCapabilities;
+
+  /** How long instances may live. `extendable` is derived from `extendLifetime`. */
+  lifetime?: Omit<LifetimeCapabilities, 'extendable'>;
+  /** Optional native lifetime extension, exposed as `instance.extendLifetime(ms)`. */
+  extendLifetime?: (instance: TInstance, ms: number) => Promise<void>;
 
   // Optional provider-specific typed getInstance method
   getInstance?: (instance: TInstance) => TInstance;
@@ -354,6 +386,10 @@ export interface SnapshotMethods<TSnapshot = any, TConfig = any> {
   create: (config: TConfig, instanceId: string, options?: CreateSnapshotOptions) => Promise<TSnapshot>;
   list: (config: TConfig, options?: ListSnapshotsOptions) => Promise<TSnapshot[]>;
   delete: (config: TConfig, snapshotId: string) => Promise<void>;
+  /** What snapshots keep and what the source needs; see {@link SnapshotCapabilities}. */
+  capabilities?: SnapshotCapabilities;
+  /** For `readiness: 'eventual'` providers: resolve once the snapshot can be restored. */
+  waitUntilReady?: (config: TConfig, snapshotId: string, options?: { timeoutMs?: number }) => Promise<void>;
 }
 
 /**
@@ -373,6 +409,8 @@ export interface VolumeMethods<TVolume extends Volume = Volume, TConfig = any> {
  */
 export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume> {
   name: string;
+  /** Pure local standard-size capability and native request resolution. */
+  sizes?: InstanceSizeResolver<TConfig>;
   methods: {
     /** Instance lifecycle methods (canonical key). */
     instances?: InstanceMethods<TInstance, TConfig>;
@@ -383,43 +421,6 @@ export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any,
     volume?: VolumeMethods<TVolume, TConfig>;
   };
 }
-
-/**
- * Auto-generated filesystem implementation that throws "not supported" errors
- */
-class UnsupportedFileSystem implements InstanceFileSystem {
-  private readonly providerName: string;
-
-  constructor(providerName: string) {
-    this.providerName = providerName;
-  }
-
-  async readFile(_path: string): Promise<string> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async writeFile(_path: string, _content: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async mkdir(_path: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async readdir(_path: string): Promise<FileEntry[]> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async exists(_path: string): Promise<boolean> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-
-  async remove(_path: string): Promise<void> {
-    throw new Error(`Filesystem operations are not supported by ${this.providerName}'s sandbox environment. ${this.providerName} sandboxes are designed for code execution only.`);
-  }
-}
-
-
 
 /**
  * Auto-generated filesystem implementation that wraps provider methods
@@ -471,11 +472,21 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   readonly filesystem: InstanceFileSystem;
   /** Set at create when `CreateInstanceOptions.egress` was passed. */
   egress?: InstanceEgressInfo;
+  sizing?: InstanceSizeMetadata;
   /** Present only when the provider implements runtime attach. */
   readonly attachVolume?: (volume: string | Volume, mountPath: string) => Promise<void>;
   /** Present only when the provider implements runtime detach. */
   readonly detachVolume?: (volume: string | Volume, mountPath?: string) => Promise<void>;
+  /** Present only when the provider implements native pause/resume. */
+  readonly pause?: () => Promise<void>;
+  readonly resume?: () => Promise<void>;
+  /** Present only when the provider implements lifetime extension. */
+  readonly extendLifetime?: (ms: number) => Promise<void>;
   private daemonStreamState?: DaemonStreamState;
+  /** Which runtime serves streaming `runCommand` and `startProcess`. */
+  readonly processRuntime: { streaming: ProcessTier; processes: ProcessTier };
+  /** The shell process tier, built on the provider's plain `runCommand`. */
+  private readonly shell: ShellProcessRuntime;
   constructor(
     private instance: TInstance,
     instanceId: string,
@@ -483,9 +494,16 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     private methods: InstanceMethods<TInstance>,
     private config: any,
     private destroyMethod: (config: any, instanceId: string) => Promise<void>,
-    private providerInstance: Provider
+    private providerInstance: Provider,
+    private runtimeMode: 'shell' | 'daemond' = 'shell'
   ) {
     this.instanceId = instanceId;
+    const fallback: ProcessTier = runtimeMode === 'daemond' ? 'daemond' : 'shell';
+    this.processRuntime = {
+      streaming: methods.streamCommand ? 'native' : fallback,
+      processes: methods.startProcess ? 'native' : fallback,
+    };
+    this.shell = new ShellProcessRuntime((command, options) => this.methods.runCommand(this.instance, command, options));
     this.sandboxId = instanceId;
     this.provider = providerName;
 
@@ -493,7 +511,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     if (methods.filesystem) {
       this.filesystem = new SupportedFileSystem(instance, methods.filesystem, methods);
     } else {
-      this.filesystem = new UnsupportedFileSystem(providerName);
+      this.filesystem = new ShellFileSystem((command, options) => this.methods.runCommand(this.instance, command, options));
     }
 
     // Runtime attach/detach are only exposed when the provider implements
@@ -511,6 +529,19 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     if (methods.detachVolume) {
       const detach = methods.detachVolume.bind(methods);
       this.detachVolume = (volume, mountPath) => detach(this.instance, volume, mountPath);
+    }
+    if (methods.pause && methods.resume) {
+      const pause = methods.pause.bind(methods);
+      const resume = methods.resume.bind(methods);
+      this.pause = () => pause(this.instance);
+      this.resume = async () => {
+        const next = await resume(this.instance);
+        if (next) this.instance = next;
+      };
+    }
+    if (methods.extendLifetime) {
+      const extend = methods.extendLifetime.bind(methods);
+      this.extendLifetime = (ms) => extend(this.instance, ms);
     }
   }
 
@@ -572,6 +603,10 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
       // routable port for it, so it is asked first.
       if (this.methods.streamCommand) {
         return await this.methods.streamCommand(this.instance, command, options);
+      }
+
+      if (this.runtimeMode !== 'daemond') {
+        return await this.shell.runCommand(command, options);
       }
 
       const forwardedOptions: RunCommandOptions = { ...options };
@@ -730,7 +765,33 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     return { invocation, result };
   }
 
+  /**
+   * Order of preference: the provider's native `startProcess`, then the shell
+   * process tier over plain `runCommand`, or daemond when the provider was
+   * configured with `processRuntime: 'daemond'`.
+   */
   async startProcess(
+    command: string,
+    options: StartProcessOptions = {}
+  ): Promise<ProcessHandle> {
+    if (this.methods.startProcess) {
+      const handle = await this.methods.startProcess(this.instance, command, options);
+      return handle.runtime ? handle : Object.assign(handle, { runtime: 'native' as const });
+    }
+    if (this.runtimeMode === 'daemond') return await this.startDaemondProcess(command, options);
+    return await this.shell.startProcess(command, options);
+  }
+
+  async attachProcess(jobId: string, options: StartProcessOptions = {}): Promise<ProcessHandle> {
+    return this.shell.attachProcess(jobId, options);
+  }
+
+  /**
+   * Starts a process on daemond regardless of the configured runtime. The
+   * egress router uses it: its shim is a Node program, and daemond's bootstrap
+   * is what puts Node on images that lack it.
+   */
+  async startDaemondProcess(
     command: string,
     options: StartProcessOptions = {}
   ): Promise<ProcessHandle> {
@@ -794,6 +855,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     return {
       pid,
       jobId,
+      runtime: 'daemond' as const,
       async write(data: string | Uint8Array): Promise<void> {
         const bytes = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
         await self.daemonJobRequest(
@@ -1051,12 +1113,22 @@ function abortPromise(signal?: AbortSignal): Promise<never> {
  * Auto-generated Instance Manager implementation
  */
 class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceManager<TInstance> {
+  readonly pause?: PauseCapabilities;
+  readonly lifetime?: LifetimeCapabilities;
   constructor(
     private config: TConfig,
     private providerName: string,
     private methods: InstanceMethods<TInstance, TConfig>,
-    private providerInstance: Provider
-  ) {}
+    private providerInstance: Provider & { readonly sizes: InstanceSizeManager },
+    private runtimeMode: 'shell' | 'daemond' = 'shell'
+  ) {
+    if (methods.pause && methods.resume) {
+      this.pause = methods.pauseCapabilities ?? { memory: false };
+    }
+    if (methods.lifetime || methods.extendLifetime) {
+      this.lifetime = { ...methods.lifetime, extendable: !!methods.extendLifetime };
+    }
+  }
 
   private wrap(result: InstanceLifecycleResult<TInstance>): GeneratedInstance<TInstance> {
     const { instance, instanceId } = normalizeInstanceResult(result);
@@ -1067,12 +1139,27 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
       this.methods,
       this.config,
       this.methods.destroy,
-      this.providerInstance
+      this.providerInstance,
+      this.runtimeMode
     );
   }
 
   async create(options?: CreateInstanceOptions): Promise<ProviderInstance<TInstance>> {
+    const standardRequest = hasInstanceSizeRequest(options);
+    if (standardRequest) validateInstanceSizeOptions(options!);
     throwIfAborted(options?.signal);
+    let sizing: InstanceSizeMetadata | undefined;
+    if (standardRequest && options) {
+      const resolution = this.providerInstance.sizes!.resolve(options.sizeClass!, options);
+      if (resolution.status !== 'supported') {
+        throw new InstanceSizeError(resolution.status, resolution.reason, resolution);
+      }
+      sizing = Object.freeze({ requested: resolution.requested, resolved: resolution.resolved, provenance: resolution.provenance });
+      const { sizeClass: _sizeClass, ...legacyOptions } = options;
+      options = applyInstanceSizePatch(legacyOptions, resolution.nativeOptions);
+      // sizeClass is SDK-only, even if a custom resolver accidentally includes it.
+      delete options.sizeClass;
+    }
 
     const signal = options?.signal;
     const runCreate = () => this.methods.create(this.config, options).then(normalizeInstanceResult);
@@ -1100,6 +1187,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     }
 
     const instance = this.wrap(result);
+    if (sizing) Object.defineProperty(instance, 'sizing', { value: sizing, enumerable: true, writable: false });
 
     if (options?.egress && typeof options.egress === 'object' && !Array.isArray(options.egress)) {
       throwIfAborted(signal);
@@ -1110,7 +1198,11 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
         if (!attached) await this.methods.destroy(this.config, result.instanceId).catch(() => {});
       };
       try {
-        instance.egress = await setupInstanceEgress(instance, options.egress, this.providerName);
+        instance.egress = await setupInstanceEgress(
+          { filesystem: instance.filesystem, startProcess: (command) => instance.startDaemondProcess(command) },
+          options.egress,
+          this.providerName
+        );
       } catch (error) {
         // A failed router setup must not orphan the instance it was set up on.
         await cleanup();
@@ -1133,7 +1225,11 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
 
     const instance = this.wrap(result);
     // Reattach a running router's info; nothing to read if none ever ran.
-    instance.egress = await readInstanceEgress(instance).catch(() => undefined);
+    // Only via a native file API: the shell fallback would turn every getById
+    // into command execs on the box.
+    if (this.methods.filesystem) {
+      instance.egress = await readInstanceEgress(instance).catch(() => undefined);
+    }
     return instance;
   }
 
@@ -1176,10 +1272,19 @@ class GeneratedTemplateManager<TTemplate, TConfig, TCreateOptions extends Create
  * Auto-generated Snapshot Manager implementation
  */
 class GeneratedSnapshotManager<TSnapshot, TConfig> implements ProviderSnapshotManager<TSnapshot> {
+  readonly capabilities?: SnapshotCapabilities;
   constructor(
     private config: TConfig,
     private methods: SnapshotMethods<TSnapshot, TConfig>
-  ) {}
+  ) {
+    this.capabilities = methods.capabilities;
+    if (methods.waitUntilReady) {
+      const wait = methods.waitUntilReady.bind(methods);
+      this.waitUntilReady = (snapshotId, options) => wait(this.config, snapshotId, options);
+    }
+  }
+
+  readonly waitUntilReady?: (snapshotId: string, options?: { timeoutMs?: number }) => Promise<void>;
 
   async create(instanceId: string, options?: CreateSnapshotOptions): Promise<TSnapshot> {
     return await this.methods.create(this.config, instanceId, options);
@@ -1232,6 +1337,7 @@ class GeneratedVolumeManager<TVolume extends Volume, TConfig> implements Provide
  */
 class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extends Volume = Volume> implements Provider<TInstance, TTemplate, TSnapshot, TVolume> {
   readonly name: string;
+  readonly sizes: InstanceSizeManager;
   readonly instances: ProviderInstanceManager<TInstance>;
   /** @deprecated Use `instances`. Always the same manager object. */
   readonly sandbox: ProviderInstanceManager<TInstance>;
@@ -1239,8 +1345,11 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
   readonly snapshot?: ProviderSnapshotManager<TSnapshot>;
   readonly volume?: ProviderVolumeManager<TVolume>;
 
-  constructor(config: TConfig, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>) {
+  constructor(rawConfig: TConfig & ProcessRuntimeOptions, providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>) {
+    const { config, processRuntime } = splitProcessRuntime(rawConfig);
     this.name = providerConfig.name;
+    this.sizes = createInstanceSizeManager(config, providerConfig.sizes);
+    Object.defineProperty(this, 'sizes', { writable: false, configurable: false });
 
     const instanceMethods = providerConfig.methods.instances ?? providerConfig.methods.sandbox;
     if (!instanceMethods) {
@@ -1254,7 +1363,8 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
       config,
       providerConfig.name,
       instanceMethods,
-      this
+      this,
+      processRuntime
     );
     this.sandbox = this.instances;
 
@@ -1274,6 +1384,21 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
 }
 
 /**
+ * Takes the framework's `processRuntime` option out of a provider config, so
+ * provider methods only ever see their own fields.
+ */
+function splitProcessRuntime<TConfig>(rawConfig: TConfig & ProcessRuntimeOptions): { config: TConfig; processRuntime: 'shell' | 'daemond' } {
+  if (!rawConfig || typeof rawConfig !== 'object' || !('processRuntime' in rawConfig)) {
+    return { config: rawConfig, processRuntime: 'shell' };
+  }
+  const { processRuntime, ...rest } = rawConfig as ProcessRuntimeOptions & Record<string, unknown>;
+  if (processRuntime !== undefined && processRuntime !== 'shell' && processRuntime !== 'daemond') {
+    throw new Error(`processRuntime must be "shell" or "daemond" (got ${JSON.stringify(processRuntime)})`);
+  }
+  return { config: rest as TConfig, processRuntime: processRuntime ?? 'shell' };
+}
+
+/**
  * Create a provider from method definitions
  *
  * Auto-generates all boilerplate classes and provides feature detection
@@ -1281,8 +1406,8 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
  */
 export function defineProvider<TInstance, TConfig = any, TTemplate = any, TSnapshot = any, TVolume extends Volume = Volume>(
   providerConfig: ProviderConfig<TInstance, TConfig, TTemplate, TSnapshot, TVolume>
-): (config: TConfig) => Provider<TInstance, TTemplate, TSnapshot, TVolume> {
-  return (config: TConfig) => {
+): (config: TConfig & ProcessRuntimeOptions) => Provider<TInstance, TTemplate, TSnapshot, TVolume> & { readonly sizes: InstanceSizeManager } {
+  return (config: TConfig & ProcessRuntimeOptions) => {
     return new GeneratedProvider(config, providerConfig);
   };
 }

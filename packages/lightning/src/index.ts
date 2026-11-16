@@ -201,6 +201,11 @@ function withStamped<T>(sandbox: LightningNativeSandbox, fn: () => Promise<T>): 
   return withSandbox(config, () => fn());
 }
 
+/** Lightning's edge answers API calls from unsupported regions with an HTML "not available in your region" page (HTTP 403). */
+function isRegionBlocked(message: string): boolean {
+  return message.includes('403') && message.toLowerCase().includes('not available in your region');
+}
+
 /** Map a Lightning sandbox status string onto the ComputeSDK status enum. */
 function mapStatus(status: string): InstanceInfo['status'] {
   const s = (status || '').toLowerCase();
@@ -274,6 +279,12 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
           return { instance: sandbox, instanceId: sandbox.sandboxId };
         } catch (error) {
           if (error instanceof Error) {
+            if (isRegionBlocked(error.message)) {
+              throw new Error(
+                'Failed to create Lightning sandbox: Lightning AI rejected the request with HTTP 403 ' +
+                  '"Lightning AI is not available in your region". The API is not reachable from this network/region.'
+              );
+            }
             if (error.message.includes('401') || error.message.toLowerCase().includes('unauthorized') || error.message.toLowerCase().includes('api key')) {
               throw new Error('Lightning AI authentication failed. Please check your LIGHTNING_API_KEY.');
             }

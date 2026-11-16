@@ -88,7 +88,7 @@ await compute.instances.create({ snapshotId: 'my-toolchain' });
 
 ## Notes
 
-- `background: true` starts a durable process rather than a backgrounded shell job, so a dev server outlives the request that started it. The returned `stdout` is the process id.
+- `background: true` launches the command detached through the shell process tier, so a dev server outlives the request that started it and the sandbox can still be paused. The returned `stdout` is the shell job id.
 - Filesystem calls inside `/workspace` use Mosaic's binary-safe files API; paths outside it fall back to the shell.
 - Images must be `linux/amd64` and contain `/bin/sh`, so distroless and scratch images are refused.
 - Previews are served over HTTPS by Mosaic's edge; `getUrl` rejects any other protocol.

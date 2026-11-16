@@ -26,6 +26,12 @@ layout:
 
 Namespace provider for ComputeSDK - Deploy and manage containerized sandboxes on Namespace's cloud infrastructure.
 
+## Sizes and snapshots
+
+`sizeClass` supports `sm`, `md`, `lg`, and `xl` for Linux amd64 through `instanceOptions.shape.virtual_cpu` and `memory_megabytes`. Other platforms and `xs`/`2xl` are `unknown`. Native shape fields conflict with `sizeClass`; see [Sandbox sizes](../reference/sizes.md).
+
+Snapshots preserve **only** the persistent snapshot volume, not the rootfs or memory. Create the source with `snapshotVolume: true` (provider config or create option), and write state under `/workspace` by default. Snapshot-volume options can set a different mount path. `snapshot.create()` shuts down and destroys the source so the volume generation can be captured (`destroysSource: true`, implicit `source: 'destroyed'`). Restore with `snapshotId`; list/delete use the volume-backed snapshot identity. Do not expect running processes or files outside the volume to survive.
+
 ## Installation & Setup
 
 ```bash

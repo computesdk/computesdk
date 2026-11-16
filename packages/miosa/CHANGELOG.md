@@ -1,5 +1,82 @@
 # @computesdk/miosa
 
+## 1.2.9
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 1.2.8
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 1.2.7
+
+### Patch Changes
+
+- 1904e82: Add a `runtime` option (`MIOSA_RUNTIME`) that selects MIOSA's Firecracker runtime, and expose same-box `pause()`/`resume()` on the native handle.
+- 1904e82: Sandboxes expose native `pause()`/`resume()` on the instance (Firecracker runtime; files and processes survive), declared in `provider.sandbox.pause`, and snapshots declare `snapshot.capabilities` (memory and whole rootfs, source keeps running). `runtime` can be set per create (`sandbox.create({ runtime: 'firecracker' })`). `snapshot.create` now waits until the snapshot is ready, so `create({ snapshotId })` can restore it straight away. The package runs the live conformance suite, including pause/resume and snapshot restore.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.2.6
+
+### Patch Changes
+
+- 946f4dc: Account-API filesystem calls (read/write/mkdir/readdir/remove) now replay 404s through a fresh sandbox's boot window instead of racing it. The control plane's `wait: true` create can still return before the VM finishes booting and `/sandboxes/:id/fs/*` answers 404 until the sandbox attaches; a 404 on a sandbox past the window still surfaces immediately as a genuine miss.
+- 936ba64: Account-API fs 404s on a young sandbox now wait out the boot via exec's `wait` readiness hold plus a 10s post-attach grace, instead of replaying 404s for the whole window — a missing file on a fresh sandbox surfaces within ~10s rather than stalling for two minutes.
+- 428423f: Snapshot calls on regionally-created sandboxes now fail with an actionable error naming the cause and remedy (snapshots are account-API only; recreate the sandbox with `runnerMode: false` or `MIOSA_RUNNER_MODE=0`) instead of a bare `404 NOT_FOUND` from `POST /sandboxes/:id/snapshots`.
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.2.5
+
+### Patch Changes
+
+- b1b52ea: Fix two sandbox-fidelity failures: novita `snapshot.create` now accepts (and drops) `name`/`metadata` instead of throwing — the API takes no label, so callers that always name snapshots no longer fail. Miosa filesystem ops (`readFile`, `writeFile`, `mkdir`, `readdir`, `remove`) now route to the regional runner's own `filesystem.*` routes for regionally-created sandboxes — the account API does not own those ids and answered 404.
+
+## 1.2.4
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.2.3
+
+### Patch Changes
+
+- 3b0030c: Bound the readiness poll's 404 tolerance to an attach window. waitForRunnerReady treated any 404 from the per-sandbox GET as "still launching" for the whole 180s budget, but a sandbox the runner never owned (created through the account API, then reattached via getById/list with an unrecorded origin) 404s forever — the poll stalled the command, then threw a plain error the wrong-endpoint fallback couldn't recognize, so every exec on such a handle failed instead of falling back to the account API. A 404 that outlives the 30s attach grace now rethrows, restoring the fallback. The fallback also only learns the "account" route once the account API answers a non-404: a regional sandbox still attaching 404s on the runner too, and caching the route on that signal alone would misroute the handle's later commands.
+
+## 1.2.2
+
+### Patch Changes
+
+- e3f821f: Run runner execs over exec/stream instead of buffered exec, and wait for the sandbox to report ready first. The buffered request dies on the transport's 30s deadline no matter the command's own timeout, so installs and builds read as failures and the abandoned server-side exec then refuses destroy with SANDBOX_BUSY. Runner create also answers while the machine is still launching — an exec sent mid-launch parks in a server-side hold that drops the stream before the command runs — so exec now polls the sandbox's state until it is ready (a 404 while it comes up just means the record is not attached yet). Also retry a SANDBOX_BUSY destroy briefly: it is a refusal while a lifecycle op drains, not an attempted delete, so a bounded retry turns the drain window into a clean teardown instead of a leaked sandbox.
+
+  Fold the exec stream's real wire shape: output frames arrive as flat {"text":"<chunk>"} objects (a merged stream — the {type,line} union in the SDK's declaration does not match the wire), and the terminal frame is any payload carrying an exit_code/exitCode rather than only type:"exit". Output and exit codes now reach the caller instead of reading as "stream ended without an exit event".
+
+## 1.2.1
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.2.0
 
 ### Minor Changes

@@ -1,7 +1,7 @@
 ---
 description: >-
-  Use Archil with ComputeSDK to run commands against an existing disk with API
-  key auth, region config, and exec-only container sessions.
+  Use Archil with ComputeSDK to manage persistent VMs or opt into disk exec,
+  with native processes, pause/resume, snapshots, and size tiers.
 layout:
   width: default
   title:
@@ -29,7 +29,8 @@ tags:
 
 {% embed url="https://www.computesdk.com/benchmarks/sandboxes/archil/" %}
 
-Archil provider for ComputeSDK
+Archil defaults to persistent VMs: commands, files, and processes share a sandbox.
+Disk exec is an explicit opt-in for commands against an existing disk.
 
 ## Installation & Setup
 
@@ -37,70 +38,79 @@ Archil provider for ComputeSDK
 npm install @computesdk/archil
 ```
 
-Add your Archil credentials to a `.env` file:
+Provide `apiKey` and `region` in config or through `ARCHIL_API_KEY` and
+`ARCHIL_REGION`. A custom `baseUrl` can replace region-based endpoint selection.
 
-```bash
-ARCHIL_API_KEY=your_archil_api_key
-ARCHIL_REGION=aws-us-east-1
-ARCHIL_DISK_ID=your_archil_disk_id
-```
-
-## Usage
-
-Archil is exec-only — `create()` resolves a handle to an existing Archil disk id. Each command runs in an Archil-managed container with that disk attached.
+## Persistent VMs (default)
 
 ```typescript
 import { archil } from '@computesdk/archil';
 
-const compute = archil({
-  apiKey: process.env.ARCHIL_API_KEY,
-  region: process.env.ARCHIL_REGION,
+const provider = archil({});
+const sandbox = await provider.instances.create({
+  sizeClass: 'md',
+  image: 'node:24-bookworm',
 });
-
-// Attach to an existing Archil disk by id
-const diskId = process.env.ARCHIL_DISK_ID;
-if (!diskId) throw new Error('ARCHIL_DISK_ID is not set');
-
-const sandbox = await compute.instances.create({ diskId });
-
-// Run a shell command against the mounted disk
-const result = await sandbox.runCommand('echo hello > /mnt/note && cat /mnt/note');
-console.log(result.stdout); // "hello"
-
-// destroy() is a no-op — disk lifecycle is managed by Archil
+await sandbox.runCommand('echo hello > /root/note');
+console.log(await sandbox.filesystem.readFile('/root/note'));
+await sandbox.pause!();
+await sandbox.resume!();
 await sandbox.destroy();
 ```
 
-### Configuration Options
+`create` provisions a VM; `getById`, `list`, and `destroy` operate on VMs.
+Commands, streaming, and `startProcess` use Archil's native process API.
+`getUrl` exposes a persistent VM's service port.
+
+New VMs support `sizeClass` `sm`/`md`/`lg`/`xl` via `vcpus` and
+`memoryMiB`. `xs`/`2xl` are `unknown`. Attaching or restoring a VM cannot
+apply standard size overrides. See [Sandbox sizes](../reference/sizes.md).
+
+Create accepts `name`, `baseImage` (or `image`), `env` (or `envs`), native
+`vcpus`/`memoryMiB`, and `maxTtlSeconds`. Unified `timeout` is milliseconds
+and maps to the session lifetime budget in seconds.
+
+### Pause, snapshots, and forks
+
+Create with `ephemeral: false` when explicitly requesting lifecycle support.
+Pause/resume preserve memory and running processes. Snapshots preserve the
+whole rootfs (including `/tmp`) and memory, and leave the source running.
+
+A snapshot is a separate paused VM fork, not a separate storage object.
+`provider.snapshot.create` makes that fork; `list` finds snapshot forks;
+`delete` removes one. `instances.create({ snapshotId })` forks it again into
+a running VM. Delete restored children before snapshots, and snapshots before
+their source VM.
+
+## Disk exec (opt-in)
+
+```typescript
+const provider = archil({ execution: 'exec' });
+const sandbox = await provider.instances.create({
+  diskId: process.env.ARCHIL_DISK_ID,
+});
+await sandbox.runCommand('echo hello > /mnt/archil/note');
+await sandbox.destroy(); // Does not delete the disk.
+```
+
+Use `execution: 'exec'` (or `ARCHIL_EXECUTION=exec`) with `diskId`;
+`ephemeral: true` also selects exec for a create. Passing only `diskId` in
+persistent mode throws rather than silently changing modes.
+
+Each exec runs in a fresh container. Only disk contents persist; there is no
+service port, VM pause/resume, or standard VM sizing. Filesystem helpers map
+normal paths under `/mnt/archil`; raw command strings must use that mount path
+themselves. Streaming falls back to output at completion when exec state is
+not shared, and `startProcess` cannot provide a persistent shell-tier process.
+Exec responses are subject to the control plane's output limit.
+
+## Configuration
 
 ```typescript
 interface ArchilConfig {
-  /** Archil API key - if not provided, will use ARCHIL_API_KEY env var */
   apiKey?: string;
-  /** Archil region (e.g. "aws-us-east-1") - if not provided, will use ARCHIL_REGION env var */
   region?: string;
-  /** Override the control-plane base URL (useful for testing) */
   baseUrl?: string;
+  execution?: 'exec' | 'persistent';
 }
 ```
-
-### Supported Operations
-
-| Method       | Supported | Notes                                                              |
-| ------------ | --------- | ------------------------------------------------------------------ |
-| `create`     | ✅         | Resolves an existing disk from top-level `diskId`.                 |
-| `getById`    | ✅         | Requires the disk id.                                              |
-| `list`       | ✅         | Lists all disks visible to the API key.                            |
-| `destroy`    | no-op     | Disk lifecycle is managed by Archil.                               |
-| `runCommand` | ✅         | Calls Archil's HTTP `exec` endpoint and waits for completion.      |
-| `getInfo`    | ✅         |                                                                    |
-| `getUrl`     | ❌         | Each exec runs in a fresh ephemeral container — no port to expose. |
-| `filesystem` | ✅         | Accepts normal paths and maps them into `/mnt/archil`; shared-mode checkout/checkin is automatic. |
-
-### Limitations
-
-* Each `exec` call provisions a fresh container — no persistent state between calls beyond what is written to the disk.
-* Responses are truncated to \~5 MB by the Archil control plane.
-* `getUrl` is not supported — each exec runs in a fresh ephemeral container, so there is no long-lived process to expose a port on.
-* Filesystem operations accept normal absolute paths and map them into `/mnt/archil` internally.
-* Raw `runCommand` strings are not rewritten. Commands that access the disk directly must use `/mnt/archil` themselves.

@@ -7,7 +7,11 @@
  */
 
 import { Sandbox, SandboxClient, SandboxStatus, OutputMode } from "tensorlake";
-import type { SandboxInfo } from "tensorlake";
+import type {
+  CreateAndConnectOptions,
+  SandboxClientOptions,
+  SandboxInfo,
+} from "tensorlake";
 import { defineProvider } from "@computesdk/provider";
 import { streamTensorlakeCommand } from "./streaming";
 import type {
@@ -51,18 +55,33 @@ const FALLBACK_WORKDIR = "/";
  *  is "/", which isn't — falling back to a writable `$HOME`, then `/tmp`. */
 const workdirs = new WeakMap<TensorlakeSandboxContext, Promise<string>>();
 
+const WORKDIR_PROBE =
+  'for d in "$(pwd)" "$HOME" /tmp; do [ -n "$d" ] && [ -d "$d" ] && [ -w "$d" ] && printf %s "$d" && break; done';
+
+// A probe can race the sandbox's exec endpoint coming up right after
+// create() returns — retry a few times before accepting the "/" fallback,
+// which would send every relative command to an unwritable cwd.
+async function probeWorkdir(
+  ctx: TensorlakeSandboxContext,
+  runCommand: CommandRunner,
+): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    const result = await runCommand(ctx, WORKDIR_PROBE);
+    const dir = result.stdout.trim();
+    if (result.exitCode === 0 && dir.startsWith("/")) return dir;
+    if (attempt >= 3) return "";
+    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+}
+
 function workdirOf(
   ctx: TensorlakeSandboxContext,
   runCommand: CommandRunner,
 ): Promise<string> {
   let probe = workdirs.get(ctx);
   if (!probe) {
-    probe = runCommand(
-      ctx,
-      'for d in "$(pwd)" "$HOME" /tmp; do [ -n "$d" ] && [ -d "$d" ] && [ -w "$d" ] && printf %s "$d" && break; done',
-    ).then((result) => {
-      const dir = result.stdout.trim();
-      if (result.exitCode === 0 && dir.startsWith("/")) return dir;
+    probe = probeWorkdir(ctx, runCommand).then((dir) => {
+      if (dir) return dir;
       // runCommand reports exec failures as results, not rejections, so a
       // failed probe must not pin the workdir to the fallback forever —
       // evict and let the next filesystem op probe again.
@@ -75,6 +94,60 @@ function workdirOf(
   return probe;
 }
 
+/** `ctx.sandbox.run("sh", …)` honoring exactly the options given — no
+ *  writable-workdir defaulting. `workdirOf`'s probe must run through this
+ *  and not the public `runCommand`: probing through the cwd-defaulting
+ *  runner would await the probe it is itself part of. */
+async function runBare(
+  ctx: TensorlakeSandboxContext,
+  command: string,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  return await runSh(ctx, command, options?.cwd, options);
+}
+
+/** Foreground `sh -c` run. A timed run goes through the process API with a
+ *  client-side deadline instead of `run({ timeout })`: Tensorlake enforces
+ *  that server-side timeout by killing everything the command spawned, even
+ *  after the shell has exited, so `nohup … &` / `setsid` launchers would see
+ *  their detached children die when the deadline passes. */
+async function runSh(
+  ctx: TensorlakeSandboxContext,
+  command: string,
+  workingDir: string | undefined,
+  options?: RunCommandOptions,
+): Promise<CommandResult> {
+  if (options?.timeout !== undefined) {
+    return await streamTensorlakeCommand(ctx.sandbox, command, {
+      ...(options.env && { env: options.env }),
+      ...(workingDir && { cwd: workingDir }),
+      timeout: options.timeout,
+    });
+  }
+  const startTime = Date.now();
+  try {
+    const result = await ctx.sandbox.run("sh", {
+      args: ["-c", command],
+      ...(options?.env &&
+        Object.keys(options.env).length > 0 && { env: options.env }),
+      ...(workingDir && { workingDir }),
+    });
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode ?? 0,
+      durationMs: Date.now() - startTime,
+    };
+  } catch (error) {
+    return {
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+      exitCode: 127,
+      durationMs: Date.now() - startTime,
+    };
+  }
+}
+
 /** Join `path` onto the sandbox workdir. Absolute paths pass through and skip
  *  the probe; empty and `.` segments are dropped; `..` segments are preserved
  *  for the sandbox filesystem to resolve physically — collapsing them
@@ -82,11 +155,10 @@ function workdirOf(
 async function resolveSandboxPath(
   ctx: TensorlakeSandboxContext,
   path: string,
-  runCommand: CommandRunner,
 ): Promise<string> {
   const combined = path.startsWith("/")
     ? path
-    : `${await workdirOf(ctx, runCommand)}/${path}`;
+    : `${await workdirOf(ctx, runBare)}/${path}`;
   const segments: string[] = [];
   for (const segment of combined.split("/")) {
     if (segment === "" || segment === ".") continue;
@@ -134,45 +206,69 @@ export const tensorlake = defineProvider<
         // `diskMb` is the SDK's create-option name; `ephemeralDiskMb` is kept
         // as an alias for existing callers.
         const diskMb = options?.diskMb ?? options?.ephemeralDiskMb;
+        // Only named sandboxes can be suspended, and names are fixed at
+        // create, so `ephemeral: false` asks for a generated unique name.
+        const name =
+          options?.name ??
+          (options?.ephemeral === false
+            ? `computesdk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+            : undefined);
 
-        const params = {
+        const params: CreateAndConnectOptions & Partial<SandboxClientOptions> = {
           ...(image && { image }),
           ...(timeoutSecs && { timeoutSecs }),
           ...(options?.cpus && { cpus: options.cpus }),
           ...(options?.memoryMb && { memoryMb: options.memoryMb }),
           ...(diskMb && { diskMb }),
-          ...(options?.name && { name: options.name }),
+          ...(name && { name }),
           ...(options?.snapshotId && { snapshotId: options.snapshotId }),
           proxyUrl: config.proxyUrl,
           apiKey,
           apiUrl,
         };
 
-        try {
-          const startTime = Date.now();
-          const instance = await Sandbox.create(params);
-
-          const sandbox: TensorlakeSandboxContext = {
-            config,
-            sandbox: instance,
-          };
-          const durationMs = Date.now() - startTime;
-          return { instance: sandbox, instanceId: instance.sandboxId,
-            durationMs,
-          };
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("401")) {
-            throw new Error(
-              `Tensorlake authentication failed. Please check your TENSORLAKE_API_KEY. ` +
-                `Get your API key from https://app.tensorlake.ai`,
+        // terminate() resolves before the project's quota slot is released,
+        // so a destroy→create cycle can hit "reached its quota" even though
+        // nothing is still running — retry briefly to ride out the async
+        // slot release.
+        const startTime = Date.now();
+        const quotaDeadline = startTime + 30_000;
+        let lastError: unknown;
+        for (let attempt = 0; ; attempt++) {
+          try {
+            const instance = await Sandbox.create(params);
+            const sandbox: TensorlakeSandboxContext = {
+              config,
+              sandbox: instance,
+            };
+            const durationMs = Date.now() - startTime;
+            return { instance: sandbox, instanceId: instance.sandboxId,
+              durationMs,
+            };
+          } catch (error) {
+            lastError = error;
+            const message =
+              error instanceof Error ? error.message : String(error);
+            if (!message.includes("reached its quota") || Date.now() >= quotaDeadline) {
+              break;
+            }
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.min(1000 * (attempt + 1), 3000)),
             );
           }
+        }
+        const error = lastError;
+        if (error instanceof Error && error.message.includes("401")) {
           throw new Error(
-            `Failed to create Tensorlake sandbox: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Tensorlake authentication failed. Please check your TENSORLAKE_API_KEY. ` +
+              `Get your API key from https://app.tensorlake.ai`,
           );
         }
+        throw new Error(
+          `Failed to create Tensorlake sandbox: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       },
 
       getById: async (config: TensorlakeConfig, sandboxId: string) => {
@@ -216,12 +312,32 @@ export const tensorlake = defineProvider<
       },
 
       destroy: async (config: TensorlakeConfig, sandboxId: string) => {
+        const { apiKey, apiUrl } = resolveAuth(config);
         try {
-          const { apiKey, apiUrl } = resolveAuth(config);
           const sandbox = await Sandbox.connect({ sandboxId, apiKey, apiUrl });
           await sandbox.terminate();
         } catch {
           // Sandbox may already be terminated
+        }
+        // Each suspend leaves a `suspend-<id>-…` memory snapshot that outlives
+        // the sandbox; drop those, but keep user checkpoints. List at project
+        // level, since the sandbox itself is gone by now. A checkpoint that is
+        // still settling can refuse deletion, so retry briefly until none remain.
+        for (let attempt = 0; attempt < 5; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+          const leftover = await Sandbox.listSnapshots({ apiKey, apiUrl })
+            .then((all) =>
+              all.filter(
+                (s) => s.snapshotId.startsWith(`suspend-${sandboxId}-`) && s.status !== "deleting",
+              ),
+            )
+            .catch(() => undefined);
+          if (leftover && leftover.length === 0) break;
+          await Promise.all(
+            (leftover ?? []).map((s) =>
+              Sandbox.deleteSnapshot(s.snapshotId, { apiKey, apiUrl }).catch(() => {}),
+            ),
+          );
         }
       },
 
@@ -232,6 +348,10 @@ export const tensorlake = defineProvider<
       ): Promise<CommandResult> => {
         const startTime = Date.now();
 
+        // The sandbox's default cwd is "/", which isn't writable — relative
+        // commands run from the same workdir filesystem paths resolve to.
+        const workingDir = options?.cwd ?? (await workdirOf(ctx, runBare));
+
         if (options?.background) {
           try {
             await ctx.sandbox.startProcess("sh", {
@@ -240,7 +360,7 @@ export const tensorlake = defineProvider<
               stderrMode: OutputMode.DISCARD,
               ...(options.env &&
                 Object.keys(options.env).length > 0 && { env: options.env }),
-              ...(options.cwd && { workingDir: options.cwd }),
+              workingDir,
             });
           } catch (error) {
             return {
@@ -250,32 +370,15 @@ export const tensorlake = defineProvider<
               durationMs: Date.now() - startTime,
             };
           }
-        }
-
-        try {
-          const result = await ctx.sandbox.run("sh", {
-            args: ["-c", command],
-            ...(options?.env &&
-              Object.keys(options.env).length > 0 && { env: options.env }),
-            ...(options?.cwd && { workingDir: options.cwd }),
-            ...(options?.timeout !== undefined && { timeout: options.timeout / 1000 }),
-          });
-
-          const durationMs = Date.now() - startTime;
-          return {
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode ?? 0,
-            durationMs,
-          };
-        } catch (error) {
           return {
             stdout: "",
-            stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 127,
+            stderr: "",
+            exitCode: 0,
             durationMs: Date.now() - startTime,
           };
         }
+
+        return await runSh(ctx, command, workingDir, options);
       },
 
       // Native streaming: `run()` returns a command's output only once it has
@@ -287,7 +390,10 @@ export const tensorlake = defineProvider<
         command: string,
         options: RunCommandOptions,
       ): Promise<CommandResult> =>
-        await streamTensorlakeCommand(ctx.sandbox, command, options),
+        await streamTensorlakeCommand(ctx.sandbox, command, {
+          ...options,
+          cwd: options.cwd ?? (await workdirOf(ctx, runBare)),
+        }),
 
       getInfo: async (
         ctx: TensorlakeSandboxContext,
@@ -360,9 +466,9 @@ export const tensorlake = defineProvider<
         readFile: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<string> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           const bytes = await ctx.sandbox.readFile(resolved);
           return Buffer.from(bytes).toString("utf-8");
         },
@@ -371,9 +477,9 @@ export const tensorlake = defineProvider<
           ctx: TensorlakeSandboxContext,
           path: string,
           content: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<void> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           await ctx.sandbox.writeFile(
             resolved,
             Buffer.from(content, "utf-8"),
@@ -383,9 +489,9 @@ export const tensorlake = defineProvider<
         mkdir: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<void> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           const result = await ctx.sandbox.run("mkdir", {
             args: ["-p", resolved],
           });
@@ -399,9 +505,9 @@ export const tensorlake = defineProvider<
         readdir: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<FileEntry[]> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           const response = await ctx.sandbox.listDirectory(resolved);
           return response.entries.map((e) => ({
             name: e.name,
@@ -414,9 +520,9 @@ export const tensorlake = defineProvider<
         exists: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<boolean> => {
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           try {
             await ctx.sandbox.readFile(resolved);
             return true;
@@ -431,7 +537,7 @@ export const tensorlake = defineProvider<
         remove: async (
           ctx: TensorlakeSandboxContext,
           path: string,
-          runCommand: CommandRunner,
+          _runCommand: CommandRunner,
         ): Promise<void> => {
           // An empty or dot-only path would resolve to the workdir itself —
           // refuse it rather than `rm -rf` the sandbox's whole cwd.
@@ -440,7 +546,7 @@ export const tensorlake = defineProvider<
               `remove: refusing ambiguous path: ${JSON.stringify(path)}`,
             );
           }
-          const resolved = await resolveSandboxPath(ctx, path, runCommand);
+          const resolved = await resolveSandboxPath(ctx, path);
           try {
             await ctx.sandbox.deleteFile(resolved);
           } catch {
@@ -457,11 +563,25 @@ export const tensorlake = defineProvider<
         },
       },
 
+      // Suspend keeps memory, running processes and the whole disk; the same
+      // handle is usable again once resume() returns.
+      pause: async (ctx: TensorlakeSandboxContext): Promise<void> => {
+        await ctx.sandbox.suspend();
+      },
+      resume: async (ctx: TensorlakeSandboxContext): Promise<void> => {
+        await ctx.sandbox.resume();
+      },
+      pauseCapabilities: { memory: true, createOptions: { ephemeral: false } },
+
       getInstance: (ctx: TensorlakeSandboxContext): TensorlakeSandboxContext =>
         ctx,
     },
 
     snapshot: {
+      // checkpoint() defaults to a filesystem checkpoint: the whole disk
+      // (/tmp and $HOME included) is restored, processes are not, and the
+      // source keeps running.
+      capabilities: { scope: "rootfs", memory: false, destroysSource: false },
       create: async (
         config: TensorlakeConfig,
         sandboxId: string,

@@ -7,6 +7,8 @@ runProviderTestSuite({
   supportsFilesystem: true,
   supportsGetUrl: true,
   supportsStreaming: true,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   ports: [3000],
   skipIntegration: !process.env.GRAVIXLAYER_API_KEY,
 })

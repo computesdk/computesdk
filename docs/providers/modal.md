@@ -31,6 +31,10 @@ tags:
 
 Modal provider for ComputeSDK - Execute code with GPU support for machine learning workloads.
 
+## Lifecycle
+
+Snapshots capture rootfs without memory and leave the source running. Restore with `snapshotId`; running processes do not continue from the captured image.
+
 ## Installation & Setup
 
 ```bash
@@ -79,7 +83,7 @@ interface ModalConfig {
   environment?: string;
   /** Ports to expose (unencrypted by default) */
   ports?: number[];
-  /** Port for the daemon SSE channel (defaults to 38989); set false to disable */
+  /** Optional-daemond SSE port (defaults to 38989); false disables port exposure, not runtime selection */
   daemonSsePort?: number | false;
   /** Modal app name (default: 'computesdk-modal') */
   appName?: string;
@@ -88,3 +92,7 @@ interface ModalConfig {
 
 
 Ports are exposed with unencrypted tunnels by default for maximum compatibility.
+
+Streaming/processes use native hooks where implemented, otherwise the shell tier.
+`processRuntime: 'daemond'` opts into the daemon fallback; `daemonSsePort` alone
+does not enable it. See [process tiers](../reference/Instance.md#startprocesscommand-options).

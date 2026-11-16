@@ -7,12 +7,13 @@
  *   the exit code in one round trip. It keeps no history, cannot stream and
  *   cannot be interrupted. After 60 s the server stops waiting and answers
  *   400 without output or exit code; the process itself keeps running.
- * - `POST .../commands` accepts the command and returns its id immediately;
- *   output arrives over a JSONL log stream. The provider consumes that stream
- *   once through the SDK's `Command` entity, splits it into stdout/stderr and
- *   forwards chunks to the streaming callbacks, then reads the exit code from
- *   the command details. `Command.wait()` is deliberately unused — it polls
- *   once a second, which would add up to a second to every call.
+ * - `POST .../execs` accepts the command and returns its execution id
+ *   immediately. The SDK's `Command` entity reads the log page by page and in
+ *   between lets the API hold a status request until the command finishes, so
+ *   nothing is polled on a fixed interval. The log does not tell stdout from
+ *   stderr: every line is reported as stdout. Buddy runs at most 3 such
+ *   commands at once per member in one sandbox and 10 per workspace, and stops
+ *   each one after 90 minutes.
  *
  * A foreground call without streaming callbacks and without a `timeout` takes
  * the first route (one request instead of three). Anything else — callbacks,
@@ -20,7 +21,7 @@
  * command by its id.
  */
 
-import { Command, type SandboxCommandResultView } from '@buddy-works/sandbox-sdk';
+import { Command, type ExecView, type SandboxCommandResultView } from '@buddy-works/sandbox-sdk';
 import { escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, RunCommandOptions } from '@computesdk/provider';
 
@@ -142,15 +143,15 @@ export async function runCommand(
   // request timeout), so the deadline applies here too: when it passes first,
   // the timeout result is returned and the command is killed once (if ever)
   // Buddy reports it accepted.
-  const submission = sandbox.client.executeCommand({
-    path: { sandbox_id: sandbox.sandboxId },
-    body: { command: payload, runtime },
-  });
+  const submission = retryBootRaces(
+    () => submitCommand(sandbox, payload, runtime),
+    deadline,
+  );
   const commandResponse = deadline ? await raceDeadline(submission, deadline) : await submission;
   if (commandResponse === DEADLINE_PASSED) {
     void submission.then(
       response => {
-        if (!response.id) return;
+        if (!response.execution_id) return;
         void killCommand(new Command({
           commandResponse: response,
           client: sandbox.client,
@@ -162,9 +163,8 @@ export async function runCommand(
     return timedOutResult();
   }
 
-  const commandId = commandResponse.id;
-  if (!commandId) {
-    throw new Error('Buddy accepted the command but returned no command id.');
+  if (!commandResponse.execution_id) {
+    throw new Error('Buddy accepted the command but returned no execution id.');
   }
 
   const running = new Command({
@@ -179,64 +179,89 @@ export async function runCommand(
   }
 
   const stdout: string[] = [];
-  const stderr: string[] = [];
 
-  // `follow: true` holds the connection open until the command exits, so this
-  // loop is the wait — nothing is polled. Each record is one line without its
-  // terminator, so the newline goes back on here. Once the caller has been
-  // given the timeout result the loop stops at the next record instead of
-  // buffering output and firing callbacks for a result nobody will read.
+  // `follow: true` reads until the command has finished, so this loop is the
+  // wait; `wait()` afterwards only returns the final state the loop already
+  // saw. Each line comes without its terminator, so the newline goes back on
+  // here. Aborting at the deadline stops the SDK's requests; the flag stops
+  // the loop from firing callbacks for a result nobody will read.
+  const abort = new AbortController();
   let timedOut = false;
   const drain = (async () => {
-    for await (const log of running.logs({ follow: true })) {
+    for await (const line of running.logs({ follow: true, signal: abort.signal })) {
       if (timedOut) break;
-      if (log.data == null) continue;
-      const chunk = `${log.data}\n`;
-      if (log.type === 'STDERR') {
-        stderr.push(chunk);
-        options.onStderr?.(chunk);
-      } else {
-        stdout.push(chunk);
-        options.onStdout?.(chunk);
-      }
+      const chunk = `${line}\n`;
+      stdout.push(chunk);
+      options.onStdout?.(chunk);
     }
+    return running.wait({ signal: abort.signal });
   })();
 
-  // The SDK stream cannot be aborted, so on timeout the result is returned
-  // right away — with whatever output arrived before the deadline — and the
-  // reader is left to finish on its own once the kill (best effort, retried)
-  // closes it or the next record arrives.
+  let finished: Command;
   try {
     const outcome = deadline ? await raceDeadline(drain, deadline) : await drain;
     if (outcome === DEADLINE_PASSED) {
       timedOut = true;
-      void killCommand(running);
+      abort.abort();
       drain.catch(() => {});
-      return timedOutResult(stdout.join(''), stderr.join(''));
+      void killCommand(running);
+      return timedOutResult(stdout.join(''));
     }
+    finished = outcome;
   } catch (error) {
-    // The stream broke mid-command. Buddy keeps running it, so stop it — best
-    // effort and not awaited, so a hanging kill cannot delay the error.
+    // Reading the log or the status broke mid-command. Buddy keeps running it,
+    // so stop it — best effort and not awaited, so a hanging kill cannot delay
+    // the error.
     void killCommand(running);
     throw error;
   }
 
-  // The stream can close before Buddy records the result, so the deadline
-  // governs the exit-code poll as well: past it, the caller gets the timeout
-  // result and the command is stopped in case it is still running.
-  const exit = waitForExitCode(sandbox, commandId);
-  const exitCode = deadline ? await raceDeadline(exit, deadline) : await exit;
-  if (exitCode === DEADLINE_PASSED) {
-    exit.catch(() => {});
-    void killCommand(running);
-    return timedOutResult(stdout.join(''), stderr.join(''));
-  }
-
+  const { exitCode, message } = outcomeOf(finished.data);
   return {
     stdout: stdout.join(''),
-    stderr: stderr.join(''),
+    stderr: message ? `${message}\n` : '',
     exitCode,
     durationMs: Date.now() - startedAt,
+  };
+}
+
+/**
+ * `POST .../execs`. Over Buddy's concurrency limit the API answers 409; that
+ * becomes an error saying what to do about it instead of a bare HTTP status.
+ */
+async function submitCommand(
+  sandbox: BuddySandboxHandle,
+  command: string,
+  runtime: BuddyCommandRuntime,
+): Promise<ExecView> {
+  try {
+    return await sandbox.client.executeCommand({
+      path: { sandbox_id: sandbox.sandboxId },
+      body: { command, runtime },
+    });
+  } catch (error) {
+    if (statusOf(error) !== 409) throw error;
+    throw new Error(
+      `Buddy refused to start the command on sandbox ${sandbox.sandboxId}: too many commands `
+      + 'are running (at most 3 per member in one sandbox and 10 per workspace). '
+      + `Retry once one of them finishes. (${messageOf(error)})`,
+    );
+  }
+}
+
+/**
+ * The exit code of a finished command. A command Buddy failed or cancelled
+ * without an exit code — e.g. stopped at the 90-minute limit — counts as a
+ * failure, with Buddy's explanation as the message.
+ */
+export function outcomeOf(view: ExecView): { exitCode: number; message?: string } {
+  if (typeof view.exit_code === 'number') return { exitCode: view.exit_code };
+  if (view.status === 'SUCCESSFUL') return { exitCode: 0 };
+  const reason = view.error_message ?? view.failure_reason;
+  return {
+    exitCode: 1,
+    message: `Buddy command ${view.execution_id ?? ''} ended ${view.status ?? 'without a status'}`
+      + (reason ? `: ${reason}` : ' without an exit code'),
   };
 }
 
@@ -286,39 +311,3 @@ async function raceDeadline<T>(work: Promise<T>, deadline: number): Promise<T | 
 
 /** The exit code `timeout(1)` uses for a killed command; reported for every timeout. */
 export const TIMEOUT_EXIT_CODE = 124;
-
-const EXIT_CODE_WAIT_MS = 5_000;
-const EXIT_CODE_POLL_MS = 200;
-
-export interface BuddyCommandDetails {
-  exit_code?: number;
-  status?: string;
-}
-
-/**
- * The log stream can close a moment before Buddy records the result, so the
- * details may still say `INPROGRESS` without an `exit_code`. Treating that as
- * success would hide failures; poll briefly until a terminal state shows up.
- */
-export async function waitForExitCode(
-  sandbox: Pick<BuddySandboxHandle, 'client' | 'sandboxId'>,
-  commandId: string,
-  deadlineMs = EXIT_CODE_WAIT_MS,
-): Promise<number> {
-  const deadline = Date.now() + deadlineMs;
-  for (;;) {
-    const details: BuddyCommandDetails = await sandbox.client.getCommandDetails({
-      path: { sandbox_id: sandbox.sandboxId, id: commandId },
-    });
-    if (typeof details.exit_code === 'number') return details.exit_code;
-    if (details.status === 'FAILED') return 1;
-    if (details.status === 'SUCCESSFUL') return 0;
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `Buddy command ${commandId} on sandbox ${sandbox.sandboxId} reported no exit code `
-        + `within ${deadlineMs / 1000}s of its log stream closing (status: ${details.status ?? 'unknown'}).`,
-      );
-    }
-    await new Promise(resolve => setTimeout(resolve, EXIT_CODE_POLL_MS));
-  }
-}

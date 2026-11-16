@@ -1,5 +1,65 @@
 # @computesdk/cloudflare
 
+## 2.1.15
+
+### Patch Changes
+
+- b4e7bb0: Restore Node.js in the bridge Worker's `default` container image (base `node:24-trixie-slim` instead of `debian:trixie-slim`) so sandboxes created without an explicit `image` get a Node runtime again.
+
+## 2.1.14
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 2.1.13
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 2.1.12
+
+### Patch Changes
+
+- 1904e82: Add a ComputeSDK bridge Worker for Cloudflare Containers with native file transfer, preview URLs and snapshots. The adapter detects the bridge via `GET /v1/info` and keeps working unchanged against the Cloudflare sandbox demo Worker.
+- 1904e82: Move file contents in larger, parallel chunks: writes pack several base64 arguments into each exec and write them at their offsets, and reads are split into 4 MiB ranges so large files no longer exceed exec output limits. Fix the getById unit test for the egress reattach read and add a credential-gated live test.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 2.1.11
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 2.1.10
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 2.1.9
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 2.1.8
 
 ### Patch Changes

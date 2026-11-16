@@ -1,0 +1,124 @@
+name: Provider Test
+
+# Run one provider package's tests (including its live integration suite)
+# on demand, e.g.:
+#   compute actions dispatch computesdk/computesdk --workflow provider-test.yml --inputs provider=namespace
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Package directory under packages/ (e.g. namespace, e2b)
+        required: true
+        type: string
+      test_file:
+        description: Optional package-relative Vitest file (src/...test.ts); empty runs the full suite
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  provider-test:
+    runs-on: namespace-profile-default;permissions.additional_grant=vault/object:*:list;permissions.additional_grant=vault/object:*:describe;permissions.additional_grant=vault/object:*:reveal
+    permissions:
+      contents: read
+    env:
+      PROVIDER: ${{ inputs.provider }}
+      TEST_FILE: ${{ inputs.test_file }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check provider
+      run: |
+        if ! printf '%s' "$PROVIDER" | grep -Eq '^[a-z0-9-]+$' || [ ! -f "packages/$PROVIDER/package.json" ]; then
+          echo "Unknown provider: $PROVIDER"
+          exit 1
+        fi
+        if [ -n "$TEST_FILE" ]; then
+          if ! printf '%s' "$TEST_FILE" | grep -Eq '^src/([a-zA-Z0-9_-]+/)*[a-zA-Z0-9_.-]+\.(test|spec)\.(ts|tsx|js|mjs)$' || [ ! -f "packages/$PROVIDER/$TEST_FILE" ]; then
+            echo "Unknown package test file: $TEST_FILE"
+            exit 1
+          fi
+        fi
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+
+    # Provider credentials live in the Namespace vault (same as the
+    # benchmarks). Authenticate nsc with NSC_TOKEN; it is only granted vault
+    # access, so skip the registry login.
+    - name: Seed Namespace token file
+      env:
+        NSC_TOKEN: ${{ secrets.NSC_TOKEN }}
+      run: |
+        if [ -n "${NSC_TOKEN:-}" ] && [ ! -f /var/run/nsc/token.json ]; then
+          mkdir -p /var/run/nsc
+          case "$NSC_TOKEN" in
+            \{*) printf '%s\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+            *) printf '{"bearer_token":"%s"}\n' "$NSC_TOKEN" > /var/run/nsc/token.json ;;
+          esac
+          chmod 600 /var/run/nsc/token.json
+          echo "NSC_DOCKER_LOGIN=1" >> "$GITHUB_ENV"
+          echo "NSC_CONTAINER_REGISTRY=nscr.io" >> "$GITHUB_ENV"
+        fi
+
+    - uses: namespacelabs/nscloud-setup@v0
+
+    - name: Install dependencies
+      run: pnpm install --ignore-scripts
+
+    - name: Build packages
+      run: pnpm build
+
+    # Every repo secret is exported, then the Namespace vault entries named
+    # like an env var in the provider's source (FOO_BAR), so its suite finds
+    # the credential names it already uses (NSC_TOKEN, E2B_API_KEY, ...).
+    # Vault entries win on name clashes.
+    # Missing credentials fail the run instead of skipping the live tests.
+    - name: Run ${{ inputs.provider }} tests
+      env:
+        COMPUTESDK_REQUIRE_INTEGRATION: '1'
+        # Per-package live-test opt-ins.
+        RUN_INTEGRATION: '1'
+        MSB_RUN_INTEGRATION: '1'
+        NOVITA_RUN_INTEGRATION: '1'
+        RUNLOOP_INTEGRATION: '1'
+        LIZARD_LIVE_TESTS: '1'
+        SECRETS_JSON: ${{ toJSON(secrets) }}
+      run: |
+        eval "$(printf '%s' "$SECRETS_JSON" | jq -r 'to_entries[] | select((.key | ascii_downcase) != "github_token") | "export \(.key)=\(.value | @sh)"')"
+        unset SECRETS_JSON
+
+        # Every ENV_STYLE name in the package source; only vault entries with one of these names load.
+        keys=$({ grep -rhoE '\b[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9]\b' "packages/$PROVIDER/src" || true; } | sort -u | jq -Rsc 'split("\n") | map(select(. != ""))')
+        envdef="$RUNNER_TEMP/vault.envdef"
+        nsc vault list --output json | jq -r --argjson keys "$keys" '
+          [ .[]
+            | select((.deleted_at // null) == null)
+            | ((((.labels // []) | map(select(.name == "name")) | .[0].value) // .description // "")) as $name
+            | select($keys | index($name) != null)
+            | {name: $name, object_id: .object_id} ]
+          | group_by(.name) | map(last) | .[]
+          | "\(.name)=\(.object_id)"' > "$envdef"
+        echo "Loading $(cut -d= -f1 "$envdef" | tr '\n' ' ')from the Namespace vault"
+        if [ -s "$envdef" ]; then
+          vault_exported=$(nsc vault export --envdef "$envdef" --shell=bash)
+          eval "$vault_exported"
+          unset vault_exported
+          while IFS='=' read -r key _; do
+            if [ -n "${!key-}" ]; then printf '::add-mask::%s\n' "${!key}"; fi
+          done < "$envdef"
+        fi
+        rm -f "$envdef"
+
+        if [ -n "$TEST_FILE" ]; then
+          pnpm --filter "./packages/$PROVIDER" test "$TEST_FILE"
+        else
+          pnpm --filter "./packages/$PROVIDER" test
+        fi

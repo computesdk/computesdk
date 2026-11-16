@@ -22,8 +22,8 @@ describe('s3 config forwarding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     putMock.mockResolvedValue({ data: {}, error: null });
-    getMock.mockResolvedValue({ data: new ReadableStream(), error: null });
-    listMock.mockResolvedValue({ data: { objects: [] }, error: null });
+    getMock.mockImplementation(async () => ({ data: new ReadableStream({ start: (c) => c.close() }), error: null }));
+    listMock.mockResolvedValue({ data: { items: [], commonPrefixes: [], paginationToken: undefined, hasMore: false }, error: null });
     removeMock.mockResolvedValue({ data: {}, error: null });
     headMock.mockResolvedValue({ data: {}, error: null });
   });
@@ -73,5 +73,48 @@ describe('s3 config forwarding', () => {
         config: expect.objectContaining({ bucket: 'bucket-d' }),
       })
     );
+  });
+
+  it('defaults the endpoint to Tigris when none is configured', async () => {
+    const previous = process.env.TIGRIS_STORAGE_ENDPOINT;
+    delete process.env.TIGRIS_STORAGE_ENDPOINT;
+    try {
+      const provider = s3({ accessKeyId: 'akid', secretAccessKey: 'secret' });
+      await provider.upload('bucket-a', 'hello.txt', 'hello');
+      expect(putMock).toHaveBeenCalledWith(
+        'hello.txt',
+        'hello',
+        expect.objectContaining({
+          config: expect.objectContaining({ endpoint: 'https://t3.storage.dev' }),
+        })
+      );
+    } finally {
+      if (previous !== undefined) process.env.TIGRIS_STORAGE_ENDPOINT = previous;
+    }
+  });
+
+  it('maps Tigris list items and pagination to ListResult', async () => {
+    const modified = new Date('2026-01-01T00:00:00Z');
+    listMock.mockResolvedValueOnce({
+      data: {
+        items: [{ id: 'a', name: 'x/a.txt', size: 3, lastModified: modified }],
+        commonPrefixes: [],
+        paginationToken: 'next-page',
+        hasMore: true,
+      },
+      error: null,
+    });
+    const provider = s3({ accessKeyId: 'akid', secretAccessKey: 'secret', endpoint: 'https://example-s3.local' });
+
+    const result = await provider.list('bucket-c', { prefix: 'x/', maxKeys: 1, continuationToken: 'page-1' });
+
+    expect(listMock).toHaveBeenCalledWith(
+      expect.objectContaining({ prefix: 'x/', limit: 1, paginationToken: 'page-1' })
+    );
+    expect(result).toEqual({
+      objects: [{ bucket: 'bucket-c', key: 'x/a.txt', size: 3, lastModified: modified }],
+      truncated: true,
+      continuationToken: 'next-page',
+    });
   });
 });

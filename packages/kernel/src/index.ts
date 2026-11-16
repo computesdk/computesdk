@@ -10,12 +10,8 @@ import { defineBrowserProvider } from '@computesdk/provider';
 
 import type {
   CreateBrowserSessionOptions,
-  CreateBrowserProfileOptions,
-  CreateBrowserExtensionOptions,
   BrowserProfile,
   BrowserExtension,
-
-  BrowserRecording,
 } from '@computesdk/provider';
 
 import type { BrowserCreateResponse } from '@onkernel/sdk/resources/browsers';

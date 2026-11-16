@@ -19,7 +19,6 @@ const SHARED_PROVIDER_NAMES = [
   'blaxel',
   'namespace',
   'hopx',
-  'declaw',
   'isorun',
   'sprites',
   'agentuity',
@@ -33,6 +32,7 @@ const SHARED_PROVIDER_NAMES = [
   'tenki',
   'microsandbox',
   'novita',
+  'boat',
 ] as const;
 
 type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
@@ -40,6 +40,7 @@ type SharedProviderName = typeof SHARED_PROVIDER_NAMES[number];
 const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string[])[]> = {
   e2b: [['E2B_API_KEY']],
   novita: [['NOVITA_API_KEY']],
+  boat: [['BOAT_API_KEY']],
   daytona: [['DAYTONA_API_KEY']],
   modal: [['MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET']],
   runloop: [['RUNLOOP_API_KEY']],
@@ -58,7 +59,6 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   blaxel: [['BL_API_KEY', 'BL_WORKSPACE']],
   namespace: [['NSC_TOKEN'], ['NSC_TOKEN_FILE']],
   hopx: [['HOPX_API_KEY']],
-  declaw: [['DECLAW_API_KEY']],
   isorun: [['ISORUN_API_KEY']],
   sprites: [['SPRITES_TOKEN']],
   agentuity: [['AGENTUITY_SDK_KEY']],
@@ -82,6 +82,7 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
 const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | readonly string[]>> = {
   e2b: { apiKey: 'E2B_API_KEY' },
   novita: { apiKey: 'NOVITA_API_KEY' },
+  boat: { apiKey: 'BOAT_API_KEY', baseURL: 'BOAT_API_BASE' },
   daytona: { apiKey: 'DAYTONA_API_KEY' },
   modal: { tokenId: 'MODAL_TOKEN_ID', tokenSecret: 'MODAL_TOKEN_SECRET' },
   runloop: { apiKey: 'RUNLOOP_API_KEY' },
@@ -101,7 +102,6 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | reado
   blaxel: { apiKey: 'BL_API_KEY', workspace: 'BL_WORKSPACE' },
   namespace: { token: 'NSC_TOKEN', tokenFile: 'NSC_TOKEN_FILE' },
   hopx: { apiKey: 'HOPX_API_KEY' },
-  declaw: { apiKey: 'DECLAW_API_KEY' },
   isorun: { apiKey: 'ISORUN_API_KEY' },
   sprites: { token: 'SPRITES_TOKEN' },
   agentuity: { sdkKey: 'AGENTUITY_SDK_KEY' },
@@ -364,6 +364,8 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
     switch (providerName) {
       case 'e2b':
         return await import('@computesdk/e2b');
+      case 'boat':
+        return await import('@computesdk/boat');
       case 'novita':
         return await import('@computesdk/novita');
       case 'daytona':
@@ -397,8 +399,6 @@ export async function loadProvider(providerName: ProviderName): Promise<any> {
         return await import('@computesdk/namespace');
       case 'hopx':
         return await import('@computesdk/hopx');
-      case 'declaw':
-        return await import('@computesdk/declaw');
       case 'isorun':
         return await import('@computesdk/isorun');
       case 'sprites':

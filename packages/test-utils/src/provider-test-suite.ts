@@ -8,7 +8,23 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 // @ts-ignore - workspace reference
-import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOptions, InstanceInfo } from '@computesdk/provider';
+import type { Provider, ProviderInstance, CommandResult, FileEntry, RunCommandOptions, InstanceInfo, ProcessTier } from '@computesdk/provider';
+
+/** Which runtime served streaming and background processes in a conformance run. */
+export interface ProcessRuntimeCoverage {
+  provider: string;
+  streaming: ProcessTier | 'unknown';
+  processes: ProcessTier | 'unknown';
+}
+
+/** Coverage recorded by every suite run in this process, for reporting. */
+export const processRuntimeCoverage: ProcessRuntimeCoverage[] = [];
+
+/** Reads which runtime serves `onStdout`/`onStderr` and `startProcess` on an instance. */
+export function describeProcessRuntime(name: string, instance: ProviderInstance): ProcessRuntimeCoverage {
+  const runtime = instance.processRuntime;
+  return { provider: name, streaming: runtime?.streaming ?? 'unknown', processes: runtime?.processes ?? 'unknown' };
+}
 
 export interface ProviderTestConfig {
   /** The provider instance to test */
@@ -28,18 +44,49 @@ export interface ProviderTestConfig {
   /** Base path for filesystem tests (default: '/tmp') */
   filesystemBasePath?: string;
   /**
-   * Whether to check live command output (`onStdout`/`onStderr`). Any provider
-   * can serve it — natively via `streamCommand`, otherwise through the daemond
-   * bridge — but the bridge needs a routable port inside the sandbox, so this is
-   * opt-in per provider rather than assumed.
+   * Whether to check live command output (`onStdout`/`onStderr`). Served
+   * natively via `streamCommand`, otherwise by the shell process tier over
+   * plain `runCommand` (or daemond when configured with `processRuntime: 'daemond'`).
    */
   supportsStreaming?: boolean;
   /**
-   * Whether to exercise `startProcess` (interactive stdin jobs via the
-   * in-sandbox daemon). Like streaming it runs through daemond, so it needs a
-   * sandbox where the daemon can boot — opt-in per provider.
+   * Whether to exercise `startProcess` (stdin, kill, parallel starts, reattach).
+   * Served natively via a `startProcess` hook, otherwise by the shell tier.
    */
   supportsProcesses?: boolean;
+  /**
+   * Expected runtime per capability, e.g. `{ streaming: 'native', processes: 'shell' }`.
+   * The suite always records coverage in {@link processRuntimeCoverage}; with
+   * this set it also fails when a provider silently changes tier.
+   */
+  expectProcessRuntime?: { streaming?: ProcessTier; processes?: ProcessTier };
+  /**
+   * Whether to exercise `instance.pause()`/`resume()`. Sources are created
+   * with the provider's declared `sandbox.pause.createOptions`. Defaults to
+   * whether the provider declares `sandbox.pause`.
+   */
+  supportsPauseResume?: boolean;
+  /**
+   * Whether to exercise `provider.snapshot` create/restore/delete. Requires
+   * declared `snapshot.capabilities`; markers are written under its `path`.
+   * Defaults to whether the provider declares `snapshot.capabilities`.
+   */
+  supportsSnapshots?: boolean;
+  /** Timeout for pause and snapshot tests (default: 300000) */
+  lifecycleTimeout?: number;
+}
+
+/**
+ * With COMPUTESDK_REQUIRE_INTEGRATION=1, a suite whose live tests would be
+ * skipped (missing credentials) registers a failing test instead.
+ */
+export function failIfIntegrationRequired(name: string, skipIntegration: boolean) {
+  if (!skipIntegration || process.env.COMPUTESDK_REQUIRE_INTEGRATION !== '1') return;
+  it(`${name} integration tests require credentials`, () => {
+    throw new Error(
+      `COMPUTESDK_REQUIRE_INTEGRATION=1 but ${name} integration tests were skipped (missing credentials)`
+    );
+  });
 }
 
 /**
@@ -58,9 +105,15 @@ export function defineProviderTests(config: ProviderTestConfig) {
     filesystemBasePath = '/tmp',
     supportsStreaming = false,
     supportsProcesses = false,
+    expectProcessRuntime,
+    supportsPauseResume = !!config.provider.sandbox.pause,
+    supportsSnapshots = !!config.provider.snapshot?.capabilities,
+    lifecycleTimeout = 300000,
   } = config;
 
   return () => {
+    failIfIntegrationRequired(name, skipIntegration);
+
     let sandbox: ProviderInstance;
 
     const createSandbox = async () => {
@@ -118,6 +171,36 @@ export function defineProviderTests(config: ProviderTestConfig) {
       expect(result).toBeDefined();
       expect(result.exitCode).toBe(0);
     }, timeout);
+
+    it.skipIf(skipIntegration)('should apply env to every part of a compound command', async () => {
+      const value = `a b $x 'q' "dq"`;
+      const command = 'echo "1:$CSDK_ENV"; echo "2:$CSDK_ENV" && echo "3:$CSDK_ENV"';
+      const variants: RunCommandOptions[] = [{ env: { CSDK_ENV: value } }];
+      if (supportsStreaming) variants.push({ env: { CSDK_ENV: value }, onStdout: () => {} });
+
+      for (const options of variants) {
+        const result = await sandbox.runCommand(command, options);
+        expect(result.exitCode).toBe(0);
+        for (const n of [1, 2, 3]) expect(result.stdout).toContain(`${n}:${value}`);
+      }
+    }, timeout);
+
+    it.skipIf(skipIntegration)('should run commands in the requested cwd', async () => {
+      const result = await sandbox.runCommand('pwd && echo "$PWD"', { cwd: '/tmp' });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim().split('\n').map((l) => l.trim())).toEqual(['/tmp', '/tmp']);
+    }, timeout);
+
+    it('should report which runtime serves streaming and processes', () => {
+      const coverage = describeProcessRuntime(name, sandbox);
+      processRuntimeCoverage.push(coverage);
+      console.info(`[conformance] ${name}: streaming=${coverage.streaming} processes=${coverage.processes}`);
+      // The mock sandbox used without credentials has no process runtime.
+      if (skipIntegration) return;
+      if (expectProcessRuntime?.streaming) expect(coverage.streaming).toBe(expectProcessRuntime.streaming);
+      if (expectProcessRuntime?.processes) expect(coverage.processes).toBe(expectProcessRuntime.processes);
+    });
 
     it('should get sandbox info', async () => {
       const info = await sandbox.getInfo();
@@ -222,14 +305,15 @@ export function defineProviderTests(config: ProviderTestConfig) {
           // about ordering against the command's own completion rather than
           // about the final text.
           const chunks: string[] = [];
-          const startedAt = Date.now();
           let firstChunkAt: number | undefined;
+          let lastChunkAt: number | undefined;
 
           const result = await sandbox.runCommand(
             `sh -c 'for i in 1 2 3 4 5; do echo tick $i; sleep 1; done'`,
             {
               onStdout: (text: string) => {
                 firstChunkAt ??= Date.now();
+                lastChunkAt = Date.now();
                 chunks.push(text);
               }
             }
@@ -237,12 +321,10 @@ export function defineProviderTests(config: ProviderTestConfig) {
 
           expect(result.exitCode).toBe(0);
           expect(firstChunkAt).toBeDefined();
-          // The first tick is printed immediately and the last four seconds are
-          // spent sleeping, so a first chunk that arrives in the first half of
-          // the command's life could not have been buffered until exit.
-          expect((firstChunkAt as number) - startedAt).toBeLessThan(
-            result.durationMs / 2
-          );
+          // The ticks are printed a second apart, so output buffered until exit
+          // arrives in one burst while streamed output is spread over the run.
+          // Measured between chunks, so slow connection setup doesn't count.
+          expect((lastChunkAt as number) - (firstChunkAt as number)).toBeGreaterThanOrEqual(60);
           // Everything streamed is exactly what the command produced: no chunk
           // dropped, and none delivered twice.
           expect(chunks.join('')).toBe(result.stdout);
@@ -280,6 +362,22 @@ export function defineProviderTests(config: ProviderTestConfig) {
           expect(result.exitCode).not.toBe(0);
           expect(result.durationMs).toBeLessThan(30000);
         }, timeout);
+
+        if (!skipIntegration) {
+          it('should leave no delayed side effect after a timeout', async () => {
+            // A deadline that only stops the client leaves the command running;
+            // the marker proves the whole process tree died in the box.
+            const marker = `/tmp/csdk-timeout-marker-${Date.now()}`;
+            const result = await sandbox.runCommand(`sh -c 'sleep 4; touch ${marker}'`, {
+              timeout: 1500,
+              onStdout: () => {},
+            });
+            expect(result.exitCode).not.toBe(0);
+            await new Promise((resolve) => setTimeout(resolve, 6000));
+            const check = await sandbox.runCommand(`[ -e ${marker} ] && echo present || echo absent`);
+            expect(check.stdout.trim()).toBe('absent');
+          }, timeout);
+        }
       });
     }
 
@@ -310,6 +408,27 @@ export function defineProviderTests(config: ProviderTestConfig) {
           expect(result.exitCode).not.toBe(0);
           expect(result.signal).toBeTruthy();
         }, timeout);
+
+        it('should start several processes in parallel', async () => {
+          const results = await Promise.all(
+            [0, 1, 2, 3].map((i) =>
+              sandbox.startProcess(`echo parallel-${i}`).then((proc) => proc.wait({ timeout: 30000 }))
+            )
+          );
+          results.forEach((result, i) => {
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe(`parallel-${i}\n`);
+          });
+        }, timeout);
+
+        it('should reattach to a shell-tier process from its job id', async () => {
+          if (sandbox.processRuntime?.processes !== 'shell' || !sandbox.attachProcess) return;
+          const proc = await sandbox.startProcess(`sh -c 'echo before; sleep 2; echo after'`);
+          const attached = await sandbox.attachProcess(proc.jobId);
+          const result = await attached.wait({ timeout: 30000 });
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toBe('before\nafter\n');
+        }, timeout);
       });
     }
 
@@ -335,6 +454,144 @@ export function defineProviderTests(config: ProviderTestConfig) {
         expect(result.stdout.trim()).toBe('test content');
       }, timeout);
     });
+
+    const createLifecycleSource = (createOptions?: Record<string, unknown>) =>
+      provider.sandbox.create({ ...(ports?.length ? { ports } : {}), ...(createOptions ?? {}) } as any);
+
+    const destroyQuietly = async (sb: ProviderInstance | undefined) => {
+      if (sb) await cleanupSandbox(sb);
+    };
+
+    const isUnder = (dir: string, root: string) =>
+      dir === root || dir.startsWith(root.endsWith('/') ? root : `${root}/`);
+
+    const markerDir = async (sb: ProviderInstance, declared?: string, excludes: string[] = []) => {
+      if (declared) return declared;
+      const out = await sb.runCommand('pwd; echo "$HOME"');
+      const candidates = [...out.stdout.split('\n').map((l) => l.trim()).filter(Boolean), '/root', '/tmp'];
+      return candidates.find((dir) => !excludes.some((ex) => isUnder(dir, ex))) ?? '/tmp';
+    };
+
+    const lifetime = provider.sandbox.lifetime;
+    if (lifetime && !skipIntegration) {
+      describe('Lifetime', () => {
+        it('should declare a consistent lifetime', () => {
+          if (lifetime.defaultMs !== undefined) expect(lifetime.defaultMs).toBeGreaterThan(0);
+          if (lifetime.maxMs !== undefined && lifetime.defaultMs !== undefined) {
+            expect(lifetime.maxMs).toBeGreaterThanOrEqual(lifetime.defaultMs);
+          }
+          expect(typeof sandbox.extendLifetime === 'function').toBe(lifetime.extendable);
+        });
+
+        if (lifetime.extendable) {
+          it('should extend a live instance', async () => {
+            await sandbox.extendLifetime!(Math.min(lifetime.maxMs ?? 600000, 600000));
+            expect((await sandbox.runCommand('echo alive')).stdout.trim()).toBe('alive');
+          }, timeout);
+        }
+      });
+    }
+
+    if (supportsPauseResume && !skipIntegration) {
+      describe('Pause and Resume', () => {
+        it('should expose pause and resume on instances', () => {
+          expect(provider.sandbox.pause).toBeDefined();
+          expect(typeof sandbox.pause).toBe('function');
+          expect(typeof sandbox.resume).toBe('function');
+        });
+
+        it('should keep files across pause and resume', async () => {
+          const caps = provider.sandbox.pause!;
+          let source: ProviderInstance | undefined;
+          try {
+            source = await createLifecycleSource(caps.createOptions);
+            const marker = `${await markerDir(source)}/csdk-pause-${Date.now()}`;
+            expect((await source.runCommand(`echo paused-state > ${marker}`)).exitCode).toBe(0);
+            // startProcess, not `cmd &` in runCommand: some providers end a command's process group on exit.
+            // The process records its own pid, since a native handle may not survive a pause.
+            const pidFile = `${marker}.pid`;
+            if (caps.memory) {
+              await source.startProcess(`sh -c 'echo $$ > ${pidFile}; exec sleep 600'`);
+              const deadline = Date.now() + 15000;
+              while ((await source.runCommand(`cat ${pidFile}`)).stdout.trim() === '' && Date.now() < deadline) {
+                await new Promise((r) => setTimeout(r, 500));
+              }
+              expect((await source.runCommand(`kill -0 $(cat ${pidFile}) && echo alive`)).stdout.trim()).toBe('alive');
+            }
+
+            await source.pause!();
+            await source.resume!();
+
+            const read = await source.runCommand(`cat ${marker}`);
+            expect(read.exitCode).toBe(0);
+            expect(read.stdout.trim()).toBe('paused-state');
+            if (caps.memory) {
+              expect((await source.runCommand(`kill -0 $(cat ${pidFile}) && echo alive`)).stdout.trim()).toBe('alive');
+            }
+          } finally {
+            await destroyQuietly(source);
+          }
+        }, lifecycleTimeout);
+      });
+    }
+
+    if (supportsSnapshots && !skipIntegration) {
+      describe('Snapshots', () => {
+        it('should declare what snapshots keep', () => {
+          const caps = provider.snapshot?.capabilities;
+          expect(caps).toBeDefined();
+          if (caps!.scope === 'volume') expect(caps!.path).toBeTruthy();
+          if (caps!.source) expect(caps!.destroysSource).toBe(caps!.source !== 'kept');
+          if (caps!.readiness === 'eventual') expect(typeof provider.snapshot!.waitUntilReady).toBe('function');
+        });
+
+        it('should restore files from a snapshot into a new instance', async () => {
+          const caps = provider.snapshot!.capabilities!;
+          let source: ProviderInstance | undefined;
+          const sourceState = caps.source ?? (caps.destroysSource ? 'destroyed' : 'kept');
+          let restored: ProviderInstance | undefined;
+          let second: ProviderInstance | undefined;
+          let snapshotId: string | undefined;
+          try {
+            source = await createLifecycleSource(caps.createOptions);
+            const marker = `${await markerDir(source, caps.path, caps.excludes)}/csdk-snapshot-${Date.now()}`;
+            expect((await source.runCommand(`echo snapshot-state > ${marker}`)).exitCode).toBe(0);
+
+            const snapshot: any = await provider.snapshot!.create(source.instanceId);
+            snapshotId = snapshot.id;
+            expect(typeof snapshotId).toBe('string');
+            if (caps.readiness === 'eventual') {
+              await provider.snapshot!.waitUntilReady!(snapshotId!, { timeoutMs: lifecycleTimeout });
+            }
+
+            if (sourceState === 'destroyed') {
+              source = undefined;
+            } else if (sourceState === 'kept') {
+              expect((await source.runCommand('echo alive')).stdout.trim()).toBe('alive');
+            }
+
+            restored = await provider.sandbox.create({ snapshotId } as any);
+            expect(restored.instanceId).not.toBe(source?.instanceId);
+            const read = await restored.runCommand(`cat ${marker}`);
+            expect(read.exitCode).toBe(0);
+            expect(read.stdout.trim()).toBe('snapshot-state');
+
+            if (caps.fork) {
+              second = await provider.sandbox.create({ snapshotId } as any);
+              expect(second.instanceId).not.toBe(restored.instanceId);
+              expect((await restored.runCommand(`echo changed > ${marker}`)).exitCode).toBe(0);
+              expect((await second.runCommand(`cat ${marker}`)).stdout.trim()).toBe('snapshot-state');
+            }
+          } finally {
+            // Children before parents: some providers refuse to delete a fork's source first.
+            await destroyQuietly(second);
+            await destroyQuietly(restored);
+            if (snapshotId) await provider.snapshot!.delete(snapshotId).catch(() => {});
+            await destroyQuietly(source);
+          }
+        }, lifecycleTimeout);
+      });
+    }
   };
 }
 
@@ -342,8 +599,8 @@ export function defineProviderTests(config: ProviderTestConfig) {
  * Runs the complete provider test suite (legacy function for backward compatibility)
  */
 export function runProviderTestSuite(config: ProviderTestConfig) {
-  const testFunction = defineProviderTests(config);
-  testFunction();
+  // Scoped so the per-test live sandbox hooks don't wrap a package's own unit tests.
+  describe(`${config.name} conformance`, defineProviderTests(config));
 }
 
 /**
@@ -409,7 +666,7 @@ function createMockSandbox(config: ProviderTestConfig): ProviderInstance {
     },
 
     startProcess: async (): Promise<never> => {
-      throw new Error('daemond: not supported by mock');
+      throw new Error('startProcess is not supported by the mock sandbox');
     },
 
     getInfo: async (): Promise<InstanceInfo> => ({

@@ -97,4 +97,25 @@ describe('connection options', () => {
     await provider.sandbox.create();
     expect(mockCreate.mock.calls[0][0]).toMatchObject({ apiKey: 'lel_NOT-HEX' });
   });
+
+  it('surfaces the network cause behind a bare "fetch failed"', async () => {
+    const cause = Object.assign(new Error('connect ECONNREFUSED 203.0.113.7:443'), { code: 'ECONNREFUSED' });
+    mockCreate.mockImplementationOnce(() => { throw Object.assign(new TypeError('fetch failed'), { cause }); });
+    const provider = lelantos({ apiKey: 'e2b_abc123' });
+    await expect(provider.sandbox.create()).rejects.toThrow(
+      'Failed to create Lelantos sandbox: fetch failed (connect ECONNREFUSED 203.0.113.7:443)'
+    );
+  });
+
+  it('unwraps an AggregateError cause (IPv4 and IPv6 both refused)', async () => {
+    const cause = Object.assign(new Error(''), {
+      code: 'ECONNREFUSED',
+      errors: [new Error('connect ECONNREFUSED 203.0.113.7:443'), new Error('connect ECONNREFUSED 2001:db8::1:443')],
+    });
+    mockCreate.mockImplementationOnce(() => { throw Object.assign(new TypeError('fetch failed'), { cause }); });
+    const provider = lelantos({ apiKey: 'e2b_abc123' });
+    await expect(provider.sandbox.create()).rejects.toThrow(
+      'fetch failed (connect ECONNREFUSED 203.0.113.7:443; connect ECONNREFUSED 2001:db8::1:443)'
+    );
+  });
 });

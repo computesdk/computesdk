@@ -5,6 +5,7 @@
  * but don't have native sandbox capabilities. Used by gateway server.
  */
 
+import { assertInstanceSizeSupported } from 'computesdk';
 import type { CreateInstanceOptions } from './types/index.js';
 
 /**
@@ -107,6 +108,7 @@ export function defineInfraProvider<TInstance, TConfig = any>(
       name: config.name,
       
       create: async (options) => {
+        assertInstanceSizeSupported({ name: config.name }, options);
         return await config.methods.create(providerConfig, options);
       },
       

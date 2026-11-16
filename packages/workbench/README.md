@@ -187,6 +187,7 @@ Install any combination of:
 - `@computesdk/codesandbox` - CodeSandbox boxes
 - `@computesdk/blaxel` - Blaxel environments
 - `@computesdk/northflank` - Northflank deployment services
+- `@computesdk/boat` - Boat Ubuntu cloud sandboxes
 
 ## Environment Variables
 
@@ -227,6 +228,10 @@ NORTHFLANK_TOKEN=nf_xxx
 NORTHFLANK_PROJECT_ID=my-project
 NORTHFLANK_TEAM_ID=xxx       # optional — required only for organization API tokens
 NORTHFLANK_API_URL=xxx       # optional — defaults to https://api.northflank.com
+
+# Boat
+BOAT_API_KEY=boat_xxx
+BOAT_API_BASE=xxx            # optional — defaults to https://boat.dev/api/v1
 ```
 
 ## Tips

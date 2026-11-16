@@ -67,7 +67,7 @@ superserve({
 | Templates (boot from named template) | ✅ |
 | Snapshots (create, list, delete, boot from snapshot) | ✅ |
 | Preview URLs (`getUrl`) | ✅ |
-| Pause / resume (in-place state preservation) | ✅ via `@superserve/sdk` |
+| Pause / resume (memory, processes and files preserved) | ✅ `instance.pause()` / `instance.resume()` |
 | Template build (`template.create`) | ❌ Use `@superserve/sdk` `Template.create` |
 
 ## API Reference

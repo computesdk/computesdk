@@ -25,6 +25,12 @@ layout:
 
 Mosaic provides Firecracker-based sandbox environments with command execution, a workspace filesystem, preview URLs, snapshots, and environments built from container images.
 
+## Account sizes and lifecycle
+
+Use native `vcpu`/`memoryMb` for the smaller create shapes. The 8-vCPU/16-GiB shape boots the account environment `csdk-node22-8cpu-16gb` via `templateId`, built by [Provider Setup](../../ADD-PROVIDER.md#provider-setup). This adapter has no standard `sizeClass` mapping (`unknown`); see [Sandbox sizes](../reference/sizes.md).
+
+`pause()`/`resume()` preserve memory and processes. Snapshots declare whole-rootfs and memory preservation with the source kept; restore with `snapshotId`.
+
 ## Installation and setup
 
 ```bash

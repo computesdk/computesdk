@@ -13,5 +13,7 @@ runProviderTestSuite({
   supportsGetUrl: false,
   skipIntegration: !process.env.SAIL_API_KEY,
   filesystemBasePath: '/tmp',
+  supportsPauseResume: true,
+  supportsSnapshots: true,
   timeout: 120_000,
 });

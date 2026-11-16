@@ -378,6 +378,18 @@ describe('exec', () => {
     assert.equal(calls, 1 + ops.DEFAULT_EXEC_RETRIES)
   })
 
+  it('says when the provider voided the exec, and does not retry it', async () => {
+    let calls = 0
+    const { client } = door(() => {
+      calls += 1
+      return {
+        body: { results: [{ sandbox: 'sbx-1', billed: false, outcome: { outcome: 'void', cause: 'exec_channel_lost' } }] },
+      }
+    })
+    await assert.rejects(() => ops.runCommand(handle(client), 'x'), /voided the exec for sbx-1 \(exec_channel_lost\)/)
+    assert.equal(calls, 1)
+  })
+
   it('can be told not to retry at all', async () => {
     let calls = 0
     const { client } = door(() => {
@@ -465,6 +477,26 @@ describe('filesystem', () => {
     const content = 'na\u00efve \u2013 \u65e5\u672c\u8a9e'
     const payload = /printf %s '([A-Za-z0-9+/=]*)'/.exec(ops.writeFileCommand('/f', content))!
     assert.equal(Buffer.from(payload[1], 'base64').toString('utf8'), content)
+  })
+
+  it('splits a write too large for one exec into slices that decode back exactly', () => {
+    const content = 'na\u00efve \u2013 '.repeat(20_000)
+    const cmds = [...ops.writeFileCommands('/a/b.txt', content, 1000)]
+    assert.ok(cmds.length > 1)
+    let joined = ''
+    for (const [i, cmd] of cmds.entries()) {
+      const slice = /printf %s '([A-Za-z0-9+/=]*)'/.exec(cmd)![1]
+      assert.ok(slice.length <= 1000 && slice.length % 4 === 0 || i === cmds.length - 1)
+      assert.match(cmd, i === 0 ? /base64 -d > "\/a\/b.txt.gmn-part"/ : /base64 -d >> "\/a\/b.txt.gmn-part"/)
+      joined += Buffer.from(slice, 'base64').toString('binary')
+    }
+    assert.equal(Buffer.from(joined, 'binary').toString('utf8'), content)
+    assert.match(cmds[0], /^mkdir -p/)
+    assert.match(cmds.at(-1)!, /&& mv -f "\/a\/b.txt.gmn-part" "\/a\/b.txt"$/)
+  })
+
+  it('keeps a write that fits one exec a single command', () => {
+    assert.deepEqual([...ops.writeFileCommands('/f', 'hello')], [ops.writeFileCommand('/f', 'hello')])
   })
 
   it('makes the parent directory, because cat cannot', () => {
@@ -668,7 +700,7 @@ describe('a command that legitimately runs longer than the client timeout', () =
     // is two. If the request is the shorter one it aborts a command that is
     // still running, and the caller is told a command failed that succeeds.
     const seen: number[] = []
-    const fetchImpl = (async (_url: any, init: any) => {
+    const fetchImpl = (async (_url: any, _init: any) => {
       // The client's own timer is what we are checking, so read the deadline
       // it armed by racing it: a request whose timeout is shorter than the
       // command deadline would abort before this resolves.
@@ -843,19 +875,21 @@ describe("the review's findings on PR 741", () => {
   it('a file past the exec output cap is an error, not a silent prefix', async () => {
     const { client } = door(() => ({ body: {} }))
     const handle = { id: 'sbx-1', client, createdAt: new Date(), metadata: {} } as any
-    const truncatedRun = async () => ({
-      stdout: 'x'.repeat(16),
+    const truncatedRun = async (_sandbox: unknown, command: string) => ({
+      stdout: command.startsWith('wc') ? '16' : 'x'.repeat(16),
       stderr: '',
       exitCode: 0,
       durationMs: 1,
-      truncated: true,
+      truncated: !command.startsWith('wc'),
     })
     await assert.rejects(
       () => ops.filesystem.readFile(handle, '/big.bin', truncatedRun as any),
-      /larger than the 1 MiB an exec can return/,
+      /Truncated file read/,
     )
     // And an untruncated read is unchanged.
-    const wholeRun = async () => ({ stdout: 'hello', stderr: '', exitCode: 0, durationMs: 1 })
+    const wholeRun = async (_sandbox: unknown, command: string) => ({
+      stdout: command.startsWith('wc') ? '5' : btoa('hello\n0'), stderr: '', exitCode: 0, durationMs: 1,
+    })
     assert.equal(await ops.filesystem.readFile(handle, '/small', wholeRun as any), 'hello')
   })
 

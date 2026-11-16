@@ -1,5 +1,67 @@
 # @computesdk/vercel
 
+## 1.7.56
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 1.7.55
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 1.7.54
+
+### Patch Changes
+
+- 1904e82: `getInfo()` reports the sandbox's real name, status, creation time and timeout instead of placeholder values.
+- 1904e82: Native pause/resume for persistent sandboxes (`instance.pause()` stops, `instance.resume()` starts a fresh session with the filesystem restored), declared pause and snapshot capabilities (whole-rootfs snapshots, no memory; snapshotting stops the source), and `destroy` now deletes the sandbox and its automatic snapshots instead of only stopping it.
+
+  Snapshot capabilities declare `source: 'stopped'`, since the stopped source still exists and needs destroying, and `list()` keeps stopped persistent (paused) sandboxes so they can be found and resumed.
+
+- 1904e82: Pass command `env` and create-time `envs`/`name` through Vercel's native fields, stream command output natively via `streamCommand`, and implement sandbox and snapshot listing with `Sandbox.list`/`Snapshot.list`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 1.7.53
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 1.7.52
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 1.7.51
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.7.50
 
 ### Patch Changes

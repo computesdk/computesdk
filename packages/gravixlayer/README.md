@@ -49,6 +49,8 @@ an image with `template.create({ name, fromImage })`, then pass its name as
 `templateId`. `sandbox.getInstance()` returns the GravixLayer
 `Runtime` handle for filesystem, services, and other SDK APIs.
 
-Snapshots require a `name` on `snapshot.create`. Template builds need
+Snapshots require a `name` on `snapshot.create` and default to `hot`
+(filesystem and memory, so `/tmp` is restored); pass
+`metadata: { kind: 'cold' }` for a filesystem-only snapshot. Template builds need
 `fromImage` or `dockerfile` on `template.create`; select an existing template
 with `templateId` when creating a sandbox.

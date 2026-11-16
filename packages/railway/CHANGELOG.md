@@ -1,5 +1,66 @@
 # @computesdk/railway
 
+## 2.0.22
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 2.0.21
+
+### Patch Changes
+
+- fbdf09f: Honor native Railway CPU and decimal-GB memory overrides for sandbox creates and checkpoint restores through the public API. Reject invalid resource values instead of silently using workspace defaults.
+
+## 2.0.20
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 2.0.19
+
+### Patch Changes
+
+- 1904e82: Add snapshot support backed by Railway sandbox checkpoints (create, list, delete, and restore via `sandbox.create({ snapshotId })`), and move the filesystem onto Railway's native `sandbox.files` API.
+- 1904e82: Declare snapshot capabilities: a Railway checkpoint keeps the whole root filesystem (including `/tmp`, not `/dev/shm`), boots restores fresh without running processes, and leaves the source running; the conformance suite now runs snapshot tests live. An exec whose WebSocket never opened is retried even when its timeout fired while connecting.
+- 1904e82: Stream command output natively through `sandbox.exec`, pass `env`/`cwd` through `sandbox.exec` so env reaches every part of a compound command, make command timeouts kill the process in the sandbox instead of only closing the client session, and retry execs whose session never opened.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 2.0.18
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 2.0.17
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 2.0.16
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 2.0.15
 
 ### Patch Changes

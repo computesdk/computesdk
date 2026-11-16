@@ -69,6 +69,33 @@ Cloud Run supports two execution modes for sandbox sessions:
 
 ## Use the Cloud Run provider
 
+### Sizes and lifecycle
+
+`sizeClass` supports `xs` through `xl` by routing to a separate gateway service
+deployed at each CPU/RAM tier. Configure `sizeGateways` or
+`CLOUD_RUN_SANDBOX_URL_XS`, `_SM`, `_MD`, `_LG`, `_XL`; size-specific
+`CLOUD_RUN_SANDBOX_SECRET_<SIZE>` values can override the shared secret.
+Deploy each service with `CLOUD_RUN_SIZE=<size>` using the setup CLI. Create
+checks the gateway's advertised size; missing or mismatched configuration fails
+instead of using another tier. `2xl` exceeds Cloud Run's 8-vCPU limit. See
+[Sandbox sizes](../reference/sizes.md).
+
+Create options `executionMode` and `allowEgress` override provider config.
+`ephemeral: false` selects a stateful sandbox (unless `executionMode` explicitly
+selects otherwise); `snapshotId` always restores statefully. The default remains
+ephemeral, so choose stateful mode for files/processes that must survive commands.
+
+Remote gateways advertising snapshot support expose snapshot create/list/delete
+and repeated restores with `snapshotId`. Create the source with
+`{ ephemeral: false }`. Snapshots capture the writable rootfs overlay, **not**
+memory, `/tmp`, or mounted paths; the source stays running. `fork: true` permits
+multiple independent restores, which restart the startup command rather than
+continuing running processes. There are no unified `pause()`/`resume()` hooks.
+
+Gateway idle cleanup is separate from command timeout. Setup accepts
+`CLOUD_RUN_SANDBOX_IDLE_TIMEOUT_MS`; `0` disables idle cleanup, and a running
+command is not reaped as idle.
+
 ```typescript
 import { cloudRun } from '@computesdk/gcp/cloud-run';
 
@@ -98,6 +125,8 @@ interface CloudRunConfig {
   sandboxSecret?: string;
   /** Optional Google-signed identity token for Cloud Run services that require IAM auth. */
   gatewayAuthToken?: string;
+  /** Gateway URL or { sandboxUrl, sandboxSecret?, gatewayAuthToken? } per standard size. */
+  sizeGateways?: Partial<Record<'xs' | 'sm' | 'md' | 'lg' | 'xl', string | CloudRunSizeGateway>>;
   /** Execution mode. Ephemeral uses `sandbox do`; stateful uses `sandbox run`, `exec`, and `delete`. Defaults to ephemeral. */
   executionMode?: 'ephemeral' | 'stateful';
   /** Path to the Cloud Run sandbox binary. Defaults to CLOUD_RUN_SANDBOX_BINARY or /usr/local/gcp/bin/sandbox. */

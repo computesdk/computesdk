@@ -1,5 +1,50 @@
 # @computesdk/example-cloudflare-direct
 
+## 0.0.25
+
+### Patch Changes
+
+- Updated dependencies [b4e7bb0]
+  - @computesdk/cloudflare@2.1.15
+
+## 0.0.24
+
+### Patch Changes
+
+- @computesdk/cloudflare@2.1.14
+
+## 0.0.23
+
+### Patch Changes
+
+- @computesdk/cloudflare@2.1.13
+
+## 0.0.22
+
+### Patch Changes
+
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+  - @computesdk/cloudflare@2.1.12
+
+## 0.0.21
+
+### Patch Changes
+
+- @computesdk/cloudflare@2.1.11
+
+## 0.0.20
+
+### Patch Changes
+
+- @computesdk/cloudflare@2.1.10
+
+## 0.0.19
+
+### Patch Changes
+
+- @computesdk/cloudflare@2.1.9
+
 ## 0.0.18
 
 ### Patch Changes

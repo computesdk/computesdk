@@ -110,6 +110,11 @@ describe('blaxel sandbox.create from snapshot', () => {
 });
 
 describe('blaxel snapshot manager', () => {
+	it('declares rootfs snapshots that keep memory and the source', () => {
+		const provider = blaxel({});
+		expect(provider.snapshot!.capabilities).toEqual({ scope: 'rootfs', memory: true, destroysSource: false });
+	});
+
 	it('captures a workspace snapshot via Snapshot.create', async () => {
 		const core = await mockedCore();
 		vi.mocked(core.Snapshot.create).mockResolvedValue(makeSnapshot());

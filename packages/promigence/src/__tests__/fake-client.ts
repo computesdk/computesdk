@@ -301,6 +301,35 @@ export class FakeClient {
       s.state = 'ended';
       return { ok: true };
     },
+    pause: async (sandboxId: string) => {
+      this.record('sandboxes.pause', sandboxId);
+      const s = this.need(sandboxId);
+      const alreadyPaused = s.state === 'paused';
+      s.state = 'paused';
+      return { ok: true, sandbox_id: sandboxId, state: 'paused', paused_id: `pause_${sandboxId}`, took_ms: 5, ...(alreadyPaused ? { already_paused: true } : {}) };
+    },
+    resume: async (sandboxId: string, opts?: Record<string, unknown>) => {
+      this.record('sandboxes.resume', sandboxId, opts);
+      const s = this.need(sandboxId);
+      s.state = 'ready';
+      return { ok: true, sandbox_id: sandboxId, state: 'ready', paused_id: `pause_${sandboxId}`, took_ms: 3 };
+    },
+    snapshot: async (sandboxId: string, opts?: Record<string, unknown>) => {
+      this.record('sandboxes.snapshot', sandboxId, opts);
+      this.need(sandboxId);
+      const snapshotId = `snap_live${this.snapshotsStore.length + 1}`;
+      this.snapshotsStore.push({ snapshot_id: snapshotId, tier: 'small', created_at: new Date().toISOString() });
+      return {
+        ok: true,
+        snapshot_id: snapshotId,
+        sandbox_id: sandboxId,
+        tier: 'small',
+        bytes: { allocated: 4096 },
+        took_ms: 12,
+        background_execs_killed: 0,
+        still_running: true,
+      };
+    },
     // Like the API: newest first, filtered by state, `limit` per page, an opaque cursor to the next.
     listPage: async (opts: { limit?: number; state?: string[]; cursor?: string } = {}) => {
       this.record('sandboxes.listPage', opts);

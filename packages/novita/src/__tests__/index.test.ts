@@ -31,6 +31,8 @@ function nativeSandbox(id = 'sbx-1') {
     sandboxId: id,
     commands: { run: vi.fn().mockResolvedValue(commandHandle()) },
     getHost: vi.fn((port: number) => `${port}-${id}.example.test`),
+    pause: vi.fn().mockResolvedValue(true),
+    connect: vi.fn(),
     getInfo: vi.fn().mockResolvedValue({
       sandboxId: id, templateId: 'base', state: 'running', metadata: { team: 'test' },
       startedAt: new Date('2026-01-01T00:00:00Z'), endAt: new Date('2026-01-01T00:10:00Z'),
@@ -226,6 +228,22 @@ describe('Novita provider', () => {
     expect(native.files.remove).toHaveBeenCalledWith('/tmp/test/file');
   });
 
+  it('pauses natively and resumes by reconnecting with the creation lifetime', async () => {
+    const sdk = novita({ apiKey: 'key', timeout: 600_000 });
+    expect(sdk.sandbox.pause).toEqual({ memory: true });
+    native.connect.mockResolvedValue(native);
+    const sandbox = await sdk.sandbox.create();
+    await sandbox.pause!();
+    expect(native.pause).toHaveBeenCalledOnce();
+    await sandbox.resume!();
+    expect(native.connect).toHaveBeenCalledWith({ timeoutMs: 600_000 });
+    expect(sandbox.getInstance()).toBe(native);
+  });
+
+  it('declares that snapshots keep the root filesystem and running processes', () => {
+    expect(provider().snapshot!.capabilities).toEqual({ scope: 'rootfs', memory: true, destroysSource: false });
+  });
+
   it('creates, lists and deletes snapshots using the snapshot API', async () => {
     const snapshots = provider().snapshot!;
     api.createSnapshot.mockResolvedValue({ snapshotId: 'snap-1' });
@@ -244,7 +262,11 @@ describe('Novita provider', () => {
     api.listSnapshots.mockReturnValue(paginator);
     expect((await snapshots.list({ limit: 1 })).map(s => s.id)).toEqual(['one']);
     expect(paginator.nextItems).toHaveBeenCalledOnce();
-    await expect(snapshots.create('sbx-1', { name: 'unsupported' })).rejects.toThrow('do not support');
+    // name/metadata are accepted and dropped (the API takes no label): a
+    // caller that always names snapshots must not be refused.
+    api.createSnapshot.mockResolvedValue({ snapshotId: 'snap-named' });
+    expect(await snapshots.create('sbx-1', { name: 'snap-x' })).toEqual({ id: 'snap-named', snapshotId: 'snap-named', provider: 'novita' });
+    expect(api.createSnapshot).toHaveBeenCalledWith('sbx-1');
     await expect(snapshots.list({ limit: -1 })).rejects.toThrow('non-negative');
   });
 

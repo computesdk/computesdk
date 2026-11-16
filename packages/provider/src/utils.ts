@@ -85,6 +85,20 @@ export function resolveVolumeRef(volume: string | VolumeRef): VolumeRef {
   };
 }
 
+/**
+ * True when a `volumes` create option is the unified `VolumeMount[]` shape —
+ * a non-empty array where every entry carries `volume`. Anything else
+ * (entries without `volume`, non-array values) is a provider-native spec
+ * from before the unified surface and must pass through untouched.
+ */
+export function isUnifiedVolumeMounts(volumes: unknown): volumes is { volume: string | VolumeRef; mountPath: string; readOnly?: boolean }[] {
+  return (
+    Array.isArray(volumes) &&
+    volumes.length > 0 &&
+    volumes.every((m) => m != null && typeof m === 'object' && 'volume' in m)
+  );
+}
+
 const VOLUME_ATTACHED_RE = /attached|mounted|in.?use|busy|in_use|still in use|sync.?pending|pending_create/i;
 
 /**

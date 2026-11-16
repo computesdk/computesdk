@@ -97,8 +97,19 @@ are available through `sandbox.getInstance().files`.
   does not make a service public. Native token information is available through
   `sandbox.getInstance()`.
 
-Native pause/resume, timeout extension, PTY, and other SDK features remain
-available through `sandbox.getInstance()` or a separate `Novita` client.
+## Pause and resume
+
+```typescript
+await sandbox.pause();
+await sandbox.resume();
+```
+
+Pausing keeps memory, so files anywhere on the filesystem and running
+processes survive (`sdk.sandbox.pause` is `{ memory: true }`). Resuming
+reconnects with the lifetime the sandbox was created with.
+
+Timeout extension, PTY, and other SDK features remain available through
+`sandbox.getInstance()` or a separate `Novita` client.
 
 ## Snapshots
 
@@ -113,7 +124,11 @@ try {
 await sdk.snapshot!.delete(snapshot.id);
 ```
 
-Snapshot creation pauses the source sandbox. `snapshot.list({ instanceId, limit })`
+Snapshots capture the whole root filesystem (including `/tmp`, which is not a
+tmpfs) and memory, so processes running in the source keep running in the
+restored sandbox. The source pauses briefly while the snapshot is taken and then
+keeps running; `sdk.snapshot.capabilities` is
+`{ scope: 'rootfs', memory: true, destroysSource: false }`. `snapshot.list({ instanceId, limit })`
 supports filtering by source and a total result limit, fetching additional pages
 as needed. Snapshots return `id`, `snapshotId`, and `provider`; the SDK does not
 provide creation timestamps. Snapshot names and metadata are not supported.

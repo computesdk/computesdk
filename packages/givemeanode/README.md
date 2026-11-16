@@ -229,6 +229,13 @@ const snapshot = await compute.snapshot.create(sandbox.instanceId)
 const copy = await compute.instances.create({ snapshotId: snapshot.id })
 ```
 
+The source keeps running. A fork resumes the exact captured state: the
+whole root filesystem (including `/tmp`), memory, and running processes
+(`provider.snapshot.capabilities` is `{ scope: 'rootfs', memory: true,
+destroysSource: false }`). There is no explicit pause: an idle sandbox
+parks itself and wakes on its next command, so `instance.pause()` is not
+offered.
+
 ## Supported
 
 | Feature | Supported |
@@ -241,17 +248,29 @@ const copy = await compute.instances.create({ snapshotId: snapshot.id })
 | `getUrl` (a public HTTPS URL for a port) | yes - see below |
 | streaming stdout/stderr | not natively; the SDK's bridge applies |
 
-## Two behaviours worth knowing about
+## Three behaviours worth knowing about
+
+**Reads are bounded below the exec output cap.** Files are read in 512 KiB
+byte chunks over base64, then decoded as UTF-8 once. This preserves
+multibyte characters, a leading BOM, and trailing newlines even across
+chunk boundaries. Truncated responses, failed reads, short chunks and size
+changes reject rather than return a prefix. Symlinks are followed and
+the guest's file permissions still apply. A file changing in place is not
+an atomic snapshot: stop writers before reading if you need one.
 
 **Writes go through base64, not a heredoc.** A heredoc's body is every line
 up to its marker, so it can only ever produce a file *ending in a
 newline*: writing `hello` and reading it back gave `hello\n`. Base64 has no
 such rounding, needs no escaping (the alphabet is shell-inert), and carries
 content a heredoc cannot - no trailing newline, a line equal to the marker,
-arbitrary bytes. The cost is that the encoded content rides in one argv
-entry, so **a single `writeFile` is bounded by the guest's ARG_MAX**,
-typically around 1.5 MB of content. Every givemeanode image ships
-coreutils, so `base64` is present.
+arbitrary bytes. The exec channel drops a command much over ~100 KB
+(the result comes back voided with `exec_channel_lost`), so content whose
+base64 exceeds 32 KiB is appended to a `<path>.gmn-part` file in slices
+and renamed over the target by the last one - a reader never sees a
+half-written file, and a large write costs one exec per slice. Every
+givemeanode image ships coreutils, so `base64` is present. Encoding and
+command generation happen one slice at a time, not as a complete list of
+base64 commands held in memory.
 
 **A command is retried once, and only for one error.** The connection to a
 sandbox is re-established on demand, so the first command after a quiet

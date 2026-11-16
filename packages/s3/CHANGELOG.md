@@ -1,5 +1,53 @@
 # @computesdk/s3
 
+## 1.2.25
+
+### Patch Changes
+
+- 1fb3804: Raise the minimum supported Node.js version to 22 (root development floor 22.19.0); Node.js 18 and 20 are EOL.
+  - @computesdk/provider@2.1.24
+
+## 1.2.24
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+
+## 1.2.23
+
+### Patch Changes
+
+- 1904e82: Fix `list()` returning no objects: read the Tigris SDK's `items`/`name`/`hasMore`/`paginationToken` response and pass `continuationToken` as `paginationToken`. Default the endpoint to Tigris (`https://t3.storage.dev`, like the Tigris SDK) when neither `endpoint` nor `TIGRIS_STORAGE_ENDPOINT` is set, instead of throwing.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+
+## 1.2.22
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - @computesdk/provider@2.1.21
+
+## 1.2.21
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+  - @computesdk/provider@2.1.20
+
+## 1.2.20
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 1.2.19
 
 ### Patch Changes

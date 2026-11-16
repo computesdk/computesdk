@@ -1,17 +1,79 @@
 /**
- * Thin client for the benchmarks-platform Actions v1 API.
+ * The platform transport moved to `@computesdk/platform` in cli 2.x — this
+ * file re-exports the moved names under their old `Actions*` names for one
+ * release, keeps the Actions wire types, and defines `ActionsClient` as the
+ * `PlatformClient` subclass with the Actions `org()` endpoint.
  * Types mirror the wire shapes in benchmarks-platform `lib/ci/types.ts` —
  * keep them in sync by hand; the API is the contract.
  */
+import {
+  DEFAULT_BASE_URL,
+  PlatformApiError,
+  PlatformClient,
+  PlatformClientError,
+  codeForStatus,
+  errorDetails,
+  isSecurePlatformTransport,
+  isTrustedPlatformHost,
+  readSseEvents,
+  readSseNamedEvents,
+  resolvePlatformAuth,
+  toErrorEnvelope,
+} from '@computesdk/platform';
+import type {
+  PlatformAuth,
+  PlatformClientErrorCode,
+  PlatformErrorEnvelope,
+  StoredPlatformAuth,
+  StoredPlatformAuthResolver,
+} from '@computesdk/platform';
 
+export {
+  DEFAULT_BASE_URL,
+  PlatformApiError as ActionsApiError,
+  PlatformClientError as ActionsCliError,
+  codeForStatus,
+  errorDetails,
+  isSecurePlatformTransport as isSecureActionsTransport,
+  isTrustedPlatformHost as isTrustedActionsHost,
+  readSseEvents,
+  readSseNamedEvents,
+  toErrorEnvelope,
+};
 
-export const DEFAULT_BASE_URL = 'https://platform.computesdk.com';
+const CLI_CREDENTIALS_HINT =
+  'Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.';
 
-export interface ActionsAuth {
-  apiKey: string;
-  baseUrl: string;
-  /** Sent as `X-Org-Slug` when set (--org / COMPUTE_ORG / stored login org). */
-  orgSlug?: string;
+/** `resolvePlatformAuth` with the CLI's flag-style credentials hint. */
+export function resolveActionsAuth(
+  opts: Parameters<typeof resolvePlatformAuth>[0],
+  resolveStored?: StoredPlatformAuthResolver,
+): Promise<PlatformAuth> {
+  return resolvePlatformAuth(opts, resolveStored, CLI_CREDENTIALS_HINT);
+}
+export type {
+  PlatformAuth as ActionsAuth,
+  PlatformClientErrorCode as ActionsCliErrorCode,
+  PlatformErrorEnvelope as ActionsErrorEnvelope,
+  StoredPlatformAuth,
+  StoredPlatformAuthResolver,
+};
+
+export interface ActionsOrg {
+  organizationId: string;
+  name: string;
+  slug: string;
+}
+
+/** `id:jobId:step:offset` — the run-stream watch cursor wire format. */
+export function encodeWatchCursor(
+  id: string,
+  jobId: string,
+  step: number | 'runner' | null,
+  offset: number,
+): string {
+  const stepPart = step === null ? '-' : step === 'runner' ? 'runner' : String(step);
+  return `${id}:${jobId}:${stepPart}:${offset}`;
 }
 
 export interface CiWorkflowInput {
@@ -34,7 +96,85 @@ export interface CiWorkflow {
   schedules: unknown[];
 }
 
+/** A row of `GET /api/v1/actions/workflows`: the dispatch picker row plus its controls and latest run. */
+export interface CiWorkflowListItem extends CiWorkflow {
+  /** Runs at all: the repo is enabled and the workflow is not user-disabled. */
+  enabled: boolean;
+  repoEnabled: boolean;
+  userDisabledAt: string | null;
+  /** Per-workflow placement order; null inherits the org order. */
+  providerOrder: string[] | null;
+  /** Per-workflow snapshot cap; null is the dynamic pool, 0 is off. */
+  snapshotCap: number | null;
+  lastRun: { id: string; conclusion: CiConclusion; queuedAt: string } | null;
+}
+
+/** A workflow file only the listed ref has: dispatched by repo and path on that ref. */
+export interface CiRefOnlyWorkflow {
+  name: string;
+  path: string;
+  inputs: CiWorkflowInput[];
+  dispatchable: boolean;
+}
+
+export interface CiWorkflowsResponse {
+  workflows: CiWorkflowListItem[];
+  /** Present when the list was asked for with `ref`. */
+  refOnly?: CiRefOnlyWorkflow[];
+}
+
+/** `PATCH /api/v1/actions/workflows`: a workflow's user-owned controls after the change. */
+export interface CiWorkflowControls {
+  repoFullName: string;
+  path: string;
+  enabled: boolean;
+  userDisabledAt: string | null;
+  providerOrder: string[] | null;
+  snapshotCap: number | null;
+}
+
 export type CiConclusion = 'passed' | 'failed' | 'running' | 'cancelled' | 'none';
+
+export interface CiScheduleWorkflow {
+  repoFullName: string;
+  workflowName: string;
+  workflowPath: string;
+}
+
+export interface CiScheduleRun extends CiScheduleWorkflow {
+  id: string;
+  event: string;
+  ref: string;
+  status: 'queued' | 'running' | 'completed';
+  conclusion: string;
+  startedAt: string | null;
+  createdAt: string;
+}
+
+/** `GET /api/v1/actions/schedule`: daily totals, paginated runs and capped fires. */
+export interface CiSchedule {
+  from: string;
+  to: string;
+  timeZone: string;
+  countsTruncated: boolean;
+  days: (CiScheduleWorkflow & {
+    date: string;
+    runs: { total: number; byConclusion: Record<string, number>; items: CiScheduleRun[] };
+    upcoming: { total: number; items: string[] };
+  })[];
+  runs: CiScheduleRun[];
+  nextCursor: string | null;
+  upcoming: (CiScheduleWorkflow & {
+    scheduleId: string;
+    cron: string;
+    description: string;
+    occurrences: string[];
+    occurrenceCount: number;
+    truncated: boolean;
+    countTruncated: boolean;
+  })[];
+}
+
 export type CiJobState =
   | 'queued'
   | 'running'
@@ -91,8 +231,66 @@ export interface CiRun {
   cancellationReason: string | null;
   /** `provider[:region]` the dispatch pinned this run to, else null. */
   providerOverride?: string | null;
+  /** When the run was archived (hidden from the default lists), else null. */
+  archivedAt?: string | null;
   jobs: CiJob[];
   logTail: string[];
+  /**
+   * Benchmark runs this run produced (linked by `benchmark_run_executions.ci_run_id`).
+   * `[]` when the workflow ran no benchmark; a benchmark still running is listed
+   * with `providers: []` until its summary is uploaded.
+   */
+  benchmarks?: CiRunBenchmarkResult[];
+}
+
+/** The `(startedAt, id)` position after a day page's last row. */
+export interface CiRunsCursor {
+  startedAt: string;
+  id: string;
+}
+
+/** `GET /api/v1/actions/runs/day/{day}`: one page; `nextCursor` is null on the last. */
+export interface CiRunsPage {
+  runs: CiRun[];
+  nextCursor?: CiRunsCursor | null;
+}
+
+/** One row of `GET /api/v1/actions/run-days`. */
+export interface CiRunDay {
+  day: string;
+  count: number;
+}
+
+/** `POST /api/v1/actions/runs/archive`: how many runs changed, and the stamp (null when unarchiving). */
+export interface CiRunArchiveResponse {
+  archived: number;
+  archivedAt: string | null;
+}
+
+/** One benchmark run linked to an Actions run, from `GET /api/v1/actions/runs/{id}`. */
+export interface CiRunBenchmarkResult {
+  benchmarkSlug: string;
+  benchmarkName: string;
+  benchmarkRunId: string;
+  status: string;
+  dashboardUrl: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  providers: CiRunBenchmarkProvider[];
+}
+
+/** One provider row of a benchmark result; `dimensions: {}` is the provider's overall row. */
+export interface CiRunBenchmarkProvider {
+  provider: string;
+  dimensions: Record<string, unknown>;
+  compositeScore: number | null;
+  scoringVersion: string | null;
+  successRate: number | null;
+  skipped: boolean;
+  skipReason: string | null;
+  metrics: Record<string, { median: number; p95: number; p99: number; unit: string }>;
+  scalars: Record<string, number>;
+  scalarUnits: Record<string, string>;
 }
 
 /**
@@ -262,6 +460,52 @@ export interface CiProviderInfo {
   usable: boolean;
   /** 1-based position in the effective provider order, null when absent. */
   position: number | null;
+  /** The stored key's last verification; absent from servers that predate it. */
+  status?: 'connected' | 'error' | 'unconfigured';
+  statusDetail?: string | null;
+  /** The stored key's masked hint — never the key. */
+  keyHint?: string | null;
+  lastCheckedAt?: string | null;
+}
+
+/** A GitHub App installation on `GET /api/v1/actions/installations` — never a token. */
+export interface CiInstallation {
+  githubInstallationId: number;
+  account: string;
+  accountType: string | null;
+  accountAvatarUrl: string | null;
+  appSlug: string;
+  repoSelection: 'all' | 'selected';
+  suspended: boolean;
+  suspendedAt: string | null;
+  installedAt: string;
+  configureUrl: string | null;
+  repos: { granted: number; enabled: number };
+}
+
+export interface CiInstallationsResponse {
+  installations: CiInstallation[];
+}
+
+/**
+ * Where a signed-in owner/admin starts an install in their browser. The
+ * platform never mints the signed install link for an API credential.
+ */
+export interface CiInstallLink {
+  configured: boolean;
+  url: string | null;
+  /** GitHub only. */
+  appSlug?: string | null;
+}
+
+/** The org's Slack connection on `GET /api/v1/actions/slack` — never the bot token. */
+export interface CiSlackConnection {
+  installed: boolean;
+  teamName: string | null;
+  channelId: string | null;
+  channelName: string | null;
+  notifyOn: 'all' | 'failure';
+  brief: { enabled: boolean; times: string[]; timeZone: string; categories: string[] };
 }
 
 export interface CiProvidersResponse {
@@ -325,11 +569,6 @@ export interface CiRunHistory {
   runs: CiRunHistoryEntry[];
 }
 
-export interface ActionsOrg {
-  organizationId: string;
-  name: string;
-  slug: string;
-}
 
 /**
  * One row of `GET /api/v1/actions/repos`: a repo the org can run CI on,
@@ -353,7 +592,54 @@ export interface CiRepo {
 }
 
 export interface CiReposResponse {
-  repos: CiRepo[];
+  repos: CiApiRepo[];
+}
+
+export type CiPollSchedule = 'disabled' | 'never' | 'scheduled';
+
+/**
+ * A repo on `GET /api/v1/actions/repos` since the platform added poll state
+ * and run counts. Older deployments send only the `CiRepo` fields.
+ */
+export interface CiApiRepo extends CiRepo {
+  pollIntervalSeconds: number;
+  /** `disabled`: repo off; `never`: enabled but not polled yet; `scheduled`: `nextPollDueAt` is set. */
+  pollSchedule: CiPollSchedule;
+  nextPollDueAt: string | null;
+  lastPollErrorAt: string | null;
+  lastPollSucceededAt: string | null;
+  lastChangeAt: string | null;
+  /** Unarchived runs (reliability runs included), as the repository index counts them. */
+  runs: { total: number; lastRunState: CiConclusion | null; lastRunQueuedAt: string | null };
+}
+
+/** `POST /api/v1/actions/repos/poll`: a poll that failed against the remote still answers with `error` set. */
+export interface CiRepoPollResponse {
+  fullName: string;
+  repoId: string;
+  polled: true;
+  error: string | null;
+  createdRunIds: string[];
+  repo: CiApiRepo;
+}
+
+/** One ref of `GET /api/v1/actions/repos/branches`: a watched cursor, or run history alone. */
+export interface CiBranch {
+  /** Fully qualified: refs/heads/…, refs/pull/<n>/head, refs/tags/… */
+  ref: string;
+  prNumber: number | null;
+  /** True while a live ref cursor polls the ref; false: run history only. */
+  watched: boolean;
+  runCount: number;
+  /** "" when the ref has no run in view. */
+  latestRunId: string;
+  lastRunAt: string;
+}
+
+export interface CiBranchesResponse {
+  repo: string;
+  defaultBranch: string;
+  branches: CiBranch[];
 }
 
 /** What an enable/remote-connect discovered before answering. */
@@ -421,465 +707,16 @@ export interface CiVaultDeleteResponse {
   deleted: true;
 }
 
-export class ActionsApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public body?: unknown,
-  ) {
-    super(message);
-    this.name = 'ActionsApiError';
-  }
-}
-
-/** Stable machine-readable codes for errors raised by the CLI itself. */
-export type ActionsCliErrorCode =
-  | 'no_credentials'
-  | 'untrusted_host'
-  | 'untrusted_host_stored_auth'
-  | 'insecure_transport'
-  | 'invalid_argument'
-  | 'workflow_not_found';
-
-/** An error the CLI raised before or instead of an API call. */
-export class ActionsCliError extends Error {
-  constructor(
-    public code: ActionsCliErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ActionsCliError';
-  }
-}
-
-/** The `--json` error envelope; `code` is stable, `message` is for humans. */
-export interface ActionsErrorEnvelope {
-  ok: false;
-  error: {
-    code: string;
-    message: string;
-    /** Present when the platform answered; absent for local/transport failures. */
-    httpStatus?: number;
-    retryable: boolean;
-    /** The platform's `details` object, when its error response carried one. */
-    details?: Record<string, unknown>;
-  };
-}
-
-function codeForStatus(status: number): string {
-  switch (status) {
-    case 400: return 'bad_request';
-    case 401: return 'unauthenticated';
-    case 403: return 'forbidden';
-    case 404: return 'not_found';
-    case 409: return 'conflict';
-    case 413: return 'payload_too_large';
-    case 429: return 'rate_limited';
-    default: return status >= 500 ? 'server_error' : 'http_error';
-  }
-}
-
-function errorDetails(body: unknown): Record<string, unknown> | undefined {
-  if (body && typeof body === 'object' && 'details' in body) {
-    const details = (body as { details: unknown }).details;
-    if (details && typeof details === 'object' && !Array.isArray(details)) {
-      return details as Record<string, unknown>;
-    }
-  }
-  return undefined;
-}
-
 /**
- * Classify any error thrown by an Actions command. API errors carry the HTTP
- * status; CLI errors carry their own code; a fetch rejection (DNS, refused
- * connection, TLS) is `network`; anything else is `unknown`.
+ * The CLI's platform client — `PlatformClient` plus the Actions-only
+ * `org()` endpoint the dashboard URL builders need.
  */
-export function toErrorEnvelope(error: unknown): ActionsErrorEnvelope {
-  if (error instanceof ActionsApiError) {
-    const details = errorDetails(error.body);
-    // The platform's OAuth layer answers 403 insufficient_scope when the
-    // stored login's grant doesn't cover the call — point at re-login rather
-    // than leaving the raw error.
-    const insufficientScope =
-      error.message.includes('insufficient_scope') ||
-      (typeof error.body === 'string' && error.body.includes('insufficient_scope')) ||
-      (typeof error.body === 'object' && error.body !== null &&
-        JSON.stringify(error.body).includes('insufficient_scope'));
-    return {
-      ok: false,
-      error: {
-        code: codeForStatus(error.status),
-        message: insufficientScope
-          ? `${error.message} — run \`compute login\` to sign in again.`
-          : error.message,
-        httpStatus: error.status,
-        retryable: error.status === 429 || error.status === 502 || error.status === 503 || error.status === 504,
-        ...(details !== undefined && { details }),
-      },
-    };
-  }
-  if (error instanceof ActionsCliError) {
-    return { ok: false, error: { code: error.code, message: error.message, retryable: false } };
-  }
-  // undici/Node fetch rejects with a TypeError whose cause is the socket error.
-  if (error instanceof TypeError && /fetch failed/i.test(error.message)) {
-    const cause = (error as { cause?: unknown }).cause;
-    const detail = cause instanceof Error ? `: ${cause.message}` : '';
-    return {
-      ok: false,
-      error: { code: 'network', message: `${error.message}${detail}`, retryable: true },
-    };
-  }
-  return {
-    ok: false,
-    error: {
-      code: 'unknown',
-      message: error instanceof Error ? error.message : String(error),
-      retryable: false,
-    },
-  };
-}
-
-export class ActionsClient {
+export class ActionsClient extends PlatformClient {
   private orgPromise: Promise<ActionsOrg> | null = null;
-
-  constructor(
-    private readonly auth: ActionsAuth,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
-
-  get baseUrl(): string {
-    return this.auth.baseUrl;
-  }
 
   /** The credential's org — fetched once, needed for dashboard URLs. */
   org(): Promise<ActionsOrg> {
     this.orgPromise ??= this.get<ActionsOrg>('/api/v1/actions/org');
     return this.orgPromise;
   }
-
-  async get<T>(path: string, params?: Record<string, string | string[] | undefined>): Promise<T> {
-    const url = new URL(`${this.auth.baseUrl}${path}`);
-    for (const [key, value] of Object.entries(params ?? {})) {
-      if (value === undefined) continue;
-      for (const v of Array.isArray(value) ? value : [value]) url.searchParams.append(key, v);
-    }
-    const res = await this.fetchImpl(url, { headers: this.headers() });
-    return this.parse<T>(res);
-  }
-
-  async post<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'POST',
-      headers: { ...this.headers(), 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return this.parse<T>(res);
-  }
-
-  async put<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'PUT',
-      headers: { ...this.headers(), 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return this.parse<T>(res);
-  }
-
-  async patch<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'PATCH',
-      headers: { ...this.headers(), 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return this.parse<T>(res);
-  }
-
-  async del<T>(path: string): Promise<T> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      method: 'DELETE',
-      headers: this.headers(),
-    });
-    return this.parse<T>(res);
-  }
-
-  /**
-   * One `data:` JSON payload per SSE event. `next()` resolves to the payload,
-   * or null when the stream ends. Call `close()` to abort.
-   */
-  async *sse(path: string, params?: Record<string, string | string[] | undefined>): AsyncGenerator<unknown> {
-    const url = new URL(`${this.auth.baseUrl}${path}`);
-    for (const [key, value] of Object.entries(params ?? {})) {
-      if (value === undefined) continue;
-      for (const v of Array.isArray(value) ? value : [value]) url.searchParams.append(key, v);
-    }
-    const res = await this.fetchImpl(url, {
-      headers: { ...this.headers(), accept: 'text/event-stream' },
-    });
-    if (!res.ok) {
-      await this.parse(res); // throws
-    }
-    if (!res.body) throw new Error('SSE response has no body');
-    yield* readSseEvents(res.body);
-  }
-
-  /**
-   * `sse()` with the frame's `event:` name preserved — for streams whose
-   * events are distinguished by name rather than payload shape (process
-   * follow: stdout/stderr share a `{chunk}` payload).
-   */
-  async *sseNamed(
-    path: string,
-    params?: Record<string, string | string[] | undefined>,
-  ): AsyncGenerator<{ event: string; data: unknown }> {
-    const url = new URL(`${this.auth.baseUrl}${path}`);
-    for (const [key, value] of Object.entries(params ?? {})) {
-      if (value === undefined) continue;
-      for (const v of Array.isArray(value) ? value : [value]) url.searchParams.append(key, v);
-    }
-    const res = await this.fetchImpl(url, {
-      headers: { ...this.headers(), accept: 'text/event-stream' },
-    });
-    if (!res.ok) {
-      await this.parse(res); // throws
-    }
-    if (!res.body) throw new Error('SSE response has no body');
-    yield* readSseNamedEvents(res.body);
-  }
-
-  /** Download bytes following redirects (artifact URLs 302 to storage). */
-  async download(path: string): Promise<Uint8Array> {
-    const res = await this.fetchImpl(`${this.auth.baseUrl}${path}`, {
-      headers: this.headers(),
-      redirect: 'follow',
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => undefined);
-      throw new ActionsApiError(res.status, errorMessage(body, res.status), body);
-    }
-    return new Uint8Array(await res.arrayBuffer());
-  }
-
-  private headers(): Record<string, string> {
-    const headers: Record<string, string> = {
-      authorization: `Bearer ${this.auth.apiKey}`,
-      accept: 'application/json',
-    };
-    if (this.auth.orgSlug) headers['X-Org-Slug'] = this.auth.orgSlug;
-    return headers;
-  }
-
-  private async parse<T>(res: Response): Promise<T> {
-    const body = await res.json().catch(() => undefined);
-    if (!res.ok) throw new ActionsApiError(res.status, errorMessage(body, res.status), body);
-    return body as T;
-  }
-}
-
-function errorMessage(body: unknown, status: number): string {
-  if (body && typeof body === 'object' && 'error' in body && typeof (body as { error: unknown }).error === 'string') {
-    return (body as { error: string }).error;
-  }
-  return `Request failed with status ${status}`;
-}
-
-/** Minimal SSE reader: yields the JSON payload of each `data:` event. */
-export async function* readSseEvents(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<unknown> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const event = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        for (const line of event.split('\n')) {
-          if (line.startsWith('data: ')) {
-            yield JSON.parse(line.slice(6));
-          }
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-/** `readSseEvents` with the `event:` name preserved alongside the JSON payload. */
-export async function* readSseNamedEvents(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<{ event: string; data: unknown }> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const frame = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        let event = 'message';
-        const dataLines: string[] = [];
-        for (const line of frame.split('\n')) {
-          if (line.startsWith('event: ')) event = line.slice(7);
-          else if (line.startsWith('data: ')) dataLines.push(line.slice(6));
-        }
-        if (dataLines.length > 0) {
-          yield { event, data: JSON.parse(dataLines.join('\n')) };
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-/** `id:jobId:step:offset` — the run-stream watch cursor wire format. */
-export function encodeWatchCursor(
-  id: string,
-  jobId: string,
-  step: number | 'runner' | null,
-  offset: number,
-): string {
-  const stepPart = step === null ? '-' : step === 'runner' ? 'runner' : String(step);
-  return `${id}:${jobId}:${stepPart}:${offset}`;
-}
-
-/** The subset of `@benchsdk/cli`'s `resolveAuth` result Actions needs. */
-export type StoredPlatformAuth = { apiKey?: string; token?: string; orgSlug?: string; orgId?: string };
-export type StoredPlatformAuthResolver = (opts: { baseUrl: string }) => Promise<StoredPlatformAuth>;
-
-const NO_CREDENTIALS_HINT =
-  'Set COMPUTE_API_KEY, pass --api-key, or run `compute login`.';
-
-/**
- * Precedence: `--api-key` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
- * (legacy) > platform OAuth credentials stored by `compute login`
- * (`~/.benchsdk/credentials.json`, via `@benchsdk/cli`'s `resolveAuth`, which
- * refreshes an expired access token but never opens a browser). `compute
- * login` writes the same store, so a platform login covers these commands.
- */
-export async function resolveActionsAuth(
-  opts: {
-    apiKey?: string;
-    baseUrl?: string;
-    allowUntrustedHost?: boolean;
-    /** One-off org override: sent as X-Org-Slug (also settable via COMPUTE_ORG). */
-    org?: string;
-  },
-  resolveStored: StoredPlatformAuthResolver = resolveStoredPlatformAuth,
-): Promise<ActionsAuth> {
-  const baseUrl = (
-    opts.baseUrl ||
-    process.env.COMPUTE_PLATFORM_URL ||
-    process.env.BENCHMARKS_PLATFORM_URL || // legacy name
-    DEFAULT_BASE_URL
-  ).replace(/\/+$/, '');
-
-  // One-off org override: --org flag or COMPUTE_ORG sends X-Org-Slug on every
-  // request. Falls back to the stored login's saved org. The platform ignores
-  // the header for org API keys (they are already org-scoped).
-  let orgSlug = opts.org || process.env.COMPUTE_ORG || undefined;
-
-  // The bearer key is attached to every request, so an attacker-controlled
-  // --base-url would exfiltrate it. Only trusted hosts are allowed silently;
-  // anything else must be opted into with --allow-untrusted-host.
-  if (!opts.allowUntrustedHost && !isTrustedActionsHost(baseUrl)) {
-    throw new ActionsCliError(
-      'untrusted_host',
-      `Refusing to send the API key to ${baseUrl} — it is not a computesdk.com or localhost host. ` +
-        'If this is a self-hosted/dev deployment you trust, pass --allow-untrusted-host.',
-    );
-  }
-  // Host trust and transport security are separate: --allow-untrusted-host
-  // says who may receive the key, never that it may travel in plaintext.
-  if (!isSecureActionsTransport(baseUrl)) {
-    throw new ActionsCliError(
-      'insecure_transport',
-      `Refusing to send the API key over plaintext HTTP to ${baseUrl}. ` +
-        'Use an https:// base URL; http:// is only allowed for localhost/loopback.',
-    );
-  }
-
-  // `||` not `??`: empty-string env vars (common in CI matrices) should fall
-  // through to the next source, not count as configured.
-  let apiKey =
-    opts.apiKey ||
-    process.env.COMPUTE_API_KEY ||
-    process.env.BENCHMARKS_PLATFORM_API_KEY || // legacy name
-    undefined;
-  if (!apiKey) {
-    // Stored platform OAuth is only ever resolved (and refreshed) for trusted
-    // hosts. --allow-untrusted-host opts an explicit key into a host, not the
-    // user's saved session.
-    if (!isTrustedActionsHost(baseUrl)) {
-      throw new ActionsCliError(
-        'untrusted_host_stored_auth',
-        `Refusing to use stored platform credentials with untrusted host ${baseUrl}. ` +
-          'Pass --api-key or set COMPUTE_API_KEY to use an explicit key with --allow-untrusted-host.',
-      );
-    }
-    let stored: StoredPlatformAuth;
-    try {
-      stored = await resolveStored({ baseUrl });
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      // `@benchsdk/cli`'s "nothing stored" message names `bench` commands and
-      // env vars that only apply to that CLI; keep ours for that case and
-      // surface the reason only for expired/failed-refresh sessions.
-      const detail = reason.startsWith('No credentials found') ? 'No API key.' : reason;
-      throw new ActionsCliError('no_credentials', `${detail} ${NO_CREDENTIALS_HINT}`);
-    }
-    apiKey = stored.apiKey || stored.token || undefined;
-    // The stored orgSlug is only a cache of the last `org use` on this
-    // machine — the server's consent row is the source of truth, and
-    // sending it would pin this machine to a stale org after a switch
-    // elsewhere. Only --org/COMPUTE_ORG send X-Org-Slug.
-  }
-  if (!apiKey) {
-    throw new ActionsCliError('no_credentials', `No API key. ${NO_CREDENTIALS_HINT}`);
-  }
-  return { apiKey, baseUrl, ...(orgSlug && { orgSlug }) };
-}
-
-async function resolveStoredPlatformAuth(opts: { baseUrl: string }): Promise<StoredPlatformAuth> {
-  const { resolveAuth } = await import('@benchsdk/cli');
-  const auth = await resolveAuth({ baseUrl: opts.baseUrl });
-  return { apiKey: auth.apiKey, token: auth.token, orgSlug: auth.orgSlug, orgId: auth.orgId };
-}
-
-function isLoopbackHost(host: string): boolean {
-  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
-}
-
-/** https://, or http:// to a loopback host only. */
-export function isSecureActionsTransport(baseUrl: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(baseUrl);
-  } catch {
-    return false;
-  }
-  if (url.protocol === 'https:') return true;
-  return url.protocol === 'http:' && isLoopbackHost(url.hostname);
-}
-
-/** computesdk.com (and subdomains) or localhost — safe to receive the API key. */
-export function isTrustedActionsHost(baseUrl: string): boolean {
-  let host: string;
-  try {
-    host = new URL(baseUrl).hostname;
-  } catch {
-    return false;
-  }
-  return host === 'computesdk.com' || host.endsWith('.computesdk.com') || isLoopbackHost(host);
 }

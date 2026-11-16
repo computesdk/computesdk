@@ -1,5 +1,70 @@
 # @computesdk/createos-sandbox
 
+## 0.1.29
+
+### Patch Changes
+
+- @computesdk/provider@2.1.24
+
+## 0.1.28
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+
+## 0.1.27
+
+### Patch Changes
+
+- 1904e82: `getUrl` enables ingress on demand: sandboxes are created with ingress off, so requesting a URL now turns it on instead of throwing "No ingress URL is available".
+- 1904e82: Native `instance.pause()`/`resume()` (waiting for the pause to settle before resuming), with declared `pauseCapabilities` and `snapshot.capabilities`: pause and snapshots keep the whole rootfs and running processes, and `snapshot.create` leaves the source running.
+- 1904e82: `snapshot.create` now returns a paused fork of the sandbox (its own id) and resumes the source, so snapshots survive the source being destroyed and can be restored many times.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+
+## 0.1.26
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - @computesdk/provider@2.1.21
+
+## 0.1.25
+
+### Patch Changes
+
+- d4424cd: runCommand: capture output via guest files instead of streamed exec output. Provider exec transports can drop a contiguous chunk mid-stream (observed across all five providers during a CPU-bound quiet stretch) while still reporting success, silently corrupting captured stdout/stderr. Commands now redirect output to files inside the sandbox and the adapter reads them back with short-lived commands, verified against byte counts the command writes alongside. Microsandbox additionally records byte counts and re-reads through the alternate transport on a mismatch.
+
+## 0.1.24
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+  - @computesdk/provider@2.1.20
+
+## 0.1.23
+
+### Patch Changes
+
+- 7668bf8: namespace: send size_mb on runtime volume attaches — a fresh persistent volume with no size can't be provisioned and the instance is destroyed while waiting for readiness. createos: wait for mount_status=mounted after create/attachDisk (the in-VM agent mounts asynchronously); mount_error surfaces on failure.
+
+## 0.1.22
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 0.1.21
 
 ### Patch Changes

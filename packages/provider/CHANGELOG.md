@@ -1,5 +1,69 @@
 # @computesdk/provider
 
+## 2.1.24
+
+### Patch Changes
+
+- Updated dependencies [1fb3804]
+  - daemond@0.1.9
+  - computesdk@4.1.18
+
+## 2.1.23
+
+### Patch Changes
+
+- 8e11040: `CreateSnapshotOptions` gains an optional `scope: 'disk' | 'full'` hint (both the universal-instance and provider-factory surfaces).
+
+  `snapshot.create` now tries a live full-scope capture first — `Snapshot.builder(name).fromSandbox(id).full().guestFlush('auto')` — so on backends that support it (SDK `scope: "full"` / checkpoint), the source keeps running and memory/process state is preserved. When the backend rejects live capture, it falls back to the previous disk-only stop/capture/restart path. Restores of `scope === "full"` snapshots request `cowMemory()` so the captured execution resumes.
+
+- Updated dependencies [8e11040]
+  - computesdk@4.1.17
+  - daemond@0.1.8
+
+## 2.1.22
+
+### Patch Changes
+
+- 1904e82: `getById` only reattaches egress info when the provider has a native filesystem, so providers on the shell filesystem fallback don't run commands on every lookup.
+- 1904e82: Providers without native filesystem methods now get a working `sandbox.filesystem` built on `runCommand` (base64 over POSIX `sh`) instead of one that throws "not supported".
+- 1904e82: Shell process tier: lock log appends with a noclobber file create instead of `mkdir`, which is not atomic under uutils coreutils (Ubuntu 26.04 images).
+- 1904e82: Snapshot capabilities can say what happens to the source (`kept`, `stopped`, `destroyed`), which paths a restore leaves out, whether one snapshot forks into many instances, and whether it needs `snapshot.waitUntilReady()` before restoring. Providers can declare a lifetime (`provider.sandbox.lifetime`) and expose `instance.extendLifetime()`. The conformance suite runs the pause and snapshot tests whenever a provider declares them, and its pause test keeps its probe process alive with `startProcess`.
+- 1904e82: Add optional `instance.pause()`/`resume()` (providers implement `pause`/`resume` and declare `pauseCapabilities`, surfaced as `provider.sandbox.pause`) and `snapshot.capabilities` describing what a snapshot keeps (`scope`, `path`, `memory`, `destroysSource`, `createOptions`). The conformance suite gains opt-in `supportsPauseResume` and `supportsSnapshots` tests.
+- 4924af5: Background processes and streaming `runCommand` now default to a POSIX-shell process tier built on the provider's plain `runCommand` (no Node, daemon or download; works on Alpine/busybox). Order: provider-native `streamCommand`/`startProcess` hooks, then the shell tier, then daemond only with `processRuntime: 'daemond'`. Adds the `startProcess` provider hook, `instance.processRuntime`, `instance.attachProcess(jobId)`, and process-runtime coverage in the test-utils conformance suite.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - computesdk@4.1.16
+  - daemond@0.1.8
+
+## 2.1.21
+
+### Patch Changes
+
+- 24803d6: Add additive standard CPU/RAM sizeClass requests, immutable pure provider capability resolution and request metadata, with typed pre-create failures instead of silently ignored or default-sized requests. Initially map sm/md/lg/xl for Namespace Linux amd64 and new Archil persistent VMs; preserve every legacy create path without sizeClass. Other mappings remain explicitly unknown; no builds, live availability checks, or consumer migrations are performed.
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - daemond@0.1.8
+
+## 2.1.20
+
+### Patch Changes
+
+- 2bd2e7d: Add `saveDownloads` to `CreateBrowserSessionOptions` and forward it to Hyperbrowser's create-session params. Previously the option was silently dropped by `mapSessionOptions`, so sessions were always created with downloads disabled and the session downloads API reported `not_enabled`.
+- Updated dependencies [0a54571]
+  - computesdk@4.1.14
+  - daemond@0.1.8
+
+## 2.1.19
+
+### Patch Changes
+
+- f062b5d: Restore native `volumes` passthrough in `create()`. The unified-volume surface made `options.volumes` mean `VolumeMount[]` on every provider, which silently mangled provider-native volume specs callers were already passing: entries without a `volume` key resolved `name`/`volumeId` to `undefined`, so e.g. blaxel's `{name, type, sizeMb, mountPath}` hit the wire as `{"mountPath":"/","type":"persistent"}` and failed validation (`Volume binding 'name' and 'mountPath' must be strings`). Modal's native `volumes` dict was dropped entirely.
+
+  `volumes` is now treated as unified mounts only when it is a non-empty array where every entry carries `volume` (new `isUnifiedVolumeMounts` guard in `@computesdk/provider`). Anything else stays in provider options and reaches the provider untouched, restoring the pre-unified passthrough.
+
+  - daemond@0.1.8
+
 ## 2.1.18
 
 ### Patch Changes

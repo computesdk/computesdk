@@ -82,11 +82,11 @@ export async function retryBootRaces<T>(
       return await operation();
     } catch (error) {
       const retryable = isInstanceNotRunning(error) || isOperationInProgress(error);
-      if (!retryable || Date.now() >= deadline) throw error;
       // The caller may have given up at the deadline, so never start another
-      // attempt past it.
-      await sleep(Math.min(BOOT_WAIT_POLL_MS, deadline - Date.now()));
-      if (Date.now() >= deadline) throw error;
+      // attempt past it. Timers can fire a millisecond early, so a retry is
+      // only made when a whole poll interval still fits.
+      if (!retryable || deadline - Date.now() < BOOT_WAIT_POLL_MS) throw error;
+      await sleep(BOOT_WAIT_POLL_MS);
     }
   }
 }

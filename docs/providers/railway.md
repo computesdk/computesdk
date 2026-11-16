@@ -26,6 +26,10 @@ layout:
 
 Railway provider for ComputeSDK — run commands in [Railway Sandboxes](https://docs.railway.com/sandboxes), ephemeral compute environments backed by the Railway platform.
 
+## Lifecycle
+
+Snapshot capabilities declare rootfs-only capture (`memory: false`) with the source kept. Restore with `snapshotId`; running processes are not preserved.
+
 ## Installation & Setup
 
 ```bash

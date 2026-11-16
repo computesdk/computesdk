@@ -7,20 +7,19 @@
  * These tests run against a real S3-compatible endpoint and only execute when credentials
  * are available in environment variables.
  * 
- * To run: Set TIGRIS_STORAGE_ACCESS_KEY_ID, TIGRIS_STORAGE_SECRET_ACCESS_KEY, and
- * TIGRIS_STORAGE_ENDPOINT, then run tests
+ * To run: Set TIGRIS_STORAGE_ACCESS_KEY_ID and TIGRIS_STORAGE_SECRET_ACCESS_KEY
+ * (optionally TIGRIS_STORAGE_ENDPOINT and TIGRIS_STORAGE_BUCKET), then run tests
  * These tests are automatically skipped in CI without credentials.
  */
 
 import { describe, it } from 'vitest';
-import { runStorageProviderTestSuite } from '@computesdk/test-utils';
+import { failIfIntegrationRequired, runStorageProviderTestSuite } from '@computesdk/test-utils';
 import { s3 } from '../index';
 
 // Only run integration tests if credentials are available
 const runIntegration = !!(
   process.env.TIGRIS_STORAGE_ACCESS_KEY_ID &&
-  process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY &&
-  process.env.TIGRIS_STORAGE_ENDPOINT
+  process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY
 );
 
 // Use environment bucket or default test bucket
@@ -40,6 +39,7 @@ if (runIntegration) {
     timeout: 60000,
   });
 } else {
+  failIfIntegrationRequired('S3-compatible', true);
   // Add a placeholder test so vitest doesn't complain about empty file
   describe('S3-Compatible Integration', () => {
     it.skip('skipped - no credentials available', () => {});

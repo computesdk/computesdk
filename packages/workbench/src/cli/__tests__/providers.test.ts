@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getProviderConfig, getProviderStatus } from '../providers.js';
+import { getProviderConfig, getProviderStatus, loadProvider } from '../providers.js';
 
 describe('Novita Workbench configuration', () => {
   afterEach(() => { vi.unstubAllEnvs(); });
@@ -103,5 +103,23 @@ describe('Cloudflare Workbench configuration', () => {
       sandboxUrl: 'https://sandbox.example.workers.dev',
       sandboxApiKey: 'legacy-key',
     });
+  });
+});
+
+
+describe('Boat Workbench configuration', () => {
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('requires the Boat key and maps the optional endpoint', () => {
+    vi.stubEnv('BOAT_API_KEY', '');
+    vi.stubEnv('BOAT_API_BASE', 'https://boat.example/api/v1');
+    expect(getProviderStatus('boat')).toMatchObject({ isComplete: false, missing: ['BOAT_API_KEY'] });
+    vi.stubEnv('BOAT_API_KEY', 'boat-test');
+    expect(getProviderStatus('boat')).toMatchObject({ isComplete: true, missing: [] });
+    expect(getProviderConfig('boat')).toEqual({ apiKey: 'boat-test', baseURL: 'https://boat.example/api/v1' });
+  });
+
+  it('loads the Boat factory', async () => {
+    expect((await loadProvider('boat')).boat({ apiKey: 'test' }).name).toBe('boat');
   });
 });

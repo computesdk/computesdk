@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@unikraft/cloud": "link:/Users/abdallah_unikraft/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_j75pt4nbaw-1/js-sdk",
+    "@unikraft/cloud": "^0.2.0",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

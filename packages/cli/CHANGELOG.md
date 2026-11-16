@@ -1,5 +1,198 @@
 # @computesdk/cli
 
+## 2.6.14
+
+### Patch Changes
+
+- 6b5e70b: Expose everyday sandbox commands directly under compute, guide users with shorter
+  first-workload examples, and open browser-assisted device login for interactive
+  creation with an empty credential store before continuing the requested command.
+  Keep existing command paths, version shorthand and noninteractive auth behavior.
+
+  Match the familiar exec command pattern: interpret a single argument as a remote
+  shell command, preserve multi-argument quoting, and support --detach, --stream,
+  and --timeout in seconds while keeping spawn and --timeout-ms compatible.
+
+  Add read-only status diagnostics, resumable device login with explicit JSON and
+  wait modes, root-level kill/wait, and run completion summaries with confirmed
+  cleanup and settled cost when available. Machine-readable runs emit JSON Lines.
+
+  Support provider-first project creation (`compute new e2b .`) and one-way sync
+  between local directories and sandboxes, including sandbox relays, gitignore
+  filtering, incremental copies, dry runs, explicit deletion, and polling watch mode.
+
+  Reuse the pinned platform OCI checkpoint engine for sync scanning, diffing,
+  capture and integrity-checked restore, with selected-layer transfers and guarded
+  destination updates instead of a separate snapshot implementation.
+
+  Retain full sync captures in platform-managed storage for 30 days before applying
+  destination changes, and report snapshot IDs and expiry while cleaning only
+  filesystem staging. Storage billing is unchanged.
+
+## 2.6.13
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/platform@0.2.6
+
+## 2.6.12
+
+### Patch Changes
+
+- Updated dependencies [a995462]
+  - @computesdk/platform@0.2.5
+
+## 2.6.11
+
+### Patch Changes
+
+- 83f77cb: `compute sandboxes|actions settings` shows the managed routing strategy (ComputeSDK recommended, Cheapest or Custom) and its order; `settings set --routing` takes `computesdk`, `cheapest` or a provider order. `compute sandboxes options` says how managed accounts are ordered.
+
+## 2.6.10
+
+### Patch Changes
+
+- 73d7ed4: `compute sandboxes create` / `compute new` now say how to use the sandbox next — exec a command, start a server, get its public URL, destroy it — and that it bills until it's destroyed (on stderr; skipped with `-q`/`--json`).
+- 0343caf: Support the platform 2xlarge (16 vCPU / 32 GiB) and 3xlarge (32 vCPU / 128 GiB) sizes in help and per-size price caps.
+
+## 2.6.9
+
+### Patch Changes
+
+- 42d7e47: Add `compute sandboxes options` (and `compute new --list`): everything you can create sandboxes on, in your Sandboxes router's order — each ComputeSDK managed account with its price per size (billed from credit) and each BYOK provider (billed by the provider) — plus where a plain `compute new` would land.
+
+## 2.6.8
+
+### Patch Changes
+
+- 52c6a6f: Fix flags given before a subcommand being silently dropped: `compute credits --org team-b topup 50` now tops up team-b instead of your active org. Applies to every command group that declares shared flags on the parent and its subcommands (`credits`, `byok`, `actions runs|workflows|providers|repos|installations|slack|settings`, `sandboxes settings`, `invitations`, `org invitations`). A flag given to the subcommand itself still wins.
+
+## 2.6.7
+
+### Patch Changes
+
+- 4c627af: Add `compute credits` — your prepaid credit, which managed accounts bill from: `compute credits` (balance and holds), `compute credits ledger`, and `compute credits topup <usd>` (prints the Stripe checkout link, and the credit you'll receive after the top-up fee when the platform reports it). These lived under the hidden `compute market`, where they still work.
+
+## 2.6.6
+
+### Patch Changes
+
+- da83167: Make the CLI router-first. `compute sandboxes settings` / `compute actions settings` show the router: managed routing (ComputeSDK default or your own managed order) and BYOK use, and `settings set` takes `--routing`, `--byok off|first|fallback|only` and `--byok-order` (`--order` stays as a hidden alias). New `compute sandboxes route` shows where a create would land, whether it's billed from ComputeSDK credit (managed) or by your provider (BYOK), the price and the router's walk; `quote` remains as a hidden alias. Sandbox output labels each placement managed or BYOK. Market commands and flags are hidden from help. `compute sandboxes create|route --provider daytona[,e2b]` narrows the router to those providers for one request, keeping its BYOK mode and order. Add `--byok` (only your own keys) or `--managed` (only ComputeSDK managed accounts) to override the router's BYOK mode for that request. `create --order` is hidden (still accepted). New `compute new` is short for `compute sandboxes create`; `compute new vercel` or `compute new --vercel` picks the provider (same as `--provider vercel`). `create` / `new` print where the router will place the sandbox (provider, managed or BYOK, size, who bills it) before waiting for it to boot.
+- Updated dependencies [da83167]
+  - @computesdk/platform@0.2.4
+
+## 2.6.5
+
+### Patch Changes
+
+- 9e83843: Actions parity with the dashboard:
+
+  - `compute actions runs` works without a repo argument (every repo the org has) and takes the platform's run filters: `--event`, `--workflow` (path, name or file name), `--search`, `--archived` and `--reliability`. `--day <YYYY-MM-DD>` lists one day's runs page by page (`--time-zone`, `--cursor`, `--all` to follow every page). New `compute actions runs days` prints how many runs each day holds, and `compute actions runs archive|unarchive <run-id...>` archives or restores runs.
+  - New `compute actions workflows [repo]` lists workflows with their controls (on/off, provider order, snapshot cap) and latest run; `--all` adds user-disabled workflows and those on disabled repos, and `--ref <ref>` lists the workflow files only that branch or tag has, with their inputs. `compute actions workflows enable|disable|set <repo> <workflow>` changes a workflow's controls. `compute actions dispatch --ref <ref>` now also finds a workflow that exists only on that ref and dispatches it by path.
+  - `compute actions repos` rows show each repo's run count, latest run and next poll. New `compute actions branches <repo>` lists a repo's refs (`--search`, `--archived`), `compute actions repos poll <repo>` polls it now (one poll per 30 s; a second prints when to retry), and `compute actions repos set <repo> --fork-prs allow|refuse` sets whether fork pull requests run CI.
+
+  Archive/unarchive, workflow enable/disable/set, repos poll and repos set need an owner or admin, ask for confirmation on a terminal, and need `-y` elsewhere (they exit 1 without it).
+
+- b122dd2: Depend on `@benchsdk/cli` ^0.9.5 and `@benchsdk/runner` ^0.8.6, the releases carrying the bench commands `compute bench` now bundles (benchmark management, the org run feed, daily run again, run analytics) and the `providers` login scopes `compute byok` needs.
+- ccbe8e4: `compute bench` forwards `COMPUTE_PLATFORM_URL`, `COMPUTE_API_KEY` and `COMPUTE_ORG` (or a leading `compute --org <slug> bench …`) to bench as `BENCHMARKS_PLATFORM_URL`, `BENCHMARKS_PLATFORM_API_KEY` and `--org`, without overriding bench's own settings, and a refused connection names the URL it tried. `compute whoami` and `compute org current` read `COMPUTE_API_KEY`; with an org API key they print the key's organization and no user instead of "No credentials found".
+- 27a2166: `compute bench` exposes the newer bench commands: `benchmarks archive|restore|describe|mute|unmute|pause|resume`, `benchmarks list --status`, `runs archive|unarchive`, `runs feed|days|day`, `reliability`, `reliability cards`, `activity`, and `run-again [--wait]` / `run-again status` (the daily Run again, next to the released `runs run-again`). `cli-manifest.json` marks the bundled `@benchsdk/runner` / `@benchsdk/cli` with `"linked": true, "released": false` while they resolve to a local benchmarks checkout instead of an npm install.
+- 3ab2f31: New `compute byok` commands for the org's BYOK providers over `/api/v1/providers`: `compute byok [list]`, `show`, `configure [--verify]`, `verify`, `remove [-y]`, and `rate set <provider> <usd> [--per]` / `rate clear` for custom rates. A custom rate is for the org's own cost reporting only — it never changes billing. `compute actions providers configure|verify|remove` are deprecated in favour of `compute byok`. User logins need `compute login` once more to pick up the `providers` scopes.
+- 02f2189: Add a hidden `compute __manifest` command that prints the CLI's command tree (commands, aliases, arguments, flags, global flags, and the bundled `@benchsdk/runner` / `@benchsdk/cli` versions behind `compute bench`) as JSON. The package now ships the generated `cli-manifest.json`; regenerate it with `pnpm --filter @computesdk/cli run manifest`.
+- 280c4b4: `compute instances list` takes the dashboard's filters and sort: `--customer-only` (leave out idle platform sandboxes), `--search <text>` (label, id, provider, provider sandbox id or product), `--sort created|name|cost|runtime` and `--direction asc|desc`. `--status` help now names `active` (every status but destroyed), which the API already accepted.
+- d9949d5: Sandbox spend and routing on the CLI:
+
+  - New `compute instances costs [--customer-only]` shows the org's sandbox spend (running, settled, total and per provider) from `GET /api/v1/sandboxes/costs`.
+  - `compute instances settings set` takes `--resources <provider>=<preset|none>` and `--warm-pool <provider[:region]>=<0..16>` (both repeatable), and `compute instances settings` prints the resources and warm-pool rows (a provider's size shows only the fields it sets, e.g. `blaxel  2048 MB`).
+
+- 19fcf13: Org members and invitations on the CLI:
+
+  - New `compute org members` lists the organization's members (email, role, name, member id); `--org <slug>` picks the org for a user login.
+  - New `compute org invitations` lists pending invitations with their links, and `compute org invitations cancel <invitationId>` cancels one.
+  - New `compute org invite <email> [--role member|admin]` creates an invitation and prints its link, noting when the email was not sent. Owner invitations are refused (they stay in the web app).
+  - New `compute org member set-role <member> <member|admin>` and `compute org member remove <member>` take a member id or email.
+  - New `compute org leave` leaves the organization; it needs a user login (`compute login`).
+  - New `compute invitations` lists your own pending invitations, with `show <id>`, `accept <id>` and `decline <id>`; they need a user login, and an org API key is refused with `user_credential_required`.
+  - Invite, cancel, set-role, remove, leave and decline ask for confirmation on a terminal and need `-y` elsewhere (they exit 1 without it); accept does not ask.
+  - These commands call `/api/v1/organizations/current/{members,invitations,leave}`, `/api/v1/me/invitations` and `/api/v1/invitations/{id}[/accept|/decline]`, and print the platform's error `hint`.
+
+## 2.6.4
+
+### Patch Changes
+
+- 86a24e9: Add `compute actions schedule` for timezone-aware upcoming fires and paginated past runs, with filters, JSON output and next-page hints.
+- 7b74e97: Bump @benchsdk/runner to 0.8.3 for `compute bench runs run-again`.
+- Updated dependencies [8e11040]
+- Updated dependencies [7b74e97]
+  - computesdk@4.1.17
+  - @computesdk/platform@0.2.3
+
+## 2.6.3
+
+### Patch Changes
+
+- 74f256d: Add `compute agents run <agent> --resume <sessionId>` to restore a stopped conversation on a replacement sandbox with its persistent agent disk.
+
+## 2.6.2
+
+### Patch Changes
+
+- b897c18: Add `compute agents` (alias `ag`): managed agents on the platform's `/api/v1/agents` API — `list`, `create`, `describe`, `update`, `delete`, `sessions`, `run`, `session`, `send`, `events` (`--follow` polls), `stop`.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - computesdk@4.1.16
+  - @computesdk/platform@0.2.2
+
+## 2.6.1
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/platform@0.2.1
+
+## 2.6.0
+
+### Minor Changes
+
+- 0a54571: New `@computesdk/platform` provider: hosted ComputeSDK Platform sandboxes behind the same `compute`/`sandbox` interface — market placement, own-keys provider orders, quotes and org billing handled server-side. The shared transport (`PlatformClient`, `PlatformApiError`, `PlatformClientError`, `resolvePlatformAuth`, SSE readers) moved out of the CLI into this package; the CLI imports it and keeps the old `actions-client` names re-exported for one release. `compute sandboxes exec` gains `--cwd` and `-e/--env` like `spawn`. In `computesdk`, `createWithFallback` now rethrows immediately on an error flagged `fallback: false`, and the all-failed error keeps the original errors on `.errors`.
+
+### Patch Changes
+
+- Updated dependencies [0a54571]
+  - @computesdk/platform@0.2.0
+  - computesdk@4.1.14
+
+## 2.5.8
+
+### Patch Changes
+
+- 4e05572: `compute actions benchmarks <run-id>` — the benchmark runs an Actions run produced (per-provider composite score, success rate, metrics; `--json` for agents), and `compute actions run` shows a one-line `benchmarks:` digest when the run carried a benchmark.
+
+## 2.5.7
+
+### Patch Changes
+
+- 854e118: `run -d`/Ctrl-C-`d` summary: print the full instance id and a bare `destroy` hint (the short `3f2a…` form was not accepted back by the command). `snapshot-delete <id>` on the implicit instance now logs the resolved id instead of "undefined".
+- e5e1bea: instances UX: compact human output for create/get/list (`--verbose` for the old detail view), `-q/--quiet` for script-friendly IDs and URLs, a per-directory current instance (`use`, `COMPUTE_INSTANCE`, implicit ID resolution across all commands), and `run` (create + spawn + wait + destroy in one command, with `--keep` and `-d` modes and an interactive Ctrl-C prompt).
+- 81c38d5: `compute instances cp` — copy files and directories between the local filesystem and a sandbox through the platform transfers API (`POST /sandboxes/{id}/transfers` + `/complete`). Remote side is `[id:]/abs/path` (omitted id = current instance); upload tars locally, PUTs to a presigned URL, and the box extracts; download reverses it. Prints `copied N files (size) → dest` (`-q` prints nothing; TTY progress past 10 MB).
+- f22f0a8: `compute instances serve` — spawn a server, wait for its port to listen on a public address (via the platform `/ports` endpoint), and print the provider URL. Loopback-only binds fail with the 0.0.0.0 bind hint; a server that exits first reports its exit code and last log lines. `-q` prints only the URL.
+
+## 2.5.6
+
+### Patch Changes
+
+- c50c46e: `compute actions dispatch --with-changes`: a workflow file that exists only in your working tree can now be dispatched. The CLI computes the diff before the catalog lookup and, when the diff creates the requested workflow, dispatches it by `repoFullName + workflowPath` so the platform builds the run from the diff. Dispatching a missing `.github/workflows/*` path from a dirty tree without the flag now hints at `--with-changes`.
+- c93d05b: `compute market` now covers the buyer side: `cap` (show/set/clear the org market cap), `bids`, `bid`, `cancel-bid`, `purchases`, `credits`, `ledger`, and `topup` (prints a Stripe checkout link).
+
+## 2.5.5
+
+### Patch Changes
+
+- 7028949: `compute actions dispatch --with-changes`: run your local changes without committing. Everything the working tree has beyond `origin/<ref>` (local commits, edits, untracked files) is sent as a unified diff via `POST /api/v1/actions/patches` and applied after checkout; `--ref` defaults to the current branch. Dispatching from a dirty tree without the flag prints a hint.
+- cfbe401: `compute actions dispatch --with-changes`: fix untracked files being dropped or misplaced when run from a subdirectory — `ls-files --others` and the `diff --no-index` for each untracked file now run from the repository root so patch paths stay repo-relative.
+
 ## 2.5.4
 
 ### Patch Changes

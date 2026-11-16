@@ -31,6 +31,10 @@ tags:
 
 Isorun provider for ComputeSDK — isolated Linux VM sandboxes for running untrusted and AI-generated code, billed by the second.
 
+## Lifecycle
+
+`pause()`/`resume()` preserve memory and processes. Snapshot capabilities declare rootfs and memory preservation with the source kept. Restore with `snapshotId`; see [snapshot semantics and cleanup](../reference/compute.md#snapshot-capabilities).
+
 ## Installation & Setup
 
 ```bash

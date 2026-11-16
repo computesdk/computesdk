@@ -1,9 +1,16 @@
 import { runProviderTestSuite } from '@computesdk/test-utils';
 import { codesandbox } from '../index';
 
+const live = Boolean(process.env.CSB_API_KEY);
+
 runProviderTestSuite({
   name: 'codesandbox',
   provider: codesandbox({}),
-  supportsFilesystem: true,  // CodeSandbox supports filesystem operations
-  skipIntegration: !process.env.CSB_API_KEY
+  supportsFilesystem: true,
+  supportsStreaming: true,    // served by the shell process tier over runCommand
+  supportsProcesses: true,
+  supportsPauseResume: true,
+  supportsSnapshots: true,
+  expectProcessRuntime: live ? { streaming: 'shell', processes: 'shell' } : undefined,
+  skipIntegration: !live
 });

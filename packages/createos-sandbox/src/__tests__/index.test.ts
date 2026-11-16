@@ -6,6 +6,7 @@ import {
   defaultShape,
   mapStatus,
   parseLsOutput,
+  ingressUrl,
   pickShape,
   resolveSandboxPath,
   toCreateRequest,
@@ -155,12 +156,12 @@ describe("parseLsOutput", () => {
 });
 
 describe("toCreateRequest", () => {
-  it("carries shape + defaults ingress on", () => {
+  it("carries shape + defaults ingress off", () => {
     const r = toCreateRequest({}, "s-1vcpu-1gb");
-    expect(r).toEqual({ shape: "s-1vcpu-1gb", ingress_enabled: true });
+    expect(r).toEqual({ shape: "s-1vcpu-1gb", ingress_enabled: false });
   });
-  it("honours ingressEnabled:false", () => {
-    expect(toCreateRequest({ ingressEnabled: false }, "s").ingress_enabled).toBe(false);
+  it("honours ingressEnabled:true", () => {
+    expect(toCreateRequest({ ingressEnabled: true }, "s").ingress_enabled).toBe(true);
   });
   it("maps rootfs, name, disk, envs, ssh, egress", () => {
     const r = toCreateRequest(
@@ -190,9 +191,9 @@ describe("toCreateRequest", () => {
 });
 
 describe("toForkRequest", () => {
-  it("defaults ingress on, passes ssh/egress/envs", () => {
+  it("defaults ingress off, passes ssh/egress/envs", () => {
     const r = toForkRequest({ sshPubkeys: ["k"], egress: ["e"], envs: { A: "1" } });
-    expect(r.ingress_enabled).toBe(true);
+    expect(r.ingress_enabled).toBe(false);
     expect(r.ssh_pubkeys).toEqual(["k"]);
     expect(r.egress).toEqual(["e"]);
     expect(r.envs).toEqual({ A: "1" });
@@ -203,6 +204,51 @@ describe("toForkRequest", () => {
   });
 });
 
+describe("ingressUrl", () => {
+  const TEMPLATE = "https://sb-1-<port>.sb.createos.sh";
+  function fakeSandbox(data: { ingress_enabled: boolean; ingress_url_template?: string }) {
+    const calls: string[] = [];
+    const sb = {
+      data: { ...data },
+      async setIngress(enabled: boolean) {
+        calls.push(`setIngress:${enabled}`);
+        sb.data = { ingress_enabled: enabled, ingress_url_template: enabled ? TEMPLATE : undefined };
+        return sb;
+      },
+      async refresh() {
+        calls.push("refresh");
+        sb.data = { ...sb.data, ingress_url_template: TEMPLATE };
+        return sb;
+      },
+      previewUrl(port: number, o: { scheme?: string } = {}) {
+        if (!sb.data.ingress_enabled || !sb.data.ingress_url_template) throw new Error("no ingress");
+        const url = sb.data.ingress_url_template.replace("<port>", String(port));
+        return o.scheme === "http" ? url.replace(/^https:/, "http:") : url;
+      },
+    };
+    return { sb, calls };
+  }
+  type Arg = Parameters<typeof ingressUrl>[0];
+
+  it("enables ingress on demand when the sandbox was created without it", async () => {
+    const { sb, calls } = fakeSandbox({ ingress_enabled: false });
+    expect(await ingressUrl(sb as unknown as Arg, { port: 3000 })).toBe("https://sb-1-3000.sb.createos.sh");
+    expect(calls).toEqual(["setIngress:true"]);
+  });
+  it("uses the existing template without a round trip", async () => {
+    const { sb, calls } = fakeSandbox({ ingress_enabled: true, ingress_url_template: TEMPLATE });
+    expect(await ingressUrl(sb as unknown as Arg, { port: 8080, protocol: "http" })).toBe(
+      "http://sb-1-8080.sb.createos.sh",
+    );
+    expect(calls).toEqual([]);
+  });
+  it("refreshes a handle that has ingress on but no template", async () => {
+    const { sb, calls } = fakeSandbox({ ingress_enabled: true });
+    expect(await ingressUrl(sb as unknown as Arg, { port: 3000 })).toBe("https://sb-1-3000.sb.createos.sh");
+    expect(calls).toEqual(["refresh"]);
+  });
+});
+
 describe("createosSandbox provider", () => {
   it("builds a provider exposing sandbox and snapshot managers, no template", () => {
     const provider = createosSandbox({ apiKey: "test-key" });
@@ -210,5 +256,10 @@ describe("createosSandbox provider", () => {
     expect(provider.sandbox).toBeDefined();
     expect(provider.snapshot).toBeDefined();
     expect(provider.template).toBeUndefined();
+  });
+  it("declares memory-preserving pause and rootfs snapshots", () => {
+    const provider = createosSandbox({ apiKey: "test-key" });
+    expect(provider.sandbox.pause).toEqual({ memory: true });
+    expect(provider.snapshot!.capabilities).toEqual({ scope: "rootfs", memory: true, destroysSource: false });
   });
 });

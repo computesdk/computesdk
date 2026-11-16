@@ -8,6 +8,7 @@
 
 import { describe, it, expect, afterAll } from 'vitest';
 // @ts-ignore - workspace reference
+import { failIfIntegrationRequired } from './provider-test-suite';
 import type { StorageProvider, StorageObject, DownloadResult, ListResult } from '@computesdk/provider';
 
 export interface StorageProviderTestConfig {
@@ -29,6 +30,8 @@ export interface StorageProviderTestConfig {
  */
 export function runStorageProviderTestSuite(config: StorageProviderTestConfig) {
   const { provider, name, bucket, timeout = 30000, skipIntegration = false } = config;
+
+  failIfIntegrationRequired(name, skipIntegration);
 
   // Skip entire suite if integration tests should be skipped
   const describeFn = skipIntegration ? describe.skip : describe;

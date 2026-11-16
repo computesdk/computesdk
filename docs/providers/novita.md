@@ -26,6 +26,12 @@ layout:
 
 Novita Sandbox provider for ComputeSDK, using the official `novita-sandbox` SDK.
 
+## Account sizes and lifecycle
+
+CPU/RAM are fixed at template build. [Provider Setup](../../ADD-PROVIDER.md#provider-setup) builds the Node 22 size templates for this account; use `templateId` to boot one. This adapter's `sizeClass` resolution is `unknown`, not a per-create CPU override; see [Sandbox sizes](../reference/sizes.md).
+
+`pause()`/`resume()` preserve memory and processes; resume re-arms the sandbox's configured lifetime. Snapshot capabilities declare rootfs/memory preservation and the source kept. Snapshot names and metadata are accepted but ignored.
+
 ## Installation & Setup
 
 ```bash
@@ -97,7 +103,7 @@ Creation also supports `envs`, `metadata`, `secure`, `allowInternetAccess`,
 | `sandbox.getInfo()` | Reads current sandbox information from Novita. |
 | `sandbox.getUrl({ port })` | Returns an HTTPS service URL by default. Service access may require a traffic token. |
 | `sandbox.filesystem` | Supports `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, and `remove`. |
-| `compute.snapshot` | Supports `create`, `list`, and `delete`. Creating a snapshot pauses its source sandbox; names and metadata are not supported. |
+| `compute.snapshot` | Supports `create`, `list`, and `delete`, preserving memory/rootfs with the source kept. Names and metadata are accepted but ignored. |
 | `compute.template` | Supports `create`, `list`, and `delete`. Creation builds a default base image, a specified `image`, or a native `template` definition. |
 
 Nonzero command exits return their output and exit code. Authentication, network,

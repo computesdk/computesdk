@@ -53,6 +53,25 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+/** The SSE text /exec/stream sends for a buffered-exec-shaped reply. */
+function execSse(scripted: RunnerReply): string {
+  const body = (scripted.body ?? {}) as {
+    stdout?: string;
+    stderr?: string;
+    exit_code?: number;
+  };
+  const events = [
+    ...(body.stdout ? [{ type: "stdout", line: body.stdout }] : []),
+    ...(body.stderr ? [{ type: "stderr", line: body.stderr }] : []),
+    { type: "exit", exit_code: body.exit_code ?? 0 },
+  ];
+  return events.map((event) => `data: ${JSON.stringify(event)}\n`).join("");
+}
+
+async function* singleChunk(text: string): AsyncIterableIterator<string> {
+  yield text;
+}
+
 interface RunnerCall {
   addressIndex: number;
   method: string;
@@ -123,6 +142,45 @@ describe("lazy create", () => {
               : (JSON.parse(String(init.body)) as Record<string, unknown>),
         };
         runnerCalls.push(call);
+        // The adapter's pre-exec readiness poll is adapter plumbing, not
+        // part of the test's script: every sandbox answers `ready`.
+        if (
+          call.method === "GET" &&
+          /^\/api\/v1\/sandboxes\/[^/]+$/.test(call.path)
+        ) {
+          return {
+            status: 200,
+            headers: {},
+            body: JSON.stringify({
+              status: "ok",
+              result: { instance_id: call.path.split("/").pop(), state: "ready" },
+            }),
+          };
+        }
+        // The runner's own filesystem routes are adapter plumbing here too:
+        // a regional sandbox's fs ops ride /filesystem/<op> in soma-api's
+        // envelope (the account API does not own the id), so answer them
+        // the way the readiness poll is answered.
+        const fsOp = /^\/api\/v1\/sandboxes\/[^/]+\/filesystem\/(\w+)$/.exec(
+          call.path,
+        );
+        if (call.method === "POST" && fsOp) {
+          return {
+            status: 200,
+            headers: {},
+            body: JSON.stringify({
+              schema: "soma.api.v1",
+              operation: `filesystem.${fsOp[1]}`,
+              status: "ok",
+              result: {
+                instance_id: REAL_ID.replace(/-/g, ""),
+                operation: fsOp[1],
+              },
+              error: null,
+              receipt: null,
+            }),
+          };
+        }
         const scripted = await reply(call);
         return {
           status: scripted.status,
@@ -131,8 +189,35 @@ describe("lazy create", () => {
             scripted.body === undefined ? "" : JSON.stringify(scripted.body),
         };
       },
-      streamRequest: async () => {
-        throw new Error("streamRequest is not scripted");
+      streamRequest: async (
+        _hostname: string,
+        addressIndex: number,
+        _authority: string,
+        path: string,
+        init: { method: string; body?: unknown }
+      ) => {
+        const call: RunnerCall = {
+          addressIndex,
+          method: init.method,
+          path,
+          body:
+            init.body === undefined
+              ? undefined
+              : (JSON.parse(String(init.body)) as Record<string, unknown>),
+        };
+        runnerCalls.push(call);
+        const scripted = await reply(call);
+        // >=400 answers the way sendToSandboxStream expects: the raw error
+        // body as chunks. 2xx is SSE `data:` lines of exec events.
+        return {
+          status: scripted.status,
+          headers: scripted.headers ?? {},
+          chunks: singleChunk(
+            scripted.status >= 400
+              ? JSON.stringify(scripted.body ?? {})
+              : execSse(scripted)
+          ),
+        };
       },
       close: async () => undefined,
     } as unknown as ScriptedTransport;
@@ -373,7 +458,8 @@ describe("lazy create", () => {
 
       expect(runnerPaths()).toEqual([
         "POST /api/v1/sandboxes",
-        `POST /api/v1/sandboxes/${REAL_ID}/exec`,
+        `GET /api/v1/sandboxes/${REAL_ID}`,
+        `POST /api/v1/sandboxes/${REAL_ID}/exec/stream`,
       ]);
       expect(second.stdout).toBe("from-exec\n");
       expect(creates()).toHaveLength(1);
@@ -388,7 +474,8 @@ describe("lazy create", () => {
 
       expect(runnerPaths()).toEqual([
         "POST /api/v1/sandboxes",
-        `POST /api/v1/sandboxes/${REAL_ID}/exec`,
+        `GET /api/v1/sandboxes/${REAL_ID}`,
+        `POST /api/v1/sandboxes/${REAL_ID}/exec/stream`,
       ]);
       expect(creates()).toHaveLength(1);
       expect(result.stdout).toBe("from-exec\n");
@@ -409,7 +496,7 @@ describe("lazy create", () => {
         expect(creates()).toHaveLength(1);
         expect(creates()[0]?.body).not.toHaveProperty("run");
         expect(runnerPaths()).toContain(
-          `POST /api/v1/sandboxes/${REAL_ID}/exec`
+          `POST /api/v1/sandboxes/${REAL_ID}/exec/stream`
         );
         expect(result.stdout).toBe("from-exec\n");
       }
@@ -594,7 +681,10 @@ describe("lazy create", () => {
       expect(command.exitCode).toBe(127);
       expect(creates()).toHaveLength(2);
       expect(creates()[1]?.body).not.toHaveProperty("run");
-      expect(accountApiCalls()).toEqual([`POST /sandboxes/${REAL_ID}/fs/write`]);
+      expect(runnerPaths()).toContain(
+        `POST /api/v1/sandboxes/${REAL_ID}/filesystem/write`,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should still send a create the runner does not serve to the account API without the run field", async () => {
@@ -629,9 +719,10 @@ describe("lazy create", () => {
 
       expect(creates()).toHaveLength(1);
       expect(creates()[0]?.body).not.toHaveProperty("run");
-      expect(accountApiCalls()).toEqual([
-        `POST /sandboxes/${REAL_ID}/fs/write`,
-      ]);
+      expect(runnerPaths()).toContain(
+        `POST /api/v1/sandboxes/${REAL_ID}/filesystem/write`,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should create the sandbox before reporting its info", async () => {
@@ -656,16 +747,21 @@ describe("lazy create", () => {
       expect(found?.sandboxId).toBe(REAL_ID);
     });
 
-    it("should create the sandbox before snapshotting it by its placeholder id", async () => {
+    it("should create the sandbox before resolving its placeholder id for a snapshot", async () => {
+      // A runner-created sandbox cannot be snapshotted - snapshots are
+      // account-API only - but the create must still have run so the real id
+      // is what the refusal names.
       useRunners((call) => (isCreate(call) ? createdPlain() : execOk()));
       const provider = miosa({ apiKey: API_KEY, lazyCreate: true });
       const sandbox = await provider.sandbox.create();
 
-      await provider.snapshot?.create(sandbox.sandboxId, { name: "s" });
+      await expect(
+        provider.snapshot!.create(sandbox.sandboxId, { name: "s" }),
+      ).rejects.toThrow("does not own it");
 
       expect(creates()).toHaveLength(1);
-      expect(accountApiCalls()).toContain(
-        `POST /sandboxes/${REAL_ID}/snapshots`
+      expect(accountApiCalls().filter((c) => c.includes("/snapshots"))).toEqual(
+        [],
       );
     });
 
@@ -693,9 +789,10 @@ describe("lazy create", () => {
 
       expect(creates()).toHaveLength(1);
       expect(command.stdout).toBe("v22.1.0\n");
-      expect(accountApiCalls()).toEqual([
-        `POST /sandboxes/${REAL_ID}/fs/write`,
-      ]);
+      expect(runnerPaths()).toContain(
+        `POST /api/v1/sandboxes/${REAL_ID}/filesystem/write`,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should give two commands started together one create and one ordinary exec", async () => {

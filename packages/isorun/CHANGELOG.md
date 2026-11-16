@@ -1,5 +1,65 @@
 # @computesdk/isorun
 
+## 0.1.23
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 0.1.22
+
+### Patch Changes
+
+- Updated dependencies [8e11040]
+  - @computesdk/provider@2.1.23
+  - computesdk@4.1.17
+
+## 0.1.21
+
+### Patch Changes
+
+- 1904e82: Native pause/resume via Isorun hibernate (memory and processes survive), and declared snapshot capabilities (whole rootfs plus memory; the source keeps running).
+- 1904e82: Run commands detached and poll for completion so commands longer than Isorun's ~120s exec request cap finish (and `timeout` kills them), apply `env`/`cwd` to every part of a compound command, and move large files and command output in small verified chunks: multi-MiB downloads/exec bodies truncate and drop the sandbox console, and uploads above 4 MiB silently corrupt.
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [1904e82]
+- Updated dependencies [4924af5]
+  - @computesdk/provider@2.1.22
+  - computesdk@4.1.16
+
+## 0.1.20
+
+### Patch Changes
+
+- Updated dependencies [24803d6]
+  - computesdk@4.1.15
+  - @computesdk/provider@2.1.21
+
+## 0.1.19
+
+### Patch Changes
+
+- d4424cd: runCommand: capture output via guest files instead of streamed exec output. Provider exec transports can drop a contiguous chunk mid-stream (observed across all five providers during a CPU-bound quiet stretch) while still reporting success, silently corrupting captured stdout/stderr. Commands now redirect output to files inside the sandbox and the adapter reads them back with short-lived commands, verified against byte counts the command writes alongside. Microsandbox additionally records byte counts and re-reads through the alternate transport on a mismatch.
+
+## 0.1.18
+
+### Patch Changes
+
+- Updated dependencies [2bd2e7d]
+- Updated dependencies [0a54571]
+  - @computesdk/provider@2.1.20
+  - computesdk@4.1.14
+
+## 0.1.17
+
+### Patch Changes
+
+- Updated dependencies [f062b5d]
+  - @computesdk/provider@2.1.19
+
 ## 0.1.16
 
 ### Patch Changes

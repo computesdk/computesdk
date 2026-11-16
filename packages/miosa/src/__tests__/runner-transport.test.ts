@@ -14,8 +14,11 @@ type ScriptedTransport = RunnerTransport;
 
 const runnerSpies = vi.hoisted(() => ({
   createSandbox: vi.fn(),
-  exec: vi.fn(),
+  execStream: vi.fn(),
   destroySandbox: vi.fn(),
+  // The sandbox is already launched in every test that doesn't script a
+  // launch wait, so the readiness poll answers `ready` by default.
+  get: vi.fn().mockResolvedValue({ state: "ready" }),
   close: vi.fn().mockResolvedValue(undefined),
   transport: undefined as ScriptedTransport | undefined,
   constructed: [] as Array<{
@@ -50,8 +53,9 @@ vi.mock("@miosa/sdk", async (importOriginal) => {
           }
           return {
             createSandbox: runnerSpies.createSandbox,
-            exec: runnerSpies.exec,
+            execStream: runnerSpies.execStream,
             destroySandbox: runnerSpies.destroySandbox,
+            get: runnerSpies.get,
             close: runnerSpies.close,
           };
         },
@@ -101,6 +105,42 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+/** The execStream events a runner emits for a finished command, for the
+ * spy client to return. `line` chunks are raw output and carry their own
+ * newline. */
+function execStreamEvents(body: {
+  stdout?: string;
+  stderr?: string;
+  exit_code?: number;
+}): AsyncIterableIterator<
+  { type: "stdout" | "stderr"; line: string } | { type: "exit"; exit_code: number }
+> {
+  return (async function* () {
+    if (body.stdout) yield { type: "stdout" as const, line: body.stdout };
+    if (body.stderr) yield { type: "stderr" as const, line: body.stderr };
+    yield { type: "exit" as const, exit_code: body.exit_code ?? 0 };
+  })();
+}
+
+/** The SSE text /exec/stream sends for a buffered-exec-shaped reply. */
+function execSse(scripted: { status: number; body?: unknown }): string {
+  const body = (scripted.body ?? {}) as {
+    stdout?: string;
+    stderr?: string;
+    exit_code?: number;
+  };
+  const events = [
+    ...(body.stdout ? [{ type: "stdout", line: body.stdout }] : []),
+    ...(body.stderr ? [{ type: "stderr", line: body.stderr }] : []),
+    { type: "exit", exit_code: body.exit_code ?? 0 },
+  ];
+  return events.map((event) => `data: ${JSON.stringify(event)}\n`).join("");
+}
+
+async function* singleChunk(text: string): AsyncIterableIterator<string> {
+  yield text;
+}
+
 describe("regional sandbox endpoint", () => {
   let fetchMock: FetchMock;
 
@@ -108,8 +148,9 @@ describe("regional sandbox endpoint", () => {
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     runnerSpies.createSandbox.mockReset();
-    runnerSpies.exec.mockReset();
+    runnerSpies.execStream.mockReset();
     runnerSpies.destroySandbox.mockReset();
+    runnerSpies.get.mockReset().mockResolvedValue({ state: "ready" });
     runnerSpies.constructed.length = 0;
     runnerSpies.transport = undefined;
     delete process.env.MIOSA_RUNNER_MODE;
@@ -258,7 +299,7 @@ describe("regional sandbox endpoint", () => {
     function expectNothingRegional(): void {
       expect(runnerSpies.constructed).toEqual([]);
       expect(runnerSpies.createSandbox).not.toHaveBeenCalled();
-      expect(runnerSpies.exec).not.toHaveBeenCalled();
+      expect(runnerSpies.execStream).not.toHaveBeenCalled();
       expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
     }
 
@@ -479,7 +520,7 @@ describe("regional sandbox endpoint", () => {
 
       // The sandbox lives on the account API, so nothing may address the
       // regional endpoint for it.
-      expect(runnerSpies.exec).not.toHaveBeenCalled();
+      expect(runnerSpies.execStream).not.toHaveBeenCalled();
       expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
     });
 
@@ -525,11 +566,11 @@ describe("regional sandbox endpoint", () => {
       return provider.sandbox.create();
     }
 
-    it("should exec through the RunnerClient and unwrap a { data } response", async () => {
+    it("should exec through the RunnerClient's stream endpoint", async () => {
       const sandbox = await createRunnerSandbox();
-      runnerSpies.exec.mockResolvedValueOnce({
-        data: { stdout: "hello\n", stderr: "", exit_code: 0 },
-      });
+      runnerSpies.execStream.mockReturnValueOnce(
+        execStreamEvents({ stdout: "hello\n" }),
+      );
 
       const result = await sandbox.runCommand("echo hello", {
         cwd: "/workspace",
@@ -537,7 +578,7 @@ describe("regional sandbox endpoint", () => {
         timeout: 30_000,
       });
 
-      expect(runnerSpies.exec).toHaveBeenCalledWith(
+      expect(runnerSpies.execStream).toHaveBeenCalledWith(
         sandbox.sandboxId,
         "echo hello",
         { cwd: "/workspace", env: { NODE_ENV: "test" }, timeout: 30 }
@@ -547,13 +588,11 @@ describe("regional sandbox endpoint", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("should unwrap a flat (non-data) runner exec response too", async () => {
+    it("should return a non-zero exit code and stderr from the stream", async () => {
       const sandbox = await createRunnerSandbox();
-      runnerSpies.exec.mockResolvedValueOnce({
-        stdout: "",
-        stderr: "boom",
-        exit_code: 1,
-      });
+      runnerSpies.execStream.mockReturnValueOnce(
+        execStreamEvents({ stderr: "boom", exit_code: 1 }),
+      );
 
       const result = await sandbox.runCommand("false");
       expect(result.exitCode).toBe(1);
@@ -562,13 +601,48 @@ describe("regional sandbox endpoint", () => {
 
     it("should return exitCode 127 with the error when the runner rejects", async () => {
       const sandbox = await createRunnerSandbox();
-      runnerSpies.exec.mockRejectedValueOnce(
+      runnerSpies.execStream.mockRejectedValueOnce(
         new Error("runner request failed with 503 runtime_busy")
       );
 
       const result = await sandbox.runCommand("echo hi");
       expect(result.exitCode).toBe(127);
       expect(result.stderr).toMatch(/runtime_busy/);
+    });
+
+    it("should wait for a launching sandbox before streaming the exec", async () => {
+      // Runner create answers while the machine is still coming up; an exec
+      // sent mid-launch dies in the server-side hold. The readiness poll
+      // rides out the launch - a 404 on the per-sandbox route just means
+      // the runner has not attached the record yet.
+      const sandbox = await createRunnerSandbox();
+      runnerSpies.get
+        .mockReset()
+        .mockRejectedValueOnce(
+          Object.assign(new Error("not provisioned"), { status: 404 })
+        )
+        .mockResolvedValue({ state: "ready" });
+      runnerSpies.execStream.mockReturnValueOnce(
+        execStreamEvents({ stdout: "warm\n" })
+      );
+
+      const result = await sandbox.runCommand("echo warm");
+
+      expect(runnerSpies.get).toHaveBeenCalledTimes(2);
+      expect(runnerSpies.execStream).toHaveBeenCalledTimes(1);
+      expect(result.stdout).toBe("warm\n");
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("should fail the command when the sandbox is stopping instead of running it", async () => {
+      const sandbox = await createRunnerSandbox();
+      runnerSpies.get.mockResolvedValue({ state: "stopping" });
+
+      const result = await sandbox.runCommand("echo hi");
+
+      expect(result.exitCode).toBe(127);
+      expect(result.stderr).toMatch(/stopping/);
+      expect(runnerSpies.execStream).not.toHaveBeenCalled();
     });
   });
 
@@ -618,6 +692,42 @@ describe("regional sandbox endpoint", () => {
       const provider = miosa({ apiKey: API_KEY, runnerMode: true });
 
       await expect(provider.sandbox.destroy("sb-1")).rejects.toThrow(/403/);
+    });
+
+    it("should retry a SANDBOX_BUSY destroy until the lifecycle op drains", async () => {
+      // SANDBOX_BUSY is a refusal, not an attempted destroy: an exec was
+      // still running when the first delete arrived. Retrying rides out the
+      // drain instead of reporting a leak.
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      runnerSpies.destroySandbox
+        .mockRejectedValueOnce(
+          Object.assign(
+            new Error(
+              "SANDBOX_BUSY: Another lifecycle operation is in progress for this sandbox",
+            ),
+            { status: 409, code: "SANDBOX_BUSY" },
+          ),
+        )
+        .mockRejectedValueOnce(
+          Object.assign(
+            new Error(
+              "SANDBOX_BUSY: Another lifecycle operation is in progress for this sandbox",
+            ),
+            { status: 409, code: "SANDBOX_BUSY" },
+          ),
+        )
+        .mockResolvedValueOnce(undefined);
+      const provider = miosa({ apiKey: API_KEY, runnerMode: true });
+      const sandbox = await provider.sandbox.create();
+
+      await provider.sandbox.destroy(sandbox.sandboxId);
+
+      expect(runnerSpies.destroySandbox).toHaveBeenCalledTimes(3);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should delete an untracked sandbox through the account API instead of trusting a regional 404", async () => {
@@ -698,7 +808,7 @@ describe("regional sandbox endpoint", () => {
       expect(reattached).not.toBeNull();
       await reattached!.runCommand("echo ok");
 
-      expect(runnerSpies.exec).not.toHaveBeenCalled();
+      expect(runnerSpies.execStream).not.toHaveBeenCalled();
       const [execUrl] = fetchMock.mock.calls.at(-1) as [string];
       expect(execUrl).toBe(
         `${DEFAULT_BASE_URL}/sandboxes/${record.id}/exec`
@@ -721,7 +831,7 @@ describe("regional sandbox endpoint", () => {
       const [listed] = await provider.sandbox.list();
       await listed.runCommand("echo ok");
 
-      expect(runnerSpies.exec).not.toHaveBeenCalled();
+      expect(runnerSpies.execStream).not.toHaveBeenCalled();
       const [execUrl] = fetchMock.mock.calls.at(-1) as [string];
       expect(execUrl).toBe(
         `${DEFAULT_BASE_URL}/sandboxes/${record.id}/exec`
@@ -813,6 +923,21 @@ describe("regional sandbox endpoint", () => {
             ...(init.body !== undefined ? { body: String(init.body) } : {}),
           };
           runnerCalls.push(call);
+          // The adapter's pre-exec readiness poll is adapter plumbing, not
+          // part of the test's script: every sandbox answers `ready`.
+          if (
+            call.method === "GET" &&
+            /^\/api\/v1\/sandboxes\/[^/]+$/.test(call.path)
+          ) {
+            return {
+              status: 200,
+              headers: {},
+              body: JSON.stringify({
+                status: "ok",
+                result: { instance_id: call.path.split("/").pop(), state: "ready" },
+              }),
+            };
+          }
           const scripted = await reply(call);
           return {
             status: scripted.status,
@@ -821,8 +946,32 @@ describe("regional sandbox endpoint", () => {
               scripted.body === undefined ? "" : JSON.stringify(scripted.body),
           };
         },
-        streamRequest: async () => {
-          throw new Error("streamRequest is not scripted in these tests");
+        streamRequest: async (
+          _hostname: string,
+          addressIndex: number,
+          _authority: string,
+          path: string,
+          init: { method: string; body?: unknown },
+        ) => {
+          const call: RunnerCall = {
+            addressIndex,
+            method: init.method,
+            path,
+            ...(init.body !== undefined ? { body: String(init.body) } : {}),
+          };
+          runnerCalls.push(call);
+          const scripted = await reply(call);
+          // >=400 answers the way sendToSandboxStream expects: the raw error
+          // body as chunks. 2xx is SSE `data:` lines of exec events.
+          return {
+            status: scripted.status,
+            headers: scripted.headers ?? {},
+            chunks: singleChunk(
+              scripted.status >= 400
+                ? JSON.stringify(scripted.body ?? {})
+                : execSse(scripted),
+            ),
+          };
         },
         close: async () => undefined,
       } as unknown as ScriptedTransport;
@@ -1110,7 +1259,8 @@ describe("regional sandbox endpoint", () => {
       expect(result.stdout).toBe("from-runner\n");
       expect(runnerCalls.map((call) => `${call.method} ${call.path}`)).toEqual([
         "POST /api/v1/sandboxes",
-        `POST /api/v1/sandboxes/${sandbox.sandboxId}/exec`,
+        `GET /api/v1/sandboxes/${sandbox.sandboxId}`,
+        `POST /api/v1/sandboxes/${sandbox.sandboxId}/exec/stream`,
         `DELETE /api/v1/sandboxes/${sandbox.sandboxId}`,
       ]);
       expect(fetchMock).not.toHaveBeenCalled();
@@ -1288,7 +1438,7 @@ describe("regional sandbox endpoint", () => {
         ]);
         expect(runnerSpies.constructed).toHaveLength(0);
         expect(runnerSpies.createSandbox).not.toHaveBeenCalled();
-        expect(runnerSpies.exec).not.toHaveBeenCalled();
+        expect(runnerSpies.execStream).not.toHaveBeenCalled();
         expect(runnerSpies.destroySandbox).not.toHaveBeenCalled();
       },
     );
@@ -1312,7 +1462,7 @@ describe("regional sandbox endpoint", () => {
             })
           : jsonResponse(sandboxRecord({ id })),
       );
-      runnerSpies.exec.mockRejectedValue(notFound());
+      runnerSpies.execStream.mockRejectedValue(notFound());
       const provider = miosa({ apiKey: API_KEY });
 
       // Created by another process: this one has no record of its origin.
@@ -1323,16 +1473,111 @@ describe("regional sandbox endpoint", () => {
       expect(first.stdout).toBe("from-account-api\n");
       expect(second.stdout).toBe("from-account-api\n");
       // Learned once, then addressed directly.
-      expect(runnerSpies.exec).toHaveBeenCalledTimes(1);
+      expect(runnerSpies.execStream).toHaveBeenCalledTimes(1);
       expect(
         fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/exec")),
       ).toHaveLength(2);
     });
 
+    it("should fall back to the account API when the runner's sandbox GET 404s past the attach window", async () => {
+      // Regression test: the readiness poll treats a 404 as "still
+      // launching", but a sandbox the runner never owned 404s forever -
+      // the poll must give up within the attach grace so the error reaches
+      // exec's wrong-endpoint fallback instead of stalling the command.
+      const id = "b1000000-0000-0000-0000-000000000005";
+      fetchMock.mockImplementation(async (url: string) =>
+        url.endsWith("/exec")
+          ? jsonResponse({
+              data: { stdout: "from-account-api\n", stderr: "", exit_code: 0 },
+            })
+          : jsonResponse(sandboxRecord({ id })),
+      );
+      runnerSpies.get.mockReset().mockRejectedValue(notFound());
+      const provider = miosa({ apiKey: API_KEY });
+
+      vi.useFakeTimers();
+      try {
+        // getById reads the sandbox's egress state file, and fs calls now
+        // cross the same attach grace - advance through it too.
+        const getById = provider.sandbox.getById(id);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const sandbox = await getById;
+
+        const first = sandbox!.runCommand("echo ok");
+        await vi.advanceTimersByTimeAsync(60_000);
+        vi.useRealTimers();
+        const second = await sandbox!.runCommand("echo ok");
+
+        expect((await first).stdout).toBe("from-account-api\n");
+        expect(second.stdout).toBe("from-account-api\n");
+        // Learned once, then addressed directly.
+        expect(runnerSpies.execStream).not.toHaveBeenCalled();
+        expect(
+          fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/exec")),
+        ).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should not pin the account route when the account API 404s too (regional sandbox still attaching)", async () => {
+      // A regional sandbox whose record has not attached yet 404s on BOTH
+      // endpoints: the runner 404 alone does not prove account ownership, so
+      // the route must only be learned once the account API answers.
+      const id = "b1000000-0000-0000-0000-000000000006";
+      let execCalls = 0;
+      fetchMock.mockImplementation(async (url: string) => {
+        if (url.endsWith("/exec")) {
+          execCalls += 1;
+          return execCalls === 1
+            ? jsonResponse({ error: { code: "NOT_FOUND", message: "no sandbox" } }, 404)
+            : jsonResponse({
+                data: { stdout: "from-account-api\n", stderr: "", exit_code: 0 },
+              });
+        }
+        // A sandbox the account API does not own 404s its fs routes too -
+        // the /fs/* calls getById and the adapter make must see that.
+        if (url.includes("/fs")) {
+          return jsonResponse({ error: { code: "NOT_FOUND", message: "no sandbox" } }, 404);
+        }
+        return jsonResponse(sandboxRecord({ id }));
+      });
+      runnerSpies.get.mockReset().mockRejectedValue(notFound());
+      const provider = miosa({ apiKey: API_KEY });
+
+      vi.useFakeTimers();
+      try {
+        const getById = provider.sandbox.getById(id);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const sandbox = await getById;
+
+        const first = sandbox!.runCommand("echo ok");
+        await vi.advanceTimersByTimeAsync(60_000);
+        const firstResult = await first;
+        const runnerGetsAfterFirst = runnerSpies.get.mock.calls.length;
+
+        const second = sandbox!.runCommand("echo ok");
+        await vi.advanceTimersByTimeAsync(60_000);
+        const secondResult = await second;
+
+        // The command fails fast while both endpoints 404 — and because the
+        // route was not learned, the retry consults the runner again rather
+        // than being pinned to the account API.
+        expect(firstResult.exitCode).toBe(127);
+        expect(runnerSpies.get.mock.calls.length).toBeGreaterThan(
+          runnerGetsAfterFirst,
+        );
+        expect(secondResult.stdout).toBe("from-account-api\n");
+        expect(runnerSpies.execStream).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("should not re-run a reattached command on the account API after an ambiguous regional failure", async () => {
       const id = "b1000000-0000-0000-0000-000000000002";
       fetchMock.mockImplementation(async () => jsonResponse(sandboxRecord({ id })));
-      runnerSpies.exec.mockRejectedValue(
+      runnerSpies.execStream.mockRejectedValue(
         Object.assign(new Error("runner request failed with 500 internal_error"), {
           status: 500,
         }),
@@ -1379,11 +1624,9 @@ describe("regional sandbox endpoint", () => {
         runnerUrl: "https://b.run-us.miosa.ai",
         data: sandboxRecord({ id }),
       });
-      runnerSpies.exec.mockResolvedValue({
-        stdout: "from-runner\n",
-        stderr: "",
-        exit_code: 0,
-      });
+      runnerSpies.execStream.mockReturnValue(
+        execStreamEvents({ stdout: "from-runner\n" }),
+      );
       runnerSpies.destroySandbox.mockResolvedValue({});
       fetchMock.mockImplementation(async () => jsonResponse(sandboxRecord({ id })));
       await miosa({ apiKey: API_KEY }).sandbox.create();
@@ -1428,6 +1671,66 @@ describe("regional sandbox endpoint", () => {
       // "account" record.
       await provider.sandbox.destroy(id);
       expect(runnerSpies.destroySandbox).toHaveBeenCalledWith(id);
+    });
+  });
+
+  describe("snapshots on regional sandboxes", () => {
+    // Snapshots are account-API only: the regional endpoint exposes no
+    // snapshot routes and the account API does not know a regional sandbox's
+    // id, so a snapshot call must fail with the remedy spelled out rather
+    // than a bare 404.
+    it("should refuse snapshot.create for a regional sandbox without calling the account API", async () => {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      await expect(
+        provider.snapshot!.create(sandbox.sandboxId, { name: "s" }),
+      ).rejects.toThrow("does not own it");
+
+      expect(
+        fetchMock.mock.calls.filter(([url]) =>
+          String(url).includes("/snapshots"),
+        ),
+      ).toHaveLength(0);
+    });
+
+    it("should refuse snapshot.list for a regional sandbox", async () => {
+      runnerSpies.createSandbox.mockResolvedValueOnce({
+        id: sandboxRecord().id,
+        runnerUrl: "https://3.run-us.miosa.ai",
+        data: sandboxRecord(),
+      });
+      const provider = miosa({ apiKey: API_KEY });
+      const sandbox = await provider.sandbox.create();
+
+      await expect(
+        provider.snapshot!.list({ sandboxId: sandbox.sandboxId }),
+      ).rejects.toThrow("does not own it");
+    });
+
+    it("should keep the 404 status while appending regional guidance", async () => {
+      // A handle whose origin this process never recorded gets a real
+      // NOT_FOUND (the sandbox may simply be missing) with the regional
+      // remedy appended as context.
+      const id = "b1000000-0000-0000-0000-000000000020";
+      fetchMock.mockImplementation(async (url: string) =>
+        url.includes("/snapshots")
+          ? jsonResponse({ error: { code: "NOT_FOUND" } }, 404)
+          : jsonResponse(sandboxRecord({ id })),
+      );
+      const provider = miosa({ apiKey: API_KEY });
+
+      const error = await provider
+        .snapshot!.create(id, { name: "s" })
+        .catch((e) => e);
+      expect(error.message).toContain("runnerMode: false");
+      expect(error.status).toBe(404);
+      expect(error.code).toBe("NOT_FOUND");
     });
   });
 });

@@ -55,8 +55,13 @@ function startServer(
         },
         sessionsSeen,
         streamsPerSession,
+        // server.close() waits for every open session, and the client pool
+        // keeps its sessions open, so end them server-side first.
         close: () =>
-          new Promise((resolveClose) => server.close(() => resolveClose())),
+          new Promise((resolveClose) => {
+            for (const session of sessionsSeen) session.destroy();
+            server.close(() => resolveClose());
+          }),
       });
     });
   });

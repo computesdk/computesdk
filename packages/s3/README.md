@@ -15,9 +15,9 @@ import { s3 } from '@computesdk/s3';
 
 // Create storage instance
 const storage = s3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: 'us-east-1'
+  accessKeyId: process.env.TIGRIS_STORAGE_ACCESS_KEY_ID,
+  secretAccessKey: process.env.TIGRIS_STORAGE_SECRET_ACCESS_KEY,
+  endpoint: 'https://t3.storage.dev'
 });
 
 // Upload a file
@@ -47,11 +47,9 @@ for (const obj of list.objects) {
 
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
-| `accessKeyId` | string | No* | `AWS_ACCESS_KEY_ID` env | AWS access key |
-| `secretAccessKey` | string | No* | `AWS_SECRET_ACCESS_KEY` env | AWS secret key |
-| `region` | string | No | `us-east-1` | AWS region |
-| `endpoint` | string | No | - | Custom endpoint for S3-compatible services |
-| `forcePathStyle` | boolean | No | false | Use path-style URLs |
+| `accessKeyId` | string | No* | `TIGRIS_STORAGE_ACCESS_KEY_ID` env | Access key ID |
+| `secretAccessKey` | string | No* | `TIGRIS_STORAGE_SECRET_ACCESS_KEY` env | Secret access key |
+| `endpoint` | string | No | `TIGRIS_STORAGE_ENDPOINT` env, then `https://t3.storage.dev` | Endpoint of the S3-compatible service |
 
 *Either provide in config or set environment variables.
 
