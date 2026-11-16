@@ -100,7 +100,7 @@ interface MaritimeConfig {
 
 - Commands run for at most 1 hour (Maritime's per-command limit). Without `timeout`, the provider asks for that limit instead of Maritime's 60-second default.
 - Templates cannot be created or deleted (Maritime's templates are saved snapshots).
-- By default Maritime pauses a sandbox after 5 idle minutes (`onIdle`, `idleTimeoutSeconds`) and ends it at its time limit; call `destroy()` when you are done.
+- After 5 idle minutes (`idleTimeoutSeconds`) Maritime ends a sandbox, or pauses it if you pass `onIdle: 'pause'`. Maritime's docs say ending is the default, but the SDK's types say pausing is, so set `onIdle` yourself if it matters. A sandbox also ends at its time limit; call `destroy()` when you are done.
 
 ## Links
 
