@@ -1,6 +1,6 @@
 ---
 description: >-
-  Luxor Agent Cloud provider for ComputeSDK - microVM sandboxes with native
+  Luxor provider for ComputeSDK - microVM sandboxes with native
   filesystem, preview URLs, snapshots, and SSH.
 layout:
   width: default
@@ -22,9 +22,9 @@ layout:
     visible: true
 ---
 
-# Luxor Agent Cloud
+# Luxor
 
-Luxor Agent Cloud provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH. Tenki Cloud is now Luxor Agent Cloud; the `tenki` export remains as a compatibility alias.
+Luxor provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH. Tenki Cloud is now Luxor; the `tenki` export remains as a compatibility alias.
 
 ## Lifecycle
 
@@ -41,10 +41,10 @@ Requires Node.js 20 or later (the Luxor Sandbox SDK's gRPC transport depends on 
 Add your Luxor credentials to a `.env` file:
 
 ```bash
-LUXORAI_API_KEY=lx_your_api_key
+LUXOR_API_KEY=lx_your_api_key
 ```
 
-`TENKI_API_KEY` / `TENKI_AUTH_TOKEN` remain accepted as fallbacks.
+`LUXORAI_*` and `TENKI_*` variables remain accepted as fallbacks.
 
 ## Usage
 
@@ -52,7 +52,7 @@ LUXORAI_API_KEY=lx_your_api_key
 import { luxor } from '@computesdk/tenki';
 
 const compute = luxor({
-  apiKey: process.env.LUXORAI_API_KEY,
+  apiKey: process.env.LUXOR_API_KEY,
 });
 
 // Create sandbox
@@ -70,11 +70,11 @@ await sandbox.destroy();
 
 ```typescript
 interface LuxorConfig {
-  /** Luxor API key (lx_...; tk_... remains accepted). Falls back to LUXORAI_API_KEY / LUXORAI_AUTH_TOKEN, then TENKI_API_KEY / TENKI_AUTH_TOKEN. */
+  /** Luxor API key (lx_...; tk_... remains accepted). Falls back to LUXOR_API_KEY / LUXOR_AUTH_TOKEN, then LUXORAI_API_KEY / LUXORAI_AUTH_TOKEN, then TENKI_API_KEY / TENKI_AUTH_TOKEN. */
   apiKey?: string;
-  /** API base URL. Falls back to LUXORAI_API_ENDPOINT / LUXORAI_API_URL, then TENKI_API_ENDPOINT / TENKI_API_URL, then https://api.tenki.cloud. */
+  /** API base URL. Falls back to LUXOR_API_ENDPOINT / LUXOR_API_URL, then LUXORAI_API_ENDPOINT / LUXORAI_API_URL, then TENKI_API_ENDPOINT / TENKI_API_URL, then https://api.tenki.cloud. */
   baseUrl?: string;
-  /** Workspace to create sandboxes in. Falls back to LUXORAI_WORKSPACE_ID / TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
+  /** Workspace to create sandboxes in. Falls back to LUXOR_WORKSPACE_ID / LUXORAI_WORKSPACE_ID / TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
   workspaceId?: string;
   /** @deprecated Luxor no longer scopes sandboxes by project. */
   projectId?: string;
@@ -102,6 +102,6 @@ interface LuxorConfig {
 
 ### Notes
 
-* Workspace API keys infer their workspace server-side. Set `workspaceId`, or `LUXORAI_WORKSPACE_ID` / `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
+* Workspace API keys infer their workspace server-side. Set `workspaceId`, or `LUXOR_WORKSPACE_ID` / `LUXORAI_WORKSPACE_ID` / `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
 * Background commands (`{ background: true }`) detach stdio automatically; a bare `&` would hold the exec output stream open.
 * Snapshots and pause/resume are wired to the unified surface. Use `sandbox.getInstance()` for additional native SDK controls such as SSH, tunnels, and git.

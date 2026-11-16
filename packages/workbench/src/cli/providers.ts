@@ -71,9 +71,9 @@ const SHARED_PROVIDER_AUTH: Record<SharedProviderName, readonly (readonly string
   // The lelantos provider falls back LELANTOS_API_KEY → E2B_API_KEY, so either
   // key alone counts as configured.
   lelantos: [['LELANTOS_API_KEY'], ['E2B_API_KEY']],
-  // Luxor Agent Cloud (formerly Tenki Cloud): prefer LUXORAI_* credentials,
-  // with TENKI_* kept as fallbacks for existing installations.
-  tenki: [['LUXORAI_API_KEY'], ['LUXORAI_AUTH_TOKEN'], ['TENKI_API_KEY'], ['TENKI_AUTH_TOKEN']],
+  // Luxor (formerly Tenki Cloud): prefer LUXOR_* credentials, with
+  // LUXORAI_* and TENKI_* kept as fallbacks for existing installations.
+  tenki: [['LUXOR_API_KEY'], ['LUXOR_AUTH_TOKEN'], ['LUXORAI_API_KEY'], ['LUXORAI_AUTH_TOKEN'], ['TENKI_API_KEY'], ['TENKI_AUTH_TOKEN']],
   // Cloud is the default, and it can authenticate with either a direct key or
   // a named SDK profile.
   microsandbox: [['MSB_API_KEY'], ['MSB_PROFILE']],
@@ -119,9 +119,9 @@ const PROVIDER_ENV_MAP: Record<SharedProviderName, Record<string, string | reado
     apiUrl: ['LELANTOS_API_URL', 'E2B_API_URL'],
   },
   tenki: {
-    apiKey: ['LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN', 'TENKI_API_KEY', 'TENKI_AUTH_TOKEN'],
-    baseUrl: ['LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL'],
-    workspaceId: ['LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID'],
+    apiKey: ['LUXOR_API_KEY', 'LUXOR_AUTH_TOKEN', 'LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN', 'TENKI_API_KEY', 'TENKI_AUTH_TOKEN'],
+    baseUrl: ['LUXOR_API_ENDPOINT', 'LUXOR_API_URL', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL'],
+    workspaceId: ['LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID'],
   },
   microsandbox: { apiKey: 'MSB_API_KEY', apiUrl: 'MSB_API_URL', profile: 'MSB_PROFILE' },
 };

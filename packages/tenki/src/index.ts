@@ -1,5 +1,5 @@
 /**
- * @computesdk/tenki — ComputeSDK provider for Luxor Agent Cloud (formerly Tenki Cloud) sandboxes.
+ * @computesdk/tenki — ComputeSDK provider for Luxor (formerly Tenki Cloud) sandboxes.
  *
  * Usage:
  *   import { luxor } from "@computesdk/tenki";
@@ -28,11 +28,11 @@ import {
 } from "@luxorai/sandbox";
 
 export interface LuxorConfig {
-  /** Luxor API key (lx_...; tk_... remains accepted). Falls back to LUXORAI_API_KEY / LUXORAI_AUTH_TOKEN, then TENKI_API_KEY / TENKI_AUTH_TOKEN. */
+  /** Luxor API key (lx_...; tk_... remains accepted). Falls back to LUXOR_API_KEY / LUXOR_AUTH_TOKEN, then LUXORAI_API_KEY / LUXORAI_AUTH_TOKEN, then TENKI_API_KEY / TENKI_AUTH_TOKEN. */
   apiKey?: string;
-  /** API base URL. Falls back to LUXORAI_API_ENDPOINT / LUXORAI_API_URL, then TENKI_API_ENDPOINT / TENKI_API_URL, then https://api.tenki.cloud. */
+  /** API base URL. Falls back to LUXOR_API_ENDPOINT / LUXOR_API_URL, then LUXORAI_API_ENDPOINT / LUXORAI_API_URL, then TENKI_API_ENDPOINT / TENKI_API_URL, then https://api.tenki.cloud. */
   baseUrl?: string;
-  /** Workspace to create sandboxes in. Falls back to LUXORAI_WORKSPACE_ID / TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
+  /** Workspace to create sandboxes in. Falls back to LUXOR_WORKSPACE_ID / LUXORAI_WORKSPACE_ID / TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
   workspaceId?: string;
   /** @deprecated Luxor no longer scopes sandboxes by project. */
   projectId?: string;
@@ -44,7 +44,7 @@ export interface LuxorConfig {
   diskSizeGb?: number;
 }
 
-/** @deprecated Use {@link LuxorConfig}; Tenki is now Luxor Agent Cloud. */
+/** @deprecated Use {@link LuxorConfig}; Tenki is now Luxor. */
 export type TenkiConfig = LuxorConfig;
 
 // ---------------------------------------------------------------------------
@@ -67,20 +67,20 @@ function firstEnv(...names: string[]): string | undefined {
 }
 
 function resolveApiKey(config: LuxorConfig): string {
-  const apiKey = config.apiKey ?? firstEnv('LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN', 'TENKI_API_KEY', 'TENKI_AUTH_TOKEN');
+  const apiKey = config.apiKey ?? firstEnv('LUXOR_API_KEY', 'LUXOR_AUTH_TOKEN', 'LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN', 'TENKI_API_KEY', 'TENKI_AUTH_TOKEN');
   if (!apiKey) {
     throw new Error(
-      "Missing API key for Luxor Agent Cloud.\n\n" +
+      "Missing API key for Luxor.\n\n" +
         "Create one at https://luxor.ai (workspace settings > API Keys)\n" +
         'Then pass it: luxor({ apiKey: "lx_..." })\n' +
-        "Or set LUXORAI_API_KEY (or LUXORAI_AUTH_TOKEN) in your environment.",
+        "Or set LUXOR_API_KEY (or LUXOR_AUTH_TOKEN) in your environment.",
     );
   }
   return apiKey;
 }
 
 function clientKey(config: LuxorConfig): string {
-  return `${resolveApiKey(config)}::${config.baseUrl ?? firstEnv('LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL') ?? ''}`;
+  return `${resolveApiKey(config)}::${config.baseUrl ?? firstEnv('LUXOR_API_ENDPOINT', 'LUXOR_API_URL', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL') ?? ''}`;
 }
 
 function getClient(config: LuxorConfig): LuxorSandbox {
@@ -89,7 +89,7 @@ function getClient(config: LuxorConfig): LuxorSandbox {
   if (!client) {
     client = new LuxorSandbox({
       authToken: resolveApiKey(config),
-      baseUrl: config.baseUrl ?? firstEnv('LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL'),
+      baseUrl: config.baseUrl ?? firstEnv('LUXOR_API_ENDPOINT', 'LUXOR_API_URL', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL'),
     });
     clients.set(key, client);
   }
@@ -134,7 +134,7 @@ function mapStatus(state: SessionState): InstanceInfo["status"] {
 
 function toCreateOptions(config: LuxorConfig, options?: CreateInstanceOptions): CreateOptions {
   const opts: CreateOptions = {};
-  const workspaceId = config.workspaceId ?? firstEnv('LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID');
+  const workspaceId = config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID');
   if (workspaceId) opts.workspaceId = workspaceId;
   if (options?.name) opts.name = options.name;
   if (options?.envs) opts.env = options.envs;
@@ -315,7 +315,7 @@ function basename(path: string): string {
 
 const luxorProvider = defineProvider<Session, LuxorConfig>({
   // Keep the provider id stable: benchmark history, platform credentials, and
-  // routing keys still use "tenki" for the same Luxor Agent Cloud service.
+  // routing keys still use "tenki" for the same Luxor service.
   name: "tenki",
   methods: {
     instances: {
@@ -464,7 +464,7 @@ const luxorProvider = defineProvider<Session, LuxorConfig>({
       list: async (config, options) => {
         const client = getClient(config);
         const instanceId = options?.instanceId ?? options?.sandboxId;
-        const workspaceId = config.workspaceId ?? firstEnv('LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID');
+        const workspaceId = config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID');
         const snaps = instanceId
           ? await client.listSessionSnapshots(instanceId)
           : await client.listSnapshots(workspaceId ? { workspaceId } : undefined);
@@ -483,8 +483,8 @@ const luxorProvider = defineProvider<Session, LuxorConfig>({
         const v = await client.createVolume({
           name: options.name,
           sizeBytes: options.sizeBytes ?? 10 * 1024 * 1024 * 1024,
-          ...(config.workspaceId ?? firstEnv('LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID')
-            ? { workspaceId: config.workspaceId ?? firstEnv('LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID') }
+          ...(config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID')
+            ? { workspaceId: config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID') }
             : {}),
         });
         // SYNC_PENDING on a fresh volume is the create-time equivalent of the
@@ -514,7 +514,7 @@ const luxorProvider = defineProvider<Session, LuxorConfig>({
 
 export const luxor = luxorProvider;
 
-/** @deprecated Tenki is now Luxor Agent Cloud; use {@link luxor}. The provider id remains "tenki" for compatibility. */
+/** @deprecated Tenki is now Luxor; use {@link luxor}. The provider id remains "tenki" for compatibility. */
 export const tenki = luxorProvider;
 
 export default luxor;

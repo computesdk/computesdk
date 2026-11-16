@@ -1,8 +1,8 @@
 {
   "name": "@computesdk/tenki",
   "version": "0.1.24",
-  "description": "Luxor Agent Cloud provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH",
-  "author": "Luxor Agent Cloud <support@luxor.ai>",
+  "description": "Luxor provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH",
+  "author": "Luxor <support@luxor.ai>",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

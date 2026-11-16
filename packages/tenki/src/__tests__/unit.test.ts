@@ -439,40 +439,43 @@ describe('luxor provider (mocked SDK)', () => {
     await expect(provider.sandbox.destroy('gone')).resolves.toBeUndefined();
   });
 
-  it('prefers LUXORAI credentials and keeps TENKI fallbacks', async () => {
-    const saved = {
-      luxorKey: process.env.LUXORAI_API_KEY,
-      luxorToken: process.env.LUXORAI_AUTH_TOKEN,
-      luxorUrl: process.env.LUXORAI_API_URL,
-      tenkiKey: process.env.TENKI_API_KEY,
-      tenkiToken: process.env.TENKI_AUTH_TOKEN,
-      tenkiUrl: process.env.TENKI_API_URL,
+  it('prefers LUXOR credentials and keeps LUXORAI/TENKI fallbacks', async () => {
+    const envNames = [
+      'LUXOR_API_KEY', 'LUXOR_AUTH_TOKEN', 'LUXOR_API_ENDPOINT', 'LUXOR_API_URL',
+      'LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL',
+      'TENKI_API_KEY', 'TENKI_AUTH_TOKEN', 'TENKI_API_ENDPOINT', 'TENKI_API_URL',
+    ] as const;
+    const saved = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
+    for (const name of envNames) delete process.env[name];
+    const restore = () => {
+      for (const name of envNames) {
+        const value = saved[name];
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
     };
-    delete process.env.LUXORAI_API_KEY;
-    delete process.env.LUXORAI_AUTH_TOKEN;
-    delete process.env.TENKI_API_KEY;
-    delete process.env.TENKI_AUTH_TOKEN;
     try {
-      await expect(tenki({}).sandbox.create()).rejects.toThrow(/Missing API key for Luxor Agent Cloud/);
+      await expect(tenki({}).sandbox.create()).rejects.toThrow(/Missing API key for Luxor/);
 
-      vi.stubEnv('LUXORAI_API_KEY', 'lx_new');
-      vi.stubEnv('LUXORAI_API_URL', 'https://luxor.example');
-      vi.stubEnv('TENKI_API_KEY', 'tk_legacy');
-      vi.stubEnv('TENKI_API_URL', 'https://tenki.example');
+      process.env.LUXOR_API_KEY = 'lx_new';
+      process.env.LUXOR_API_URL = 'https://luxor.example';
+      process.env.LUXORAI_API_KEY = 'lx_ai';
+      process.env.LUXORAI_API_URL = 'https://luxorai.example';
+      process.env.TENKI_API_KEY = 'tk_legacy';
+      process.env.TENKI_API_URL = 'https://tenki.example';
       await tenki({}).sandbox.create();
       expect(lastClientOptions).toEqual({ authToken: 'lx_new', baseUrl: 'https://luxor.example' });
+
+      delete process.env.LUXOR_API_KEY;
+      delete process.env.LUXOR_API_URL;
+      await tenki({}).sandbox.create();
+      expect(lastClientOptions).toEqual({ authToken: 'lx_ai', baseUrl: 'https://luxorai.example' });
 
       delete process.env.LUXORAI_API_KEY;
       delete process.env.LUXORAI_API_URL;
       await tenki({}).sandbox.create();
       expect(lastClientOptions).toEqual({ authToken: 'tk_legacy', baseUrl: 'https://tenki.example' });
     } finally {
-      if (saved.luxorKey) process.env.LUXORAI_API_KEY = saved.luxorKey; else delete process.env.LUXORAI_API_KEY;
-      if (saved.luxorToken) process.env.LUXORAI_AUTH_TOKEN = saved.luxorToken; else delete process.env.LUXORAI_AUTH_TOKEN;
-      if (saved.luxorUrl) process.env.LUXORAI_API_URL = saved.luxorUrl; else delete process.env.LUXORAI_API_URL;
-      if (saved.tenkiKey) process.env.TENKI_API_KEY = saved.tenkiKey; else delete process.env.TENKI_API_KEY;
-      if (saved.tenkiToken) process.env.TENKI_AUTH_TOKEN = saved.tenkiToken; else delete process.env.TENKI_AUTH_TOKEN;
-      if (saved.tenkiUrl) process.env.TENKI_API_URL = saved.tenkiUrl; else delete process.env.TENKI_API_URL;
+      restore();
     }
   });
 
@@ -482,24 +485,21 @@ describe('luxor provider (mocked SDK)', () => {
   });
 
   it('throws a helpful error when no API key is configured', async () => {
-    const saved = {
-      luxorKey: process.env.LUXORAI_API_KEY,
-      luxorToken: process.env.LUXORAI_AUTH_TOKEN,
-      key: process.env.TENKI_API_KEY,
-      token: process.env.TENKI_AUTH_TOKEN,
-    };
-    delete process.env.LUXORAI_API_KEY;
-    delete process.env.LUXORAI_AUTH_TOKEN;
-    delete process.env.TENKI_API_KEY;
-    delete process.env.TENKI_AUTH_TOKEN;
+    const envNames = [
+      'LUXOR_API_KEY', 'LUXOR_AUTH_TOKEN',
+      'LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN',
+      'TENKI_API_KEY', 'TENKI_AUTH_TOKEN',
+    ] as const;
+    const saved = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
+    for (const name of envNames) delete process.env[name];
     try {
       const provider = tenki({});
-      await expect(provider.sandbox.create()).rejects.toThrow(/Missing API key for Luxor Agent Cloud/);
+      await expect(provider.sandbox.create()).rejects.toThrow(/Missing API key for Luxor/);
     } finally {
-      if (saved.luxorKey) process.env.LUXORAI_API_KEY = saved.luxorKey; else delete process.env.LUXORAI_API_KEY;
-      if (saved.luxorToken) process.env.LUXORAI_AUTH_TOKEN = saved.luxorToken; else delete process.env.LUXORAI_AUTH_TOKEN;
-      if (saved.key) process.env.TENKI_API_KEY = saved.key; else delete process.env.TENKI_API_KEY;
-      if (saved.token) process.env.TENKI_AUTH_TOKEN = saved.token; else delete process.env.TENKI_AUTH_TOKEN;
+      for (const name of envNames) {
+        const value = saved[name];
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
     }
   });
 });

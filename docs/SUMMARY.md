@@ -63,7 +63,7 @@
   * [Sprites](providers/sprites.md)
   * [Superserve](providers/superserve.md)
   * [Tangle Sandbox](providers/tangle.md)
-  * [Luxor Agent Cloud](providers/tenki.md)
+  * [Luxor](providers/tenki.md)
   * [Tensorlake](providers/tensorlake.md)
   * [Uno](providers/uno.md)
   * [Upstash](providers/upstash.md)
