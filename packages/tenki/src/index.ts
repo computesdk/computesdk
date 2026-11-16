@@ -30,7 +30,7 @@ import {
 export interface LuxorConfig {
   /** Luxor API key (lx_...; tk_... remains accepted). Falls back to LUXOR_API_KEY / LUXOR_AUTH_TOKEN, then LUXORAI_API_KEY / LUXORAI_AUTH_TOKEN, then TENKI_API_KEY / TENKI_AUTH_TOKEN. */
   apiKey?: string;
-  /** API base URL. Falls back to LUXOR_API_ENDPOINT / LUXOR_API_URL, then LUXORAI_API_ENDPOINT / LUXORAI_API_URL, then TENKI_API_ENDPOINT / TENKI_API_URL, then https://api.tenki.cloud. */
+  /** API base URL. Falls back to LUXOR_API_ENDPOINT / LUXOR_API_URL, then LUXORAI_API_ENDPOINT / LUXORAI_API_URL, then TENKI_API_ENDPOINT / TENKI_API_URL, then the SDK default (https://api.luxor.ai). */
   baseUrl?: string;
   /** Workspace to create sandboxes in. Falls back to LUXOR_WORKSPACE_ID / LUXORAI_WORKSPACE_ID / TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
   workspaceId?: string;
@@ -60,8 +60,8 @@ const clients = new Map<string, LuxorSandbox>();
 
 function firstEnv(...names: string[]): string | undefined {
   for (const name of names) {
-    const value = process.env[name];
-    if (value?.trim()) return value;
+    const value = process.env[name]?.trim();
+    if (value) return value;
   }
   return undefined;
 }
@@ -79,8 +79,16 @@ function resolveApiKey(config: LuxorConfig): string {
   return apiKey;
 }
 
+function resolveBaseUrl(config: LuxorConfig): string | undefined {
+  return config.baseUrl ?? firstEnv('LUXOR_API_ENDPOINT', 'LUXOR_API_URL', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL');
+}
+
+function resolveWorkspaceId(config: LuxorConfig): string | undefined {
+  return config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID');
+}
+
 function clientKey(config: LuxorConfig): string {
-  return `${resolveApiKey(config)}::${config.baseUrl ?? firstEnv('LUXOR_API_ENDPOINT', 'LUXOR_API_URL', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL') ?? ''}`;
+  return `${resolveApiKey(config)}::${resolveBaseUrl(config) ?? ''}`;
 }
 
 function getClient(config: LuxorConfig): LuxorSandbox {
@@ -89,7 +97,7 @@ function getClient(config: LuxorConfig): LuxorSandbox {
   if (!client) {
     client = new LuxorSandbox({
       authToken: resolveApiKey(config),
-      baseUrl: config.baseUrl ?? firstEnv('LUXOR_API_ENDPOINT', 'LUXOR_API_URL', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL'),
+      baseUrl: resolveBaseUrl(config),
     });
     clients.set(key, client);
   }
@@ -134,7 +142,7 @@ function mapStatus(state: SessionState): InstanceInfo["status"] {
 
 function toCreateOptions(config: LuxorConfig, options?: CreateInstanceOptions): CreateOptions {
   const opts: CreateOptions = {};
-  const workspaceId = config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID');
+  const workspaceId = resolveWorkspaceId(config);
   if (workspaceId) opts.workspaceId = workspaceId;
   if (options?.name) opts.name = options.name;
   if (options?.envs) opts.env = options.envs;
@@ -464,7 +472,7 @@ const luxorProvider = defineProvider<Session, LuxorConfig>({
       list: async (config, options) => {
         const client = getClient(config);
         const instanceId = options?.instanceId ?? options?.sandboxId;
-        const workspaceId = config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID');
+        const workspaceId = resolveWorkspaceId(config);
         const snaps = instanceId
           ? await client.listSessionSnapshots(instanceId)
           : await client.listSnapshots(workspaceId ? { workspaceId } : undefined);
@@ -480,12 +488,11 @@ const luxorProvider = defineProvider<Session, LuxorConfig>({
     volume: {
       create: async (config, options) => {
         const client = getClient(config);
+        const workspaceId = resolveWorkspaceId(config);
         const v = await client.createVolume({
           name: options.name,
           sizeBytes: options.sizeBytes ?? 10 * 1024 * 1024 * 1024,
-          ...(config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID')
-            ? { workspaceId: config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID') }
-            : {}),
+          ...(workspaceId ? { workspaceId } : {}),
         });
         // SYNC_PENDING on a fresh volume is the create-time equivalent of the
         // attach race the API already reports; wait before handing it back.

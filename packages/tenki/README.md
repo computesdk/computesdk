@@ -69,8 +69,8 @@ const url = await sandbox.getUrl({ port: 3000 });
 | Option | Env var | Default | Description |
 |---|---|---|---|
 | `apiKey` | `LUXOR_API_KEY` / `LUXOR_AUTH_TOKEN`, then `LUXORAI_API_KEY` / `LUXORAI_AUTH_TOKEN`, then `TENKI_API_KEY` / `TENKI_AUTH_TOKEN` | required | Luxor API key (`lx_...`; `tk_...` remains accepted) |
-| `baseUrl` | `LUXOR_API_ENDPOINT` / `LUXOR_API_URL`, then `LUXORAI_API_ENDPOINT` / `LUXORAI_API_URL`, then `TENKI_API_ENDPOINT` / `TENKI_API_URL` | `https://api.tenki.cloud` | API endpoint |
-| `workspaceId` | `LUXOR_WORKSPACE_ID` / `LUXOR_WORKSPACE_ID` / `LUXORAI_WORKSPACE_ID` / `TENKI_WORKSPACE_ID` | inferred from workspace API key | Explicit workspace for trusted service credentials |
+| `baseUrl` | `LUXOR_API_ENDPOINT` / `LUXOR_API_URL`, then `LUXORAI_API_ENDPOINT` / `LUXORAI_API_URL`, then `TENKI_API_ENDPOINT` / `TENKI_API_URL` | `https://api.luxor.ai` | API endpoint |
+| `workspaceId` | `LUXOR_WORKSPACE_ID` / `LUXORAI_WORKSPACE_ID` / `TENKI_WORKSPACE_ID` | inferred from workspace API key | Explicit workspace for trusted service credentials |
 | `projectId` | - | ignored | Deprecated; Luxor no longer scopes sandboxes by project |
 | `timeout` | - | none | Default `runCommand` timeout (ms) |
 | `cpuCores` / `memoryMb` / `diskSizeGb` | - | Luxor defaults | Default sandbox resources |
