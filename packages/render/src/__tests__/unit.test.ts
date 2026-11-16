@@ -67,14 +67,16 @@ vi.mock('@renderinc/sdk', () => {
           status: 'available', plan: '1c-2g', requestedAt: '2026-01-01T00:00:00Z', expiresAt: '2026-02-01T00:00:00Z',
         };
       },
-      list: async () =>
-        ['sbx-a', 'sbx-b', 'sbx-a', 'sbx-a'].map((source, i) => ({
+      list: async () => {
+        calls.push({ method: 'snapshots.list', args: [] });
+        return ['sbx-a', 'sbx-b', 'sbx-a', 'sbx-a'].map((source, i) => ({
           snapshot: {
             id: `snp-${i}`, sandboxGroupId: 'sbg-default', sourceSandboxId: source, kind: 'runtime',
             status: 'available', plan: '1c-2g', requestedAt: '2026-01-01T00:00:00Z', expiresAt: '2026-02-01T00:00:00Z',
           },
           cursor: String(i + 1),
-        })),
+        }));
+      },
       delete: async (input: unknown) => {
         calls.push({ method: 'snapshots.delete', args: [input] });
       },
@@ -168,6 +170,7 @@ describe('render provider', () => {
     const provider = render(config);
     const forA = await provider.snapshot!.list({ instanceId: 'sbx-a', limit: 2 });
     expect(forA.map((s: { id: string }) => s.id)).toEqual(['snp-0', 'snp-2']);
+    expect(calls.filter((c) => c.method === 'snapshots.list')).toHaveLength(1);
     expect(await provider.snapshot!.list()).toHaveLength(4);
   });
 

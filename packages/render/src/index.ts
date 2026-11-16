@@ -74,16 +74,17 @@ const isNotFound = (error: unknown) => error instanceof ClientError && error.sta
 
 const PAGE_SIZE = 100;
 
-/** Follows Render's cursor pagination until a short page, `max` rows, or no cursor. */
+/** Follows Render's cursor pagination until a short page, `max` kept rows, or no cursor. */
 async function paginate<T extends { cursor?: string }>(
   fetchPage: (cursor: string | undefined, limit: number) => Promise<T[]>,
   max = Infinity,
+  keep: (row: T) => boolean = () => true,
 ): Promise<T[]> {
   const rows: T[] = [];
   let cursor: string | undefined;
   while (rows.length < max) {
     const page = await fetchPage(cursor, PAGE_SIZE);
-    rows.push(...page);
+    rows.push(...page.filter(keep));
     cursor = page[page.length - 1]?.cursor;
     if (page.length < PAGE_SIZE || !cursor) break;
   }
@@ -312,14 +313,12 @@ export const render = defineProvider<RenderSandbox, RenderConfig>({
         const auth = resolveClient(config);
         const sandboxGroupId = await resolveGroupId(config, auth);
         const instanceId = options?.instanceId ?? options?.sandboxId;
-        const rows = await paginate((cursor, limit) =>
-          auth.client.snapshots.list({ sandboxGroupId, ownerId: auth.ownerId, cursor, limit }),
+        const rows = await paginate(
+          (cursor, limit) => auth.client.snapshots.list({ sandboxGroupId, ownerId: auth.ownerId, cursor, limit }),
+          options?.limit,
+          ({ snapshot }) => !instanceId || snapshot.sourceSandboxId === instanceId,
         );
-        const snapshots = rows
-          .map(({ snapshot }) => snapshot)
-          .filter((snapshot) => !instanceId || snapshot.sourceSandboxId === instanceId)
-          .map(toSnapshot);
-        return options?.limit !== undefined ? snapshots.slice(0, options.limit) : snapshots;
+        return rows.map(({ snapshot }) => toSnapshot(snapshot));
       },
       delete: async (config: RenderConfig, snapshotId: string) => {
         const auth = resolveClient(config);
