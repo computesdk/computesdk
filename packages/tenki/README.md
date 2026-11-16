@@ -2,6 +2,12 @@
 
 [Luxor](https://luxor.ai) provider for ComputeSDK - run code in fast microVM sandboxes with native filesystem operations, public preview URLs, snapshots, volumes, and SSH. Tenki Cloud is now Luxor; the `tenki` export remains as a compatibility alias.
 
+## Release status
+
+As of November 16, 2026, npm's latest `@computesdk/tenki` is **0.1.24**, which exports `tenki` and `TenkiConfig` and uses `TENKI_*` environment variables. The `luxor` / `LuxorConfig` exports, `LUXOR_*` / `LUXORAI_*` fallbacks, and Luxor SDK dependency described below are on `main` in [PR #1154](https://github.com/computesdk/computesdk/pull/1154), pending npm publication.
+
+For **0.1.24**, use `tenki({ apiKey: process.env.TENKI_API_KEY })`; its endpoint and workspace variables are `TENKI_API_URL` and `TENKI_WORKSPACE_ID`. The setup, usage, and configuration below target the updated source. In that source, `tenki` and `TenkiConfig` are deprecated aliases for `luxor` and `LuxorConfig`; the package name stays `@computesdk/tenki` and the provider ID stays `tenki`.
+
 ## Installation
 
 ```bash
