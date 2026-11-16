@@ -1,6 +1,6 @@
 # @computesdk/maritime
 
-[Maritime](https://maritime.sh) provider for ComputeSDK - Firecracker microVM sandboxes with streaming command output, filesystem access, port URLs and snapshots.
+[Maritime](https://maritime.sh) provider for ComputeSDK - Firecracker microVM sandboxes with streaming command output, filesystem access, port URLs, snapshots and templates.
 
 ## Installation & Setup
 
@@ -79,7 +79,7 @@ interface MaritimeConfig {
 
 | Option | Maps to | Notes |
 |---|---|---|
-| `templateId`, `image`, `snapshotId` | `from` | A stock template (`base`, `python`, `code-interpreter`, `desktop-linux`), a saved snapshot name, or an OCI image. Defaults to `base`. |
+| `templateId`, `image`, `snapshotId` | `from` | A stock or customer template name, a saved snapshot name, or an OCI image. Defaults to `base`. |
 | `timeout` (ms) | `timeLimitSeconds` | Maritime ends the sandbox when it passes. Rounded up to whole seconds, clamped to 60 s - 24 h. |
 | `envs` | `env` | Environment variables for every command. |
 | `name` | `name` | Sandbox name. |
@@ -94,12 +94,12 @@ interface MaritimeConfig {
 - **Port URLs**: `getUrl({ port })` returns a URL that carries the sandbox's URL token.
 - **Snapshots**: `snapshot.create` saves the sandbox's disk and memory under a name; pass it as `snapshotId` to start new sandboxes from it. `snapshot.list` and `snapshot.delete` manage saved snapshots.
 - **List**: `sandbox.list()` returns sandboxes that have not ended.
+- **Templates**: `template.create` builds a customer template from `image` or `dockerfile` (with optional `startCmd`, `readyCmd` and `size`/`vcpu`/`memoryMib`/`diskGib`) and waits for the build unless you pass `wait: false`. Pass its name as `templateId` to start sandboxes from it. `template.list` returns your templates, then Maritime's stock ones; `template.delete` removes a customer template. Creating templates needs a paid Maritime plan.
 - **Pause and resume**: `pause()` pauses the sandbox (a paused one bills only its disk). Maritime has no resume call: the next command resumes it, so `resume()` runs `true` in the sandbox. Files survive; running processes may not, since Maritime can restore a sandbox from its disk only.
 
 ## Limitations
 
 - Commands run for at most 1 hour (Maritime's per-command limit). Without `timeout`, the provider asks for that limit instead of Maritime's 60-second default.
-- Templates cannot be created or deleted (Maritime's templates are saved snapshots).
 - After 5 idle minutes (`idleTimeoutSeconds`) Maritime ends a sandbox, or pauses it if you pass `onIdle: 'pause'`. Maritime's docs say ending is the default, but the SDK's types say pausing is, so set `onIdle` yourself if it matters. A sandbox also ends at its time limit; call `destroy()` when you are done.
 
 ## Links

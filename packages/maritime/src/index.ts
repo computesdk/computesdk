@@ -6,14 +6,23 @@
 
 import { randomUUID } from 'node:crypto';
 import { Maritime, MaritimeAuthError, MaritimeNotFoundError, MaritimeSandboxError } from 'maritime-sdk';
-import type { CreateSandboxParams, Sandbox as MaritimeSandbox, SandboxData, SavedSnapshot } from 'maritime-sdk';
+import type {
+  CreateSandboxParams,
+  CreateTemplateParams,
+  Sandbox as MaritimeSandbox,
+  SandboxData,
+  SandboxTemplate,
+  SavedSnapshot,
+} from 'maritime-sdk';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type {
   CommandResult,
   CreateInstanceOptions,
+  CreateTemplateOptions,
   FileEntry,
   InstanceInfo,
+  ListTemplatesOptions,
   RunCommandOptions,
 } from '@computesdk/provider';
 
@@ -143,7 +152,37 @@ function toSnapshot(snapshot: SavedSnapshot) {
   };
 }
 
-export const maritime = defineProvider<MaritimeSandbox, MaritimeConfig>({
+/** Options for `provider.template.create`: a customer template built from exactly one of `image` or `dockerfile`. */
+export interface MaritimeCreateTemplateOptions extends CreateTemplateOptions {
+  /** A public image reference. */
+  image?: string;
+  /** Dockerfile text (no multi-stage builds). */
+  dockerfile?: string;
+  /** The command that starts in every new sandbox. */
+  startCmd?: string;
+  /** The command whose success means a new sandbox is ready. */
+  readyCmd?: string;
+  /** A size preset; `vcpu`, `memoryMib` and `diskGib` override it. Every sandbox from the template gets this size. */
+  size?: CreateTemplateParams['size'];
+  vcpu?: number;
+  memoryMib?: number;
+  diskGib?: number;
+  /** Wait for the build to finish (up to 40 minutes). Default `true`. */
+  wait?: boolean;
+}
+
+export type MaritimeTemplate = SandboxTemplate & {
+  /** The template name, which `create({ templateId })` takes. Maritime's `tpl-` id is in `templateId`. */
+  id: string;
+  templateId: string | null;
+  provider: 'maritime';
+};
+
+function toTemplate(template: SandboxTemplate): MaritimeTemplate {
+  return { ...template, id: template.name, templateId: template.id, provider: 'maritime' };
+}
+
+export const maritime = defineProvider<MaritimeSandbox, MaritimeConfig, MaritimeTemplate>({
   name: 'maritime',
   methods: {
     instances: {
@@ -304,6 +343,57 @@ export const maritime = defineProvider<MaritimeSandbox, MaritimeConfig>({
       pauseCapabilities: { memory: false },
 
       getInstance: (sandbox: MaritimeSandbox): MaritimeSandbox => sandbox,
+    },
+
+    template: {
+      create: async (config: MaritimeConfig, options: MaritimeCreateTemplateOptions): Promise<MaritimeTemplate> => {
+        const { name, image, dockerfile, startCmd, readyCmd, size, vcpu, memoryMib, diskGib, wait = true } = options;
+        if (!name?.trim()) throw new Error('A Maritime template name is required.');
+        if ((image === undefined) === (dockerfile === undefined)) {
+          throw new Error('A Maritime template needs exactly one of `image` or `dockerfile`.');
+        }
+        if (options.description !== undefined || options.metadata !== undefined) {
+          throw new Error('Maritime templates do not support description or metadata.');
+        }
+        const client = getClient(config);
+        const source = image !== undefined ? { image } : { dockerfile: dockerfile as string };
+        try {
+          const created = await client.templates.create({ ...source, name, startCmd, readyCmd, size, vcpu, memoryMib, diskGib });
+          return toTemplate(wait ? await client.templates.wait(created.name) : created);
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to create Maritime template');
+        }
+      },
+      // Customer templates newest first, then Maritime's stock templates.
+      list: async (config: MaritimeConfig, options?: ListTemplatesOptions): Promise<MaritimeTemplate[]> => {
+        const limit = options?.limit;
+        if (limit === 0) return [];
+        const client = getClient(config);
+        const templates: SandboxTemplate[] = [];
+        let cursor: string | undefined;
+        try {
+          do {
+            const page = await client.templates.list({ limit: 100, cursor });
+            templates.push(...page.data);
+            cursor = page.nextCursor ?? undefined;
+          } while (cursor && (limit === undefined || templates.length < limit));
+        } catch (error) {
+          rethrowFriendly(error, 'Failed to list Maritime templates');
+        }
+        return (limit === undefined ? templates : templates.slice(0, limit)).map(toTemplate);
+      },
+      delete: async (config: MaritimeConfig, templateId: string): Promise<void> => {
+        const client = getClient(config);
+        try {
+          await client.templates.delete(templateId);
+        } catch (error) {
+          if (error instanceof MaritimeSandboxError && error.code === 'snapshot_not_found') return;
+          if (error instanceof MaritimeSandboxError && error.code === 'scope_missing') {
+            throw new Error(`Maritime template ${templateId} could not be deleted: stock templates cannot be deleted, and the key needs the \`sandboxes\` scope.`);
+          }
+          rethrowFriendly(error, 'Failed to delete Maritime template');
+        }
+      },
     },
 
     snapshot: {

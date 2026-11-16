@@ -105,7 +105,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **kosa8** | `KOSA8_API_KEY` | Sandboxes that each run in their own microVM with its own kernel, per-second billing, sleep and wake |
 | **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
 | **Lizard** | `LIZARD_API_KEY`, `LIZARD_PROJECT_ID` | Lizard Sandboxes with native command streaming, files and authenticated port URLs |
-| **Maritime** | `MARITIME_API_KEY` | Firecracker microVM sandboxes with streaming output, files, port URLs and snapshots |
+| **Maritime** | `MARITIME_API_KEY` | Firecracker microVM sandboxes with streaming output, files, port URLs, snapshots and templates |
 | **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
 | **Microsandbox** | `MSB_API_KEY` or `MSB_PROFILE` for cloud; none for explicit local mode | Hardware-isolated microVMs on local machines or microsandbox cloud |
 | **MIOSA** | `MIOSA_API_KEY` | Snapshot-backed Firecracker microVM sandboxes with native filesystem and preview URLs |
@@ -389,7 +389,7 @@ See individual provider READMEs for details:
 - **[@computesdk/kosa8](./packages/kosa8)** - Sandboxes that each run in their own microVM with its own kernel, with sleep and wake
 - **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
 - **[@computesdk/lizard](./packages/lizard)** - Lizard Sandboxes with command streaming, files and authenticated port URLs
-- **[@computesdk/maritime](./packages/maritime)** - Firecracker microVM sandboxes with streaming output, files, port URLs and snapshots
+- **[@computesdk/maritime](./packages/maritime)** - Firecracker microVM sandboxes with streaming output, files, port URLs, snapshots and templates
 - **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
 - **[@computesdk/miosa](./packages/miosa)** - Snapshot-backed Firecracker microVMs with native filesystem, preview URLs, and checkpoints
 - **[@computesdk/mosaic](./packages/mosaic)** - Firecracker microVMs with preview URLs, snapshots, and container-image environments
