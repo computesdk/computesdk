@@ -97,7 +97,7 @@ export function createInput(config: RenderConfig, options: CreateInstanceOptions
 /** Builds the `bash -c` script for a ComputeSDK command and its options. */
 export function buildCommand(command: string, options?: RunCommandOptions): string {
   let cmd = command;
-  if (options?.cwd) cmd = `cd "${escapeShellArg(options.cwd)}" && ${cmd}`;
+  if (options?.cwd) cmd = `cd "${escapeShellArg(options.cwd)}" || exit 1; ${cmd}`;
   if (options?.env) {
     const exports = Object.entries(options.env).map(([key, value]) => {
       if (!ENV_NAME.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
