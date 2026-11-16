@@ -286,6 +286,23 @@ export const maritime = defineProvider<MaritimeSandbox, MaritimeConfig>({
         },
       },
 
+      pause: async (sandbox: MaritimeSandbox): Promise<void> => {
+        await sandbox.pause();
+      },
+
+      // Maritime has no resume call: the next data plane call resumes a paused sandbox, and a
+      // foreground `run` retries `sandbox_paused` until it has resumed.
+      resume: async (sandbox: MaritimeSandbox): Promise<void> => {
+        const result = await sandbox.run('true', { timeoutSeconds: 60 });
+        if (result.exitCode !== 0) {
+          throw new Error(`Failed to resume Maritime sandbox ${sandbox.id}: ${result.stderr || `exit code ${result.exitCode}`}`);
+        }
+        await sandbox.refresh();
+      },
+
+      // A resume may restore only the disk (`restoredFrom: 'disk_only'`), so running processes are not promised.
+      pauseCapabilities: { memory: false },
+
       getInstance: (sandbox: MaritimeSandbox): MaritimeSandbox => sandbox,
     },
 

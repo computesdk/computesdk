@@ -77,6 +77,9 @@ console.log(await sandbox.getUrl({ port: 8000 }));
 const snapshot = await sdk.snapshot.create(sandbox.sandboxId, { name: 'my-snapshot' });
 const copy = await sdk.sandbox.create({ snapshotId: snapshot.id });
 
+await sandbox.pause();
+await sandbox.resume();
+
 await copy.destroy();
 await sandbox.destroy();
 ```
@@ -113,11 +116,12 @@ interface MaritimeConfig {
 - **Port URLs**: `getUrl({ port })` returns a URL that carries the sandbox's URL token.
 - **Snapshots**: `snapshot.create` saves the sandbox's disk and memory under a name; pass it as `snapshotId` to start new sandboxes from it. `snapshot.list` and `snapshot.delete` manage saved snapshots.
 - **List**: `sandbox.list()` returns sandboxes that have not ended.
+- **Pause and resume**: `pause()` pauses the sandbox (a paused one bills only its disk). Maritime has no resume call: the next command resumes it, so `resume()` runs `true` in the sandbox. Files survive; running processes may not, since Maritime can restore a sandbox from its disk only.
 
 ## Limitations
 
 - Commands run for at most 1 hour (Maritime's per-command limit). Without `timeout`, the provider asks for that limit instead of Maritime's 60-second default.
-- Pause and resume are not exposed through this provider, and templates cannot be created or deleted (Maritime's templates are saved snapshots).
+- Templates cannot be created or deleted (Maritime's templates are saved snapshots).
 - By default Maritime pauses a sandbox after 5 idle minutes (`onIdle`, `idleTimeoutSeconds`) and ends it at its time limit; call `destroy()` when you are done.
 
 ## Links
