@@ -6,6 +6,8 @@
 
 Requires Node.js 20.19 or newer.
 
+The provider added in [PR #944](https://github.com/computesdk/computesdk/pull/944) has not yet been published to npm. Use the installation command below after its first npm release.
+
 ```bash
 npm install @computesdk/tangle
 ```
