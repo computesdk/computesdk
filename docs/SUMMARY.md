@@ -1,14 +1,44 @@
 # Table of contents
 
-## Getting Started
+## Start here
 
 * [Introduction](README.md)
 * [Installation](getting-started/installation.md)
-* [Quick Start](getting-started/quick-start.md)
+* [CLI quickstart](getting-started/quick-start.md)
+* [Platform SDK quickstart](getting-started/sdk-quick-start.md)
+* [Accounts and authentication](getting-started/authentication.md)
 
-***
+## CLI
 
-* [Providers](providers/README.md)
+* [Commands and development servers](cli/execution.md)
+* [Project sync](cli/project-sync.md)
+* [Scripts and agents](cli/automation.md)
+* [Command reference](platform/cli.md)
+* [Compatibility and migration](cli/migration.md)
+
+## Platform SDK
+
+* [Overview](sdk/README.md)
+* [Hosted sandboxes](platform/sandboxes.md)
+* [Errors, limits and retries](sdk/errors.md)
+* [SDK reference](sdk/reference.md)
+
+## Guides
+
+* [Routing and BYOK](guides/routing.md)
+
+## Platform
+
+* [Platform overview](platform/README.md)
+* [Actions (CI)](platform/actions.md)
+* [MCP server](platform/mcp.md)
+* [REST API reference](platform/api-reference.md)
+* [Benchmarks](platform/benchmarks.md)
+
+## Direct providers
+
+* [Provider catalog](providers/README.md)
+  * [Direct provider setup](providers/getting-started.md)
   * [AWS Bedrock AgentCore](providers/agentcore.md)
   * [AWS EC2](providers/aws-ec2.md)
   * [Agent37](providers/agent37.md)
@@ -19,6 +49,7 @@
   * [Boat](providers/boat.md)
   * [Brezel](providers/brezel.md)
   * [Briq](providers/briq.md)
+  * [Browser Use](providers/browseruse.md)
   * [Buddy](providers/buddy.md)
   * [Cloud Run (GCP)](providers/cloud-run.md)
   * [Cloudflare](providers/cloudflare.md)
@@ -70,17 +101,7 @@
   * [Upstash](providers/upstash.md)
   * [Vercel](providers/vercel.md)
 
-## Platform
-
-* [Overview](platform/README.md)
-* [Sandboxes](platform/sandboxes.md)
-* [Actions (CI)](platform/actions.md)
-* [CLI reference](platform/cli.md)
-* [MCP server (Claude, ChatGPT)](platform/mcp.md)
-* [API reference](platform/api-reference.md)
-* [Benchmarks](platform/benchmarks.md)
-
-## Reference
+## Core SDK reference
 
 * [Instance (interface)](reference/Instance.md)
 * [compute](reference/compute.md)
@@ -89,4 +110,4 @@
 
 ***
 
-* [LLM Documentation Files](llm-docs.md)
+* [LLM documentation](llm-docs.md)

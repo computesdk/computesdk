@@ -7,7 +7,9 @@ description: >-
 
 # Sandboxes
 
-Hosted sandboxes run code on the platform's compute — your org's registered providers or a compute-market fill — with no per-provider SDK in your code. Use the `@computesdk/platform` provider; it gives hosted sandboxes the same `compute` interface as every other ComputeSDK provider, so the same code works across hosted and self-managed placements. To drive sandboxes from a shell instead, see the [`compute sandboxes` CLI reference](cli.md#compute-sandboxes).
+Hosted sandboxes run code on the platform's compute — your org's registered providers or a compute-market fill — with no per-provider SDK in your code. Use the `@computesdk/platform` provider; it gives hosted sandboxes the same `compute` interface as every other ComputeSDK provider, so the same code works across hosted and self-managed placements. To drive sandboxes from a shell instead, see the [CLI quickstart](../getting-started/quick-start.md).
+
+Start with the [Platform SDK quickstart](../getting-started/sdk-quick-start.md) for a runnable example with cleanup, or use the [SDK overview](../sdk/README.md) to choose a guide.
 
 ```bash
 npm install computesdk @computesdk/platform
@@ -21,10 +23,13 @@ compute.setConfig({
   provider: platform({ apiKey: process.env.COMPUTE_API_KEY }),
 });
 
-const sandbox = await compute.sandbox.create({ size: 'small' });
-const result = await sandbox.runCommand('echo hello');
-console.log(result.stdout);
-await sandbox.destroy();
+const sandbox = await compute.instances.create({ size: 'small' });
+try {
+  const result = await sandbox.runCommand('echo hello');
+  console.log(result.stdout);
+} finally {
+  await sandbox.destroy();
+}
 ```
 
 ## Authentication
@@ -38,18 +43,34 @@ Credentials resolve once per provider instance, with the same precedence as the 
 
 `baseUrl` in config, then `COMPUTE_PLATFORM_URL`, then `BENCHMARKS_PLATFORM_URL`, then `https://platform.computesdk.com` selects the deployment. Credentials are only sent to `computesdk.com`, its subdomains, or loopback — pass `allowUntrustedHost: true` to send them elsewhere (HTTPS still required off-loopback).
 
-`org` in config (or `COMPUTE_ORG`) sends `X-Org-Slug` on every request, for logins or keys that span orgs.
+`org` in config (or `COMPUTE_ORG`) sends `X-Org-Slug` on every request, for user logins; organization API keys remain scoped to their own org.
 
 ## Create options
 
 The `@computesdk/platform` provider accepts either a platform `size` (`small` 1 vCPU/2 GiB, `medium` 2/4 GiB, `large` 4/8 GiB, `xlarge` 8/16 GiB, `2xlarge` 16/32 GiB, `3xlarge` 32/128 GiB) or raw resources (`cpus`/`vcpus`, `memoryMb`/`memoryMiB`/`memMiB`/`memory`, `diskMb`/`diskMiB`) — never both. A provider must have a verified preset for the requested shape; accepting a size name does not imply every provider or account supports it. These platform `size` names are separate from the direct adapters' opt-in [`sizeClass`](../reference/sizes.md) vocabulary.
 
 ```typescript
-await compute.sandbox.create({ size: 'medium' });
-await compute.sandbox.create({ cpus: 4, memoryMb: 8192, diskMb: 20000 });
+await compute.instances.create({ size: 'medium' });
+await compute.instances.create({ cpus: 4, memoryMb: 8192, diskMb: 20000 });
 ```
 
 Other options: `label`, `secrets` (org vault names injected into every command), `disk`, `snapshotId`, `image`/`templateId`, `timeout` (lifetime in ms), `envs`, and `idempotencyKey`.
+
+## Saved routing and REST requests
+
+A create without a provider pin or explicit `providerOrder` walks the org's saved Sandboxes router. Configure its managed strategy and BYOK mode through the [routing API](api-reference.md#routing). Managed accounts use platform billing; BYOK uses the org's own provider keys.
+
+For REST `POST /api/v1/sandboxes`, `only` narrows the saved router to a nonempty array of registered provider names without regions, retaining its order. `byok` overrides its mode for this request: `off`, `first`, `fallback`, or `only`. These fields may be combined, but neither may accompany `provider` or `providerOrder`. For example, request a small sandbox using only managed Daytona capacity:
+
+```json
+{ "only": ["daytona"], "byok": "off", "size": "small" }
+```
+
+This leaves org settings unchanged. `GET /api/v1/sandboxes/quote` accepts the same mode override and comma-separated `only` names, such as `?only=daytona,e2b&byok=off&size=small`, to evaluate a concrete request.
+
+`GET /api/v1/sandboxes/options` returns `{ byokMode, strategy, size, options }`. Managed rows have `account: "managed"`, `provider`, and `sizes` with per-size rates (null when not sold); BYOK rows have `account: "byok"`, `provider`, `region`, and `ready`. The size is the default used to order managed accounts; `cheapest` can rank differently at another size. Discovery does not reserve capacity or guarantee credentials, credits, or placement will succeed.
+
+REST create responses include `sandbox` and may include `next` guidance: a lifetime/billing `note` and suggested `mcp`, `api`, and `cli` actions. MCP entries contain `{ tool, args, does }`, API entries `{ method, path, does }`, and CLI entries `{ command, does }`. Use `sandbox.id` to work with the sandbox and destroy it when finished; it runs and bills until timeout or destruction.
 
 ## Market pricing
 
@@ -66,7 +87,7 @@ const provider = platform({
 });
 ```
 
-A `providerOrder` with no `'market'` entry never touches the market — no buyer-lane approval, no credits, no cap. An org with no provider order configured anywhere defaults to `['market']`.
+A `providerOrder` with no `'market'` entry never touches the market — no buyer-lane approval, no credits, no cap. Without an explicit order, creation follows the saved router described above.
 
 ## Commands and files
 

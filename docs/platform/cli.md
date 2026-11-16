@@ -9,6 +9,9 @@ description: >-
 
 ## Install
 
+Start with the [CLI quickstart](../getting-started/quick-start.md), [installation options](../getting-started/installation.md), [project sync guide](../cli/project-sync.md) or [automation guide](../cli/automation.md). The commands below describe CLI 2.6.14; see [compatibility and migration](../cli/migration.md).
+
+
 ```bash
 pnpm dlx @computesdk/cli <cmd>   # zero-install, always latest
 npm i -g @computesdk/cli         # or install once
@@ -181,90 +184,11 @@ supported.
 
 ### Executing commands
 
-```bash
-compute exec "npm test"                            # one argument: shell command
-compute exec node -v                               # multiple arguments: preserve argv
-compute exec "echo hello && echo world"            # shell operators run remotely
-compute exec --cwd /app --timeout 120 npm test
-compute exec --stream "npm run build"              # follow output while it runs
-compute exec --timeout 0 "long-running-command"    # no command time limit
-compute exec --detach "npm run dev"                # return a background job ID
-compute logs <sandbox-id> <job-id> --follow          # follow a detached job
-```
-
-Omit the sandbox ID to use the current selection, or place an explicit ID after
-`exec`. A single command argument is interpreted by the remote shell; two or
-more arguments are individually quoted, preserving spaces, quotes and shell
-metacharacters literally. Use `bash -lc '...'` when you want an explicit shell.
-The same command interpretation applies to `spawn`, which remains available.
-
-`--timeout` accepts seconds; `--timeout-ms` remains compatible. Use one spelling
-per invocation. Without either flag, the existing platform command timeout
-applies. A zero timeout removes the command time limit; the sandbox's own
-lifetime still applies. Limits longer than the buffered endpoint's 290-second
-maximum automatically use the process path and follow output, as does zero.
-
-`--stream` follows a tracked process and prints new stdout/stderr incrementally.
-The remote exit code becomes the CLI exit code. A streamed command that exceeds
-its time limit is killed and exits 124; Ctrl-C signals the process and exits 130.
-With `--json`, streamed output is JSON Lines with `stdout`, `stderr` and `exit`
-events. Buffered execution keeps its existing single JSON result.
-
-`--detach` returns immediately with a job ID (or process metadata with `--json`).
-It cannot be combined with `--stream` or a command timeout: the CLI must remain
-connected to enforce those limits. Existing `logs`, `ps`, and
-`compute kill <sandbox-id> <job-id>` and `compute wait <sandbox-id> <job-id>` manage the background job. If
-following output fails, the CLI reports the job ID for recovery without
-starting the command again.
+See [command execution](../cli/execution.md) for argv handling, timeouts, streaming and detached jobs.
 
 ## Project creation and sync
 
-```bash
-compute new e2b .                         # provider first, local project last
-compute new daytona ./my-app
-compute new .                             # use your router
-compute exec --cwd /app npm test
-compute sync . :/app                      # update the selected sandbox
-compute sync :/app ./results              # download directory contents
-compute sync <sandbox-a>:/app <sandbox-b>:/app
-compute sync . :/app --dry-run
-compute sync . :/app --delete
-compute sync . :/app --watch
-```
-
-`new` accepts an optional final local directory using explicit path syntax
-(`.`, `./project`, `../project`, or an absolute path); bare operands remain
-provider names. It validates the source before provisioning, syncs contents to
-`/app`, then selects the sandbox. `--no-use` preserves the existing selection.
-If initial sync fails, teardown is attempted and the old selection is retained;
-a cleanup failure includes the sandbox ID for manual teardown.
-
-`sync <source> <destination>` operates on directory contents, in one direction.
-An endpoint is local, `<sandbox-uuid>:/absolute/path`, or `:/absolute/path` for
-the selected sandbox. At least one endpoint must be remote. Both sandboxes
-use the invocation's credentials, organization, and platform URL.
-
-Content hashes and permissions identify changed files. Local uploads honor
-nested `.gitignore` files and repository ancestor rules. `.git` is excluded;
-`--delete` removes destination-only entries while preserving ignored paths.
-Binary files, executable permissions, and project-contained relative symlinks
-are preserved. Filesystem roots, overlapping endpoints on the same sandbox,
-symlink traversal, and file/directory type conflicts are refused. Source hardlinks are copied as separate files; overwriting hard-linked destination files is refused.
-
-`--dry-run` returns a plan without changing destination files. `--watch` polls
-every two seconds, serializes passes, and finishes the active pass before
-stopping on Ctrl-C; `--dry-run --watch` is invalid. `--json` returns `dryRun`,
-`copied`, and `deleted` (relative path arrays); watch mode emits JSON Lines for
-passes with changes. Errors use the standard stderr JSON envelope.
-
-Sync uses the platform OCI checkpoint engine for scan, diff, capture, and
-integrity-checked restore. Node.js is required in each sandbox. The existing
-transfer API carries only selected OCI layers through the CLI, including sandbox
-relays; a changed file can require its whole top-level directory layer. Only
-planned entries are restored. Deletions occur after a successful restore. Transfers
-are not atomic across the entire directory; avoid concurrent destination edits.
-The sandbox working directory is unchanged: use `exec --cwd /app` for the synced
-project. Watch mode is one-way; it does not merge conflicting edits.
+See [project sync](../cli/project-sync.md) for provider-first project creation, endpoint syntax, ignore rules, watch mode and retained captures.
 
 ## Status, resumable login, and run summaries
 
@@ -320,27 +244,3 @@ deprecated in favour of these.
 ```bash
 compute providers    # SDK provider credentials in this environment (local env vars)
 ```
-
-### Maintaining the sync checkpoint engine
-
-The CLI bundles an exact copy of the platform checkpoint module;
-`checkpoint-provenance.json` records its upstream commit and SHA-256 digest.
-Refresh it with `node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform [revision]`
-from the repository root, then run the CLI tests. Do not edit the bundled engine
-directly. Every invocation uses a private temporary directory and restrictive
-file permissions for upstream scratch archives. Sync-specific filtering and destination guards live in the adapter.
-Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
-selectors use glob syntax. Watch passes skip capture when nothing changed. Each pass that copies entries
-retains its full filtered source capture in platform-owned Tigris storage for
-30 days. Snapshot namespaces are isolated, so expiring a sync capture cannot
-delete permanent snapshot layers. Cross-snapshot layer deduplication is not yet
-implemented. Only local and sandbox scratch files are removed after the pass.
-
-Retained sync snapshots must finish uploading and pass platform integrity checks
-before destination changes begin. `sync --json` includes `snapshot: {id, expiresAt}`
-when a capture is created; project creation includes `syncSnapshot` in its JSON
-result. Human output shows the same ID and expiry. Dry runs, unchanged passes and
-delete-only passes do not create captures. A failed destination copy leaves the
-retained capture available until expiry. There is no new storage charge in this
-release. Deploy the managed sync snapshot API before releasing this CLI; failure
-to retain a capture stops sync rather than falling back to disposable snapshots.

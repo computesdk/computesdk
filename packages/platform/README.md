@@ -2,6 +2,8 @@
 
 ComputeSDK provider for [ComputeSDK Platform](https://platform.computesdk.com) hosted sandboxes — the same `compute` / `sandbox` interface as every other provider, backed by the platform's own sandbox API. Market placement, provider fallback, the secrets vault, warm pools and cost tracking all live server-side; your code gets one sandbox ID space and one API.
 
+Start with the [runnable Platform SDK quickstart](https://docs.computesdk.com/getting-started/sdk-quick-start), [authentication](https://docs.computesdk.com/getting-started/authentication) and [SDK reference](https://docs.computesdk.com/sdk/reference).
+
 ```bash
 npm install computesdk @computesdk/platform
 ```
@@ -14,10 +16,13 @@ const sdk = compute({
   provider: platform({ apiKey: process.env.COMPUTE_API_KEY }),
 });
 
-const sandbox = await sdk.sandbox.create({ size: 'small' });
-const result = await sandbox.runCommand('echo hello');
-console.log(result.stdout);
-await sandbox.destroy();
+const sandbox = await sdk.instances.create({ size: 'small' });
+try {
+  const result = await sandbox.runCommand('echo hello');
+  console.log(result.stdout);
+} finally {
+  await sandbox.destroy();
+}
 ```
 
 ## Authentication
@@ -33,7 +38,7 @@ Base URL resolves similarly: `baseUrl` in config, then `COMPUTE_PLATFORM_URL`, t
 
 Credentials are only sent to `computesdk.com`, its subdomains, or loopback — pass `allowUntrustedHost: true` to send them elsewhere (HTTPS still required off-loopback). With no key configured you get a `no_credentials` error telling you to set `COMPUTE_API_KEY`, pass `apiKey`, or run `compute login`.
 
-`org` in config (or `COMPUTE_ORG`) sends `X-Org-Slug` on every request, for API keys that span orgs. A stored login's saved org is never sent — the platform already knows the active org.
+`org` in config (or `COMPUTE_ORG`) sends `X-Org-Slug` on every request, for user logins; org API keys stay scoped to their own organization. A stored login's saved org is never sent — the platform already knows the active org.
 
 ## Sizes and pricing
 
@@ -41,10 +46,10 @@ Creates accept either a platform `size` or raw resources — never both:
 
 ```typescript
 // Sizes: 'small' | 'medium' | 'large' | 'xlarge' | '2xlarge' | '3xlarge'
-await sdk.sandbox.create({ size: 'medium' });
+await sdk.instances.create({ size: 'medium' });
 
 // Or raw resources (aliases: cpus|vcpus, memoryMb|memoryMiB|memMiB|memory, diskMb|diskMiB)
-await sdk.sandbox.create({ cpus: 4, memoryMb: 8192, diskMb: 20000 });
+await sdk.instances.create({ cpus: 4, memoryMb: 8192, diskMb: 20000 });
 ```
 
 Market pricing options — `maxPrice: { usd, per: 'hour' }` and `orderType: 'market' | 'limit'` — can be passed per call or set once as `defaults` on the provider. `providerOrder` ranks where the platform tries to place the sandbox: your own provider keys by name, or `'market'` for the compute market.
@@ -71,7 +76,7 @@ const provider = platform({
 });
 ```
 
-Provider order resolution: the call's `providerOrder`, then `defaults.providerOrder`, then the org's sandbox provider order (dashboard), then its Actions provider order. An org with none of these defaults to `['market']` — so own-keys users must set a provider order somewhere.
+Without an explicit order, creation follows the organization's saved Sandboxes router. An explicit call-level `providerOrder` overrides provider defaults and bypasses that saved routing. See [routing and BYOK](https://docs.computesdk.com/guides/routing) for managed strategies and own-key modes. REST-only fields such as `only` and `byok` are not typed provider create options.
 
 ## Errors
 
@@ -85,7 +90,7 @@ The market codes: `market_cap_required`, `market_access_required`, `limit_not_me
 
 ```typescript
 try {
-  await sdk.sandbox.create();
+  await sdk.instances.create();
 } catch (err) {
   if (err instanceof Error && 'code' in err) {
     switch ((err as { code: string }).code) {
@@ -103,7 +108,7 @@ import { e2b } from '@computesdk/e2b';
 
 const sdk = compute({ providers: [platform({ apiKey: k }), e2b({ apiKey: ek })] });
 try {
-  await sdk.sandbox.create();
+  await sdk.instances.create();
 } catch (err) {
   const codes = ((err as { errors?: { code?: string }[] }).errors ?? []).map((e) => e.code);
   // e.g. ['no_market_capacity', 'unauthenticated']
@@ -126,7 +131,7 @@ Retries the SDK runs itself (the CLI does none of these): `sandbox_booting` expo
 Every `create` mints an `sdk-create:<uuid>` idempotency key, so a network blip or the 310s request timeout replays the same request instead of placing a second sandbox. Pass your own `idempotencyKey` to make the create safe across process restarts:
 
 ```typescript
-await sdk.sandbox.create({ size: 'small', idempotencyKey: 'deploy-2026-10-27-a' } as any);
+await sdk.instances.create({ size: 'small', idempotencyKey: 'deploy-2026-10-27-a' });
 ```
 
 Same key + same request → the existing sandbox back, whatever its status. Same key + different request → `idempotency_key_reused` (409). A failed placement frees the key.

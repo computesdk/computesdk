@@ -1,137 +1,58 @@
-# Quick Start
+# CLI quickstart
 
-Welcome to ComputeSDK! This guide will get you up and running with ComputeSDK, the sandbox router: one TypeScript interface for secure, isolated code execution on any supported cloud provider.
+Create a sandbox, run a command, and destroy it from your terminal.
 
-## Installation
+## 1. Install and sign in
 
-Install the provider package for the platform you want to use. This guide uses E2B as an example, but the sandbox API is the same across all providers.
-
-```bash
-npm install @computesdk/e2b
-```
-
-Then add your provider credentials to a `.env` file:
+[Install the CLI](installation.md#cli), then run:
 
 ```bash
-E2B_API_KEY=your_e2b_api_key
+compute login
+compute whoami
 ```
 
-## Basic Usage
+Approve the sign-in in your browser. If it cannot open automatically, use the printed URL and code or run `compute login --no-browser`. Your resources belong to the organization shown after sign-in; use `compute org list` and `compute org use <slug>` to switch.
 
-A **sandbox** is an isolated compute environment where you can safely execute code. Each sandbox runs on your chosen cloud provider (E2B, Modal, Vercel, etc.) with a unified interface. The `create()` method provisions a new sandbox, `runCommand()` executes shell commands and returns the result, and `destroy()` tears down the sandbox to free resources.
+## 2. Check where work will run
 
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-// Create a compute instance for your provider
-const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-
-// Create a sandbox
-const sandbox = await compute.instances.create();
-
-// Run a command
-const result = await sandbox.runCommand('echo "Hello World!"');
-console.log(result.stdout); // "Hello World!"
-
-// Clean up
-await sandbox.destroy();
+```bash
+compute status
+compute sandboxes options
+compute sandboxes route
 ```
 
+The route shows the current placement and rate without creating a sandbox. Managed compute requires available ComputeSDK credit; BYOK requires a configured provider key. If no route is ready, set up [managed compute or BYOK](../guides/routing.md).
 
-## Filesystem Operations
+## 3. Create and run
 
-Each sandbox has its own isolated filesystem. You can read, write, and manage files using absolute paths (starting with `/`). Files persist for the sandbox lifetime and are destroyed when you call `destroy()`.
-
-```typescript
-// Write file
-await sandbox.filesystem.writeFile('/tmp/hello.py', 'print("Hello")');
-
-// Read file
-const content = await sandbox.filesystem.readFile('/tmp/hello.py');
-
-// Create directory
-await sandbox.filesystem.mkdir('/tmp/mydir');
-
-// List directory
-const files = await sandbox.filesystem.readdir('/tmp');
-
-// Check if exists
-const exists = await sandbox.filesystem.exists('/tmp/hello.py');
-
-// Remove file/directory
-await sandbox.filesystem.remove('/tmp/hello.py');
+```bash
+compute new
+compute exec echo hello
+compute list
 ```
 
-## Shell Commands
+`new` creates and selects a sandbox for this directory/repository and organization. It can also start browser sign-in when you are in an interactive terminal. `exec` uses that selection, so you do not need to copy an ID for every command.
 
-Use `runCommand()` for shell operations, package installation, or system commands. It provides full shell access with detailed execution results including stdout, stderr, exit codes, and execution time.
+## 4. Destroy the sandbox
 
-```typescript
-// Run shell command
-const result = await sandbox.runCommand('ls -la');
-console.log(result.stdout);
-
-// With different working directory
-const result2 = await sandbox.runCommand('pwd', { cwd: '/tmp' });
+```bash
+compute destroy
 ```
 
-## Error Handling
+A sandbox keeps running and billing until it is destroyed or its lifetime expires. Closing your terminal does not destroy it. Check `compute list` and retry cleanup if destruction fails.
 
-ComputeSDK methods throw exceptions for API/network failures. For command execution errors, check the `exitCode` in the result rather than relying on exceptions. Exit code `0` indicates success, non-zero indicates failure.
+For a single command with automatic cleanup, use:
 
-```typescript
-try {
-  const sandbox = await compute.instances.create();
-  const result = await sandbox.runCommand('some-command');
-} catch (error) {
-  console.error('Failed:', error.message);
-}
+```bash
+compute run echo hello
 ```
 
-## Essential Patterns
+`run` creates a sandbox, waits for the command, then attempts teardown. `--keep` and `--detach` leave compute running.
 
-### Resource Cleanup (Critical for Production)
+## Next steps
 
-Always destroy sandboxes when done to avoid resource leaks and unnecessary costs. Sandboxes consume resources until explicitly destroyed or they timeout.
-
-```typescript
-// ✅ Recommended: Use try-finally
-let sandbox;
-try {
-  sandbox = await compute.instances.create();
-  await sandbox.runCommand('echo "Hello"');
-} finally {
-  await sandbox?.destroy();
-}
-```
-
-### Error Handling with Exit Codes
-
-Commands return exit codes following Unix conventions: `0` means success, non-zero indicates failure. Always check `exitCode` rather than catching exceptions for command failures.
-
-```typescript
-const result = await sandbox.runCommand('npm test');
-if (result.exitCode !== 0) {
-  console.error('Tests failed:', result.stderr);
-} else {
-  console.log('Tests passed!', result.stdout);
-}
-```
-
-## Understanding Results
-
-### Command Execution Results
-
-When you call `runCommand()`, you receive:
-- `stdout`: Standard output (normal program output)
-- `stderr`: Standard error (error messages and warnings)
-- `exitCode`: `0` for success, non-zero for failures
-- `durationMs`: Execution time in milliseconds
-
-```typescript
-const result = await sandbox.runCommand('npm install');
-console.log(result.stdout);      // Installation logs
-console.log(result.stderr);      // Warnings or errors
-console.log(result.exitCode);    // 0
-console.log(result.durationMs);  // 2341
-```
+- [Bring and sync a project](../cli/project-sync.md)
+- [Execute commands and expose a server](../cli/execution.md)
+- [Use JSON output in scripts and agents](../cli/automation.md)
+- [Use the Platform SDK from code](sdk-quick-start.md)
+- [CLI command reference](../platform/cli.md)

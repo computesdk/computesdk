@@ -6,7 +6,7 @@
 </div>
 
 <div align="center">
-  <strong>The open, multi-provider harness behind ComputeSDK Benchmarks.</strong>
+  <strong>Cloud sandboxes from your terminal and your application.</strong>
 </div>
 
 <div align="center">
@@ -14,7 +14,7 @@
 [![npm version](https://badge.fury.io/js/computesdk.svg)](https://badge.fury.io/js/computesdk)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Documentation](https://img.shields.io/badge/docs-computesdk.com-blue)](https://computesdk.com)
+[![Documentation](https://img.shields.io/badge/docs-computesdk.com-blue)](https://docs.computesdk.com)
 
 </div>
 
@@ -22,46 +22,47 @@
 
 ## What is ComputeSDK?
 
-ComputeSDK is the open, multi-provider benchmark harness for cloud infrastructure. It is the engine behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks) and a unified TypeScript SDK for running code in remote sandboxes.
+ComputeSDK runs code in isolated cloud sandboxes. Use the **compute CLI** from your terminal or the **Platform SDK** from your Node.js application. The hosted platform handles routing across managed compute and your organization's provider keys.
 
-The same API lets you:
-
-- **Benchmark providers fairly** — run the same workload on E2B, Modal, Vercel, and dozens of others, then publish reproducible results.
-- **Build provider-agnostic apps** — switch sandboxes without changing application code for AI agents, code-execution platforms, and developer tools.
-
-Whether you're comparing infrastructure or running it, ComputeSDK provides one unified API.
-
-**Perfect for:**
-- 📊 Benchmarking infrastructure providers
-- 🤖 AI code execution agents
-- 📊 Data science platforms
-- 🎓 Educational coding environments
-- 🧪 Testing & CI/CD systems
-- 🔧 Developer tools
-
-## Quick Start
+## CLI quickstart
 
 ```bash
-npm install computesdk @computesdk/e2b
+npm install -g @computesdk/cli
+compute login
+compute sandboxes route
+compute new
+compute exec echo hello
+compute destroy
 ```
 
-Configure a provider and use the SDK:
+[Other installation options](docs/getting-started/installation.md) include macOS/Linux and Windows installers. Creation requires available credit or a configured BYOK route. Sandboxes keep running and billing until destroyed or their lifetime expires.
+
+## Platform SDK quickstart
+
+```bash
+npm install computesdk @computesdk/platform
+export COMPUTE_API_KEY="your_org_api_key"
+```
 
 ```typescript
 import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
+import { platform } from '@computesdk/platform';
 
-compute.setConfig({
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
-});
-
-const sandbox = await compute.instances.create();
-
-const result = await sandbox.runCommand('python -c "print(\'Hello World!\')"');
-console.log(result.stdout); // "Hello World!"
-
-await sandbox.destroy();
+const sdk = compute({ provider: platform({}) });
+const sandbox = await sdk.instances.create({ size: 'small' });
+try {
+  const result = await sandbox.runCommand('echo hello');
+  console.log(result.stdout);
+} finally {
+  await sandbox.destroy();
+}
 ```
+
+Follow the [complete runnable SDK quickstart](docs/getting-started/sdk-quick-start.md) to create an API key and run this from Node.js. See [routing and BYOK](docs/guides/routing.md) to choose account modes and understand billing.
+
+## Direct providers and benchmarks
+
+Individual provider adapters remain available for applications that manage vendor credentials directly. Start with [direct provider setup](docs/providers/getting-started.md). The same provider abstractions power [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks), which compare cloud infrastructure using reproducible workloads.
 
 ## Features
 
@@ -114,7 +115,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Novita** | `NOVITA_API_KEY` | Cloud sandboxes with native command streaming, filesystem access, snapshots, and template builds |
 | **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
 | **Promigence** | `PROMIGENCE_API_KEY` | Production-grade sandboxes for AI agents, with filesystem and streaming output |
-| **Render** | `RENDER_API_KEY`, `RENDER_WORKSPACE_ID` | Render Sandboxes (beta) with native command streaming, file transfer and snapshots |
+| **Render** (source only) | `RENDER_API_KEY`, `RENDER_WORKSPACE_ID` | Render Sandboxes (beta) with native command streaming, file transfer and snapshots |
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
 | **Runtime** | `RUNTIME_API_KEY` | Firecracker microVM sandboxes with streaming, previews and snapshots |
 | **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
@@ -342,7 +343,7 @@ npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/novita           # Novita Sandbox provider
 npm install @computesdk/platform         # ComputeSDK Platform hosted sandboxes (market or own keys)
 npm install @computesdk/promigence       # Promigence provider
-npm install @computesdk/render           # Render Sandboxes provider
+# Render Sandboxes: source only; npm latest is a placeholder (see packages/render)
 npm install @computesdk/runloop          # Runloop provider
 npm install @computesdk/runtime          # Runtime provider
 npm install @computesdk/sail             # Sail provider
@@ -397,7 +398,7 @@ See individual provider READMEs for details:
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
 - **[@computesdk/platform](./packages/platform)** - ComputeSDK Platform hosted sandboxes: market placement or your own provider keys, one API and sandbox ID space
 - **[@computesdk/promigence](./packages/promigence)** - Production-grade sandboxes for AI agents, with filesystem and streaming output
-- **[@computesdk/render](./packages/render)** - Render Sandboxes (beta) with native command streaming, file transfer and snapshots
+- **[@computesdk/render](./packages/render)** (source only; npm latest is a placeholder) - Render Sandboxes (beta) with native command streaming, file transfer and snapshots
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
 - **[@computesdk/runtime](./packages/runtime)** - Firecracker microVM sandboxes for AI agents, with native command streaming, private preview URLs and snapshots
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
@@ -452,6 +453,8 @@ import type {
 ## Contributing
 
 ComputeSDK is open source and welcomes contributions!
+
+Building and developing this repository from source requires **Node.js 22.19.0 or later** and **pnpm 9 or later**. For published npm packages, check the requirements for the package version you install.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)

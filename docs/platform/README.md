@@ -16,12 +16,15 @@ The ComputeSDK Platform ([platform.computesdk.com](https://platform.computesdk.c
 * **[Actions](actions.md), the CI router.** Run GitHub-style workflows on real compute providers instead of fixed runner VMs. Each job is placed by your org's provider order and reports the `provider:region` it ran on.
 * **[Benchmarks](benchmarks.md).** Managed runs that measure providers and publish results to your org's feed.
 
-Everything the platform does is available four ways:
+## Ways to use the platform
 
-* the web dashboard at `https://platform.computesdk.com/<org-slug>/...`
-* the `compute` CLI (`@computesdk/cli` on npm)
-* the REST API under `https://platform.computesdk.com/api/v1`
-* the MCP server at `https://platform.computesdk.com/mcp` — for AI assistants (ChatGPT, Claude, Codex). Connects over OAuth; tools cover sandboxes, Actions runs, provider keys, and benchmark results, using the same data as the REST routes.
+* **[CLI](../getting-started/quick-start.md)** — install `compute`, sign in and run commands from your terminal.
+* **[Platform SDK](../getting-started/sdk-quick-start.md)** — create and control hosted sandboxes from a Node.js application with `computesdk` and `@computesdk/platform`.
+* **Dashboard** — manage resources at `https://platform.computesdk.com/<org-slug>/...`.
+* **[REST API](api-reference.md)** — call platform routes under `/api/v1`.
+* **[MCP](mcp.md)** — authorize an AI assistant through the OAuth-backed server at `https://platform.computesdk.com/mcp`.
+
+The SDK provider covers hosted sandbox operations; use REST, CLI or MCP for other platform resources. See [routing and BYOK](../guides/routing.md) for saved routing, managed accounts and billing.
 
 ## Organizations
 
@@ -31,7 +34,7 @@ Org members collaborate through the dashboard. Owners and admins manage API keys
 
 ## Authentication
 
-The REST API and CLI authenticate with **organization API keys**:
+For applications and automation, the REST API, CLI and Platform SDK accept **organization API keys**:
 
 1. Open **Settings → API keys** (`/<org-slug>/settings/api-keys`) in the dashboard
 2. Create a key — the full value is shown once, store it somewhere safe
@@ -72,6 +75,9 @@ API errors use a single envelope:
 with status `400`, `401`, `403`, `404`, `410`, `429`, or `500`. Successful responses are wrapped as `{ "ok": true, ... }`-style JSON payloads.
 
 ## Where next
+
+* [CLI quickstart](../getting-started/quick-start.md) — create, execute and clean up from a terminal
+* [Platform SDK quickstart](../getting-started/sdk-quick-start.md) — run a complete TypeScript example
 
 * [Sandboxes](sandboxes.md) — create and route hosted sandboxes from code
 * [Actions](actions.md) — connect repos, register provider credentials, dispatch workflows, stream logs
