@@ -16,7 +16,7 @@ export const DEFAULT_BASE_URL = 'https://console.uno4.dev'
 const CREATE_TIMEOUT_MS = 120_000
 /** The longest readiness wait the API holds a response for (`wait_ready_s`). */
 export const MAX_WAIT_READY_S = 30
-/** Delete retries, see {@link UnoClient.deleteBox}. A delete normally answers in ~30 ms. */
+/** Delete and read retries, see {@link UnoClient.deleteBox} and {@link UnoClient.getBox}. Both normally answer in ~30 ms. */
 const DELETE_ATTEMPTS = 4
 const DELETE_RETRY_DELAYS_MS = [250, 1_000, 2_000]
 const DELETE_TIMEOUT_MS = 15_000
@@ -205,12 +205,23 @@ export class UnoClient {
     }
   }
 
+  /**
+   * Fetch one box, or `null` if it does not exist. A read is safe to repeat,
+   * so a GET lost on the way (dropped connection, timeout, 429, 5xx) is tried
+   * again like a delete: up to {@link DELETE_ATTEMPTS} times over ~3 s. Without
+   * this, one dropped readiness poll right after create failed the whole create
+   * and threw away a machine that was booting fine.
+   */
   async getBox(id: string | number): Promise<UnoBox | null> {
-    try {
-      return (await this.request<UnoBox>('GET', `/api/v1/boxes/${encodeURIComponent(String(id))}`)).body
-    } catch (err) {
-      if (err instanceof UnoError && (err.status === 404 || err.code === 'INVALID_ID')) return null
-      throw err
+    const path = `/api/v1/boxes/${encodeURIComponent(String(id))}`
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return (await this.request<UnoBox>('GET', path)).body
+      } catch (err) {
+        if (err instanceof UnoError && (err.status === 404 || err.code === 'INVALID_ID')) return null
+        if (attempt + 1 >= DELETE_ATTEMPTS || !isTransient(err)) throw err
+        await sleep(DELETE_RETRY_DELAYS_MS[attempt] ?? 2_000)
+      }
     }
   }
 

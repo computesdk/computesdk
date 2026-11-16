@@ -89,6 +89,36 @@ describe('UnoClient', () => {
     )
   })
 
+  it('repeats a readiness poll lost on the way instead of failing the create', async () => {
+    const calls = mockFetch([
+      () => {
+        throw new TypeError('fetch failed')
+      },
+      () => [502, { raw: 'Bad gateway' }],
+      () => [200, box()],
+    ])
+    const c = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' })
+    await expect(c.waitReady(42, 120_000)).resolves.toMatchObject({ status: 'running', provision_state: 'ready' })
+    expect(calls.map(x => `${x.method} ${x.url}`)).toEqual(Array(3).fill('GET https://api.test/api/v1/boxes/42'))
+  })
+
+  it('gives up on a read after four attempts and does not repeat a refused one', async () => {
+    mockFetch([
+      () => {
+        throw new TypeError('fetch failed')
+      },
+      () => [503, {}],
+      () => [524, {}],
+      () => [503, { error: 'UNAVAILABLE' }],
+    ])
+    const c = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' })
+    await expect(c.getBox(42)).rejects.toMatchObject({ status: 503, code: 'UNAVAILABLE' })
+
+    const calls = mockFetch([() => [401, { error: 'UNAUTHORIZED' }]])
+    await expect(c.getBox(42)).rejects.toMatchObject({ status: 401 })
+    expect(calls).toHaveLength(1)
+  }, 15_000)
+
   it('gives up on a delete after four attempts and does not repeat a refused one', async () => {
     mockFetch([() => [503, {}], () => [503, {}], () => [524, {}], () => [503, { error: 'UNAVAILABLE' }]])
     const c = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' })
