@@ -1,5 +1,5 @@
 /**
- * Mock-based unit tests for the Tenki provider. These run without credentials
+ * Mock-based unit tests for the Luxor provider (package/provider id remain Tenki). These run without credentials
  * and exercise option mapping, shell wrapping, status mapping, the native
  * filesystem path, and not-found handling. Integration coverage lives in
  * index.test.ts via the standard provider test suite.
@@ -11,6 +11,7 @@ const enc = new TextEncoder();
 class SessionNotFoundError extends Error {}
 
 let lastCreateOptions: any = null;
+let lastClientOptions: any = null;
 let lastExec: { command: string; args?: string[]; env?: Record<string, string> } | null = null;
 let execOutputChunks: Array<{ data: Uint8Array; isStderr: boolean }> | null = null;
 
@@ -113,8 +114,10 @@ class FakeSession {
 let shouldNotFind = false;
 const sharedSession = new FakeSession();
 
-class FakeTenkiSandbox {
-  constructor(public options: any) {}
+class FakeLuxorSandbox {
+  constructor(public options: any) {
+    lastClientOptions = options;
+  }
   async createAndWait(opts: any) {
     lastCreateOptions = opts;
     return sharedSession;
@@ -148,8 +151,9 @@ class FakeTenkiSandbox {
 
 let lastSnapshotCall: any = null;
 
-vi.mock('@tenkicloud/sandbox', () => ({
-  TenkiSandbox: FakeTenkiSandbox,
+vi.mock('@luxorai/sandbox', () => ({
+  LuxorSandbox: FakeLuxorSandbox,
+  TenkiSandbox: FakeLuxorSandbox,
   Session: FakeSession,
   SessionNotFoundError,
   stdoutText: (r: any) => new TextDecoder().decode(r.stdout).trim(),
@@ -157,15 +161,17 @@ vi.mock('@tenkicloud/sandbox', () => ({
 }));
 
 // Import lazily so the hoisted vi.mock factory's classes are initialized first.
+let luxor: typeof import('../index').luxor;
 let tenki: typeof import('../index').tenki;
 
-describe('tenki provider (mocked SDK)', () => {
+describe('luxor provider (mocked SDK)', () => {
   beforeAll(async () => {
-    ({ tenki } = await import('../index'));
+    ({ luxor, tenki } = await import('../index'));
   });
 
   beforeEach(() => {
     lastCreateOptions = null;
+    lastClientOptions = null;
     lastExec = null;
     execOutputChunks = null;
     shouldNotFind = false;
@@ -280,7 +286,7 @@ describe('tenki provider (mocked SDK)', () => {
 
     expect(await sandbox.runCommand('sleep 10', { timeout: 100 })).toEqual({
       stdout: 'partial stdout',
-      stderr: 'partial stderr\nTenki command timed out.',
+      stderr: 'partial stderr\nLuxor command timed out.',
       exitCode: 124,
       durationMs: 100,
     });
@@ -314,7 +320,7 @@ describe('tenki provider (mocked SDK)', () => {
     } as Awaited<ReturnType<FakeSession['exec']>>);
     const result = await sandbox.runCommand('sleep 10');
     expect(result.exitCode).toBe(124);
-    expect(result.stderr).toBe('Tenki command timed out.');
+    expect(result.stderr).toBe('Luxor command timed out.');
   });
 
   it('passes the provider timeout through and lets a command override it', async () => {
@@ -331,7 +337,7 @@ describe('tenki provider (mocked SDK)', () => {
     const provider = tenki({ apiKey: 'tk_test' });
     const sandbox = await provider.sandbox.create();
     await sandbox.runCommand('printenv FOO', { env: { FOO: 'bar baz', QUOTED: `it's "quoted"` } });
-    // Env goes through Tenki's native exec env (execve), not shell prefixing,
+    // Env goes through Luxor's native exec env (execve), not shell prefixing,
     // so values need no escaping and arrive verbatim.
     expect(lastExec?.env).toEqual({ FOO: 'bar baz', QUOTED: `it's "quoted"` });
     expect(lastExec?.args).toEqual(['-lc', 'printenv FOO']);
@@ -393,7 +399,7 @@ describe('tenki provider (mocked SDK)', () => {
     expect(await sandbox.getUrl({ port: 3000 })).toBe('https://sbx-123-3000.sb.tenki.sh');
   });
 
-  it('filesystem round-trips through native Tenki fs', async () => {
+  it('filesystem round-trips through native Luxor fs', async () => {
     const provider = tenki({ apiKey: 'tk_test' });
     const sandbox = await provider.sandbox.create();
 
@@ -433,16 +439,67 @@ describe('tenki provider (mocked SDK)', () => {
     await expect(provider.sandbox.destroy('gone')).resolves.toBeUndefined();
   });
 
+  it('prefers LUXORAI credentials and keeps TENKI fallbacks', async () => {
+    const saved = {
+      luxorKey: process.env.LUXORAI_API_KEY,
+      luxorToken: process.env.LUXORAI_AUTH_TOKEN,
+      luxorUrl: process.env.LUXORAI_API_URL,
+      tenkiKey: process.env.TENKI_API_KEY,
+      tenkiToken: process.env.TENKI_AUTH_TOKEN,
+      tenkiUrl: process.env.TENKI_API_URL,
+    };
+    delete process.env.LUXORAI_API_KEY;
+    delete process.env.LUXORAI_AUTH_TOKEN;
+    delete process.env.TENKI_API_KEY;
+    delete process.env.TENKI_AUTH_TOKEN;
+    try {
+      await expect(tenki({}).sandbox.create()).rejects.toThrow(/Missing API key for Luxor Agent Cloud/);
+
+      vi.stubEnv('LUXORAI_API_KEY', 'lx_new');
+      vi.stubEnv('LUXORAI_API_URL', 'https://luxor.example');
+      vi.stubEnv('TENKI_API_KEY', 'tk_legacy');
+      vi.stubEnv('TENKI_API_URL', 'https://tenki.example');
+      await tenki({}).sandbox.create();
+      expect(lastClientOptions).toEqual({ authToken: 'lx_new', baseUrl: 'https://luxor.example' });
+
+      delete process.env.LUXORAI_API_KEY;
+      delete process.env.LUXORAI_API_URL;
+      await tenki({}).sandbox.create();
+      expect(lastClientOptions).toEqual({ authToken: 'tk_legacy', baseUrl: 'https://tenki.example' });
+    } finally {
+      if (saved.luxorKey) process.env.LUXORAI_API_KEY = saved.luxorKey; else delete process.env.LUXORAI_API_KEY;
+      if (saved.luxorToken) process.env.LUXORAI_AUTH_TOKEN = saved.luxorToken; else delete process.env.LUXORAI_AUTH_TOKEN;
+      if (saved.luxorUrl) process.env.LUXORAI_API_URL = saved.luxorUrl; else delete process.env.LUXORAI_API_URL;
+      if (saved.tenkiKey) process.env.TENKI_API_KEY = saved.tenkiKey; else delete process.env.TENKI_API_KEY;
+      if (saved.tenkiToken) process.env.TENKI_AUTH_TOKEN = saved.tenkiToken; else delete process.env.TENKI_AUTH_TOKEN;
+      if (saved.tenkiUrl) process.env.TENKI_API_URL = saved.tenkiUrl; else delete process.env.TENKI_API_URL;
+    }
+  });
+
+  it('exports tenki as a deprecated alias of luxor', () => {
+    expect(tenki).toBe(luxor);
+    expect(tenki({ apiKey: 'lx_test' }).name).toBe('tenki');
+  });
+
   it('throws a helpful error when no API key is configured', async () => {
-    const saved = { key: process.env.TENKI_API_KEY, token: process.env.TENKI_AUTH_TOKEN };
+    const saved = {
+      luxorKey: process.env.LUXORAI_API_KEY,
+      luxorToken: process.env.LUXORAI_AUTH_TOKEN,
+      key: process.env.TENKI_API_KEY,
+      token: process.env.TENKI_AUTH_TOKEN,
+    };
+    delete process.env.LUXORAI_API_KEY;
+    delete process.env.LUXORAI_AUTH_TOKEN;
     delete process.env.TENKI_API_KEY;
     delete process.env.TENKI_AUTH_TOKEN;
     try {
       const provider = tenki({});
-      await expect(provider.sandbox.create()).rejects.toThrow(/Missing API key for Tenki/);
+      await expect(provider.sandbox.create()).rejects.toThrow(/Missing API key for Luxor Agent Cloud/);
     } finally {
-      if (saved.key) process.env.TENKI_API_KEY = saved.key;
-      if (saved.token) process.env.TENKI_AUTH_TOKEN = saved.token;
+      if (saved.luxorKey) process.env.LUXORAI_API_KEY = saved.luxorKey; else delete process.env.LUXORAI_API_KEY;
+      if (saved.luxorToken) process.env.LUXORAI_AUTH_TOKEN = saved.luxorToken; else delete process.env.LUXORAI_AUTH_TOKEN;
+      if (saved.key) process.env.TENKI_API_KEY = saved.key; else delete process.env.TENKI_API_KEY;
+      if (saved.token) process.env.TENKI_AUTH_TOKEN = saved.token; else delete process.env.TENKI_AUTH_TOKEN;
     }
   });
 });

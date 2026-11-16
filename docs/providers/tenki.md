@@ -1,6 +1,6 @@
 ---
 description: >-
-  Tenki Cloud provider for ComputeSDK - microVM sandboxes with native
+  Luxor Agent Cloud provider for ComputeSDK - microVM sandboxes with native
   filesystem, preview URLs, snapshots, and SSH.
 layout:
   width: default
@@ -22,13 +22,13 @@ layout:
     visible: true
 ---
 
-# Tenki
+# Luxor Agent Cloud
 
-Tenki Cloud provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH.
+Luxor Agent Cloud provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH. Tenki Cloud is now Luxor Agent Cloud; the `tenki` export remains as a compatibility alias.
 
 ## Lifecycle
 
-`pause()`/`resume()` preserve memory and processes. Snapshot methods `create`/`list`/`delete` are exposed directly. Snapshots preserve rootfs and memory and keep the source; the adapter notes that Tenki empties `/tmp` on the source during capture. Keep durable state outside `/tmp` (the declared path is `/home/tenki`). Restore with `snapshotId`.
+`pause()`/`resume()` preserve memory and processes. Snapshot methods `create`/`list`/`delete` are exposed directly. Snapshots preserve rootfs and memory and keep the source; the adapter notes that Luxor empties `/tmp` on the source during capture. Keep durable state outside `/tmp` (the declared path is `/home/tenki`). Restore with `snapshotId`.
 
 ## Installation & Setup
 
@@ -36,29 +36,31 @@ Tenki Cloud provider for ComputeSDK - microVM sandboxes with native filesystem, 
 npm install @computesdk/tenki
 ```
 
-Requires Node.js 20 or later (the Tenki SDK's gRPC transport depends on it).
+Requires Node.js 20 or later (the Luxor Sandbox SDK's gRPC transport depends on it).
 
-Add your Tenki credentials to a `.env` file:
+Add your Luxor credentials to a `.env` file:
 
 ```bash
-TENKI_API_KEY=tk_your_api_key
+LUXORAI_API_KEY=lx_your_api_key
 ```
+
+`TENKI_API_KEY` / `TENKI_AUTH_TOKEN` remain accepted as fallbacks.
 
 ## Usage
 
 ```typescript
-import { tenki } from '@computesdk/tenki';
+import { luxor } from '@computesdk/tenki';
 
-const compute = tenki({
-  apiKey: process.env.TENKI_API_KEY,
+const compute = luxor({
+  apiKey: process.env.LUXORAI_API_KEY,
 });
 
 // Create sandbox
 const sandbox = await compute.instances.create();
 
 // Run a command
-const result = await sandbox.runCommand('echo "Hello from Tenki!"');
-console.log(result.stdout); // "Hello from Tenki!"
+const result = await sandbox.runCommand('echo "Hello from Luxor!"');
+console.log(result.stdout); // "Hello from Luxor!"
 
 // Clean up
 await sandbox.destroy();
@@ -67,14 +69,14 @@ await sandbox.destroy();
 ### Configuration Options
 
 ```typescript
-interface TenkiConfig {
-  /** Tenki API key (tk_...). Falls back to TENKI_API_KEY / TENKI_AUTH_TOKEN env vars. */
+interface LuxorConfig {
+  /** Luxor API key (lx_...; tk_... remains accepted). Falls back to LUXORAI_API_KEY / LUXORAI_AUTH_TOKEN, then TENKI_API_KEY / TENKI_AUTH_TOKEN. */
   apiKey?: string;
-  /** API base URL. Falls back to TENKI_API_URL, then https://api.tenki.cloud. */
+  /** API base URL. Falls back to LUXORAI_API_ENDPOINT / LUXORAI_API_URL, then TENKI_API_ENDPOINT / TENKI_API_URL, then https://api.tenki.cloud. */
   baseUrl?: string;
-  /** Workspace to create sandboxes in. Falls back to TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
+  /** Workspace to create sandboxes in. Falls back to LUXORAI_WORKSPACE_ID / TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
   workspaceId?: string;
-  /** @deprecated Tenki no longer scopes sandboxes by project. */
+  /** @deprecated Luxor no longer scopes sandboxes by project. */
   projectId?: string;
   /** Default runCommand timeout in milliseconds. */
   timeout?: number;
@@ -100,6 +102,6 @@ interface TenkiConfig {
 
 ### Notes
 
-* Workspace API keys infer their workspace server-side. Set `workspaceId`, or `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
+* Workspace API keys infer their workspace server-side. Set `workspaceId`, or `LUXORAI_WORKSPACE_ID` / `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
 * Background commands (`{ background: true }`) detach stdio automatically; a bare `&` would hold the exec output stream open.
 * Snapshots and pause/resume are wired to the unified surface. Use `sandbox.getInstance()` for additional native SDK controls such as SSH, tunnels, and git.

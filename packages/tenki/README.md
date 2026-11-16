@@ -1,6 +1,6 @@
 # @computesdk/tenki
 
-[Tenki Cloud](https://tenki.cloud) provider for ComputeSDK - run code in fast microVM sandboxes with native filesystem operations, public preview URLs, snapshots, volumes, and SSH.
+[Luxor Agent Cloud](https://luxor.ai) provider for ComputeSDK - run code in fast microVM sandboxes with native filesystem operations, public preview URLs, snapshots, volumes, and SSH. Tenki Cloud is now Luxor Agent Cloud; the `tenki` export remains as a compatibility alias.
 
 ## Installation
 
@@ -8,17 +8,19 @@
 npm install @computesdk/tenki
 ```
 
-Requires Node.js 20 or later (the Tenki SDK's gRPC transport depends on it).
+Requires Node.js 20 or later (the Luxor Sandbox SDK's gRPC transport depends on it).
 
 ## Setup
 
-1. Sign up at [app.tenki.cloud](https://app.tenki.cloud)
+1. Sign up at [luxor.ai](https://luxor.ai)
 2. Create an API key in your workspace settings
 3. Set it as an environment variable:
 
 ```bash
-export TENKI_API_KEY=tk_your_api_key
+export LUXORAI_API_KEY=lx_your_api_key
 ```
+
+`TENKI_API_KEY` / `TENKI_AUTH_TOKEN` remain accepted as fallbacks.
 
 ## Usage
 
@@ -26,13 +28,13 @@ export TENKI_API_KEY=tk_your_api_key
 
 ```typescript
 import { compute } from 'computesdk';
-import { tenki } from '@computesdk/tenki';
+import { luxor } from '@computesdk/tenki';
 
-compute.setConfig({ provider: tenki({ apiKey: process.env.TENKI_API_KEY }) });
+compute.setConfig({ provider: luxor({ apiKey: process.env.LUXORAI_API_KEY }) });
 
 const sandbox = await compute.instances.create();
 
-const result = await sandbox.runCommand('echo "Hello from Tenki!"');
+const result = await sandbox.runCommand('echo "Hello from Luxor!"');
 console.log(result.stdout);
 
 await sandbox.destroy();
@@ -40,7 +42,7 @@ await sandbox.destroy();
 
 ### Filesystem operations
 
-Tenki exposes native file primitives over its data plane, so filesystem operations do not go through shell commands (no escaping hazards, works with any path or content):
+Luxor exposes native file primitives over its data plane, so filesystem operations do not go through shell commands (no escaping hazards, works with any path or content):
 
 ```typescript
 await sandbox.filesystem.writeFile('/home/tenki/app.py', 'print("hi")');
@@ -66,14 +68,14 @@ const url = await sandbox.getUrl({ port: 3000 });
 
 | Option | Env var | Default | Description |
 |---|---|---|---|
-| `apiKey` | `TENKI_API_KEY` / `TENKI_AUTH_TOKEN` | required | Tenki API key (`tk_...`) |
-| `baseUrl` | `TENKI_API_URL` | `https://api.tenki.cloud` | API endpoint |
-| `workspaceId` | `TENKI_WORKSPACE_ID` | inferred from workspace API key | Explicit workspace for trusted service credentials |
-| `projectId` | - | ignored | Deprecated; Tenki no longer scopes sandboxes by project |
+| `apiKey` | `LUXORAI_API_KEY` / `LUXORAI_AUTH_TOKEN`, then `TENKI_API_KEY` / `TENKI_AUTH_TOKEN` | required | Luxor API key (`lx_...`; `tk_...` remains accepted) |
+| `baseUrl` | `LUXORAI_API_ENDPOINT` / `LUXORAI_API_URL`, then `TENKI_API_ENDPOINT` / `TENKI_API_URL` | `https://api.tenki.cloud` | API endpoint |
+| `workspaceId` | `LUXORAI_WORKSPACE_ID` / `TENKI_WORKSPACE_ID` | inferred from workspace API key | Explicit workspace for trusted service credentials |
+| `projectId` | - | ignored | Deprecated; Luxor no longer scopes sandboxes by project |
 | `timeout` | - | none | Default `runCommand` timeout (ms) |
-| `cpuCores` / `memoryMb` / `diskSizeGb` | - | Tenki defaults | Default sandbox resources |
+| `cpuCores` / `memoryMb` / `diskSizeGb` | - | Luxor defaults | Default sandbox resources |
 
-Workspace API keys infer their workspace server-side. Set `workspaceId`, or `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
+Workspace API keys infer their workspace server-side. Set `workspaceId`, or `LUXORAI_WORKSPACE_ID` / `TENKI_WORKSPACE_ID`, only when using trusted service credentials that require explicit scope.
 
 Per-sandbox resource overrides are accepted on `create`:
 
@@ -90,15 +92,15 @@ await compute.instances.create({ cpuCores: 4, memoryMb: 8192 });
 | Public URLs (`getUrl`) | Yes - per-port preview URLs |
 | List / getById / destroy | Yes |
 | Background commands | Yes - `{ background: true }` detaches stdio automatically |
-| Custom images | Via Tenki templates (`templateId` maps to a Tenki image ref) |
+| Custom images | Via Luxor templates (`templateId` maps to a Luxor image ref) |
 | Pause / resume | Yes - `sandbox.pause()` / `sandbox.resume()`; memory, processes and files (including `/tmp`) survive |
 | Snapshots | Yes - `compute.snapshot.create(id)`, restore with `create({ snapshotId })`; memory snapshots that keep the rootfs except `/tmp` (emptied on the source too), source keeps running |
 
 ## Notes
 
-- `runCommand` wraps the command in `sh -lc` because Tenki's exec runs argv directly (execve, no shell).
+- `runCommand` wraps the command in `sh -lc` because Luxor's exec runs argv directly (execve, no shell).
 - A long-running process started with a bare `&` would hold the exec output stream open; use `{ background: true }`, which detaches stdio for you.
-- For advanced features (SSH, tunnels, git operations), use the underlying SDK directly via `sandbox.getInstance()`, which returns the `@tenkicloud/sandbox` `Session`.
+- For advanced features (SSH, tunnels, git operations), use the underlying SDK directly via `sandbox.getInstance()`, which returns the `@luxorai/sandbox` `Session`.
 
 ## License
 
