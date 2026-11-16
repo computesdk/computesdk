@@ -1163,6 +1163,46 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.5)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
 
+  packages/depot:
+    dependencies:
+      '@computesdk/provider':
+        specifier: workspace:*
+        version: link:../provider
+      '@connectrpc/connect':
+        specifier: ^2.1.0
+        version: 2.3.0(@bufbuild/protobuf@2.11.0)
+      '@depot/sandbox':
+        specifier: 0.1.0-beta.7
+        version: 0.1.0-beta.7
+      computesdk:
+        specifier: workspace:*
+        version: link:../computesdk
+    devDependencies:
+      '@computesdk/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@vitest/coverage-v8':
+        specifier: ^1.0.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1))
+      eslint:
+        specifier: ^8.37.0
+        version: 8.57.1
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.7.0)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.9.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.41)(jsdom@23.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(terser@5.43.1)
+
   packages/docker:
     dependencies:
       '@computesdk/provider':
@@ -3656,6 +3696,9 @@ packages:
     resolution: {integrity: sha512-Cf+Mw2AeSAGihBK0wmUmxaF5+caz6Q6mOkAGKNXDRugN/qURejXBfTQILdJn+Jbvxq8hGIeJLJY/MRgT4FL7Xw==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
+  '@bufbuild/protobuf@2.11.0':
+    resolution: {integrity: sha512-sBXGT13cpmPR5BMgHE6UEEfEaShh5Ror6rfN3yEK5si7QVrtZg8LEPQb0VVhiLRUslD2yLnXtnRzG035J/mZXQ==}
+
   '@bufbuild/protobuf@2.12.1':
     resolution: {integrity: sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg==}
 
@@ -3944,6 +3987,10 @@ packages:
   '@daytonaio/sdk@0.224.1':
     resolution: {integrity: sha512-ao+bGXdFd36G7b2d4HuQ8dM8G/IhcpwQGrwuwKR3HMYxVbPwclbgaPc01hqvSrvXIjFmuwNdilklITjTeoUIew==}
     deprecated: 'Moved to @daytona/sdk, same API, no breaking changes. Please update: npm uninstall @daytonaio/sdk && npm i @daytona/sdk@0'
+
+  '@depot/sandbox@0.1.0-beta.7':
+    resolution: {integrity: sha512-e8thCCFMWRkbQEEOPlkOXiIMZTdSkOaTm/vSDH+m0dAWIGF1kebApIC2oGiIApuBvtF7tCzTseQHjw84G63x+w==}
+    engines: {node: '>=20'}
 
   '@e2b/dockerfile-utils@0.1.2':
     resolution: {integrity: sha512-05xv2gW5JRlHe/AJK6bpO7ux/+1CQDKT27icQWeH1caqq7YySfQ7NwuN4WHRe5rM2jCJH79fML0JWXTkbn4d6A==}
@@ -11089,6 +11136,8 @@ snapshots:
       p-retry: 7.1.1
       zod: 4.3.5
 
+  '@bufbuild/protobuf@2.11.0': {}
+
   '@bufbuild/protobuf@2.12.1': {}
 
   '@bufbuild/protobuf@2.17.0':
@@ -11370,6 +11419,11 @@ snapshots:
       daemond: 0.1.9
     optional: true
 
+  '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.11.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.11.0))':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.11.0)
+
   '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
@@ -11402,6 +11456,10 @@ snapshots:
   '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1)':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
+
+  '@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.11.0)':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
 
   '@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.17.0)':
     dependencies:
@@ -11565,6 +11623,12 @@ snapshots:
       - supports-color
       - utf-8-validate
     optional: true
+
+  '@depot/sandbox@0.1.0-beta.7':
+    dependencies:
+      '@bufbuild/protobuf': 2.11.0
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.11.0)
+      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.11.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.11.0))
 
   '@e2b/dockerfile-utils@0.1.2':
     optional: true
