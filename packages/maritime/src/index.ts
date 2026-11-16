@@ -23,6 +23,7 @@ import type {
   CreateTemplateOptions,
   FileEntry,
   InstanceInfo,
+  ListSnapshotsOptions,
   ListTemplatesOptions,
   RunCommandOptions,
 } from '@computesdk/provider';
@@ -414,7 +415,10 @@ export const maritime = defineProvider<MaritimeSandbox, MaritimeConfig, Maritime
           rethrowFriendly(error, 'Failed to create Maritime snapshot');
         }
       },
-      list: async (config: MaritimeConfig) => {
+      list: async (config: MaritimeConfig, options?: ListSnapshotsOptions) => {
+        const limit = options?.limit;
+        if (limit === 0) return [];
+        const instanceId = options?.instanceId ?? options?.sandboxId;
         const client = getClient(config);
         const snapshots: SavedSnapshot[] = [];
         let cursor: string | undefined;
@@ -424,7 +428,8 @@ export const maritime = defineProvider<MaritimeSandbox, MaritimeConfig, Maritime
           cursor = page.nextCursor ?? undefined;
         } while (cursor);
         // The same listing carries Maritime's stock templates, which have no source sandbox.
-        return snapshots.filter((s) => s.sourceSandboxId !== null).map(toSnapshot);
+        const saved = snapshots.filter((s) => s.sourceSandboxId !== null && (instanceId === undefined || s.sourceSandboxId === instanceId));
+        return (limit === undefined ? saved : saved.slice(0, limit)).map(toSnapshot);
       },
       delete: async (config: MaritimeConfig, snapshotId: string) => {
         const client = getClient(config);
