@@ -51,6 +51,22 @@ await compute.sandbox.create({ cpus: 4, memoryMb: 8192, diskMb: 20000 });
 
 Other options: `label`, `secrets` (org vault names injected into every command), `disk`, `snapshotId`, `image`/`templateId`, `timeout` (lifetime in ms), `envs`, and `idempotencyKey`.
 
+## Saved routing and REST requests
+
+A create without a provider pin or explicit `providerOrder` walks the org's saved Sandboxes router. Configure its managed strategy and BYOK mode through the [routing API](api-reference.md#routing). Managed accounts use platform billing; BYOK uses the org's own provider keys.
+
+For REST `POST /api/v1/sandboxes`, `only` narrows the saved router to a nonempty array of registered provider names without regions, retaining its order. `byok` overrides its mode for this request: `off`, `first`, `fallback`, or `only`. These fields may be combined, but neither may accompany `provider` or `providerOrder`. For example, request a small sandbox using only managed Daytona capacity:
+
+```json
+{ "only": ["daytona"], "byok": "off", "size": "small" }
+```
+
+This leaves org settings unchanged. `GET /api/v1/sandboxes/quote` accepts the same mode override and comma-separated `only` names, such as `?only=daytona,e2b&byok=off&size=small`, to evaluate a concrete request.
+
+`GET /api/v1/sandboxes/options` returns `{ byokMode, strategy, size, options }`. Managed rows have `account: "managed"`, `provider`, and `sizes` with per-size rates (null when not sold); BYOK rows have `account: "byok"`, `provider`, `region`, and `ready`. The size is the default used to order managed accounts; `cheapest` can rank differently at another size. Discovery does not reserve capacity or guarantee credentials, credits, or placement will succeed.
+
+REST create responses include `sandbox` and may include `next` guidance: a lifetime/billing `note` and suggested `mcp`, `api`, and `cli` actions. MCP entries contain `{ tool, args, does }`, API entries `{ method, path, does }`, and CLI entries `{ command, does }`. Use `sandbox.id` to work with the sandbox and destroy it when finished; it runs and bills until timeout or destruction.
+
 ## Market pricing
 
 `providerOrder` ranks where the platform tries to place the sandbox — your own provider keys by name, or `'market'` for the compute market. `orderType: 'market' | 'limit'` and `maxPrice: { usd, per: 'hour' }` control the fill. All three can be passed per call or set once as `defaults` on the provider:
