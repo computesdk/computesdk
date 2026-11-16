@@ -22,6 +22,21 @@ The binary is `compute`. Pass `--json` on almost any platform command for machin
 
 `code` is one of `bad_request`, `unauthenticated`, `forbidden`, `not_found`, `conflict`, `payload_too_large`, `rate_limited`, `server_error`, `http_error` (API responses — `httpStatus` is set), or `no_credentials`, `untrusted_host`, `untrusted_host_stored_auth`, `insecure_transport`, `invalid_argument`, `workflow_not_found`, `network`, `unknown` (raised locally — no `httpStatus`). `retryable` is `true` for 429/502/503/504 and network failures. `details` is present only when the API returned a `details` object.
 
+## Version and availability
+
+The sandbox onboarding and sync additions described here are an unreleased
+source preview from [PR #1145](https://github.com/computesdk/computesdk/pull/1145).
+They are not included in `@computesdk/cli` 2.6.13. This includes the root sandbox
+command shortcuts, provider-first project creation, directory sync, automatic
+sign-in during creation, resumable/JSON login, status diagnostics, and the new
+execution options and run summaries. Installing the latest published package
+does not yet provide these additions; no release version is confirmed here.
+For 2.6.13, use the existing `compute instances` command paths and their `--help`.
+
+Project sync also requires a platform deployment with managed sync snapshot
+support. Hosted availability and retention configuration have not been verified;
+source examples below do not establish deployment availability.
+
 ## Your first sandbox
 
 ```bash
@@ -266,6 +281,14 @@ are not atomic across the entire directory; avoid concurrent destination edits.
 The sandbox working directory is unchanged: use `exec --cwd /app` for the synced
 project. Watch mode is one-way; it does not merge conflicting edits.
 
+When the platform supports managed sync snapshots, each pass that copies files
+must retain its full filtered source capture before destination writes begin.
+Retention failure stops the pass. `sync --json` includes `snapshot: {id, expiresAt}`;
+project creation includes `syncSnapshot`. Human output shows the same ID and
+expiry supplied by the platform. Dry runs, unchanged passes, and delete-only
+passes create no captures. A failed destination copy does not delete the retained
+capture. Literal `*` and `?` characters in endpoint paths are unsupported.
+
 ## Status, resumable login, and run summaries
 
 `compute status` shows verified authentication, the effective organization,
@@ -320,27 +343,3 @@ deprecated in favour of these.
 ```bash
 compute providers    # SDK provider credentials in this environment (local env vars)
 ```
-
-### Maintaining the sync checkpoint engine
-
-The CLI bundles an exact copy of the platform checkpoint module;
-`checkpoint-provenance.json` records its upstream commit and SHA-256 digest.
-Refresh it with `node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform [revision]`
-from the repository root, then run the CLI tests. Do not edit the bundled engine
-directly. Every invocation uses a private temporary directory and restrictive
-file permissions for upstream scratch archives. Sync-specific filtering and destination guards live in the adapter.
-Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
-selectors use glob syntax. Watch passes skip capture when nothing changed. Each pass that copies entries
-retains its full filtered source capture in platform-owned Tigris storage for
-30 days. Snapshot namespaces are isolated, so expiring a sync capture cannot
-delete permanent snapshot layers. Cross-snapshot layer deduplication is not yet
-implemented. Only local and sandbox scratch files are removed after the pass.
-
-Retained sync snapshots must finish uploading and pass platform integrity checks
-before destination changes begin. `sync --json` includes `snapshot: {id, expiresAt}`
-when a capture is created; project creation includes `syncSnapshot` in its JSON
-result. Human output shows the same ID and expiry. Dry runs, unchanged passes and
-delete-only passes do not create captures. A failed destination copy leaves the
-retained capture available until expiry. There is no new storage charge in this
-release. Deploy the managed sync snapshot API before releasing this CLI; failure
-to retain a capture stops sync rather than falling back to disposable snapshots.
