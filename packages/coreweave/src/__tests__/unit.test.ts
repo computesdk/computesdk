@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { commandArgv, coreweave, createOptions, parseLs } from '../index';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { commandArgv, coreweave, createOptions, parseLs, templateBody } from '../index';
 
 describe('coreweave create options', () => {
   it('maps image, cpu, memory, lifetime, env, name and ports', () => {
@@ -71,6 +71,64 @@ describe('coreweave snapshots', () => {
       scope: 'volume', path: '/work', memory: false, destroysSource: false, source: 'kept', fork: true,
       createOptions: { snapshotVolume: true },
     });
+  });
+});
+
+describe('coreweave templates', () => {
+  const record = { sandboxTemplateId: 'tpl-1', displayName: 'py', revision: '1', createTime: '2026-01-01T00:00:00Z', spec: { tags: ['x'] } };
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('builds the template document', () => {
+    expect(templateBody({ name: ' py ', image: 'python:3.12', spec: { maxLifetimeSeconds: 60 } })).toEqual({
+      displayName: 'py',
+      spec: { maxLifetimeSeconds: 60, containers: [{ name: 'main', image: 'python:3.12' }] },
+    });
+    expect(() => templateBody({ name: '' })).toThrow(/name is required/);
+    expect(() => templateBody({ name: 'a', description: 'd' })).toThrow(/no description or metadata/);
+    expect(() => templateBody({ name: 'a', image: 'x', spec: { containers: [] } })).toThrow(/not both/);
+  });
+
+  it('creates a template on the control plane', async () => {
+    const fetch = vi.fn(async () => json(record));
+    vi.stubGlobal('fetch', fetch);
+    const tpl = await coreweave({ apiKey: 'k' }).template!.create({ name: 'py', image: 'python:3.12', requestId: 'r 1' } as any);
+    expect(tpl).toEqual({ id: 'tpl-1', name: 'py', provider: 'coreweave', revision: '1', createdAt: new Date('2026-01-01T00:00:00Z'), spec: { tags: ['x'] } });
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.coreweave.com/v1/sandboxTemplates?requestId=r%201');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer k', 'Content-Type': 'application/json' });
+    expect(JSON.parse(init.body as string)).toEqual({ displayName: 'py', spec: { containers: [{ name: 'main', image: 'python:3.12' }] } });
+  });
+
+  it('pages through templates and honours limit', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(json({ sandboxTemplates: [record], nextPageToken: 'next' }))
+      .mockResolvedValueOnce(json({ sandboxTemplates: [{ ...record, sandboxTemplateId: 'tpl-2' }] }));
+    vi.stubGlobal('fetch', fetch);
+    const all = await coreweave({ apiKey: 'k', controlPlaneUrl: 'https://cp.test/' }).template!.list();
+    expect(all.map((t) => t.id)).toEqual(['tpl-1', 'tpl-2']);
+    expect(fetch.mock.calls.map((c) => c[0])).toEqual(['https://cp.test/v1/sandboxTemplates', 'https://cp.test/v1/sandboxTemplates?pageToken=next']);
+
+    fetch.mockReset().mockResolvedValueOnce(json({ sandboxTemplates: [record], nextPageToken: 'next' }));
+    expect((await coreweave({ apiKey: 'k' }).template!.list({ limit: 1 })).map((t) => t.id)).toEqual(['tpl-1']);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe('https://api.coreweave.com/v1/sandboxTemplates?pageSize=1');
+  });
+
+  it('deletes templates idempotently and surfaces API errors', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(json({ code: 5, message: 'not found' }, 404))
+      .mockResolvedValueOnce(json({ code: 7, message: 'requires sandbox_admin' }, 403));
+    vi.stubGlobal('fetch', fetch);
+    const provider = coreweave({ apiKey: 'k' });
+    await expect(provider.template!.delete('tpl-1')).resolves.toBeUndefined();
+    expect(fetch.mock.calls[0][0]).toBe('https://api.coreweave.com/v1/sandboxTemplates/tpl-1');
+    expect((fetch.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
+    await expect(provider.template!.delete('tpl-1')).rejects.toThrow(/403.*requires sandbox_admin/);
   });
 });
 

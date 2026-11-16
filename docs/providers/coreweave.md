@@ -108,6 +108,8 @@ interface CoreWeaveConfig {
   snapshotMountPath?: string;
   /** Snapshot volume size, e.g. '10Gi' - omit for the platform default */
   snapshotVolumeSize?: string;
+  // Control plane for template management (default https://api.coreweave.com)
+  controlPlaneUrl?: string;
 }
 ```
 
@@ -122,7 +124,7 @@ interface CoreWeaveConfig {
 | `envs` | `environmentVariables` | Set for the whole sandbox. |
 | `name` | `annotations.name` | |
 | `ports` | `services` | Each port gets a public HTTPS endpoint, used by `getUrl()`. |
-| `templateId` | `runFromTemplate()` | Starts from a CoreWeave sandbox template; the template supplies the image unless `image` is set. |
+| `templateId` | `runFromTemplate()` | Starts from a CoreWeave sandbox template (UUID); the template supplies the image unless `image` is set. |
 | `snapshotVolume` | `fileSystemSnapshot` | Mounts a scratch volume at `snapshotMountPath` (`/work`) that can be snapshotted. |
 | `snapshotId` | `fileSystemSnapshot.restoreFromSnapshotId` | Starts a new sandbox with the snapshot restored at `snapshotMountPath`. |
 
@@ -133,6 +135,7 @@ Every sandbox is tagged `computesdk`, and `list()` returns only active sandboxes
 - **Command execution** with `cwd`, `env`, `timeout` and background commands
 - **Filesystem**: native read and write; mkdir, list, exists and remove run as shell commands
 - **Snapshots**: `snapshot.create(sandboxId)` archives the sandbox's snapshot volume (`/work` by default) and waits until it is ready; the sandbox keeps running. Restore with `create({ snapshotId })`, and the same snapshot can be restored into many sandboxes. `snapshot.list()` and `snapshot.delete()` manage your organization's snapshots.
+- **Templates**: `template.create({ name, image })` (or `{ name, spec }` with a full CoreWeave partial sandbox spec), `template.list()` and `template.delete(id)` manage your organization's templates through the CoreWeave control plane (`/v1/sandboxTemplates`). Creating and deleting need the **Sandbox Admin** role. Start a sandbox from one with `create({ templateId })`. Deletes are soft: existing sandboxes are unaffected.
 - **Port URLs**: `getUrl({ port })` returns the public HTTPS URL of a port requested at create
 - **Native SDK access**: `sandbox.getInstance()` returns the `@coreweave/cwsandbox` `Sandbox`, for streaming and other native APIs
 
@@ -142,7 +145,8 @@ Every sandbox is tagged `computesdk`, and `list()` returns only active sandboxes
 - `runCommand`'s `timeout` is a client-side deadline: the call fails when it passes, but the command is not killed inside the sandbox.
 - Background commands run detached with `nohup` and their output is discarded.
 - Snapshots capture only the snapshot volume, not the rest of the container filesystem or memory, and only sandboxes created with `snapshotVolume: true` (or restored from a snapshot) can be snapshotted. The capture is not atomic: writes during `snapshot.create()` may be missed.
-- Pause/resume and template management are not exposed through this provider.
+- Pause/resume and template updates (`PATCH`) are not exposed through this provider.
+- Templates have no description or metadata fields, so passing those to `template.create()` throws.
 - Sandboxes live until destroyed or until their maximum lifetime, so always call `destroy()` when you are done.
 
 ## Links
