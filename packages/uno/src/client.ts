@@ -30,6 +30,10 @@ const BUSY_RETRY_MS = 150
 const BUSY_WAIT_MS = 60_000
 /** Upper bound for one file transfer through the native file API. */
 const FILE_TIMEOUT_MAX_MS = 15 * 60_000
+/** Default for {@link UnoClientOptions.pauseInMemoryS}. */
+const DEFAULT_PAUSE_IN_MEMORY_S = 300
+/** How long one readiness poll asks the API to hold the answer (`GET /boxes/{id}?wait_ready_s`). */
+const READY_POLL_HOLD_S = 5
 
 /** Box JSON as returned by `GET /api/v1/boxes/{id}` (fields this package reads). */
 export interface UnoBox {
@@ -89,6 +93,13 @@ export interface UnoClientOptions {
   baseUrl?: string
   /** Per-request timeout for plain API calls, in ms. Default 30 000. */
   requestTimeoutMs?: number
+  /**
+   * How long `pause()` keeps a machine paused in memory before it goes to
+   * sleep on disk on its own, in seconds (1–3600). Default 300. A paused
+   * machine resumes in milliseconds and counts as running while it waits;
+   * `0` pauses straight to disk.
+   */
+  pauseInMemoryS?: number
 }
 
 export class UnoError extends Error {
@@ -109,6 +120,7 @@ export class UnoClient {
   readonly baseUrl: string
   private readonly apiKey: string
   private readonly requestTimeoutMs: number
+  private readonly pauseInMemoryS: number
 
   constructor(options: UnoClientOptions = {}) {
     const apiKey = options.apiKey ?? process.env.UNO_API_KEY
@@ -126,6 +138,8 @@ export class UnoClient {
     this.apiKey = apiKey
     this.baseUrl = baseUrl
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000
+    const ramS = options.pauseInMemoryS ?? DEFAULT_PAUSE_IN_MEMORY_S
+    this.pauseInMemoryS = Number.isFinite(ramS) ? Math.min(3600, Math.max(0, Math.floor(ramS))) : DEFAULT_PAUSE_IN_MEMORY_S
   }
 
   /**
@@ -218,11 +232,12 @@ export class UnoClient {
    * this, one dropped readiness poll right after create failed the whole create
    * and threw away a machine that was booting fine.
    */
-  async getBox(id: string | number): Promise<UnoBox | null> {
-    const path = `/api/v1/boxes/${encodeURIComponent(String(id))}`
+  async getBox(id: string | number, opts: { waitReadyS?: number } = {}): Promise<UnoBox | null> {
+    const waitS = Math.min(MAX_WAIT_READY_S, Math.max(0, Math.floor(opts.waitReadyS ?? 0)))
+    const path = `/api/v1/boxes/${encodeURIComponent(String(id))}` + (waitS > 0 ? `?wait_ready_s=${waitS}` : '')
     for (let attempt = 0; ; attempt++) {
       try {
-        return (await this.request<UnoBox>('GET', path)).body
+        return (await this.request<UnoBox>('GET', path, undefined, waitS > 0 ? { timeoutMs: this.requestTimeoutMs + waitS * 1000 } : {})).body
       } catch (err) {
         if (err instanceof UnoError && (err.status === 404 || err.code === 'INVALID_ID')) return null
         if (attempt + 1 >= DELETE_ATTEMPTS || !isTransient(err)) throw err
@@ -262,12 +277,16 @@ export class UnoClient {
    * running source for a copy-on-write copy of its disk (milliseconds), resumes
    * it, and boots the copy from that disk; memory is not copied. Returns the
    * new box, still `provisioning`: wait for it with {@link waitReady}.
+   *
+   * With `start: false` the API copies the disk only and answers once the
+   * copy is on the server, already `stopped` (see {@link isStoppedCopy}). An
+   * API without that option ignores it and boots the copy as usual.
    */
-  async cloneBox(id: string | number, opts: { name?: string; signal?: AbortSignal } = {}): Promise<UnoBox> {
+  async cloneBox(id: string | number, opts: { name?: string; signal?: AbortSignal; start?: boolean } = {}): Promise<UnoBox> {
     const { body } = await this.request<{ boxes?: UnoBox[] }>(
       'POST',
       `/api/v1/boxes/${encodeURIComponent(String(id))}/clone`,
-      { count: 1, ...(opts.name ? { name: opts.name } : {}) },
+      { count: 1, ...(opts.name ? { name: opts.name } : {}), ...(opts.start === false ? { start: false } : {}) },
       { accept: [201, 200], signal: opts.signal, timeoutMs: CREATE_TIMEOUT_MS },
     )
     const created = body.boxes?.[0]
@@ -295,13 +314,36 @@ export class UnoClient {
     await this.lifecycle(id, 'wake')
   }
 
-  private async lifecycle(id: string | number, action: 'sleep' | 'wake'): Promise<void> {
-    const path = `/api/v1/boxes/${encodeURIComponent(String(id))}/${action}`
+  /**
+   * Pause a box in memory (`POST /boxes/{id}/sleep?mode=ram`): it stops where
+   * it runs and keeps its memory on the server, so {@link wakeBox} resumes it
+   * in milliseconds. After {@link UnoClientOptions.pauseInMemoryS} seconds it
+   * goes to sleep on disk on its own. An API without the option sleeps the
+   * box on disk instead (it ignores `mode`); one that refuses it gets a plain
+   * {@link sleepBox}. Returns the state the API reports: `paused_ram` or
+   * `sleeping`.
+   */
+  async pauseBox(id: string | number): Promise<string> {
+    if (this.pauseInMemoryS <= 0) {
+      await this.sleepBox(id)
+      return 'sleeping'
+    }
+    try {
+      const body = await this.lifecycle(id, 'sleep', `?mode=ram&ram_s=${this.pauseInMemoryS}`)
+      return typeof body.status === 'string' ? body.status : 'sleeping'
+    } catch (err) {
+      if (!(err instanceof UnoError) || !refusesOption(err, 'INVALID_SLEEP_MODE')) throw err
+      await this.sleepBox(id)
+      return 'sleeping'
+    }
+  }
+
+  private async lifecycle(id: string | number, action: 'sleep' | 'wake', query = ''): Promise<Record<string, unknown>> {
+    const path = `/api/v1/boxes/${encodeURIComponent(String(id))}/${action}${query}`
     const deadline = Date.now() + BUSY_WAIT_MS
     for (let failures = 0; ; ) {
       try {
-        await this.withBoxTurn(id, () => this.request('POST', path, undefined, { timeoutMs: 120_000 }))
-        return
+        return (await this.withBoxTurn(id, () => this.request('POST', path, undefined, { timeoutMs: 120_000 }))).body
       } catch (err) {
         // BOX_BUSY: a command's tail or a start is still finishing; it frees up in well under a second.
         if (isBusy(err) && Date.now() < deadline) {
@@ -453,7 +495,11 @@ export class UnoClient {
     for (;;) {
       signal?.throwIfAborted()
       const polledAt = Date.now()
-      const box = await this.getBox(id)
+      // The API holds this answer until the box is ready (up to a few seconds),
+      // so a ready box is seen the moment it is, not on the next 100 ms tick.
+      // An API without the parameter answers at once, and polling goes on as before.
+      const left = Math.floor((deadline - Date.now()) / 1000)
+      const box = await this.getBox(id, { waitReadyS: Math.min(READY_POLL_HOLD_S, left) })
       if (!box) throw new UnoError(`Uno box ${id} disappeared while starting`, 404, 'NOT_FOUND')
       if (isReadyOrThrow(box)) return box
       const interval = polledAt - started < READY_POLL_FAST_WINDOW_MS ? READY_POLL_FAST_MS : READY_POLL_SLOW_MS
@@ -564,6 +610,26 @@ export function isReadyOrThrow(box: UnoBox): boolean {
     )
   }
   return false
+}
+
+/**
+ * A box the API copied without starting it (`clone` with `start: false`):
+ * already `stopped` and provisioned. Throws `PROVISION_FAILED` if the copy failed.
+ */
+export function isStoppedCopy(box: UnoBox): boolean {
+  if (box.status === 'stopped' && box.provision_state === 'ready') return true
+  isReadyOrThrow(box)
+  return false
+}
+
+/**
+ * The API refused an option it does not offer: the given error code, or an
+ * unknown route (a 404 without a JSON error code, or 405).
+ */
+function refusesOption(err: UnoError, code: string): boolean {
+  if (err.code === code) return true
+  if (err.status === 405) return true
+  return err.status === 404 && err.code === undefined
 }
 
 /** Network failures and 5xx/524 from the edge, where trying again is harmless for reads. */

@@ -26,6 +26,7 @@ import {
   UnoClient,
   UnoError,
   isReadyOrThrow,
+  isStoppedCopy,
   isTransient,
   type UnoBox,
   type UnoClientOptions,
@@ -291,11 +292,14 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
 
       getInstance: (sandbox: UnoSandbox) => sandbox,
 
-      // Pause = Uno's sleep: memory and disk are saved on the node, the machine
-      // stops using CPU and RAM, and wake restores memory as it was — running
-      // processes carry on. A command sent to a sleeping machine wakes it too.
+      // Pause = the machine stops where it runs and keeps its memory on the
+      // server; resume picks up in milliseconds with every process as it was.
+      // After `pauseInMemoryS` (default 5 min) it goes to sleep on disk on its
+      // own — memory and processes still survive, waking takes ~0.1 s. An API
+      // without pause in memory sleeps it on disk right away. A command sent
+      // to a paused or sleeping machine wakes it too.
       pause: async (sandbox: UnoSandbox): Promise<void> => {
-        await sandbox.client.sleepBox(sandbox.id)
+        await sandbox.client.pauseBox(sandbox.id)
       },
       resume: async (sandbox: UnoSandbox): Promise<void> => {
         await sandbox.client.wakeBox(sandbox.id)
@@ -362,14 +366,15 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
       },
     },
 
-    // A snapshot is a stopped copy of the machine's disk, kept as a sleeping
-    // Uno machine named `computesdk-snapshot-…`. Taking one flushes the guest's
-    // page cache, copies the disk copy-on-write (the source is paused for
-    // milliseconds and keeps running), boots the copy once so it is a complete
-    // machine, and puts it to sleep, where it uses no CPU or RAM. Creating an
-    // instance from it copies that disk again, so one snapshot serves any
-    // number of instances. Memory is not kept: processes do not survive, and
-    // /tmp is emptied by the copy's boot. The snapshot id is the machine id.
+    // A snapshot is a stopped copy of the machine's disk, kept as an Uno
+    // machine named `computesdk-snapshot-…`. Taking one flushes the guest's
+    // page cache and copies the disk copy-on-write (the source is paused for
+    // milliseconds and keeps running); the copy is not started and uses no CPU
+    // or RAM. (An API that cannot copy without starting boots the copy once
+    // and puts it to sleep.) Creating an instance from it copies that disk
+    // again, so one snapshot serves any number of instances. Memory is not
+    // kept: processes do not survive, and /tmp is emptied by the instance's
+    // boot. The snapshot id is the machine id.
     snapshot: {
       capabilities: {
         scope: 'rootfs',
@@ -388,7 +393,8 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
         const since = Date.now() - 60_000
         let snap: UnoBox
         try {
-          snap = await client.cloneBox(instanceId, { name })
+          // start: false — the API copies the disk only and answers with the copy already stopped.
+          snap = await client.cloneBox(instanceId, { name, start: false })
         } catch (err) {
           // The copy may exist even though the response was lost: adopt it by its unique name.
           if (!isTransient(err)) throw err
@@ -397,8 +403,7 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
           snap = found
         }
         try {
-          if (!isReadyOrThrow(snap)) await client.waitReady(snap.id, config.readyTimeoutMs ?? 120_000)
-          await client.sleepBox(snap.id)
+          await settleSnapshot(client, snap, config.readyTimeoutMs ?? 120_000)
         } catch (err) {
           await client.deleteBox(snap.id).catch(() => {})
           throw err
@@ -479,6 +484,28 @@ function knownSnapshots(client: UnoClient): Set<string> {
   let set = snapshotsByClient.get(client)
   if (!set) snapshotsByClient.set(client, (set = new Set()))
   return set
+}
+
+/**
+ * Bring a just-made snapshot machine to rest. A copy made without starting is
+ * already stopped. An API without `start: false` boots the copy: wait for it
+ * and put it to sleep, as before. A copy adopted after a lost response may
+ * still be in the making: wait until it is either.
+ */
+async function settleSnapshot(client: UnoClient, snap: UnoBox, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  for (let box: UnoBox | null = snap; ; ) {
+    if (!box) throw new UnoError(`Uno snapshot machine ${snap.id} disappeared while it was being made`, 404, 'NOT_FOUND')
+    if (isStoppedCopy(box)) return
+    if (isReadyOrThrow(box) || box.status === 'starting') {
+      if (box.status !== 'running') await client.waitReady(box.id, Math.max(1, deadline - Date.now()))
+      await client.sleepBox(box.id)
+      return
+    }
+    if (Date.now() > deadline) throw new UnoError(`Uno snapshot ${snap.id} not ready after ${timeoutMs} ms (status ${box.status})`, 504, 'READY_TIMEOUT', box)
+    await new Promise(resolve => setTimeout(resolve, 100))
+    box = await client.getBox(snap.id)
+  }
 }
 
 /**

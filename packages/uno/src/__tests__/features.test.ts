@@ -47,14 +47,38 @@ afterEach(() => {
 })
 
 describe('pause and resume', () => {
-  it('maps to sleep and wake and declares that memory survives', async () => {
-    const calls = mockFetch([() => [201, box()], () => [200, { status: 'sleeping' }], () => [200, { status: 'running' }]])
+  it('pauses in memory, resumes with wake and declares that memory survives', async () => {
+    const calls = mockFetch([() => [201, box()], () => [200, { status: 'paused_ram' }], () => [200, { status: 'running' }]])
     const compute = uno({ apiKey: 'k', baseUrl: api })
     expect(compute.instances.pause).toEqual({ memory: true })
     const sandbox = await compute.instances.create()
     await sandbox.pause!()
     await sandbox.resume!()
-    expect(calls.slice(1).map(c => `${c.method} ${c.url}`)).toEqual([`POST ${api}/api/v1/boxes/42/sleep`, `POST ${api}/api/v1/boxes/42/wake`])
+    expect(calls.slice(1).map(c => `${c.method} ${c.url}`)).toEqual([
+      `POST ${api}/api/v1/boxes/42/sleep?mode=ram&ram_s=300`,
+      `POST ${api}/api/v1/boxes/42/wake`,
+    ])
+  })
+
+  it('keeps the machine in memory as long as pauseInMemoryS says, or sleeps it on disk with 0', async () => {
+    const calls = mockFetch([() => [201, box()], () => [200, { status: 'paused_ram' }], () => [201, box()], () => [200, { status: 'sleeping' }]])
+    await (await uno({ apiKey: 'k', baseUrl: api, pauseInMemoryS: 30 }).instances.create()).pause!()
+    await (await uno({ apiKey: 'k', baseUrl: api, pauseInMemoryS: 0 }).instances.create()).pause!()
+    expect(calls[1].url).toBe(`${api}/api/v1/boxes/42/sleep?mode=ram&ram_s=30`)
+    expect(calls[3].url).toBe(`${api}/api/v1/boxes/42/sleep`)
+  })
+
+  it('sleeps on disk when the API refuses pause in memory', async () => {
+    const calls = mockFetch([() => [201, box()], () => [400, { error: 'INVALID_SLEEP_MODE' }], () => [200, { status: 'sleeping' }]])
+    const sandbox = await uno({ apiKey: 'k', baseUrl: api }).instances.create()
+    await sandbox.pause!()
+    expect(calls.slice(1).map(c => c.url)).toEqual([`${api}/api/v1/boxes/42/sleep?mode=ram&ram_s=300`, `${api}/api/v1/boxes/42/sleep`])
+  })
+
+  it('does not hide a real pause failure behind a disk sleep', async () => {
+    mockFetch([() => [201, box()], () => [404, { error: 'NOT_FOUND' }]])
+    const sandbox = await uno({ apiKey: 'k', baseUrl: api }).instances.create()
+    await expect(sandbox.pause!()).rejects.toThrow(/NOT_FOUND/)
   })
 
   it('waits out BOX_BUSY instead of failing the pause', async () => {
@@ -66,7 +90,7 @@ describe('pause and resume', () => {
     ])
     const sandbox = await uno({ apiKey: 'k', baseUrl: api }).instances.create()
     await sandbox.pause!()
-    expect(calls.filter(c => c.url.endsWith('/sleep'))).toHaveLength(3)
+    expect(calls.filter(c => c.url.includes('/sleep'))).toHaveLength(3)
   })
 })
 
@@ -87,6 +111,58 @@ describe('snapshots', () => {
     expect(calls[2]).toMatchObject({ method: 'GET', url: `${api}/api/v1/boxes/77` })
     expect(calls[3]).toMatchObject({ method: 'POST', url: `${api}/api/v1/boxes/77/sleep` })
     expect(snap).toMatchObject({ id: '77', provider: 'uno', metadata: { sourceInstanceId: '42' } })
+  })
+
+  it('copies the disk without starting the copy where the API can', async () => {
+    const calls = mockFetch([
+      () => ok(),
+      c => [201, { boxes: [box({ id: 77, name: c.body.name, status: 'stopped', provision_state: 'ready', clone_of: 42 })] }],
+    ])
+    const snap = await uno({ apiKey: 'k', baseUrl: api }).snapshot!.create('42')
+    expect(calls).toHaveLength(2)
+    expect(calls[1]).toMatchObject({ method: 'POST', url: `${api}/api/v1/boxes/42/clone`, body: { count: 1, start: false } })
+    expect(snap).toMatchObject({ id: '77', metadata: { sourceInstanceId: '42' } })
+  })
+
+  it('waits for an adopted copy that is still being made', async () => {
+    const calls = mockFetch([
+      () => ok(),
+      () => {
+        throw new TypeError('fetch failed')
+      },
+      () => [200, { boxes: [box({ id: 77, name: calls[1].body.name, status: 'provisioning', provision_state: 'pending', created_at: new Date().toISOString() })] }],
+      () => [200, box({ id: 77, status: 'stopped', provision_state: 'ready' })],
+    ])
+    const snap = await uno({ apiKey: 'k', baseUrl: api }).snapshot!.create('42')
+    expect(snap.id).toBe('77')
+    expect(calls.map(c => `${c.method} ${c.url.replace(api, '')}`)).toEqual([
+      'POST /api/v1/boxes/42/run',
+      'POST /api/v1/boxes/42/clone',
+      'GET /api/v1/boxes',
+      'GET /api/v1/boxes/77',
+    ])
+  })
+
+  it('restores many instances from one snapshot at once', async () => {
+    const pending: Array<() => void> = []
+    let n = 0
+    const clone = (): Promise<Reply> =>
+      new Promise(resolve => pending.push(() => resolve([201, { boxes: [box({ id: 100 + ++n })] }])))
+    const calls = mockFetch([
+      () => ok(),
+      () => [201, { boxes: [box({ id: 77, name: 'computesdk-snapshot-x', status: 'stopped', provision_state: 'ready' })] }],
+      clone,
+      clone,
+      clone,
+    ])
+    const compute = uno({ apiKey: 'k', baseUrl: api })
+    const snap = await compute.snapshot!.create('42')
+    const forks = Promise.all([1, 2, 3].map(() => compute.instances.create({ snapshotId: snap.id })))
+    // All three copies are asked for before the first one is answered.
+    await vi.waitFor(() => expect(pending).toHaveLength(3))
+    pending.forEach(resolve => resolve())
+    expect((await forks).map(f => f.instanceId).sort()).toEqual(['101', '102', '103'])
+    expect(calls.slice(2).every(c => c.url === `${api}/api/v1/boxes/77/clone`)).toBe(true)
   })
 
   it('deletes the half-made snapshot machine when its start fails', async () => {

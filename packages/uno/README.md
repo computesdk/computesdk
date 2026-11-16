@@ -77,17 +77,17 @@ interface UnoConfig {
 | create / getById / list / destroy | ✅ |
 | runCommand (cwd, env, timeout, background) | ✅ |
 | filesystem (read, write, mkdir, readdir, exists, remove) | ✅ (file API where available, else shell) |
-| pause / resume | ✅ sleep and wake: memory and running processes survive |
+| pause / resume | ✅ paused in memory, resumed in milliseconds: memory and running processes survive |
 | snapshots: create, list, delete, `create({ snapshotId })`, fork | ✅ disk only (see below) |
 | getUrl | port 80 only, at `https://<name>.uno4.dev` |
 | live output streaming, templates API, volumes | not yet |
 
 ## Pause and snapshots
 
-- `instance.pause()` puts the machine to sleep: memory and disk are saved on the node and it stops using CPU and RAM. `resume()` wakes it with memory as it was, so running processes carry on. A command sent to a paused machine wakes it too.
-- `snapshot.create(instanceId)` flushes the machine's writes to disk, copies the disk copy-on-write (the source is paused for milliseconds and keeps running), boots the copy once and puts it to sleep. The snapshot is that sleeping machine: it is named `computesdk-snapshot-…`, its id is the machine id, and it uses no CPU or RAM. `instances.list()` does not show it; `snapshot.list()` does.
+- `instance.pause()` stops the machine where it runs and keeps its memory on the server; `resume()` picks up in milliseconds, so running processes carry on. A paused machine counts as running. After `pauseInMemoryS` seconds (default 300, set it in `uno({ pauseInMemoryS })`; `0` skips this step) it goes to sleep on disk on its own: it then uses no CPU or RAM, and `resume()` still brings back memory and processes. A command sent to a paused machine wakes it too.
+- `snapshot.create(instanceId)` flushes the machine's writes to disk, copies the disk copy-on-write (the source is paused for milliseconds and keeps running) and leaves the copy stopped, without booting it. The snapshot is that stopped machine: it is named `computesdk-snapshot-…`, its id is the machine id, and it uses no CPU or RAM. `instances.list()` does not show it; `snapshot.list()` does.
 - `instances.create({ snapshotId })` boots a new machine from a copy of the snapshot's disk, with the snapshot's shape; many instances can come from one snapshot. A live machine's id works as `snapshotId` too: that forks its current disk.
-- Snapshots keep the disk, not memory: processes do not survive, and `/tmp` is emptied when the copy boots. Delete snapshots you no longer need with `snapshot.delete(id)`; each counts as a machine on your account while it exists.
+- Snapshots keep the disk, not memory: processes do not survive, and `/tmp` is emptied when an instance boots from the snapshot. Delete snapshots you no longer need with `snapshot.delete(id)`; each counts as a machine on your account while it exists.
 
 ## Links
 

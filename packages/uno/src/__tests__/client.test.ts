@@ -99,7 +99,8 @@ describe('UnoClient', () => {
     ])
     const c = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' })
     await expect(c.waitReady(42, 120_000)).resolves.toMatchObject({ status: 'running', provision_state: 'ready' })
-    expect(calls.map(x => `${x.method} ${x.url}`)).toEqual(Array(3).fill('GET https://api.test/api/v1/boxes/42'))
+    // Each poll asks the API to hold the answer until the box is ready.
+    expect(calls.map(x => `${x.method} ${x.url}`)).toEqual(Array(3).fill('GET https://api.test/api/v1/boxes/42?wait_ready_s=5'))
   })
 
   it('gives up on a read after four attempts and does not repeat a refused one', async () => {
