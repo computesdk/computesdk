@@ -54,6 +54,7 @@
   * [Promigence](providers/promigence.md)
   * [Quilt](providers/quilt.md)
   * [Railway](providers/railway.md)
+  * [Render](providers/render.md)
   * [Runloop](providers/runloop.md)
   * [Runtime](providers/runtime.md)
   * [Sail](providers/sail.md)
