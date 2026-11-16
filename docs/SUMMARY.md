@@ -25,6 +25,7 @@
   * [Cocoon Stack](providers/cocoonstack.md)
   * [CodeSandbox](providers/codesandbox.md)
   * [Collimate](providers/collimate.md)
+  * [CoreWeave](providers/coreweave.md)
   * [CreateOS](providers/createos-sandbox.md)
   * [Daytona](providers/daytona.md)
   * [Docker](providers/docker.md)

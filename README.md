@@ -93,6 +93,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_API_KEY` | Edge computing |
 | **Cocoon Stack** | `COCOONSTACK_API_URL`, `COCOONSTACK_API_KEY` | Self-hosted microVM sandboxes from warm pools |
 | **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
+| **CoreWeave** | `CWSANDBOX_API_KEY` | Container sandboxes on CoreWeave capacity |
 | **CreateOS** | `CREATEOS_SANDBOX_API_KEY`, `CREATEOS_SANDBOX_BASE_URL` | VM sandboxes with pause/resume/fork snapshots |
 | **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
 | **Declaw** | `DECLAW_API_KEY` | Isolated cloud sandboxes |
@@ -321,6 +322,7 @@ npm install @computesdk/gcp              # Google Cloud providers (Cloud Run: @c
 npm install @computesdk/cloudflare       # Cloudflare provider
 npm install @computesdk/cocoonstack      # Cocoon Stack provider
 npm install @computesdk/codesandbox      # CodeSandbox provider
+npm install @computesdk/coreweave        # CoreWeave Sandboxes provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/daytona          # Daytona provider
 npm install @computesdk/e2b              # E2B provider
@@ -377,6 +379,7 @@ See individual provider READMEs for details:
 - **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
 - **[@computesdk/cocoonstack](./packages/cocoonstack)** - Self-hosted microVM sandboxes served from warm pools by sandboxd
 - **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
+- **[@computesdk/coreweave](./packages/coreweave)** - Container sandboxes on CoreWeave capacity, through the official CoreWeave SDK
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
