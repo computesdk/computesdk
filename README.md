@@ -120,6 +120,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **sandbox-cli** | `SANDBOX_ENDPOINT`, `SANDBOX_TOKEN` | MicroVM sandboxes with their own kernel, one API on a Mac, a self-hosted Linux machine or the cloud |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
 | **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
+| **Tangle Sandbox** | `TANGLE_API_KEY`, `TANGLE_SANDBOX_BASE_URL` (optional) | Isolated Linux sandboxes with command execution and filesystem access |
 | **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
 | **Uno** | `UNO_API_KEY` (optional `UNO_REGION`) | Full Linux Firecracker microVMs for agents and builds, US High-end region |
 | **Upstash** | `UPSTASH_BOX_API_KEY` | Ephemeral and persistent sandboxes |
@@ -346,6 +347,7 @@ npm install @computesdk/sail             # Sail provider
 npm install @computesdk/sandbox-cli      # sandbox-cli provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
 npm install @computesdk/superserve       # Superserve provider
+npm install @computesdk/tangle           # Tangle Sandbox provider
 npm install @computesdk/tensorlake       # Tensorlake provider
 npm install @computesdk/uno              # Uno provider
 npm install @computesdk/upstash          # Upstash provider
@@ -397,6 +399,7 @@ See individual provider READMEs for details:
 - **[@computesdk/runtime](./packages/runtime)** - Firecracker microVM sandboxes for AI agents, with native command streaming, private preview URLs and snapshots
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
 - **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes
+- **[@computesdk/tangle](./packages/tangle)** - Isolated Linux sandboxes with command execution and filesystem access
 - **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
 - **[@computesdk/uno](./packages/uno)** - Full Linux Firecracker microVMs (systemd, apt, sudo) for agents and builds, with a US High-end region
 - **[@computesdk/upstash](./packages/upstash)** - Ephemeral and persistent sandboxes
