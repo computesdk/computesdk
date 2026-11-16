@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/tangle",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Tangle Sandbox provider for ComputeSDK - isolated Linux sandboxes with command execution and filesystem access",
   "author": "Tangle",
   "license": "MIT",
