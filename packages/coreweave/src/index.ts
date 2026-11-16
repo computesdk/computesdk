@@ -2,7 +2,7 @@
  * CoreWeave Sandboxes provider for ComputeSDK, a thin adapter over @coreweave/cwsandbox.
  */
 
-import { CWSandboxNotFoundError, type Sandbox, type SandboxClient, type SandboxRunOptions, type SandboxStatus } from '@coreweave/cwsandbox';
+import { CWSandboxNotFoundError, type FileSystemSnapshotResult, type Sandbox, type SandboxClient, type SandboxRunOptions, type SandboxStatus } from '@coreweave/cwsandbox';
 import { createSandboxClient } from '@coreweave/cwsandbox/node';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
@@ -12,6 +12,8 @@ const ADAPTER_TAG = 'computesdk';
 const URL_WAIT_MS = 60_000;
 const URL_POLL_MS = 1_000;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** CoreWeave snapshots archive one scratch volume, not the whole container. */
+const DEFAULT_SNAPSHOT_MOUNT_PATH = '/work';
 
 export interface CoreWeaveConfig {
   /** CoreWeave API access token; falls back to CWSANDBOX_API_KEY. */
@@ -26,6 +28,19 @@ export interface CoreWeaveConfig {
   memory?: number;
   /** Default maximum sandbox lifetime in milliseconds. */
   timeout?: number;
+  /** Mount scratch volume for snapshots on every sandbox (also a per-create option). */
+  snapshotVolume?: boolean;
+  /** Where the snapshot volume is mounted. Defaults to `/work`. */
+  snapshotMountPath?: string;
+  /** Snapshot volume size as a Kubernetes quantity, e.g. `10Gi`. Omit for the platform default. */
+  snapshotVolumeSize?: string;
+}
+
+export interface CoreWeaveSnapshot {
+  id: string;
+  provider: 'coreweave';
+  createdAt: Date;
+  metadata: Record<string, unknown>;
 }
 
 const env = (name: string): string | undefined =>
@@ -45,9 +60,9 @@ function client(config: CoreWeaveConfig): SandboxClient {
 }
 
 export function createOptions(config: CoreWeaveConfig, options: CreateInstanceOptions = {}): SandboxRunOptions {
-  if (options.snapshotId !== undefined) {
-    throw new Error('The CoreWeave provider does not restore snapshots; use getInstance() for native snapshot APIs.');
-  }
+  const mountPath = config.snapshotMountPath ?? DEFAULT_SNAPSHOT_MOUNT_PATH;
+  const size = config.snapshotVolumeSize;
+  const snapshotVolume = options.snapshotId !== undefined || (options.snapshotVolume ?? config.snapshotVolume) === true;
   const cpu = options.cpu ?? config.cpu;
   const memory = options.memory ?? config.memory;
   const timeout = options.timeout ?? config.timeout;
@@ -64,6 +79,15 @@ export function createOptions(config: CoreWeaveConfig, options: CreateInstanceOp
     // A port must be requested at create to get a public HTTPS URL for it.
     ...(ports.length > 0
       ? { services: ports.map((port) => ({ port, visibility: 'public' as const, endpoint: { kind: 'https' as const, auth: 'open' as const } })) }
+      : {}),
+    ...(snapshotVolume
+      ? {
+          fileSystemSnapshot: {
+            mountPath,
+            ...(size ? { size } : {}),
+            ...(options.snapshotId !== undefined ? { restoreFromSnapshotId: options.snapshotId } : {}),
+          },
+        }
       : {}),
     ...(options.signal ? { signal: options.signal } : {}),
     tags: [ADAPTER_TAG],
@@ -108,13 +132,27 @@ export function parseLs(stdout: string): FileEntry[] {
   return entries;
 }
 
+function toSnapshot(record: FileSystemSnapshotResult): CoreWeaveSnapshot {
+  return {
+    id: record.snapshotId,
+    provider: 'coreweave',
+    createdAt: record.createdAt ?? new Date(),
+    metadata: {
+      state: record.state,
+      ...(record.sourceSandboxId ? { sourceSandboxId: record.sourceSandboxId } : {}),
+      ...(record.sizeBytes !== undefined ? { sizeBytes: record.sizeBytes } : {}),
+      ...(record.stateReason ? { stateReason: record.stateReason } : {}),
+    },
+  };
+}
+
 async function shell(sandbox: Sandbox, script: string, what: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const result = await sandbox.commands.run(['/bin/sh', '-c', script]);
   if (result.exitCode !== 0) throw new Error(`${what} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
   return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
 }
 
-export const coreweave = defineProvider<Sandbox, CoreWeaveConfig>({
+export const coreweave = defineProvider<Sandbox, CoreWeaveConfig, any, CoreWeaveSnapshot>({
   name: 'coreweave',
   methods: {
     instances: {
@@ -206,6 +244,29 @@ export const coreweave = defineProvider<Sandbox, CoreWeaveConfig>({
         remove: async (sandbox, path) => {
           await shell(sandbox, `rm -rf "${escapeShellArg(path)}"`, `remove ${path}`);
         },
+      },
+    },
+
+    // Snapshots archive the scratch volume at `snapshotMountPath`, so the source
+    // must be created with `snapshotVolume: true`. `sandbox.snapshot()` waits for READY.
+    snapshot: {
+      capabilities: {
+        scope: 'volume',
+        path: DEFAULT_SNAPSHOT_MOUNT_PATH,
+        memory: false,
+        destroysSource: false,
+        source: 'kept',
+        fork: true,
+        readiness: 'immediate',
+        createOptions: { snapshotVolume: true },
+      },
+      create: async (config, instanceId) => {
+        const sandbox = await client(config).fromId(instanceId);
+        return toSnapshot(await sandbox.snapshot());
+      },
+      list: async (config) => (await client(config).listSnapshots()).map(toSnapshot),
+      delete: async (config, snapshotId) => {
+        await client(config).deleteSnapshot(snapshotId, { missingOk: true });
       },
     },
   },

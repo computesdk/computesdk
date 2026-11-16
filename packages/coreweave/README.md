@@ -51,6 +51,17 @@ console.log(await sandbox.getUrl({ port: 8000 }));
 await sandbox.destroy();
 ```
 
+Snapshots capture the snapshot volume mounted at `/work`:
+
+```typescript
+const source = await sdk.sandbox.create({ snapshotVolume: true });
+await source.runCommand('echo saved > /work/state.txt');
+
+const snapshot = await sdk.snapshot.create(source.sandboxId);
+const restored = await sdk.sandbox.create({ snapshotId: snapshot.id });
+console.log((await restored.runCommand('cat /work/state.txt')).stdout); // "saved\n"
+```
+
 ## Configuration
 
 ```typescript
@@ -67,6 +78,12 @@ interface CoreWeaveConfig {
   memory?: number;
   /** Default maximum sandbox lifetime in milliseconds */
   timeout?: number;
+  /** Mount a snapshot volume on every sandbox (also a per-create option) */
+  snapshotVolume?: boolean;
+  /** Where the snapshot volume is mounted - defaults to /work */
+  snapshotMountPath?: string;
+  /** Snapshot volume size, e.g. '10Gi' - omit for the platform default */
+  snapshotVolumeSize?: string;
 }
 ```
 
@@ -82,22 +99,26 @@ interface CoreWeaveConfig {
 | `name` | `annotations.name` | |
 | `ports` | `services` | Each port gets a public HTTPS endpoint, used by `getUrl()`. |
 | `templateId` | `runFromTemplate()` | Starts from a CoreWeave sandbox template; the template supplies the image unless `image` is set. |
+| `snapshotVolume` | `fileSystemSnapshot` | Mounts a scratch volume at `snapshotMountPath` (`/work`) that can be snapshotted. |
+| `snapshotId` | `fileSystemSnapshot.restoreFromSnapshotId` | Starts a new sandbox with the snapshot restored at `snapshotMountPath`. |
 
-`snapshotId` is rejected with an error. Every sandbox is tagged `computesdk`, and `list()` returns only active sandboxes with that tag.
+Every sandbox is tagged `computesdk`, and `list()` returns only active sandboxes with that tag.
 
 ## Features
 
 - **Command execution** with `cwd`, `env`, `timeout` and background commands
 - **Filesystem**: native read and write; mkdir, list, exists and remove run as shell commands
+- **Snapshots**: `snapshot.create(sandboxId)` archives the sandbox's snapshot volume (`/work` by default) and waits until it is ready; the sandbox keeps running. Restore with `create({ snapshotId })`, and the same snapshot can be restored into many sandboxes. `snapshot.list()` and `snapshot.delete()` manage your organization's snapshots.
 - **Port URLs**: `getUrl({ port })` returns the public HTTPS URL of a port requested at create
-- **Native SDK access**: `sandbox.getInstance()` returns the `@coreweave/cwsandbox` `Sandbox`, for snapshots, streaming and other native APIs
+- **Native SDK access**: `sandbox.getInstance()` returns the `@coreweave/cwsandbox` `Sandbox`, for streaming and other native APIs
 
 ## Limitations
 
 - Output is returned when the command finishes; there is no live streaming through this provider.
 - `runCommand`'s `timeout` is a client-side deadline: the call fails when it passes, but the command is not killed inside the sandbox.
 - Background commands run detached with `nohup` and their output is discarded.
-- Snapshot restore, pause/resume and template management are not exposed through this provider.
+- Snapshots capture only the snapshot volume, not the rest of the container filesystem or memory, and only sandboxes created with `snapshotVolume: true` (or restored from a snapshot) can be snapshotted. The capture is not atomic: writes during `snapshot.create()` may be missed.
+- Pause/resume and template management are not exposed through this provider.
 - Sandboxes live until destroyed or until their maximum lifetime, so always call `destroy()` when you are done.
 
 ## Links

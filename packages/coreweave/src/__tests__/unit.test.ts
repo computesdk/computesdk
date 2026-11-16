@@ -24,8 +24,13 @@ describe('coreweave create options', () => {
     expect(createOptions({ image: 'ubuntu:24.04' }, { templateId: 'tpl' }).containerImage).toBeUndefined();
   });
 
-  it('refuses snapshot restores', () => {
-    expect(() => createOptions({}, { snapshotId: 'snap' })).toThrow(/does not restore snapshots/);
+  it('mounts a snapshot volume when asked', () => {
+    expect(createOptions({ snapshotVolumeSize: '10Gi' }, { snapshotVolume: true } as any).fileSystemSnapshot).toEqual({ mountPath: '/work', size: '10Gi' });
+    expect(createOptions({ snapshotVolume: true, snapshotMountPath: '/data' }, {}).fileSystemSnapshot).toEqual({ mountPath: '/data' });
+  });
+
+  it('restores a snapshot into the snapshot volume', () => {
+    expect(createOptions({}, { snapshotId: 'fss_1' }).fileSystemSnapshot).toEqual({ mountPath: '/work', restoreFromSnapshotId: 'fss_1' });
   });
 });
 
@@ -57,6 +62,15 @@ describe('coreweave readdir parsing', () => {
       { name: 'file 1.txt', type: 'file', size: 8 },
       { name: 'sub', type: 'directory', size: 4096 },
     ]);
+  });
+});
+
+describe('coreweave snapshots', () => {
+  it('declares volume-scoped, forkable snapshots that keep the source', () => {
+    expect(coreweave({}).snapshot?.capabilities).toMatchObject({
+      scope: 'volume', path: '/work', memory: false, destroysSource: false, source: 'kept', fork: true,
+      createOptions: { snapshotVolume: true },
+    });
   });
 });
 
