@@ -14,6 +14,7 @@ import type {
   CreateInstanceOptions,
   CreateSnapshotOptions,
   InstanceInfo,
+  ListSnapshotsOptions,
   RunCommandOptions,
 } from '@computesdk/provider';
 
@@ -70,6 +71,24 @@ function resolveClient(config: RenderConfig): Client {
 }
 
 const isNotFound = (error: unknown) => error instanceof ClientError && error.statusCode === 404;
+
+const PAGE_SIZE = 100;
+
+/** Follows Render's cursor pagination until a short page, `max` rows, or no cursor. */
+async function paginate<T extends { cursor?: string }>(
+  fetchPage: (cursor: string | undefined, limit: number) => Promise<T[]>,
+  max = Infinity,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: string | undefined;
+  while (rows.length < max) {
+    const page = await fetchPage(cursor, PAGE_SIZE);
+    rows.push(...page);
+    cursor = page[page.length - 1]?.cursor;
+    if (page.length < PAGE_SIZE || !cursor) break;
+  }
+  return rows.slice(0, max);
+}
 
 function toInstance(auth: Client, data: RenderSandboxData): RenderSandbox {
   return { id: data.id, data, client: auth.client, ownerId: auth.ownerId };
@@ -149,7 +168,7 @@ function infoStatus(status: RenderSandboxData['status']): InstanceInfo['status']
 
 async function resolveGroupId(config: RenderConfig, auth: Client): Promise<string> {
   if (config.sandboxGroupId) return config.sandboxGroupId;
-  const groups = await auth.client.listGroups({ ownerId: auth.ownerId, limit: 100 });
+  const groups = await paginate((cursor, limit) => auth.client.listGroups({ ownerId: auth.ownerId, cursor, limit }));
   const group = groups.find((g) => g.sandboxGroup.isDefault);
   if (!group) throw new Error('Render workspace has no default sandbox group; set `sandboxGroupId` in config.');
   return group.sandboxGroup.id;
@@ -202,12 +221,15 @@ export const render = defineProvider<RenderSandbox, RenderConfig>({
 
       list: async (config: RenderConfig) => {
         const auth = resolveClient(config);
-        const rows = await auth.client.list({
-          ownerId: auth.ownerId,
-          sandboxGroupId: config.sandboxGroupId,
-          status: [...ACTIVE_STATUSES],
-          limit: 100,
-        });
+        const rows = await paginate((cursor, limit) =>
+          auth.client.list({
+            ownerId: auth.ownerId,
+            sandboxGroupId: config.sandboxGroupId,
+            status: [...ACTIVE_STATUSES],
+            cursor,
+            limit,
+          }),
+        );
         return rows.map(({ sandbox }) => ({ instance: toInstance(auth, sandbox), instanceId: sandbox.id }));
       },
 
@@ -286,11 +308,18 @@ export const render = defineProvider<RenderSandbox, RenderConfig>({
         });
         return toSnapshot(snapshot);
       },
-      list: async (config: RenderConfig) => {
+      list: async (config: RenderConfig, options?: ListSnapshotsOptions) => {
         const auth = resolveClient(config);
         const sandboxGroupId = await resolveGroupId(config, auth);
-        const rows = await auth.client.snapshots.list({ sandboxGroupId, ownerId: auth.ownerId, limit: 100 });
-        return rows.map(({ snapshot }) => toSnapshot(snapshot));
+        const instanceId = options?.instanceId ?? options?.sandboxId;
+        const rows = await paginate((cursor, limit) =>
+          auth.client.snapshots.list({ sandboxGroupId, ownerId: auth.ownerId, cursor, limit }),
+        );
+        const snapshots = rows
+          .map(({ snapshot }) => snapshot)
+          .filter((snapshot) => !instanceId || snapshot.sourceSandboxId === instanceId)
+          .map(toSnapshot);
+        return options?.limit !== undefined ? snapshots.slice(0, options.limit) : snapshots;
       },
       delete: async (config: RenderConfig, snapshotId: string) => {
         const auth = resolveClient(config);

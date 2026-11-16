@@ -34,7 +34,15 @@ vi.mock('@renderinc/sdk', () => {
       calls.push({ method: 'terminate', args: [id] });
       if (id === 'sbx-missing') throw new ClientError('not found', 404);
     },
-    list: async () => [],
+    list: async ({ cursor }: { cursor?: string }) => {
+      calls.push({ method: 'list', args: [cursor] });
+      const start = cursor ? Number(cursor) : 0;
+      const total = 150;
+      return Array.from({ length: Math.min(100, total - start) }, (_, i) => ({
+        sandbox: { ...sandboxData, id: `sbx-${start + i}` },
+        cursor: String(start + i + 1),
+      }));
+    },
     listGroups: async () => [
       { sandboxGroup: { id: 'sbg-other', isDefault: false } },
       { sandboxGroup: { id: 'sbg-default', isDefault: true } },
@@ -59,7 +67,14 @@ vi.mock('@renderinc/sdk', () => {
           status: 'available', plan: '1c-2g', requestedAt: '2026-01-01T00:00:00Z', expiresAt: '2026-02-01T00:00:00Z',
         };
       },
-      list: async () => [],
+      list: async () =>
+        ['sbx-a', 'sbx-b', 'sbx-a', 'sbx-a'].map((source, i) => ({
+          snapshot: {
+            id: `snp-${i}`, sandboxGroupId: 'sbg-default', sourceSandboxId: source, kind: 'runtime',
+            status: 'available', plan: '1c-2g', requestedAt: '2026-01-01T00:00:00Z', expiresAt: '2026-02-01T00:00:00Z',
+          },
+          cursor: String(i + 1),
+        })),
       delete: async (input: unknown) => {
         calls.push({ method: 'snapshots.delete', args: [input] });
       },
@@ -141,6 +156,19 @@ describe('render provider', () => {
     expect(calls.find((c) => c.method === 'snapshots.create')?.args[0]).toMatchObject({ sandboxId: 'sbx-test', name: 'before', wait: true });
     await provider.snapshot!.delete('snp-1');
     expect(calls.find((c) => c.method === 'snapshots.delete')?.args[0]).toMatchObject({ sandboxGroupId: 'sbg-default', snapshotId: 'snp-1' });
+  });
+
+  it('follows list pagination past the first page', async () => {
+    const sandboxes = await render(config).sandbox.list();
+    expect(sandboxes).toHaveLength(150);
+    expect(calls.filter((c) => c.method === 'list').map((c) => c.args[0])).toEqual([undefined, '100']);
+  });
+
+  it('filters snapshots by instance and applies the limit', async () => {
+    const provider = render(config);
+    const forA = await provider.snapshot!.list({ instanceId: 'sbx-a', limit: 2 });
+    expect(forA.map((s: { id: string }) => s.id)).toEqual(['snp-0', 'snp-2']);
+    expect(await provider.snapshot!.list()).toHaveLength(4);
   });
 
   it('does not support public URLs', async () => {
