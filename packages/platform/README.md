@@ -2,7 +2,7 @@
 
 ComputeSDK provider for [ComputeSDK Platform](https://platform.computesdk.com) hosted sandboxes — the same `compute` / `sandbox` interface as every other provider, backed by the platform's own sandbox API. Market placement, provider fallback, the secrets vault, warm pools and cost tracking all live server-side; your code gets one sandbox ID space and one API.
 
-Start with the [runnable Platform SDK quickstart](https://docs.computesdk.com/getting-started/sdk-quick-start), [authentication](https://docs.computesdk.com/getting-started/authentication) and [SDK reference](https://docs.computesdk.com/sdk/reference).
+Start with the [runnable Platform SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start), [authentication](https://docs.computesdk.com/start-here/authentication) and [SDK reference](https://docs.computesdk.com/platform-sdk/reference).
 
 ```bash
 npm install computesdk @computesdk/platform

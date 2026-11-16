@@ -3,7 +3,7 @@
 The `compute` CLI for the ComputeSDK platform — Actions CI, the compute market,
 sandboxes, and the benchmarks toolchain.
 
-Start with the [CLI quickstart](https://docs.computesdk.com/getting-started/quick-start), [project sync](https://docs.computesdk.com/cli/project-sync), or [Platform SDK quickstart](https://docs.computesdk.com/getting-started/sdk-quick-start).
+Start with the [CLI quickstart](https://docs.computesdk.com/start-here/quick-start), [project sync](https://docs.computesdk.com/cli/project-sync), or [Platform SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start).
 
 ## Install
 
@@ -11,7 +11,7 @@ Start with the [CLI quickstart](https://docs.computesdk.com/getting-started/quic
 npm i -g @computesdk/cli        # or: pnpm dlx @computesdk/cli <cmd>
 ```
 
-CLI 2.6.14 includes the onboarding and sync commands below. For other installation methods, see [installation](https://docs.computesdk.com/getting-started/installation). Check `compute --version` and update before using newer commands.
+CLI 2.6.14 includes the onboarding and sync commands below. For other installation methods, see [installation](https://docs.computesdk.com/start-here/installation). Check `compute --version` and update before using newer commands.
 
 ## First sandbox
 
