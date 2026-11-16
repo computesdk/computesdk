@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/boxd",
   "version": "1.0.0",
-  "description": "boxd provider for ComputeSDK - isolated KVM microVM sandboxes with command execution, filesystem access, and HTTPS preview URLs",
+  "description": "boxd provider for ComputeSDK - isolated KVM microVM sandboxes with streaming exec, filesystem, snapshots, pause/resume, disks, and HTTPS preview URLs",
   "author": "ComputeSDK",
   "license": "MIT",
   "engines": {

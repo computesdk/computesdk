@@ -87,7 +87,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
 | **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
 | **Boat** | `BOAT_API_KEY` | Ubuntu cloud sandboxes with command streaming, named snapshots, file transfers, and protected preview URLs |
-| **boxd** | `BOXD_API_KEY` | Isolated KVM microVM sandboxes with a filesystem API and HTTPS preview URLs |
+| **boxd** | `BOXD_API_KEY` | Isolated KVM microVM sandboxes with memory snapshots, pause/resume, disks, and HTTPS preview URLs |
 | **Brezel** | `BREZEL_API_KEY`, `BREZEL_API_URL`, `BREZEL_PROJECT_ID`, `BREZEL_ENVIRONMENT_REVISION` | Self-hosted Firecracker sandboxes |
 | **Briq** | `BRIQ_API_KEY` | Sandboxes on microVMs with streaming commands, files, previews and interactive processes |
 | **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
