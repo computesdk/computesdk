@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { constants as osConstants } from 'node:os';
 import { Maritime, MaritimeAuthError, MaritimeNotFoundError, MaritimeSandboxError } from 'maritime-sdk';
 import type {
   CreateSandboxParams,
@@ -81,6 +82,11 @@ function rethrowFriendly(error: unknown, prefix: string): never {
   throw new Error(`${prefix}: ${message}`);
 }
 
+function signalExitCode(signal: string | null): number {
+  const number = signal ? osConstants.signals[signal as NodeJS.Signals] : undefined;
+  return 128 + (number ?? osConstants.signals.SIGKILL);
+}
+
 function toStringRecord(values: Record<string, unknown>): Record<string, string> {
   return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)]));
 }
@@ -109,8 +115,8 @@ const runCommand: CommandRunner = async (sandbox, command, options) => {
     return {
       stdout: result.stdout,
       stderr: result.stderr,
-      // A process ended by a signal has no exit code; report it like a shell does (128 + 9 for SIGKILL).
-      exitCode: result.exitCode ?? 137,
+      // A process ended by a signal has no exit code; report it like a shell does (128 + signal number).
+      exitCode: result.exitCode ?? signalExitCode(result.signal),
       durationMs: Date.now() - startTime,
     };
   } catch (error) {
