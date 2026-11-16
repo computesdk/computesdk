@@ -109,7 +109,7 @@ export function buildCommand(command: string, options?: RunCommandOptions): stri
   if (options?.timeout && options.timeout > 0) {
     // Disconnecting does not stop a Render command, so the deadline is enforced in the sandbox.
     const seconds = Math.max(1, Math.ceil(options.timeout / 1000));
-    return `timeout ${seconds} bash -c "${escapeShellArg(cmd)}"`;
+    return `timeout -k 5 ${seconds} bash -c "${escapeShellArg(cmd)}"`;
   }
   return cmd;
 }

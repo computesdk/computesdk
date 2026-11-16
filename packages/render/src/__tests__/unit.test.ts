@@ -115,7 +115,7 @@ describe('render provider', () => {
 
   it('wraps cwd, env, timeout and background into the bash script', () => {
     expect(buildCommand('ls', { cwd: '/tmp/a b', env: { FOO: 'x"y' } })).toBe('export FOO="x\\"y"; cd "/tmp/a b" || exit 1; ls');
-    expect(buildCommand('sleep 9', { timeout: 1500 })).toBe('timeout 2 bash -c "sleep 9"');
+    expect(buildCommand('sleep 9', { timeout: 1500 })).toBe('timeout -k 5 2 bash -c "sleep 9"');
     expect(buildCommand('srv', { background: true })).toBe('nohup bash -c "srv" >/dev/null 2>&1 &');
     expect(() => buildCommand('ls', { env: { 'BAD-NAME': '1' } })).toThrow(/Invalid environment variable/);
   });
