@@ -22,7 +22,7 @@ Start from your terminal with the **CLI**, build with the **TypeScript SDK**, or
 
 ## One router, several ways to run
 
-The CLI handles browser sign-in, sandbox selection, command execution, file transfers and project sync. The TypeScript SDK gives your code the same sandbox lifecycle through `computesdk` and `@computesdk/platform`.
+The CLI handles browser sign-in, sandbox selection, command execution, file transfers and project sync. The TypeScript SDK gives your code the same sandbox lifecycle through `computesdk`.
 
 ComputeSDK routes requests across managed compute and your own provider keys. Managed compute uses your organization's ComputeSDK credits; BYOK compute is billed by the provider. [Check your route](guides/routing.md) before creating resources. A sandbox keeps running and billing until its lifetime expires or you destroy it.
 

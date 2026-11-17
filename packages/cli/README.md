@@ -442,7 +442,7 @@ With a user login, run `compute login` again once to pick up the `providers`
 scopes these commands need. `compute actions providers configure|verify|remove`
 still work but are deprecated in favour of `compute byok`;
 `compute actions providers` itself stays the Actions placement inventory
-(order, act capability).
+(order, workflow readiness).
 
 ## compute org members and invitations
 

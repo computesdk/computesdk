@@ -41,7 +41,7 @@ Actions is available to every organization — no product entitlement required. 
 | --- | --- | --- |
 | GET | `/actions/org` | The org's Actions context |
 | GET/POST/PATCH | `/actions/repos` | Connected repos — list, connect a git remote, enable/disable (GitHub App + generic remotes) |
-| GET | `/actions/providers` | Where Actions can place — regions, order, act/usable status, key status |
+| GET | `/actions/providers` | Where Actions can place — regions, order, workflow readiness, key status |
 | GET/PATCH | `/actions/routing` | Read / change the saved [managed and BYOK router](#routing) (owner/admin) |
 | PUT/DELETE | `/actions/providers/{provider}/key` | Deprecated alias of `/providers/{provider}/key` |
 | POST | `/actions/providers/{provider}/verify` | Deprecated alias of `/providers/{provider}/verify` |

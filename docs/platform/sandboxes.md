@@ -1,27 +1,19 @@
 ---
-description: >-
-  Drive hosted ComputeSDK Platform sandboxes from code with
-  @computesdk/platform — the same compute/sandbox interface as every other
-  provider, with placement, pricing and billing handled server-side.
+description: Run code across sandbox providers through the ComputeSDK router with the TypeScript SDK.
 ---
 
 # Sandboxes
 
-Hosted sandboxes run code on the platform's compute — your org's registered providers or a compute-market fill — with no per-provider SDK in your code. Use the `@computesdk/platform` provider; it gives hosted sandboxes the same `compute` interface as every other ComputeSDK provider, so the same code works across hosted and self-managed placements. To drive sandboxes from a shell instead, see the [CLI quickstart](../getting-started/quick-start.md).
+Run code across providers through the ComputeSDK router. Install `computesdk` and call `compute.instances.create()`; routing, authentication and the sandbox lifecycle are built in. For terminal workflows, see the [CLI quickstart](../getting-started/quick-start.md).
 
-Start with the [Platform SDK quickstart](../getting-started/sdk-quick-start.md) for a runnable example with cleanup, or use the [SDK overview](../sdk/README.md) to choose a guide.
+Start with the [TypeScript SDK quickstart](../getting-started/sdk-quick-start.md) for a runnable example with cleanup, or use the [SDK overview](../sdk/README.md) to choose a guide.
 
 ```bash
-npm install computesdk @computesdk/platform
+npm install computesdk
 ```
 
 ```typescript
 import { compute } from 'computesdk';
-import { platform } from '@computesdk/platform';
-
-compute.setConfig({
-  provider: platform({ apiKey: process.env.COMPUTE_API_KEY }),
-});
 
 const sandbox = await compute.instances.create({ size: 'small' });
 try {
@@ -39,7 +31,7 @@ Credentials resolve once per provider instance, with the same precedence as the 
 1. `apiKey` in the provider config
 2. `COMPUTE_API_KEY` env var
 3. `BENCHMARKS_PLATFORM_API_KEY` env var (legacy alias)
-4. A `compute login` session (requires `@benchsdk/cli` installed — an optional peer; the session is read and refreshed but a login is never started)
+4. A saved `compute login` session (read and refreshed automatically; the SDK never starts a browser login)
 
 `baseUrl` in config, then `COMPUTE_PLATFORM_URL`, then `BENCHMARKS_PLATFORM_URL`, then `https://platform.computesdk.com` selects the deployment. Credentials are only sent to `computesdk.com`, its subdomains, or loopback — pass `allowUntrustedHost: true` to send them elsewhere (HTTPS still required off-loopback).
 
@@ -47,7 +39,7 @@ Credentials resolve once per provider instance, with the same precedence as the 
 
 ## Create options
 
-The `@computesdk/platform` provider accepts either a platform `size` (`small` 1 vCPU/2 GiB, `medium` 2/4 GiB, `large` 4/8 GiB, `xlarge` 8/16 GiB, `2xlarge` 16/32 GiB, `3xlarge` 32/128 GiB) or raw resources (`cpus`/`vcpus`, `memoryMb`/`memoryMiB`/`memMiB`/`memory`, `diskMb`/`diskMiB`) — never both. A provider must have a verified preset for the requested shape; accepting a size name does not imply every provider or account supports it. These platform `size` names are separate from the direct adapters' opt-in [`sizeClass`](../reference/sizes.md) vocabulary.
+The bundled router accepts either a platform `size` (`small` 1 vCPU/2 GiB, `medium` 2/4 GiB, `large` 4/8 GiB, `xlarge` 8/16 GiB, `2xlarge` 16/32 GiB, `3xlarge` 32/128 GiB) or raw resources (`cpus`/`vcpus`, `memoryMb`/`memoryMiB`/`memMiB`/`memory`, `diskMb`/`diskMiB`) — never both. A provider must have a verified preset for the requested shape; accepting a size name does not imply every provider or account supports it. These platform `size` names are separate from the direct adapters' opt-in [`sizeClass`](../reference/sizes.md) vocabulary.
 
 ```typescript
 await compute.instances.create({ size: 'medium' });
@@ -77,6 +69,8 @@ REST create responses include `sandbox` and may include `next` guidance: a lifet
 `providerOrder` ranks where the platform tries to place the sandbox — your own provider keys by name, or `'market'` for the compute market. `orderType: 'market' | 'limit'` and `maxPrice: { usd, per: 'hour' }` control the fill. All three can be passed per call or set once as `defaults` on the provider:
 
 ```typescript
+import { platform } from 'computesdk';
+
 const provider = platform({
   apiKey: process.env.COMPUTE_API_KEY,
   defaults: {

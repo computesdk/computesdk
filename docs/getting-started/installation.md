@@ -46,7 +46,7 @@ The binary is `compute`. Continue with the [CLI quickstart](quick-start.md). To 
 For Node.js applications:
 
 ```bash
-npm install computesdk @computesdk/platform
+npm install computesdk
 ```
 
-The SDK connects to the hosted platform. You do not need to install individual provider adapters. Follow the [TypeScript SDK quickstart](sdk-quick-start.md) for authentication and a runnable example.
+The SDK includes the ComputeSDK router by default. You do not need to install individual provider adapters. Follow the [TypeScript SDK quickstart](sdk-quick-start.md) for authentication and a runnable example.

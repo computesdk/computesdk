@@ -22,16 +22,16 @@ A create's `timeout` controls the sandbox lifetime in milliseconds. A command's 
 Each create generates an `sdk-create:<uuid>` idempotency key. Replays inside that create reuse the same key. To make a create safe across process restarts, supply a stable key:
 
 ```typescript
-import type { PlatformCreateOptions } from '@computesdk/platform';
+import { compute, type PlatformCreateOptions } from 'computesdk';
 
 const options: PlatformCreateOptions = {
   size: 'small',
   idempotencyKey: 'my-job-unique-id',
 };
-const sandbox = await sdk.instances.create(options);
+const sandbox = await compute.instances.create(options);
 ```
 
-Here `sdk` is the configured client from the [quickstart](../getting-started/sdk-quick-start.md). Same key and request returns the existing sandbox, including a terminal sandbox; a different request with that key fails with `idempotency_key_reused` (409). A failed placement frees the key.
+This uses the same singleton as the [quickstart](../getting-started/sdk-quick-start.md). Same key and request returns the existing sandbox, including a terminal sandbox; a different request with that key fails with `idempotency_key_reused` (409). A failed placement frees the key.
 
 If create throws `create_outcome_unknown`, a sandbox may already exist and be billing. Inspect the org dashboard before trying another placement. This error suppresses core SDK fallback to avoid allocating a second sandbox.
 

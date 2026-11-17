@@ -58,16 +58,14 @@ compute destroy
 ## Build with the TypeScript SDK
 
 ```bash
-npm install computesdk @computesdk/platform
+npm install computesdk
 export COMPUTE_API_KEY="your_org_api_key"
 ```
 
 ```typescript
 import { compute } from 'computesdk';
-import { platform } from '@computesdk/platform';
 
-const sdk = compute({ provider: platform({}) });
-const sandbox = await sdk.instances.create({ size: 'small' });
+const sandbox = await compute.instances.create({ size: 'small' });
 try {
   const result = await sandbox.runCommand('echo hello');
   console.log(result.stdout);

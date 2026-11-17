@@ -29,21 +29,15 @@ The TypeScript SDK follows the same precedence, using `apiKey` in provider confi
 
 ## Reuse a CLI login in the SDK
 
-Install the optional credential reader in your application:
-
-```bash
-npm install @benchsdk/cli
-```
-
-Separately, [install the compute CLI](installation.md#cli) (`@computesdk/cli`) if it is not already available, then sign in:
+The credential reader is included with `computesdk`; your application needs no extra auth package. [Install the compute CLI](installation.md#cli) if needed, then sign in:
 
 ```bash
 compute login
 ```
 
-`@benchsdk/cli` lets the SDK read the saved login; it does not install the `compute` command.
+Use `compute.instances.create()` without explicit configuration. The SDK reads and refreshes the saved session; it never starts a browser login. Unset key environment variables if you want the stored session to apply. Installing the SDK does not install the `compute` command.
 
-Then use `platform({})` without an explicit key. The SDK reads and refreshes the saved session; it never starts a browser login. Unset key environment variables if you want the stored session to apply.
+Older releases using `@computesdk/platform` with `computesdk@4.1.18` or earlier require `@benchsdk/cli` in the application to read a saved login. API-key authentication on those releases does not require that optional package.
 
 ## Hosts and deployments
 

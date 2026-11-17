@@ -37,7 +37,7 @@ Manage stored keys with `compute byok`, `compute byok configure <provider> --key
 
 ## SDK and REST requests
 
-A plain `sdk.instances.create()` using `platform({})` follows the saved router. The SDK's `providerOrder`, whether passed per call or set in provider `defaults`, bypasses that routing with the specified order. A call-level order takes precedence over `defaults.providerOrder`. Its legacy `'market'` entry requests market placement; an order with only provider names uses own keys. Price caps apply to market placement.
+Without explicit provider configuration, `compute.instances.create()` follows the saved router. You can also configure the bundled `platform({})` adapter explicitly. The SDK's `providerOrder`, whether passed per call or set in provider `defaults`, bypasses that routing with the specified order. A call-level order takes precedence over `defaults.providerOrder`. Its legacy `'market'` entry requests market placement; an order with only provider names uses own keys. Price caps apply to market placement.
 
 REST additionally supports per-request `only` and `byok`, documented in the [REST reference](../platform/api-reference.md#sandboxes). These are not typed `PlatformCreateOptions` fields. Do not assume that passing REST fields to the provider forwards them unchanged.
 

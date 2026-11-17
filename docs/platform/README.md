@@ -21,7 +21,7 @@ The platform places work and tracks resources across:
 ## Ways to use the platform
 
 * **[CLI](../getting-started/quick-start.md)** — install `compute`, sign in and run commands from your terminal.
-* **[TypeScript SDK](../getting-started/sdk-quick-start.md)** — create and control hosted sandboxes from a Node.js application with `computesdk` and `@computesdk/platform`.
+* **[TypeScript SDK](../getting-started/sdk-quick-start.md)** — create and control hosted sandboxes from a Node.js application with `computesdk`.
 * **Dashboard** — manage resources at `https://platform.computesdk.com/<org-slug>/...`.
 * **[REST API](api-reference.md)** — call platform routes under `/api/v1`.
 * **[MCP](mcp.md)** — authorize an AI assistant through the OAuth-backed server at `https://platform.computesdk.com/mcp`.

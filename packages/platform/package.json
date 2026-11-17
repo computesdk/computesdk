@@ -28,15 +28,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@computesdk/provider": "workspace:*"
-  },
-  "peerDependencies": {
-    "@benchsdk/cli": "^0.9.3"
-  },
-  "peerDependenciesMeta": {
-    "@benchsdk/cli": {
-      "optional": true
-    }
+    "computesdk": "workspace:*"
   },
   "keywords": [
     "computesdk",

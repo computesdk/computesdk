@@ -990,6 +990,9 @@ importers:
 
   packages/computesdk:
     dependencies:
+      '@benchsdk/cli':
+        specifier: ^0.9.3
+        version: 0.9.5
       '@computesdk/cmd':
         specifier: workspace:*
         version: link:../cmd
@@ -2228,12 +2231,9 @@ importers:
 
   packages/platform:
     dependencies:
-      '@benchsdk/cli':
-        specifier: ^0.9.3
-        version: 0.9.3
-      '@computesdk/provider':
+      computesdk:
         specifier: workspace:*
-        version: link:../provider
+        version: link:../computesdk
     devDependencies:
       '@computesdk/test-utils':
         specifier: workspace:*
@@ -3610,16 +3610,8 @@ packages:
     peerDependencies:
       typescript: ^5.0.0
 
-  '@benchsdk/api@0.11.1':
-    resolution: {integrity: sha512-yoT00Fm/V531uCK2/1SHSjFL2/AvxfnW2AV3ZZunBSilP1K2O6ehWWnFRA2Klux7xR5kM0BOhi0XKDXDYtPKaw==}
-    engines: {node: '>=18.0.0'}
-
   '@benchsdk/api@0.11.3':
     resolution: {integrity: sha512-zmfPO/kRWq3kxwAiI0QObHUmd2EIzR9U5CrgSeiRiGUZNOeqo94AmACFtVUGFuDAX+qbFz6PyLDkiNSpskE5FA==}
-    engines: {node: '>=18.0.0'}
-
-  '@benchsdk/cli@0.9.3':
-    resolution: {integrity: sha512-RhVAWctAuPFnJfZ86megoWFlqhiYGWzIdhrbaS+I9hN3N+/1qoCHHnsH4FiACwmRz2vKaEDUGvajJ86FgqfwBA==}
     engines: {node: '>=18.0.0'}
 
   '@benchsdk/cli@0.9.5':
@@ -11015,13 +11007,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@benchsdk/api@0.11.1': {}
-
   '@benchsdk/api@0.11.3': {}
-
-  '@benchsdk/cli@0.9.3':
-    dependencies:
-      '@benchsdk/api': 0.11.1
 
   '@benchsdk/cli@0.9.5':
     dependencies:

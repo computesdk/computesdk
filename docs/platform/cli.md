@@ -89,7 +89,7 @@ compute actions repos connect <clone-url>      # connect a generic git remote
 compute actions repos enable <owner>/<repo>    # enable / disable scheduling
 compute actions repos disable <owner>/<repo>
 
-# Where Actions can place (order, act capability, key status)
+# Where Actions can place (order, workflow readiness, key status)
 compute actions providers                      # provider keys themselves: `compute byok` below
 
 # Secrets and variables (owner/admin key required)

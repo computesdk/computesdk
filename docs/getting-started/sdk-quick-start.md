@@ -1,6 +1,8 @@
 # TypeScript SDK quickstart
 
-Create a hosted sandbox from a Node.js application using `computesdk` and `@computesdk/platform`. The platform handles placement; your application does not need provider-specific packages or vendor credentials.
+Create a hosted sandbox from a Node.js application using `computesdk`. The platform handles placement; your application does not need provider-specific packages or vendor credentials.
+
+The examples below require a release of `computesdk` containing the built-in router. For `computesdk@4.1.18` and earlier, see [SDK compatibility](../sdk/reference.md#compatibility).
 
 ## 1. Set up a project
 
@@ -10,7 +12,7 @@ Use a supported Node.js release (Node.js 22 or later for this example):
 mkdir compute-hello
 cd compute-hello
 npm init -y
-npm install computesdk @computesdk/platform
+npm install computesdk
 npm install --save-dev tsx typescript @types/node
 ```
 
@@ -24,7 +26,7 @@ export COMPUTE_API_KEY="your_org_api_key"
 
 In PowerShell, use `$env:COMPUTE_API_KEY="your_org_api_key"`. An org API key acts on its own organization. Keep it in your server environment, not browser code or source control.
 
-Make sure the organization has managed compute credit or a configured BYOK route. See [routing and BYOK](../guides/routing.md). The SDK can also reuse a CLI login with an optional dependency; see [authentication](authentication.md#reuse-a-cli-login-in-the-sdk).
+Make sure the organization has managed compute credit or a configured BYOK route. See [routing and BYOK](../guides/routing.md). The SDK can also reuse a CLI login without an additional dependency; see [authentication](authentication.md#reuse-a-cli-login-in-the-sdk).
 
 ## 3. Create, execute and clean up
 
@@ -32,14 +34,9 @@ Save this as `hello.ts`:
 
 ```typescript
 import { compute } from 'computesdk';
-import { platform } from '@computesdk/platform';
 
 async function main() {
-  const sdk = compute({
-    provider: platform({ apiKey: process.env.COMPUTE_API_KEY }),
-  });
-
-  const sandbox = await sdk.instances.create({ size: 'small' });
+  const sandbox = await compute.instances.create({ size: 'small' });
   try {
     const result = await sandbox.runCommand('echo hello');
     console.log(result.stdout);
