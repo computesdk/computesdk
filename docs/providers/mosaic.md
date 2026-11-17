@@ -78,7 +78,10 @@ The provider accepts `baseUrl`, `apiKey`, `template`, `memoryMb`, `vcpu`, `reque
 `node-20` and `python-3.11` are Mosaic's stock templates. Anything else — a `templateId` that is not stock, a `snapshotId`, or an `image` — is one of your own environments, addressed by id or by the name you gave it.
 
 ```typescript
-const provider = mosaic({});
+const provider = mosaic({
+  baseUrl: process.env.MOSAIC_API_URL,
+  apiKey: process.env.MOSAIC_API_TOKEN,
+});
 
 // Build an environment from any linux/amd64 registry image. Minutes, once.
 await provider.template.create({ name: 'my-env', image: 'python:3.12-slim' });

@@ -35,7 +35,7 @@ compute run echo hello
 Already know where you want to run? Use a [provider starter](../providers/README.md):
 
 ```bash
-npm create modal@latest
+npm create modal
 ```
 
 Or, with the CLI installed:

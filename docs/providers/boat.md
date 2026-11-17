@@ -39,7 +39,7 @@ Create an API key in the [Boat dashboard](https://boat.dev/dashboard?tab=api-key
 import { createCompute } from '@computesdk/provider';
 import { boat } from '@computesdk/boat';
 
-const compute = createCompute({ provider: boat({}) });
+const compute = createCompute({ provider: boat() });
 const sandbox = await compute.instances.create({
   timeout: 3_600_000,
   envs: { GREETING: 'hello' },
@@ -58,7 +58,7 @@ try {
 }
 ```
 
-You can also use `boat({}).instances` directly. `getById()` reconnects without resuming a stopped sandbox; `list()` returns ready, idle, and running sandboxes across all pages; `getInstance().name` holds each sandbox's Boat name, so you can find one by name without a `getInfo()` call per sandbox. `destroy()` requests permanent deletion, including sandbox data, rather than stopping and retaining a snapshot.
+You can also use `boat().instances` directly. `getById()` reconnects without resuming a stopped sandbox; `list()` returns ready, idle, and running sandboxes across all pages; `getInstance().name` holds each sandbox's Boat name, so you can find one by name without a `getInfo()` call per sandbox. `destroy()` requests permanent deletion, including sandbox data, rather than stopping and retaining a snapshot.
 
 ## Configuration
 
@@ -125,7 +125,7 @@ Signed transfers never receive the account bearer token; the signed URL authoriz
 ## Named snapshots and templates
 
 ```typescript
-const provider = boat({});
+const provider = boat();
 const saved = await provider.snapshot.create(sandbox.instanceId); // Generates a unique name.
 const restored = await provider.instances.create({ snapshotId: saved.id });
 try {

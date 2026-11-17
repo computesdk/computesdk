@@ -64,7 +64,10 @@ Or call the provider factory directly:
 ```typescript
 import { render } from '@computesdk/render';
 
-const sdk = render({});
+const sdk = render({
+  apiKey: process.env.RENDER_API_KEY,
+  workspaceId: process.env.RENDER_WORKSPACE_ID,
+});
 
 const sandbox = await sdk.sandbox.create({ plan: '2c-4g', timeout: 30 * 60 * 1000 });
 
