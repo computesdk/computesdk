@@ -11,7 +11,7 @@ compute org list
 compute org use <slug>
 ```
 
-Login uses an OAuth device flow and stores credentials in `~/.benchsdk/credentials.json`. Expired access tokens are refreshed automatically. `compute logout` clears local credentials. `--no-browser` prints a URL and code for manual sign-in.
+Login opens your browser and saves your session locally. Expired access tokens are refreshed automatically. `compute logout` clears local credentials. `--no-browser` prints a URL and code for manual sign-in.
 
 `compute org use` changes the active organization associated with the login. For one invocation, pass `--org <slug>` or set `COMPUTE_ORG`. Organization API keys always act on their own org; an org override does not change their scope.
 
@@ -23,25 +23,13 @@ Create an organization key in **Settings → API keys**, then export it:
 export COMPUTE_API_KEY="your_org_api_key"
 ```
 
-The CLI checks an explicit `--api-key`, then `COMPUTE_API_KEY`, then the legacy `BENCHMARKS_PLATFORM_API_KEY`, then stored login credentials. An environment key takes precedence over a browser login.
+Use `COMPUTE_API_KEY` for applications and CI. In the CLI, an explicit `--api-key` or `COMPUTE_API_KEY` takes precedence over a browser login.
 
-The TypeScript SDK follows the same precedence, using `apiKey` in provider configuration in place of the CLI flag. A key-only SDK application needs no CLI or stored login dependency.
-
-## Reuse a CLI login in the SDK
-
-The credential reader is included with `computesdk`; your application needs no extra auth package. [Install the compute CLI](installation.md#cli) if needed, then sign in:
-
-```bash
-compute login
-```
-
-Use `compute.instances.create()` without explicit configuration. The SDK reads and refreshes the saved session; it never starts a browser login. Unset key environment variables if you want the stored session to apply. Installing the SDK does not install the `compute` command.
-
-Older releases using `@computesdk/platform` with `computesdk@4.1.18` or earlier require `@benchsdk/cli` in the application to read a saved login. API-key authentication on those releases does not require that optional package.
+The TypeScript SDK reads `COMPUTE_API_KEY` automatically.
 
 ## API URL
 
-The default ComputeSDK API URL is `https://platform.computesdk.com`. Override it with `COMPUTE_PLATFORM_URL`, the CLI's `--base-url`, or the SDK's `baseUrl`. The legacy `BENCHMARKS_PLATFORM_URL` is a fallback.
+The default ComputeSDK API URL is `https://platform.computesdk.com`. Override it with `COMPUTE_PLATFORM_URL`, the CLI's `--base-url`, or the SDK's `baseUrl`.
 
 Credentials are restricted to computesdk.com and loopback hosts by default. Explicit keys can opt into another HTTPS host with `--allow-untrusted-host` or `allowUntrustedHost: true`. Stored login credentials are never resolved for an untrusted host. Plain HTTP is accepted only for loopback.
 

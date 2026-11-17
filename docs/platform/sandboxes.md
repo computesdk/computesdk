@@ -26,14 +26,13 @@ try {
 
 ## Authentication
 
-Credentials resolve once per provider instance, with the same precedence as the `compute` CLI:
+Set `COMPUTE_API_KEY` to your organization API key. An explicit `apiKey` in
+router configuration takes precedence over the environment variable.
 
-1. `apiKey` in the provider config
-2. `COMPUTE_API_KEY` env var
-3. `BENCHMARKS_PLATFORM_API_KEY` env var (legacy alias)
-4. A saved `compute login` session (read and refreshed automatically; the SDK never starts a browser login)
-
-`baseUrl` in config, then `COMPUTE_PLATFORM_URL`, then `BENCHMARKS_PLATFORM_URL`, then `https://platform.computesdk.com` selects the deployment. Credentials are only sent to `computesdk.com`, its subdomains, or loopback — pass `allowUntrustedHost: true` to send them elsewhere (HTTPS still required off-loopback).
+The default API URL is `https://platform.computesdk.com`. Override it with
+`baseUrl` in config or `COMPUTE_PLATFORM_URL`. Credentials are only sent to
+`computesdk.com`, its subdomains, or loopback — pass `allowUntrustedHost: true`
+to send them elsewhere (HTTPS still required off-loopback).
 
 `org` in config (or `COMPUTE_ORG`) sends `X-Org-Slug` on every request, for user logins; organization API keys remain scoped to their own org.
 

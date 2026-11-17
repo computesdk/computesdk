@@ -91,17 +91,15 @@ Avoid concurrent edits at the destination while a sync runs.
 ## Login
 
 ```bash
-compute login                   # browser sign-in → ~/.benchsdk/credentials.json
+compute login                   # browser sign-in
 compute login --no-browser      # print the URL and code for manual sign-in
 compute logout                  # clear stored credentials
 compute --login / --logout      # same, as flags
 ```
 
-Login uses the same OAuth device flow as `bench auth login` — every first-party
-CLI shares one credential store (`~/.benchsdk/credentials.json`) and refresh
-tokens renew automatically. Login opens the verification URL and prints the URL
-and code as a fallback. Press Ctrl-C to cancel; denied or expired codes produce
-an actionable error.
+Login opens your browser and saves your session locally. Access tokens refresh
+automatically. The CLI also prints a URL and code for manual sign-in. Press
+Ctrl-C to cancel; denied or expired codes produce an actionable error.
 
 Interactive `compute new`, `compute instances create`, and `compute run` start
 login only when there are no stored credentials or explicit API keys. After
@@ -147,7 +145,6 @@ with `sandboxId`, `jobId`, `exitCode`, `elapsedSeconds`, `provider`, `deleted`,
 compute actions …               # Actions API — repos, workflows, dispatch, runs, schedule, logs, vault (see below)
 compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
-compute bench …                 # benchmarks CLI (run, auth, org, results, …)
 compute providers               # SDK provider credentials in this environment
 compute byok …                  # the org's BYOK provider keys and custom rates (see below)
 compute org list                # your organizations (* = active)
@@ -508,69 +505,6 @@ logged in for that org, run `compute login` again.
 `invite` prints the invitation link and whether the email went out; when the
 platform has no email configured (`emailSent: false`), share the link
 yourself.
-
-## compute bench
-
-`compute bench …` runs the benchmarks CLI (`bench`) in-process: the same
-commands, flags and output as `bench …`; `compute bench --version` prints the
-version of the bench CLI it runs. The installed CLI bundles the benchmark runner and client versions listed in its package and command manifest. Use `compute bench --help` and command-specific help for the installed benchmark surface.
-
-compute's settings are forwarded to bench:
-
-| compute | bench | |
-|---|---|---|
-| `COMPUTE_PLATFORM_URL` | `BENCHMARKS_PLATFORM_URL` | only when `BENCHMARKS_PLATFORM_URL` is unset |
-| `COMPUTE_API_KEY` | `BENCHMARKS_PLATFORM_API_KEY` | only when `BENCHMARKS_PLATFORM_API_KEY` is unset, and only to a computesdk.com or localhost host over HTTPS (bench's `--base-url`, else its URL env, else `COMPUTE_PLATFORM_URL`); anything else is refused |
-| `compute --org <slug> bench …`, else `COMPUTE_ORG` | `--org <slug>` | only when the bench command has no `--org` of its own; not added to `run` / `check` |
-
-```bash
-COMPUTE_API_KEY=bp_… compute bench runs list my-benchmark --json
-COMPUTE_ORG=acme compute bench auth status --json      # same as: compute bench --org acme auth status
-```
-
-`compute whoami` and `compute org current` also read `COMPUTE_API_KEY`, under the same host rule. To use a key with a self-hosted platform, set `BENCHMARKS_PLATFORM_API_KEY` for it yourself. An
-org API key has no user, so they print the key's organization and
-`API key (no user identity)` (with `--json`: `"user": null`,
-`"credential": "api_key"`).
-
-## Command manifest
-
-`cli-manifest.json` (shipped in the package) lists every `compute` command:
-its canonical path, alias spellings, arguments and flags, plus the global
-flags and the `@benchsdk/runner` / `@benchsdk/cli` versions behind
-`compute bench …`. The bench commands themselves are described by the bench
-manifest in `@benchsdk/runner`. The benchmarks platform vendors both files
-to check that the commands its API surface map names exist.
-
-The hidden `compute __manifest` command prints the manifest (`--released`
-marks it as describing a published version; `--check <file>` exits 1 when
-`<file>` is out of date, ignoring a vendored `source.ref`). After adding,
-renaming or removing commands or flags, regenerate the committed file:
-
-```bash
-pnpm --filter @computesdk/cli run manifest   # builds, then writes cli-manifest.json
-```
-
-`src/__tests__/manifest.test.ts` fails when the committed file differs from
-the built CLI's output.
-
-## Migrating from @computesdk/cli 1.x
-
-v2 removes the legacy console authentication and its commands:
-
-- **Removed commands**: `compute create`, `compute sandbox`, `compute connect`,
-  `compute workspace`, and the interactive REPL. The old workspace-oriented
-  `run` was removed; the current `compute run <command>` creates a sandbox,
-  runs the command and attempts teardown. Sandbox
-  management moved to `compute sandboxes`, which drives the platform's
-  `/api/v1/sandboxes` API.
-- **Auth**: `compute login` no longer opens a browser flow against
-  console.computesdk.com or writes `~/.computesdk/credentials.json` — that
-  credential store is gone. `compute login` now runs the platform's OAuth
-  device flow and writes `~/.benchsdk/credentials.json` (the same store `bench
-  auth login` uses). Run `compute login` once after upgrading.
-- `compute providers` is unchanged.
-
 
 ## Sync retention
 

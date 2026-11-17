@@ -49,13 +49,16 @@ curl https://platform.computesdk.com/api/v1/me \
   -H "Authorization: Bearer $COMPUTE_API_KEY"
 ```
 
-The key implies the organization — no org id is needed on normal calls. `BENCHMARKS_PLATFORM_API_KEY` is accepted as a legacy fallback env var. Pointing at a different deployment (e.g. a preview) is done with `COMPUTE_PLATFORM_URL` / `BENCHMARKS_PLATFORM_URL` or the CLI's `--base-url`.
+The key identifies the organization, so normal calls need no organization ID.
+Use `COMPUTE_PLATFORM_URL` or the CLI's `--base-url` to override the API URL.
 
 `GET /api/v1/me` returns the authenticated user and their organizations.
 
 ### CLI browser auth
 
-The `compute` CLI can also authenticate interactively — `compute login` (equivalently `compute bench auth login`, or `bench auth login` from `@benchsdk/runner`) runs the platform's OAuth device flow and stores tokens in `~/.benchsdk/credentials.json`, which `compute bench`, `compute actions`, `compute market`, and `compute sandboxes` then use (refreshing expired access tokens automatically). An env var key always wins over stored credentials.
+Run `compute login` to sign in through your browser. The CLI saves your session
+and refreshes expired access tokens automatically. `COMPUTE_API_KEY` takes
+precedence over a saved login.
 
 ## Products and entitlements
 

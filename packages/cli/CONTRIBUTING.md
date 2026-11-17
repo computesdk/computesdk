@@ -13,7 +13,7 @@ Do not edit the bundled engine directly. The adapter owns sync filtering and des
 
 ## Command reference
 
-After changing commands or flags, run `pnpm --filter @computesdk/cli run manifest` and verify the committed manifest against the built CLI. Benchmark passthrough commands depend on the separately published benchmark packages.
+After changing commands or flags, run `pnpm --filter @computesdk/cli run manifest` and verify the committed manifest against the built CLI.
 
 ## Documentation source
 

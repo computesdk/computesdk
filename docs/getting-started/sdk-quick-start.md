@@ -26,7 +26,7 @@ export COMPUTE_API_KEY="your_org_api_key"
 
 In PowerShell, use `$env:COMPUTE_API_KEY="your_org_api_key"`. An org API key acts on its own organization. Keep it in your server environment, not browser code or source control.
 
-Make sure the organization has managed compute credit or a configured BYOK route. See [routing and BYOK](../guides/routing.md). The SDK can also reuse a CLI login without an additional dependency; see [authentication](authentication.md#reuse-a-cli-login-in-the-sdk).
+Make sure the organization has managed compute credit or a configured BYOK route. See [routing and BYOK](../guides/routing.md). See [authentication](authentication.md) for API key setup.
 
 ## 3. Create, execute and clean up
 

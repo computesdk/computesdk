@@ -45,11 +45,15 @@ creates without changing the selection.
 
 ## Authentication
 
-Auth resolves in this order: `--api-key` flag → `COMPUTE_API_KEY` env var → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → stored platform OAuth credentials (`~/.benchsdk/credentials.json`, written by `compute login` or `compute bench auth login`; an expired access token is refreshed silently). Actions commands never start the login flow themselves; with no key anywhere they fail with `no_credentials`.
+Authenticate with `compute login`, or set `COMPUTE_API_KEY` for scripts and CI.
+An explicit `--api-key` takes precedence over the environment key, which takes
+precedence over a saved login. Actions commands require an existing login or
+API key; without either, they fail with `no_credentials`.
 
-`compute login` runs the platform's OAuth device flow (the same one `bench auth login` uses) and writes to `~/.benchsdk/credentials.json`; `compute logout` clears it. `compute --login` / `compute --logout` are shortcuts for the same thing. It opens the verification URL in your browser and prints a URL and code as a
-fallback. Use `compute login --no-browser` for manual sign-in. Press Ctrl-C to
-cancel; expiry or denial explains how to retry.
+`compute login` opens your browser and prints a URL and code as a fallback.
+Use `compute login --no-browser` for manual sign-in. Saved sessions refresh
+automatically. `compute logout` clears the local session; `compute --login`
+and `compute --logout` are shortcuts. Press Ctrl-C to cancel.
 
 Interactive `compute new`, `compute instances create`, and `compute run` start
 this flow when the credential store is empty and no key was supplied, then
@@ -71,14 +75,14 @@ compute org current       # current user + active org
 
 The active org is stored per user and client on the platform, so `compute org use` applies to every machine sharing the login. A one-off override is `--org <slug>` (root flag, or on any `sandboxes` / `actions` / `market` subcommand) or the `COMPUTE_ORG` env var — it sends `X-Org-Slug` on the request, which the platform accepts for CLI logins (membership is checked) and ignores for org API keys. Precedence: `--org` > `COMPUTE_ORG` > the stored login's org.
 
-The bearer key is only sent to `computesdk.com` and loopback hosts unless you pass `--allow-untrusted-host`, and only over HTTPS — plain `http://` is accepted for `localhost`/`127.0.0.1`/`::1` only. `--allow-untrusted-host` does not relax the HTTPS requirement, and it only applies to an explicit `--api-key` / `COMPUTE_API_KEY` / `BENCHMARKS_PLATFORM_API_KEY` credential: stored `compute bench auth login` credentials are never resolved or refreshed for a non-`computesdk.com`, non-loopback host (`untrusted_host_stored_auth`).
+The bearer key is only sent to `computesdk.com` and loopback hosts unless you pass `--allow-untrusted-host`, and only over HTTPS — plain `http://` is accepted for `localhost`/`127.0.0.1`/`::1` only. `--allow-untrusted-host` does not relax the HTTPS requirement, and it only applies to an explicit `--api-key` / `COMPUTE_API_KEY` credential: saved login credentials are never resolved or refreshed for a non-`computesdk.com`, non-loopback host (`untrusted_host_stored_auth`).
 
 ```bash
 export COMPUTE_API_KEY="csdk_..."
 compute actions runs myorg/myrepo
 ```
 
-`--base-url` (or `COMPUTE_PLATFORM_URL` / `BENCHMARKS_PLATFORM_URL`) sets the ComputeSDK API URL. Default: `https://platform.computesdk.com`.
+`--base-url` (or `COMPUTE_PLATFORM_URL`) sets the ComputeSDK API URL. Default: `https://platform.computesdk.com`.
 
 ## `compute actions` — drive CI on the platform
 
@@ -121,44 +125,6 @@ Notes:
 * `vault ls` prints names and metadata, never values. `vault get` prints a variable, or a secret created with `--revealable`; any other secret is `forbidden` — replace it instead of reading it. `--revealable` and `--labels` are fixed when the item is created.
 * `vault set` and `vault get` only talk to `computesdk.com` and loopback hosts, even with `--allow-untrusted-host`.
 * Run dashboard URLs look like `https://platform.computesdk.com/<org>/actions/runs/<runId>`.
-
-## `compute bench` — the benchmarks toolchain
-
-`compute bench` folds the full `@benchsdk/runner` bench binary under `compute`:
-
-```bash
-compute bench auth          # browser login / credential management
-compute bench org           # organization info
-compute bench benchmarks    # list benchmarks
-compute bench runs          # list runs
-compute bench runs run-again <benchmark-slug> <runId> [--wait] [--timeout <seconds>]
-compute bench runs run-again-status <benchmark-slug> <runAgainId>
-compute bench results       # query results
-compute bench iterations    # per-iteration data
-compute bench artifacts     # download run artifacts
-compute bench logs          # run logs
-compute bench export        # export results
-compute bench run           # execute a benchmark run
-compute bench check         # validate a benchmark definition
-compute bench fork          # private tracked fork of a catalog benchmark
-```
-
-`compute bench runs list` and `compute bench results` narrow results with the same filters the REST routes accept:
-
-* `--participant <slug[,slug]>` — only runs those participants were in, and only their rows
-* `--steps <name[,name]|all>` — per-step overviews (`results` only)
-* `--since` / `--until <YYYY-MM-DD | ISO | 24h | 7d | 2w>` — bounds on run creation time
-* `--day <YYYY-MM-DD>` — one calendar day (sugar for `--since`/`--until`; can't be combined with them)
-* `--tz <IANA>` — timezone for date-only bounds, defaults to the machine's zone
-* `--source-org <slug>` — read another org's benchmark you can see (`~/` paths) when a bare slug is ambiguous
-
-```bash
-compute bench results dax --participant e2b --steps all --since 7d
-compute bench runs list dax --participant e2b --day 2026-10-22
-compute bench logs dax <runId> --participant e2b --max-lines 500
-```
-
-`--json` prints the raw API response, including the `filter` echo showing what the server applied.
 
 ## Sandboxes
 

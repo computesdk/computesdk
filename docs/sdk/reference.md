@@ -1,6 +1,6 @@
 # TypeScript SDK reference
 
-Install `computesdk`. The exported `compute` singleton uses the ComputeSDK router by default; no factory call or adapter package is needed. Authentication uses `COMPUTE_API_KEY` or a saved CLI login.
+Install `computesdk`. The exported `compute` singleton uses the ComputeSDK router by default; no factory call or adapter package is needed. Set `COMPUTE_API_KEY` to authenticate.
 
 ## Default router
 
