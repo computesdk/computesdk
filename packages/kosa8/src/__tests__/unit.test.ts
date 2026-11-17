@@ -602,6 +602,21 @@ describe('kosa8 file writes', () => {
     expect(assemble.body.cmd[2]).toContain(`rm -rf "${dir}"`);
   });
 
+  it('retries a part that failed in transit, then succeeds', async () => {
+    const store = new Map<string, Buffer>();
+    const route = filesRoute(store);
+    let failures = 0;
+    const calls = mockFetch((call) => {
+      if (call.method === 'PUT' && pathOf(call).endsWith('000001') && failures++ < 2) return { status: 503, body: { error: 'host_busy' } };
+      return route(call);
+    });
+    const sandbox = await provider().sandbox.create();
+    const content = bigContent(PART_BYTES + 10);
+    await sandbox.filesystem.writeFile('/root/x', content);
+    expect(fileCalls(calls, 'PUT').filter((c) => pathOf(c).endsWith('000001'))).toHaveLength(3);
+    expect(Buffer.concat([...store.keys()].sort().map((k) => store.get(k)!)).toString('utf8')).toBe(content);
+  });
+
   it('removes the staged parts when a part upload fails', async () => {
     const route = filesRoute(new Map());
     const calls = mockFetch((call) =>
@@ -610,6 +625,18 @@ describe('kosa8 file writes', () => {
     const sandbox = await provider().sandbox.create();
     await expect(sandbox.filesystem.writeFile('/root/x', bigContent(PART_BYTES + 10))).rejects.toThrow(/kosa8 API error \(502\) on write '\/root\/x': host_failed/);
     expect(execs(calls).at(-1)!.body.cmd[2]).toMatch(/^rm -rf "\/workspace\/\.computesdk-[0-9a-f]{12}"$/);
+  });
+
+  it('starts no more parts after one fails, and cleans up only once the others have finished', async () => {
+    const route = filesRoute(new Map());
+    const calls = mockFetch((call) =>
+      call.method === 'PUT' && pathOf(call).endsWith('000000') ? { status: 400, body: { error: 'bad_request' } } : route(call),
+    );
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.filesystem.writeFile('/root/x', bigContent(10 * PART_BYTES))).rejects.toThrow(/\(400\)/);
+    const puts = fileCalls(calls, 'PUT');
+    expect(puts.length).toBeLessThanOrEqual(4);
+    expect(calls.indexOf(execs(calls).at(-1)!)).toBeGreaterThan(calls.indexOf(puts.at(-1)!));
   });
 
   it('falls back to exec chunks on a host without the file API, and remembers it', async () => {
@@ -677,7 +704,9 @@ describe('kosa8 file reads', () => {
     expect(await sandbox.filesystem.readFile('/workspace/big')).toBe(content.toString('utf8'));
     const gets = fileCalls(calls, 'GET').map(pathOf);
     expect(gets[0]).toBe('/workspace/big'); // 413: over the file API's limit
-    expect(gets.slice(1).map((p) => p.replace(/.*\//, ''))).toEqual(['000000', '000001', '000002']);
+    const parts = Array.from({ length: Math.ceil(content.length / PART_BYTES) }, (_, i) => String(i).padStart(6, '0'));
+    expect(parts.length).toBeGreaterThan(1);
+    expect(gets.slice(1).map((p) => p.replace(/.*\//, '')).sort()).toEqual(parts);
     const [split, cleanup] = execs(calls);
     expect(split.body.cmd[2]).toContain(`dd if="/workspace/big"`);
     expect(cleanup.body.cmd[2]).toMatch(/^rm -rf "\/workspace\/\.computesdk-[0-9a-f]{12}"$/);

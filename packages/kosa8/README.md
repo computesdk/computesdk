@@ -94,7 +94,7 @@ interface Kosa8Config {
 ## Features
 
 - **Command execution** with `cwd`, `env`, `timeout` and background commands
-- **Filesystem**: read, write, list, mkdir, exists and remove. File content moves through kosa8's file API: one request for a file under `/workspace` up to 8 MiB, and parallel 4 MiB parts staged under `/workspace` for larger files and other paths. Small files, and every operation on a host without the file API, are shell commands over exec.
+- **Filesystem**: read, write, list, mkdir, exists and remove. File content moves through kosa8's file API: one request for a file under `/workspace` up to 8 MiB, and parallel 2 MiB parts staged under `/workspace` for larger files and other paths. Small files, and every operation on a host without the file API, are shell commands over exec.
 - **Snapshots**: `snapshot.create(sandboxId)` saves the sandbox's memory and disk while it keeps running; `sandbox.create({ snapshotId })` restores it, as many times as you like, including after the source is destroyed. `snapshot.list()` and `snapshot.delete(id)` manage them.
 - **Pause and resume**: `pause()` puts the sandbox to sleep (memory and disk are snapshotted, its RAM is freed) and `resume()` wakes it. A command sent to a sleeping sandbox also wakes it.
 - **Lifetime**: `extendLifetime(ms)` moves the delete time of a sandbox created with `timeout`

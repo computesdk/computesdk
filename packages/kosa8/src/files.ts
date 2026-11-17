@@ -7,7 +7,7 @@
  * - A small file (one exec's worth) is written with one shell command over exec, which goes straight
  *   to the sandbox's host and is quicker than the API for a few KiB.
  * - A larger file under /workspace, up to 8 MiB, is one PUT (write) or one GET (read).
- * - Any other file is staged: its bytes go up as 4 MiB parts, PUT in parallel into a directory under
+ * - Any other file is staged: its bytes go up as 2 MiB parts, PUT in parallel into a directory under
  *   /workspace, and one command puts them together at the path and removes them. A read is the
  *   reverse: one command prints a small file inline, or splits a large one into parts there, which
  *   are fetched in parallel and removed.
@@ -29,9 +29,15 @@ export type ExecRunner = (sandbox: Kosa8Sandbox, command: string, options?: RunC
 export const WORKSPACE = '/workspace';
 /** The file API's limit on one file, each way. */
 export const MAX_FILE_BYTES = 8 * 1024 * 1024;
-/** Bytes per part of a staged file, and how many parts are moved at once. */
-export const PART_BYTES = 4 * 1024 * 1024;
+/**
+ * Bytes per part of a staged file, and how many parts are moved at once. The API's Worker holds a
+ * part's bytes and their base64 while it relays them, and requests at once share its memory, so parts
+ * are kept well under the 8 MiB a single request may carry.
+ */
+export const PART_BYTES = 2 * 1024 * 1024;
 export const PART_CONCURRENCY = 4;
+/** Times a file request that failed in transit or with a 5xx is sent again (each is idempotent). */
+const FILE_RETRIES = 2;
 
 /**
  * Base64 characters per write exec. The exec API caps each argv entry at 8192 characters, too small
@@ -87,6 +93,22 @@ function apiError(res: HttpResponse, what: string): Error {
   return new Error(`kosa8 API error (${res.status}) on ${what}${detail ? `: ${detail}` : ''}`);
 }
 
+/**
+ * A file request, sent again when it failed in transit or the API answered 5xx (not 501). Each one is
+ * idempotent: a GET, or a PUT of a whole file or of one whole part.
+ */
+async function filesRequestRetrying(sandbox: Kosa8Sandbox, method: 'GET' | 'PUT', path: string, body?: Uint8Array): Promise<HttpResponse> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await filesRequest(sandbox, method, path, body);
+      if (res.status < 500 || res.status === 501 || attempt >= FILE_RETRIES) return res;
+    } catch (err) {
+      if (attempt >= FILE_RETRIES) throw err;
+    }
+    await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+  }
+}
+
 /** Notes a host without the file API, so this sandbox's files go over exec from now on. */
 function noFileApi(sandbox: Kosa8Sandbox, res: HttpResponse): boolean {
   if (res.status !== 501) return false;
@@ -94,17 +116,27 @@ function noFileApi(sandbox: Kosa8Sandbox, res: HttpResponse): boolean {
   return true;
 }
 
-/** Runs task over items, at most `limit` at once, keeping the order of the results. */
+/**
+ * Runs task over items, at most `limit` at once, keeping the order of the results. After a task
+ * fails no more are started, and the error is thrown once the ones in progress have finished, so
+ * nothing is still moving bytes when the caller cleans up.
+ */
 async function inParallel<T, R>(items: T[], limit: number, task: (item: T, i: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
   let next = 0;
+  let failed: { err: unknown } | undefined;
   const worker = async () => {
-    while (next < items.length) {
+    while (!failed && next < items.length) {
       const i = next++;
-      out[i] = await task(items[i], i);
+      try {
+        out[i] = await task(items[i], i);
+      } catch (err) {
+        failed ??= { err };
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  if (failed) throw failed.err;
   return out;
 }
 
@@ -155,7 +187,7 @@ export async function writeFileNative(sandbox: Kosa8Sandbox, path: string, conte
 
   const ws = workspacePath(path);
   if (ws && bytes.length <= MAX_FILE_BYTES) {
-    const res = await filesRequest(sandbox, 'PUT', ws, bytes);
+    const res = await filesRequestRetrying(sandbox, 'PUT', ws, bytes);
     if (res.ok) return;
     noFileApi(sandbox, res);
     // A path the file API will not write (a directory, a link out of /workspace): exec says why.
@@ -166,15 +198,18 @@ export async function writeFileNative(sandbox: Kosa8Sandbox, path: string, conte
   const parts: Uint8Array[] = [];
   for (let i = 0; i < bytes.length; i += PART_BYTES) parts.push(bytes.subarray(i, i + PART_BYTES));
   let refused: HttpResponse | undefined;
-  await inParallel(parts, PART_CONCURRENCY, async (part, i) => {
-    if (refused) return;
-    const res = await filesRequest(sandbox, 'PUT', `${dir}/${partName(i)}`, part);
-    if (!res.ok) refused ??= res;
-  });
-  if (refused) {
+  try {
+    await inParallel(parts, PART_CONCURRENCY, async (part, i) => {
+      const res = await filesRequestRetrying(sandbox, 'PUT', `${dir}/${partName(i)}`, part);
+      if (!res.ok) {
+        refused = res;
+        throw apiError(res, `write '${path}'`);
+      }
+    });
+  } catch (err) {
     await run(sandbox, `rm -rf ${q(dir)}`).catch(() => {});
-    if (noFileApi(sandbox, refused)) return writeFileViaExec(sandbox, path, bytes, run);
-    throw apiError(refused, `write '${path}'`);
+    if (refused && noFileApi(sandbox, refused)) return writeFileViaExec(sandbox, path, bytes, run);
+    throw err;
   }
   // Put together beside the target, renamed into place, and the parts removed, in one command.
   const target = q(path);
@@ -201,7 +236,7 @@ const fromBase64 = (s: string) => Buffer.from(s.replace(/\s+/g, ''), 'base64');
 export async function readFileNative(sandbox: Kosa8Sandbox, path: string, run: ExecRunner): Promise<string> {
   const ws = sandbox.files === false ? null : workspacePath(path);
   if (ws) {
-    const res = await filesRequest(sandbox, 'GET', ws);
+    const res = await filesRequestRetrying(sandbox, 'GET', ws);
     if (res.ok) return decode([res.bytes ?? new Uint8Array()]);
     if (res.status === 404) throw notFound(path);
     noFileApi(sandbox, res);
@@ -234,7 +269,7 @@ export async function readFileNative(sandbox: Kosa8Sandbox, path: string, run: E
     const n = Math.ceil(size / PART_BYTES);
     try {
       chunks = await inParallel(Array.from({ length: n }, (_, i) => i), PART_CONCURRENCY, async (i) => {
-        const res = await filesRequest(sandbox, 'GET', `${dir}/${partName(i)}`);
+        const res = await filesRequestRetrying(sandbox, 'GET', `${dir}/${partName(i)}`);
         if (!res.ok) throw apiError(res, `read '${path}'`);
         return res.bytes ?? new Uint8Array();
       });
