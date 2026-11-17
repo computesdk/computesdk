@@ -44,7 +44,6 @@ creation follows your organization's saved router.
 | `disk` | Attach a supported disk with `{ diskId, path, readonly?, branch? }` |
 | `idempotencyKey` | A stable key for safe creation across process restarts, up to 200 characters |
 | `providerOrder` | Explicit placement order; named providers use connected provider keys. See [provider selection](README.md#choose-a-provider) |
-| `orderType`, `maxPrice` | Market order and price limit; `maxPrice` is `{ usd, per: 'second' | 'minute' | 'hour' }` |
 
 ```typescript
 import { compute } from 'computesdk';

@@ -53,14 +53,17 @@ and [errors and retries](errors.md) for uncertain create outcomes.
 
 ### Choose managed compute
 
-For managed compute, leave out `providerOrder` and set the managed provider
-preferences in your organization's Sandboxes router in the
-[dashboard](https://platform.computesdk.com). Those settings apply to future
-creates that follow the saved router.
+For managed compute, leave out `providerOrder` both per call and in client
+`defaults`. Configure your organization's Sandboxes router under
+**Settings → Sandboxes → Managed accounts** in the
+[dashboard](https://platform.computesdk.com). Choose the recommended order,
+the cheapest available route for the requested size, or your own provider
+order. See [define routing rules](../guides/routing.md#define-routing-rules-in-the-platform)
+for setup. Saved rules apply to future creates that follow the router.
 
 The current SDK does not expose a per-create managed-provider pin. The CLI's
-`compute new modal` and the [REST routing fields](../platform/api-reference.md#sandboxes)
-provide request-level provider selection. Use the [provider catalog](../providers/README.md)
+`compute new modal --managed` and the [REST routing fields](../platform/api-reference.md#sandboxes)
+(`only` with `byok: "off"`) provide request-level managed-provider selection. Use the [provider catalog](../providers/README.md)
 for available router IDs and [routing](../guides/routing.md) for account modes.
 
 ## Guides

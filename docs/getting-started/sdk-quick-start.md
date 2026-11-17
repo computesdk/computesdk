@@ -59,7 +59,7 @@ const sandbox = await compute.instances.create({ providerOrder: ['modal'] });
 ```
 
 This explicit order uses your organization's connected Modal key and bypasses
-its saved router. Keep the same command and `finally` cleanup. Omit the override
+the organization's saved router. Keep the same command and `finally` cleanup. Omit the override
 to use saved routing, including managed compute. See [SDK provider selection](../sdk/README.md#choose-a-provider)
 for fallback orders and the current managed-provider selection options.
 
