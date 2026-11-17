@@ -6,7 +6,7 @@
 </div>
 
 <div align="center">
-  <strong>The open, multi-provider harness behind ComputeSDK Benchmarks.</strong>
+  <strong>One router for sandboxes and Actions.</strong>
 </div>
 
 <div align="center">
@@ -14,467 +14,86 @@
 [![npm version](https://badge.fury.io/js/computesdk.svg)](https://badge.fury.io/js/computesdk)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Documentation](https://img.shields.io/badge/docs-computesdk.com-blue)](https://computesdk.com)
+[![Documentation](https://img.shields.io/badge/docs-computesdk.com-blue)](https://docs.computesdk.com)
 
 </div>
 
 ---
 
-## What is ComputeSDK?
+## ComputeSDK
 
-ComputeSDK is the open, multi-provider benchmark harness for cloud infrastructure. It is the engine behind [ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks) and a unified TypeScript SDK for running code in remote sandboxes.
+ComputeSDK is one router for sandboxes and Actions. Run agent code and GitHub workflows across compute providers through one integration. Let ComputeSDK route, choose a provider, or set a fallback order. Use the **CLI** from your terminal and the **TypeScript SDK** from your application or agent.
 
-The same API lets you:
+- **Run commands and work with files** in cloud sandboxes from your terminal or TypeScript application.
+- **Sync local projects** to a sandbox for remote development and execution.
+- **Route compute centrally** using managed compute, your organization's provider keys, or both.
+- **Manage your organization** through one dashboard for credentials, credits and sandbox activity.
 
-- **Benchmark providers fairly** — run the same workload on E2B, Modal, Vercel, and dozens of others, then publish reproducible results.
-- **Build provider-agnostic apps** — switch sandboxes without changing application code for AI agents, code-execution platforms, and developer tools.
+[Open the dashboard](https://platform.computesdk.com) · [Read the docs](https://docs.computesdk.com)
 
-Whether you're comparing infrastructure or running it, ComputeSDK provides one unified API.
+## Start on a provider
 
-**Perfect for:**
-- 📊 Benchmarking infrastructure providers
-- 🤖 AI code execution agents
-- 📊 Data science platforms
-- 🎓 Educational coding environments
-- 🧪 Testing & CI/CD systems
-- 🔧 Developer tools
-
-## Quick Start
+Create a sandbox on a specific provider through ComputeSDK:
 
 ```bash
-npm install computesdk @computesdk/e2b
+npm create modal@latest
+# Or: npm create e2b@latest
 ```
 
-Configure a provider and use the SDK:
+These starters install or upgrade the ComputeSDK CLI when needed, sign you in and create a sandbox pinned to that provider. They use your organization's managed-compute or BYOK routing. See [sandbox providers](docs/providers/README.md) for setup and cleanup.
 
-```typescript
-import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-
-compute.setConfig({
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
-});
-
-const sandbox = await compute.instances.create();
-
-const result = await sandbox.runCommand('python -c "print(\'Hello World!\')"');
-console.log(result.stdout); // "Hello World!"
-
-await sandbox.destroy();
-```
-
-## Features
-
-- 🧪 **Open benchmark harness** - Run reproducible workloads across providers and publish independent benchmarks ([ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks))
-- 🔄 **Multi-provider support** - E2B, Modal, Daytona, Vercel, and more
-- 📁 **Filesystem operations** - Read, write, create directories across providers
-- 🖥️ **Command execution** - Run shell commands in sandboxes
-- 🧵 **Terminals** - Interactive (PTY) and exec-mode command tracking
-- 🛡️ **Type-safe** - Full TypeScript support with comprehensive error handling
-- 🔧 **Extensible** - Easy to add custom providers via [@computesdk/provider](./packages/provider)
-
-## Supported Providers
-
-Install provider packages and pass instances into `compute.setConfig`:
-
-| Provider | Environment Variables | Use Cases |
-|----------|----------------------|-----------|
-| **Agent37** | `AGENT37_API_KEY` | Persistent agent sandboxes, signed port URLs, dedicated-core VMs |
-| **Archil** | `ARCHIL_API_KEY` | Disk-attached command execution |
-| **Arker** | `ARKER_API_KEY` | Sandboxed VMs with persistent filesystems, forked from golden images |
-| **AWS Bedrock AgentCore** | `AWS_REGION` + AWS SDK credential chain (or `profile` / `credentials`) | Managed Code Interpreter sessions, no infrastructure to provision |
-| **AWS EC2** | `AWS_REGION` + AWS SDK credential chain (or a `credentials` provider) | On-demand or Spot instances from a launch template; commands over SSM |
-| **Beam** | `BEAM_TOKEN`, `BEAM_WORKSPACE_ID` | Serverless cloud sandboxes |
-| **Blaxel** | `BL_API_KEY`, `BL_WORKSPACE` | Agent sandboxes with custom images |
-| **Boat** | `BOAT_API_KEY` | Ubuntu cloud sandboxes with command streaming, named snapshots, file transfers, and protected preview URLs |
-| **Brezel** | `BREZEL_API_KEY`, `BREZEL_API_URL`, `BREZEL_PROJECT_ID`, `BREZEL_ENVIRONMENT_REVISION` | Self-hosted Firecracker sandboxes |
-| **Briq** | `BRIQ_API_KEY` | Sandboxes on microVMs with streaming commands, files, previews and interactive processes |
-| **Cloud Run** | `CLOUD_RUN_SANDBOX_URL`, `CLOUD_RUN_SANDBOX_SECRET` | Google Cloud Run sandboxes |
-| **Cloudflare** | `CLOUDFLARE_SANDBOX_URL`, `CLOUDFLARE_SANDBOX_API_KEY` | Edge computing |
-| **Cocoon Stack** | `COCOONSTACK_API_URL`, `COCOONSTACK_API_KEY` | Self-hosted microVM sandboxes from warm pools |
-| **CodeSandbox** | `CSB_API_KEY` | Collaborative development |
-| **CreateOS** | `CREATEOS_SANDBOX_API_KEY`, `CREATEOS_SANDBOX_BASE_URL` | VM sandboxes with pause/resume/fork snapshots |
-| **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
-| **Declaw** | `DECLAW_API_KEY` | Isolated cloud sandboxes |
-| **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
-| **EC2 Firecrab** | `EC2_FIRECRAB_MICRO_NETWORK_ID` (+ `EC2_FIRECRAB_API_URL`, `EC2_FIRECRAB_TEMPLATE`, `EC2_FIRECRAB_SSH_PROXY_COMMAND`) | Self-hosted Firecracker microVMs on EC2 |
-| **Freestyle** | `FREESTYLE_API_KEY` | Full Linux VMs for long-running agent tasks, with snapshots and persistence |
-| **GravixLayer** | `GRAVIXLAYER_API_KEY` | Cloud runtimes with filesystem, port publishing, and snapshots |
-| **HopX** | `HOPX_API_KEY` | Fast ephemeral sandboxes |
-| **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
-| **kosa8** | `KOSA8_API_KEY` | Sandboxes that each run in their own microVM with its own kernel, per-second billing, sleep and wake |
-| **Lightning** | `LIGHTNING_API_KEY` | Cloud sandboxes for command execution and filesystem access |
-| **Lizard** | `LIZARD_API_KEY`, `LIZARD_PROJECT_ID` | Lizard Sandboxes with native command streaming, files and authenticated port URLs |
-| **Modal** | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | GPU computing, ML inference |
-| **Microsandbox** | `MSB_API_KEY` or `MSB_PROFILE` for cloud; none for explicit local mode | Hardware-isolated microVMs on local machines or microsandbox cloud |
-| **MIOSA** | `MIOSA_API_KEY` | Snapshot-backed Firecracker microVM sandboxes with native filesystem and preview URLs |
-| **Mosaic** | `MOSAIC_API_URL`, `MOSAIC_API_TOKEN` | Firecracker microVMs with preview URLs, snapshots, and container-image environments |
-| **NeevCloud** | `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID` | Cloud sandboxes with snapshots, streaming exec and preview URLs |
-| **Northflank** | `NORTHFLANK_TOKEN`, `NORTHFLANK_PROJECT_ID` | Cloud sandboxes with preview URLs |
-| **Novita** | `NOVITA_API_KEY` | Cloud sandboxes with native command streaming, filesystem access, snapshots, and template builds |
-| **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
-| **Promigence** | `PROMIGENCE_API_KEY` | Production-grade sandboxes for AI agents, with filesystem and streaming output |
-| **Render** | `RENDER_API_KEY`, `RENDER_WORKSPACE_ID` | Render Sandboxes (beta) with native command streaming, file transfer and snapshots |
-| **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
-| **Runtime** | `RUNTIME_API_KEY` | Firecracker microVM sandboxes with streaming, previews and snapshots |
-| **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
-| **sandbox-cli** | `SANDBOX_ENDPOINT`, `SANDBOX_TOKEN` | MicroVM sandboxes with their own kernel, one API on a Mac, a self-hosted Linux machine or the cloud |
-| **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
-| **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
-| **Tangle Sandbox** | `TANGLE_API_KEY`, `TANGLE_SANDBOX_BASE_URL` (optional) | Isolated Linux sandboxes with command execution and filesystem access |
-| **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
-| **Uno** | `UNO_API_KEY` (optional `UNO_REGION`) | Full Linux Firecracker microVMs for agents and builds, US High-end region |
-| **Upstash** | `UPSTASH_BOX_API_KEY` | Ephemeral and persistent sandboxes |
-| **Vercel** | `VERCEL_TOKEN` or `VERCEL_OIDC_TOKEN` | Serverless functions |
-
-## Configuration
-
-### Direct Provider Mode
-
-Pass a provider instance directly to `setConfig()`:
-
-```typescript
-import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-
-compute.setConfig({
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
-});
-
-const sandbox = await compute.instances.create();
-```
-
-### Multi-Provider Configuration
-
-Configure multiple providers for resilience and routing:
-
-```typescript
-import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-import { modal } from '@computesdk/modal';
-
-compute.setConfig({
-  providers: [
-    e2b({ apiKey: process.env.E2B_API_KEY }),
-    modal({
-      tokenId: process.env.MODAL_TOKEN_ID,
-      tokenSecret: process.env.MODAL_TOKEN_SECRET,
-    }),
-  ],
-  providerStrategy: 'priority', // or 'round-robin'
-  fallbackOnError: true,
-});
-
-// Uses configured strategy
-const sandbox = await compute.instances.create();
-
-// Force a specific provider for one call
-const modalSandbox = await compute.instances.create({ provider: 'modal' });
-```
-
-### Switching Providers at Runtime
-
-```typescript
-import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-import { modal } from '@computesdk/modal';
-
-// Use E2B for data science
-compute.setConfig({
-  provider: e2b({ apiKey: process.env.E2B_API_KEY }),
-});
-
-const e2bSandbox = await compute.instances.create();
-await e2bSandbox.runCommand('python -c "import pandas as pd"');
-await e2bSandbox.destroy();
-
-// Switch to Modal for GPU workloads
-compute.setConfig({
-  provider: modal({
-    tokenId: process.env.MODAL_TOKEN_ID,
-    tokenSecret: process.env.MODAL_TOKEN_SECRET,
-  }),
-});
-
-const modalSandbox = await compute.instances.create();
-await modalSandbox.runCommand('python -c "import torch; print(torch.cuda.is_available())"');
-await modalSandbox.destroy();
-```
-
-## Core API
-
-### Sandbox Management
-
-```typescript
-// Create sandbox
-const sandbox = await compute.instances.create();
-
-// Create with options
-const sandbox = await compute.instances.create({
-  runtime: 'python',
-  timeout: 300000,
-  metadata: { userId: '123' }
-});
-
-// Get existing sandbox
-const sandbox = await compute.instances.getById('sandbox-id');
-
-// List sandboxes
-const sandboxes = await compute.instances.list();
-
-// Destroy sandbox
-await sandbox.destroy();
-```
-
-### Command Execution
-
-```typescript
-// Execute Python code
-const result = await sandbox.runCommand('python -c "print(\'Hello\')"');
-console.log(result.stdout);
-console.log(result.exitCode);
-
-// Run shell commands
-const cmd = await sandbox.runCommand('npm install express');
-console.log(cmd.stdout);
-console.log(cmd.exitCode);
-```
-
-### Filesystem Operations
-
-```typescript
-// Write file
-await sandbox.filesystem.writeFile('/tmp/hello.py', 'print("Hello")');
-
-// Read file
-const content = await sandbox.filesystem.readFile('/tmp/hello.py');
-
-// Create directory
-await sandbox.filesystem.mkdir('/tmp/data');
-
-// List directory
-const files = await sandbox.filesystem.readdir('/tmp');
-
-// Check if exists
-const exists = await sandbox.filesystem.exists('/tmp/hello.py');
-
-// Remove
-await sandbox.filesystem.remove('/tmp/hello.py');
-```
-
-## Example: Data Science Workflow
-
-```typescript
-import { compute } from 'computesdk';
-
-const sandbox = await compute.instances.create({ runtime: 'python' });
-
-// Create project structure
-await sandbox.filesystem.mkdir('/analysis');
-await sandbox.filesystem.mkdir('/analysis/data');
-
-// Write input data
-const csvData = `name,age,city
-Alice,25,New York
-Bob,30,San Francisco`;
-
-await sandbox.filesystem.writeFile('/analysis/data/people.csv', csvData);
-
-// Write the analysis script
-await sandbox.filesystem.writeFile('/analysis/analyze.py', `
-import json
-import pandas as pd
-
-df = pd.read_csv('/analysis/data/people.csv')
-print(f"Average age: {df['age'].mean()}")
-
-results = {'average_age': df['age'].mean()}
-with open('/analysis/results.json', 'w') as f:
-    json.dump(results, f)
-`);
-
-// Run it
-const result = await sandbox.runCommand('python /analysis/analyze.py');
-console.log(result.stdout);
-
-// Read results
-const results = await sandbox.filesystem.readFile('/analysis/results.json');
-console.log('Results:', JSON.parse(results));
-
-await sandbox.destroy();
-```
-
-## Provider Packages
-
-Install the provider packages you need and pass their instances into `compute.setConfig`:
+## Start with the CLI
 
 ```bash
-npm install @computesdk/agent37          # Agent37 provider
-npm install @computesdk/archil           # Archil provider
-npm install @computesdk/aws              # AWS providers (@computesdk/aws/ec2, @computesdk/aws/agentcore)
-npm install @computesdk/beam             # Beam provider
-npm install @computesdk/blaxel           # Blaxel provider
-npm install @computesdk/boat             # Boat Ubuntu cloud sandboxes
-npm install @computesdk/brezel           # Brezel provider
-npm install @computesdk/briq            # Briq provider
-npm install @computesdk/buddy            # Buddy provider
-npm install @computesdk/gcp              # Google Cloud providers (Cloud Run: @computesdk/gcp/cloud-run)
-npm install @computesdk/cloudflare       # Cloudflare provider
-npm install @computesdk/cocoonstack      # Cocoon Stack provider
-npm install @computesdk/codesandbox      # CodeSandbox provider
-npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
-npm install @computesdk/daytona          # Daytona provider
-npm install @computesdk/e2b              # E2B provider
-npm install @computesdk/ec2-firecrab     # Firecracker microVMs on self-hosted EC2
-npm install @computesdk/freestyle        # Freestyle provider
-npm install @computesdk/givemeanode      # givemeanode provider
-npm install @computesdk/gravixlayer      # GravixLayer provider
-npm install @computesdk/hopx             # HopX provider
-npm install @computesdk/isorun           # Isorun provider
-npm install @computesdk/kosa8            # kosa8 microVM sandboxes
-npm install @computesdk/lightning        # Lightning AI provider
-npm install @computesdk/lizard           # Lizard Sandboxes provider
-npm install @computesdk/modal            # Modal provider
-npm install @computesdk/microsandbox     # Local and cloud microsandbox provider
-npm install @computesdk/miosa            # MIOSA provider
-npm install @computesdk/mosaic           # Mosaic provider
-npm install @computesdk/northflank       # Northflank provider
-npm install @computesdk/novita           # Novita Sandbox provider
-npm install @computesdk/platform         # ComputeSDK Platform hosted sandboxes (market or own keys)
-npm install @computesdk/promigence       # Promigence provider
-npm install @computesdk/render           # Render Sandboxes provider
-npm install @computesdk/runloop          # Runloop provider
-npm install @computesdk/runtime          # Runtime provider
-npm install @computesdk/sail             # Sail provider
-npm install @computesdk/sandbox-cli      # sandbox-cli provider
-npm install @computesdk/sandbox0         # Sandbox0 provider
-npm install @computesdk/superserve       # Superserve provider
-npm install @computesdk/tangle           # Tangle Sandbox provider
-npm install @computesdk/tensorlake       # Tensorlake provider
-npm install @computesdk/uno              # Uno provider
-npm install @computesdk/upstash          # Upstash provider
-npm install @computesdk/vercel           # Vercel provider
+npm install -g @computesdk/cli
+compute login
+compute sandboxes route
+compute new
+compute exec echo hello
+compute destroy
 ```
 
-You can also use a provider's callable form directly, bypassing `compute.setConfig`:
+[Other installation options](docs/getting-started/installation.md) include macOS/Linux and Windows installers. Creation requires available credit or a configured BYOK route. Sandboxes keep running and billing until destroyed or their lifetime expires.
+
+## Build with the TypeScript SDK
 
 ```typescript
-import { e2b } from '@computesdk/e2b';
+import { compute } from 'computesdk';
 
-const e2bCompute = e2b({ apiKey: process.env.E2B_API_KEY });
-const sandbox = await e2bCompute.sandbox.create();
+const sandbox = await compute.instances.create({ size: 'small' });
+try {
+  const result = await sandbox.runCommand('echo hello');
+  console.log(result.stdout);
+} finally {
+  await sandbox.destroy();
+}
 ```
 
-See individual provider READMEs for details:
-- **[@computesdk/agent37](./packages/agent37)** - Persistent agent sandboxes with signed URLs for any port, plus dedicated-core VMs
-- **[@computesdk/archil](./packages/archil)** - Disk-attached command-execution sandboxes
-- **[@computesdk/aws](./packages/aws)** - AWS providers; `@computesdk/aws/ec2`: on-demand or Spot EC2 instances, commands over SSM Run Command; `@computesdk/aws/agentcore`: Bedrock AgentCore Code Interpreter sessions
-- **[@computesdk/beam](./packages/beam)** - Serverless cloud sandboxes
-- **[@computesdk/blaxel](./packages/blaxel)** - Agent sandboxes with custom images
-- **[@computesdk/boat](./packages/boat)** - Boat Ubuntu cloud sandboxes with reconnecting command streams, named snapshots/templates, signed file transfers, and HTTPS previews
-- **[@computesdk/brezel](./packages/brezel)** - Self-hosted Firecracker sandboxes with immutable environments
-- **[@computesdk/briq](./packages/briq)** - Sandboxes on microVMs with streaming commands, files, previews and interactive processes
-- **[@computesdk/buddy](./packages/buddy)** - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots
-- **[@computesdk/gcp](./packages/gcp)** - Google Cloud providers: Cloud Run sandboxes via `@computesdk/gcp/cloud-run`
-- **[@computesdk/cloudflare](./packages/cloudflare)** - Edge computing sandboxes
-- **[@computesdk/cocoonstack](./packages/cocoonstack)** - Self-hosted microVM sandboxes served from warm pools by sandboxd
-- **[@computesdk/codesandbox](./packages/codesandbox)** - Collaborative development
-- **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch
-- **[@computesdk/daytona](./packages/daytona)** - Development workspaces
-- **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
-- **[@computesdk/freestyle](./packages/freestyle)** - Full Linux VMs for long-running agent tasks, with snapshots and persistence
-- **[@computesdk/givemeanode](./packages/givemeanode)** - Very fast microVM sandboxes, from any container image
-- **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
-- **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
-- **[@computesdk/kosa8](./packages/kosa8)** - Sandboxes that each run in their own microVM with its own kernel, with sleep and wake
-- **[@computesdk/lightning](./packages/lightning)** - Lightning AI cloud sandboxes for command execution and filesystem access
-- **[@computesdk/lizard](./packages/lizard)** - Lizard Sandboxes with command streaming, files and authenticated port URLs
-- **[@computesdk/modal](./packages/modal)** - GPU computing, ML inference
-- **[@computesdk/miosa](./packages/miosa)** - Snapshot-backed Firecracker microVMs with native filesystem, preview URLs, and checkpoints
-- **[@computesdk/mosaic](./packages/mosaic)** - Firecracker microVMs with preview URLs, snapshots, and container-image environments
-- **[@computesdk/neevcloud](./packages/neevcloud)** - Secure cloud sandboxes with command execution, filesystem, snapshots, and preview URLs
-- **[@computesdk/novita](./packages/novita)** - Novita cloud sandboxes with native streaming, filesystem access, snapshots, and template management
-- **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
-- **[@computesdk/platform](./packages/platform)** - ComputeSDK Platform hosted sandboxes: market placement or your own provider keys, one API and sandbox ID space
-- **[@computesdk/promigence](./packages/promigence)** - Production-grade sandboxes for AI agents, with filesystem and streaming output
-- **[@computesdk/render](./packages/render)** - Render Sandboxes (beta) with native command streaming, file transfer and snapshots
-- **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
-- **[@computesdk/runtime](./packages/runtime)** - Firecracker microVM sandboxes for AI agents, with native command streaming, private preview URLs and snapshots
-- **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
-- **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes
-- **[@computesdk/tangle](./packages/tangle)** - Isolated Linux sandboxes with command execution and filesystem access
-- **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
-- **[@computesdk/uno](./packages/uno)** - Full Linux Firecracker microVMs (systemd, apt, sudo) for agents and builds, with a US High-end region
-- **[@computesdk/upstash](./packages/upstash)** - Ephemeral and persistent sandboxes
-- **[@computesdk/vercel](./packages/vercel)** - Serverless functions
-
-## Building Custom Providers
-
-Want to add support for a new compute provider? See **[@computesdk/provider](./packages/provider)** for the provider framework:
-
-```typescript
-import { defineProvider } from '@computesdk/provider';
-
-export const myProvider = defineProvider({
-  name: 'my-provider',
-  defaultMode: 'direct',
-  methods: {
-    sandbox: {
-      create: async (config, options) => {
-        // Your implementation
-      },
-      // ... other methods
-    }
-  }
-});
+```bash
+npm install computesdk
+export COMPUTE_API_KEY="your_org_api_key"
 ```
 
-## Documentation
+Follow the [complete runnable SDK quickstart](docs/getting-started/sdk-quick-start.md) to create an API key and run this from Node.js. See [routing and BYOK](docs/guides/routing.md) to choose account modes and understand billing.
 
-- 📖 **[Full Documentation](https://computesdk.com)** - Complete guides and API reference
-- 🚀 **[Getting Started](https://computesdk.com/getting-started)** - Quick setup guide
-- 🎯 **[Providers](./packages)** - Provider-specific documentation
+## Go further
 
-## TypeScript Support
+| Task | Guide |
+| --- | --- |
+| Send a local project to a sandbox | [Project sync](docs/cli/project-sync.md) |
+| Configure managed compute and BYOK | [Routing and billing](docs/guides/routing.md) |
+| Use the SDK in an application or agent | [TypeScript SDK](docs/sdk/README.md) |
+| Run workflows on sandbox providers | [Actions](docs/platform/actions.md) |
+| Connect an AI assistant | [MCP server](docs/platform/mcp.md) |
 
-Full TypeScript support with comprehensive type definitions:
+## Open-source SDK and contributing
 
-```typescript
-import type { 
-  InstanceInterface,
-  InstanceInfo,
-  CodeResult,
-  CommandResult,
-  CreateInstanceOptions
-} from 'computesdk';
-```
+For direct vendor integrations, provider development and repository contribution instructions, see the [open-source SDK guide](OPEN_SOURCE.md). Individual adapters are documented in [their GitHub packages](https://github.com/computesdk/computesdk/tree/main/packages).
 
-## Contributing
+## Community and support
 
-ComputeSDK is open source and welcomes contributions!
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## Community & Support
-
-- 💬 **[GitHub Discussions](https://github.com/computesdk/computesdk/discussions)** - Ask questions and share ideas
-- 🐛 **[GitHub Issues](https://github.com/computesdk/computesdk/issues)** - Report bugs and request features
+[GitHub Discussions](https://github.com/computesdk/computesdk/discussions) · [GitHub Issues](https://github.com/computesdk/computesdk/issues)
 
 ## License
 
-MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-<div align="center">
-
-**Built with ❤️ by the ComputeSDK team**
-
-[computesdk.com](https://computesdk.com)
-
-</div>
-
+[MIT](LICENSE)

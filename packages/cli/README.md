@@ -3,15 +3,20 @@
 The `compute` CLI for the ComputeSDK platform — Actions CI, the compute market,
 sandboxes, and the benchmarks toolchain.
 
+Start with the [CLI quickstart](https://docs.computesdk.com/start-here/quick-start), [project sync](https://docs.computesdk.com/cli/project-sync), or [Platform SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start).
+
 ## Install
 
 ```bash
 npm i -g @computesdk/cli        # or: pnpm dlx @computesdk/cli <cmd>
 ```
 
+CLI 2.6.14 includes the onboarding and sync commands below. For other installation methods, see [installation](https://docs.computesdk.com/start-here/installation). Check `compute --version` and update before using newer commands.
+
 ## First sandbox
 
 ```bash
+compute sandboxes route         # preview placement and price without creating
 compute new                     # sign in if needed, create and select a sandbox
 compute exec echo hello         # run on the selected sandbox
 compute list                    # see your sandboxes
@@ -86,17 +91,15 @@ Avoid concurrent edits at the destination while a sync runs.
 ## Login
 
 ```bash
-compute login                   # browser sign-in → ~/.benchsdk/credentials.json
+compute login                   # browser sign-in
 compute login --no-browser      # print the URL and code for manual sign-in
 compute logout                  # clear stored credentials
 compute --login / --logout      # same, as flags
 ```
 
-Login uses the same OAuth device flow as `bench auth login` — every first-party
-CLI shares one credential store (`~/.benchsdk/credentials.json`) and refresh
-tokens renew automatically. Login opens the verification URL and prints the URL
-and code as a fallback. Press Ctrl-C to cancel; denied or expired codes produce
-an actionable error.
+Login opens your browser and saves your session locally. Access tokens refresh
+automatically. The CLI also prints a URL and code for manual sign-in. Press
+Ctrl-C to cancel; denied or expired codes produce an actionable error.
 
 Interactive `compute new`, `compute instances create`, and `compute run` start
 login only when there are no stored credentials or explicit API keys. After
@@ -142,7 +145,6 @@ with `sandboxId`, `jobId`, `exitCode`, `elapsedSeconds`, `provider`, `deleted`,
 compute actions …               # Actions API — repos, workflows, dispatch, runs, schedule, logs, vault (see below)
 compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
-compute bench …                 # benchmarks CLI (run, auth, org, results, …)
 compute providers               # SDK provider credentials in this environment
 compute byok …                  # the org's BYOK provider keys and custom rates (see below)
 compute org list                # your organizations (* = active)
@@ -437,7 +439,7 @@ With a user login, run `compute login` again once to pick up the `providers`
 scopes these commands need. `compute actions providers configure|verify|remove`
 still work but are deprecated in favour of `compute byok`;
 `compute actions providers` itself stays the Actions placement inventory
-(order, act capability).
+(order, workflow readiness).
 
 ## compute org members and invitations
 
@@ -504,141 +506,8 @@ logged in for that org, run `compute login` again.
 platform has no email configured (`emailSent: false`), share the link
 yourself.
 
-## compute bench
+## Sync retention
 
-`compute bench …` runs the benchmarks CLI (`bench`) in-process: the same
-commands, flags and output as `bench …`; `compute bench --version` prints the
-version of the bench CLI it runs. The last release bundles `@benchsdk/runner`
-0.8.3 with `@benchsdk/cli` 0.9.3, which adds `bench fork`, `bench runs run-again`
-and the result filters `--participant`, `--since`, `--until`, `--day`, `--tz`
-and `--source-org`.
+Sync needs the managed sync snapshot API on the target platform. Copies retain their filtered source capture before destination writes; failure to retain stops the pass. JSON output includes `snapshot: {id, expiresAt}` (or `syncSnapshot` on project creation). Use the returned expiry. Dry runs, unchanged and delete-only passes create no capture; failed destination writes leave an existing capture available.
 
-This branch also links the benchmarks branch build (see "Developing against a
-bench branch build" below), so `compute bench` has the newer bench commands:
-
-```bash
-compute bench benchmarks archive|restore|describe|mute|unmute|pause|resume <slug>
-compute bench benchmarks list --status active|archived|all
-compute bench runs archive|unarchive <runId...> -y
-compute bench runs feed | runs days | runs day <YYYY-MM-DD> [--all]
-compute bench reliability <slug> | reliability cards
-compute bench activity [--days N]
-compute bench run-again <slug> [--wait] | run-again status <slug>   # daily Run again; needs a user login
-```
-
-compute's settings are forwarded to bench:
-
-| compute | bench | |
-|---|---|---|
-| `COMPUTE_PLATFORM_URL` | `BENCHMARKS_PLATFORM_URL` | only when `BENCHMARKS_PLATFORM_URL` is unset |
-| `COMPUTE_API_KEY` | `BENCHMARKS_PLATFORM_API_KEY` | only when `BENCHMARKS_PLATFORM_API_KEY` is unset, and only to a computesdk.com or localhost host over HTTPS (bench's `--base-url`, else its URL env, else `COMPUTE_PLATFORM_URL`); anything else is refused |
-| `compute --org <slug> bench …`, else `COMPUTE_ORG` | `--org <slug>` | only when the bench command has no `--org` of its own; not added to `run` / `check` |
-
-```bash
-COMPUTE_API_KEY=bp_… compute bench runs list my-benchmark --json
-COMPUTE_ORG=acme compute bench auth status --json      # same as: compute bench --org acme auth status
-```
-
-`compute whoami` and `compute org current` also read `COMPUTE_API_KEY`, under the same host rule. To use a key with a self-hosted platform, set `BENCHMARKS_PLATFORM_API_KEY` for it yourself. An
-org API key has no user, so they print the key's organization and
-`API key (no user identity)` (with `--json`: `"user": null`,
-`"credential": "api_key"`).
-
-## Command manifest
-
-`cli-manifest.json` (shipped in the package) lists every `compute` command:
-its canonical path, alias spellings, arguments and flags, plus the global
-flags and the `@benchsdk/runner` / `@benchsdk/cli` versions behind
-`compute bench …`. The bench commands themselves are described by the bench
-manifest in `@benchsdk/runner`. The benchmarks platform vendors both files
-to check that the commands its API surface map names exist.
-
-The hidden `compute __manifest` command prints the manifest (`--released`
-marks it as describing a published version; `--check <file>` exits 1 when
-`<file>` is out of date, ignoring a vendored `source.ref`). After adding,
-renaming or removing commands or flags, regenerate the committed file:
-
-```bash
-pnpm --filter @computesdk/cli run manifest   # builds, then writes cli-manifest.json
-```
-
-`src/__tests__/manifest.test.ts` fails when the committed file differs from
-the built CLI's output.
-
-### Developing against a bench branch build
-
-`@benchsdk/cli` and `@benchsdk/runner` can be pointed at a local checkout of
-[computesdk/benchmarks](https://github.com/computesdk/benchmarks) with a pnpm
-`link:` override in the root `package.json`, so `compute bench` runs bench
-commands that are not published yet:
-
-```json
-"pnpm": {
-  "overrides": {
-    "@benchsdk/cli": "link:../benchmarks-surface-parity/packages/benchsdk-cli",
-    "@benchsdk/runner": "link:../benchmarks-surface-parity/packages/benchsdk-runner"
-  }
-}
-```
-
-The paths are relative to the repository root, so the benchmarks checkout must
-sit next to it (`../benchmarks-surface-parity`, branch `droid/surface-parity`)
-and be installed and built first (`pnpm install && pnpm build` there; the
-linked packages use that checkout's own `node_modules` and `dist/`). Then run
-`pnpm install` here; the override is recorded in `pnpm-lock.yaml`, and
-`pnpm install --frozen-lockfile` accepts it. Without the sibling checkout pnpm
-still installs, with a "non-existent directory" warning and a dangling
-symlink, but typecheck and the CLI tests fail because `@benchsdk/cli` cannot
-be resolved. The override also covers `@computesdk/platform`'s optional
-`@benchsdk/cli` peer, so the workspace has one bench CLI.
-
-While the bench packages resolve to a checkout rather than to an npm install,
-`cli-manifest.json` marks them `"linked": true, "released": false` under
-`passthrough.bench.runner` and `passthrough.bench.cli`: the checkout's version
-number (`0.9.4` / `0.8.4`, the last bench release, until the branch is
-released as `@benchsdk/cli` 0.9.5) does not tell which commands it has, so consumers of the manifest should treat every bench
-command as present but unreleased.
-
-Before a release, publish the bench packages, remove the `pnpm.overrides`
-block, set `@benchsdk/cli` / `@benchsdk/runner` in `packages/cli/package.json`
-to the published caret ranges, run `pnpm install`, and regenerate the
-manifest (the `linked` / `released` fields disappear).
-
-## Migrating from @computesdk/cli 1.x
-
-v2 removes the legacy console authentication and its commands:
-
-- **Removed commands**: `compute create`, `compute sandbox`, `compute connect`,
-  `compute workspace`, `compute run`, and the interactive REPL. Sandbox
-  management moved to `compute sandboxes`, which drives the platform's
-  `/api/v1/sandboxes` API.
-- **Auth**: `compute login` no longer opens a browser flow against
-  console.computesdk.com or writes `~/.computesdk/credentials.json` — that
-  credential store is gone. `compute login` now runs the platform's OAuth
-  device flow and writes `~/.benchsdk/credentials.json` (the same store `bench
-  auth login` uses). Run `compute login` once after upgrading.
-- `compute providers` is unchanged.
-
-### Maintaining the sync checkpoint engine
-
-The CLI bundles an exact copy of the platform checkpoint module;
-`checkpoint-provenance.json` records its upstream commit and SHA-256 digest.
-Refresh it with `node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform [revision]`
-from the repository root, then run the CLI tests. Do not edit the bundled engine
-directly. Every invocation uses a private temporary directory and restrictive
-file permissions for upstream scratch archives. Sync-specific filtering and destination guards live in the adapter.
-Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
-selectors use glob syntax. Watch passes skip capture when nothing changed. Each pass that copies entries
-retains its full filtered source capture in platform-owned Tigris storage for
-30 days. Snapshot namespaces are isolated, so expiring a sync capture cannot
-delete permanent snapshot layers. Cross-snapshot layer deduplication is not yet
-implemented. Only local and sandbox scratch files are removed after the pass.
-
-Retained sync snapshots must finish uploading and pass platform integrity checks
-before destination changes begin. `sync --json` includes `snapshot: {id, expiresAt}`
-when a capture is created; project creation includes `syncSnapshot` in its JSON
-result. Human output shows the same ID and expiry. Dry runs, unchanged passes and
-delete-only passes do not create captures. A failed destination copy leaves the
-retained capture available until expiry. There is no new storage charge in this
-release. Deploy the managed sync snapshot API before releasing this CLI; failure
-to retain a capture stops sync rather than falling back to disposable snapshots.
+Maintainers: see [CLI contributor notes](./CONTRIBUTING.md) for bundled engine updates and manifest generation.

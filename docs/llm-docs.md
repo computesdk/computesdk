@@ -1,16 +1,24 @@
 ---
-title: "LLM Documentation Files"
-description: "AI-optimized documentation files for ComputeSDK, the sandbox router and CI router for cloud compute providers."
+title: LLM documentation
+description: Current CLI, TypeScript SDK and API entry points for AI assistants.
 ---
 
-ComputeSDK is a sandbox router and CI router: one API for sandboxes on any cloud provider, and a CI engine that runs GitHub Actions workflows on the providers you choose. These AI-optimized documentation files are designed for training large language models (LLMs) and AI assistants. They contain our complete documentation in a format that's easy for AI systems to understand and use.
+# LLM documentation
 
-## Available Files
+Use the ComputeSDK router as the default path for sandbox execution. Start with these guides:
 
-For the current SDK surface, see [Sandbox sizes](reference/sizes.md), [Instance lifecycle and processes](reference/Instance.md), [instance creation](reference/compute.instances.md), and [compute and snapshots](reference/compute.md). Provider-specific requirements are listed in the [provider pages](providers/README.md).
+- [CLI quickstart](getting-started/quick-start.md): install, sign in, inspect routing, create, execute and destroy.
+- [TypeScript SDK quickstart](getting-started/sdk-quick-start.md): a complete Node.js/TypeScript application using `computesdk` and `compute.instances`.
+- [CLI automation](cli/automation.md): noninteractive auth, JSON Lines, errors and resumable user sign-in.
+- [Provider starters](providers/getting-started.md): `npm create modal@latest` and other provider-pinned entry points use the same router.
+- [Routing and BYOK](guides/routing.md): account modes, provider selection and billing.
+- [Sandbox tasks](platform/sandboxes.md): commands, files, previews and lifecycle.
+- [Pricing and billing](guides/billing.md): managed compute credits, rates and cleanup.
+- [SDK reference](sdk/reference.md) and [REST reference](platform/api-reference.md): distinguish provider methods from HTTP routes.
+- [MCP server](platform/mcp.md): OAuth authorization for assistants.
 
-### [llms-small.txt](/llms-small.txt)
-A minimal version containing essential information about ComputeSDK, perfect for quick AI context.
+[llms-small.txt](/llms-small.txt) and [llms-full.txt](/llms-full.txt) are publisher-provided documentation export links; this repository does not generate them. Check the version and linked API surface before relying on an export cached by an assistant; published package versions and deployment availability can differ from repository source.
 
-### [llms-full.txt](/llms-full.txt) 
-The complete documentation — including sandbox routing, Actions CI, API references, and provider information. This comprehensive file contains everything an AI needs to help users with ComputeSDK.
+Use `compute --version` and command-specific `--help` to inspect the installed CLI. Provisioning can incur charges; a sandbox keeps running until destruction or lifetime expiry. Include cleanup and report any unconfirmed teardown.
+
+For applications explicitly integrating with vendor APIs outside the platform, see the separate [GitHub adapter documentation](https://github.com/computesdk/computesdk/tree/main/packages).

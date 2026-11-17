@@ -1,42 +1,157 @@
 ---
 description: >-
   ComputeSDK Actions is a CI/workflow engine that runs GitHub-style workflow
-  YAML on real compute-provider sandboxes — connect repos, register provider
-  credentials, dispatch runs, and stream logs from the dashboard, CLI, or API.
+  YAML through the ComputeSDK router — connect a repository, run workflows,
+  inspect logs and artifacts, and rerun failures.
 ---
 
 # Actions
 
-Actions is the platform's CI engine: it runs workflow files — the same GitHub Actions syntax your repo already uses — inside managed sandboxes on the compute providers your organization registers, instead of on fixed hosted runners.
-
-Jobs execute under [`act`](https://github.com/nektos/act) inside a ComputeSDK sandbox, so every job lands on a real provider and reports its `provider:region` placement alongside its steps.
+Actions runs your supported GitHub Actions workflows through the ComputeSDK router. Connect a repository, enable a workflow, then run and inspect jobs from the dashboard, CLI or API. ComputeSDK handles compute placement; each job reports where it ran alongside its steps, logs and result.
 
 ## Setup
 
-1. **Access** — Actions is available to every organization; no subscription or entitlement is required.
-2. **Connect a repo** — either install the platform's GitHub App (grants repo access + push/PR triggers), or connect a generic git remote by clone URL from **Actions → Repos** or `compute actions repos connect <clone-url>` (`token`, `basic`, `ssh`, and unauthenticated remotes are supported). A connect validates the remote with a real `ls-remote`, then lands enabled.
-3. **Register a provider credential** — under **Settings → Providers**, or `compute actions providers configure <provider> --key <key>`. See [Providers and eligibility](#providers-and-eligibility).
-4. **Secrets and variables** — optional; see [Secrets and variables](#secrets-and-variables).
-5. **Workflows** — repos run ordinary workflow YAML (`.github/workflows/`). Workflows become dispatchable once the repo is enabled and the workflow declares `workflow_dispatch`.
+1. **Connect a repository** — install the ComputeSDK GitHub App and select a repository to enable push and pull-request triggers. You can also connect a git remote under **Actions → Repos** or with `compute actions repos connect <clone-url>`.
+2. **Add a workflow** — save a YAML file in `.computesdk/workflows/`, commit it and push it to your repository. Enable the discovered workflow in Actions. Existing `.github/workflows/` files are also supported.
+3. **Run and inspect** — push a change or [dispatch a run](#dispatch-and-follow-a-run), follow the logs, and inspect the result. Add any workflow credentials under [Secrets and variables](#secrets-and-variables).
+
+Actions is available to every organization. Workflow runs use compute at the applicable rates; see [pricing](https://www.computesdk.com/pricing).
+
+## Your first workflow
+
+Create `.computesdk/workflows/hello.yml` in your repository:
+
+```yaml
+name: Hello ComputeSDK
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: Message to print
+        type: string
+        default: Hello from ComputeSDK
+permissions:
+  contents: read
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print a message
+        env:
+          MESSAGE: ${{ inputs.message }}
+        run: printf '%s\n' "$MESSAGE"
+```
+
+Commit and push the file to `main` (or use your branch in `--ref`). Once the
+connected repository discovers it, run it from **Actions** in the dashboard,
+or use the CLI:
+
+```bash
+compute actions workflows myorg/myrepo
+compute actions workflows enable myorg/myrepo .computesdk/workflows/hello.yml
+compute actions dispatch myorg/myrepo --workflow .computesdk/workflows/hello.yml --ref main --inputs message="Hello from ComputeSDK"
+```
+
+Replace `myorg/myrepo` with your repository. Use the returned run ID to follow
+the logs and inspect the result:
+
+```bash
+compute actions logs <run-id> --follow
+compute actions summary <run-id>
+```
+
+ComputeSDK provisions compute for the job and releases it when the job ends.
+You do not need to create or destroy a sandbox yourself.
+
+### Workflow file locations
+
+Use **`.computesdk/workflows/` for workflows you want ComputeSDK to run**.
+Files directly inside this directory can use `.yml` or `.yaml` extensions.
+They use supported GitHub Actions YAML syntax; no wrapper file is required.
+
+ComputeSDK also discovers `.github/workflows/`, so you can run an existing
+workflow without moving it. GitHub independently runs eligible files in that
+folder too. Keeping a workflow in `.computesdk/workflows/` lets ComputeSDK own
+its execution without also scheduling it in GitHub Actions.
+
+If both directories contain a file with the same filename, ComputeSDK uses the
+one in `.computesdk/workflows/`. For example, its `hello.yml` takes precedence
+over `.github/workflows/hello.yml`; the discovered workflow reports the
+shadowed path. This precedence only affects ComputeSDK's discovery, not GitHub.
+
+### Read the YAML
+
+| Field | Meaning |
+| --- | --- |
+| `name` | Workflow display name |
+| `on` | Events that start a run; `workflow_dispatch` enables dashboard and CLI dispatch |
+| `on.workflow_dispatch.inputs` | Named inputs for a manual run, passed with `--inputs name=value` |
+| `permissions` | Repository token permissions requested by the workflow |
+| `jobs` | Named jobs; use `needs` to order dependent jobs |
+| `runs-on` | Runner environment label; ComputeSDK chooses the underlying provider unless pinned |
+| `timeout-minutes` | Maximum job duration |
+| `steps` | Ordered commands (`run`) or actions (`uses`) |
+| `env` | Environment variables for a workflow, job or step |
+| `${{ inputs.message }}` | An expression reading a dispatch input |
+
+Use `run: |` for a multi-line script. `uses: actions/checkout@v4` checks out
+the repository before commands that need its files. Put credentials in
+[secrets](#secrets-and-variables), then reference `${{ secrets.NAME }}`.
+Use the [GitHub Actions workflow syntax](https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions)
+for field definitions, and check [GitHub compatibility](#github-compatibility)
+for the features ComputeSDK supports and current limitations.
+
+### Run on pushes, pull requests or a schedule
+
+Replace or extend the workflow's `on` section with the events you need:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch:
+```
+
+The schedule above runs at 09:00 UTC on weekdays. Commit the workflow to the
+watched branch and keep the repository and workflow enabled. Connect the GitHub App to receive push and pull-request webhooks. `workflow_dispatch`
+keeps an on-demand entry point alongside automatic triggers.
 
 ## Providers and eligibility
 
-Provider credentials are bring-your-own: the org stores each provider's key once (encrypted, never readable again), and jobs place on whichever providers the org's **Actions provider order** names — `provider` or `provider:region` entries, walked in order, editable under **Settings → Providers**. Every refusal along the walk is recorded on the job's `placementAttempts`, so a bad key or unsupported region shows up as an explicit reason rather than a silently skipped provider.
+Actions uses your organization's Actions router to place jobs on available compute. You do not need a provider account to get started with managed compute. To review available providers and placement settings:
 
 ```bash
-compute actions providers                                 # providers, regions, act-usable status
-compute actions providers configure tensorlake --key <key> --verify
-compute actions providers configure blaxel --field apiKey=<k> --field workspace=<w>
-compute actions providers verify tensorlake               # re-run the placement probe
-compute actions providers remove tensorlake               # refused while live boxes need it
+compute actions providers
 ```
 
-A stored key makes a provider **placeable**. Actions adds its own eligibility on top:
+Let ComputeSDK route, set provider and region preferences, or pin a run with `dispatch --provider <id>`. Jobs that cannot be placed report the reason in their run details. Long-running jobs require a provider that supports reconnecting to the sandbox.
 
-* **Act-proven** — jobs run under `act`, which needs a real Docker daemon inside the sandbox. Providers with a built-in dockerd path (Vercel, Tensorlake, Blaxel) qualify out of the box; for any other provider, `configure --verify` / `providers verify` proves it by placing a real sandbox and running the same dockerd + act bring-up the job would — a pass marks the org's key act-capable. An unproven provider is *refused* with a recorded reason, not silently skipped.
-* **Reconnect-capable for long jobs** — a job whose `timeout-minutes` exceeds one executor invocation can only land on a provider whose sandboxes can be reattached after the invocation ends; shorter jobs don't care.
+For optional BYOK, account modes and billing, see [Routing and BYOK](../guides/routing.md). Actions has its own saved routing configuration, separate from interactive sandboxes.
 
-`dispatch --provider <id>` pins a run to one provider regardless of the stored order (see [Dispatch](#dispatch-and-follow-a-run)).
+### Choose compute in YAML
+
+Start with `runs-on: ubuntu-latest` and let the organization's Actions router
+choose compute. To pin one job, add a `computesdk:<provider>` placement label:
+
+```yaml
+jobs:
+  hello:
+    runs-on: [ubuntu-latest, 'computesdk:modal']
+    steps:
+      - run: echo hello
+```
+
+Use `computesdk:<provider>:<region>` when you also need a specific region. A
+provider pin restricts placement to that provider; it does not fall back to
+other providers. Choose a provider eligible for Actions with
+`compute actions providers`. For a whole manually dispatched run, use
+`--provider <id>` instead of changing the YAML.
 
 ## Secrets and variables
 
@@ -58,7 +173,8 @@ compute actions vault ls --repo myorg/myrepo    # includes inherited org items
 ```bash
 compute actions dispatch myorg/myrepo --workflow ci.yml --ref main --inputs env=staging
 compute actions logs <run-id> --follow
-compute actions run <run-id>
+compute actions summary <run-id>
+compute actions rerun <run-id>
 ```
 
 `--workflow` matches the workflow's file path, display name, or id. Workflows without `workflow_dispatch` are refused unless you pass `--manual`, which runs the workflow anyway; such a run has no inputs, so `--inputs` is rejected for it (a `workflow_dispatch` workflow keeps its inputs with or without `--manual`). `dispatch --provider <id>` pins placement to one provider — a refusal is recorded as the job's `failureReason`, which is itself a useful signal when evaluating providers.
@@ -110,7 +226,7 @@ Runs GitHub-correctly today:
 * `env`, `$GITHUB_ENV`, `$GITHUB_PATH`, `$GITHUB_OUTPUT`, step outputs, cross-job `needs.*.outputs`
 * `concurrency` including `cancel-in-progress`, job/step `timeout-minutes`
 * `workflow_dispatch` inputs, third-party `uses:` actions, check-run reporting, cancel/rerun
-* `container:` pins — act pulls and runs the image through a reachable Docker daemon on every supported provider; a provider with no daemon refuses the job with a recorded reason
+* `container:` pins — run jobs in the specified container image on providers that support it; unsupported placement reports a reason
 * `secrets.*` expressions resolve against the job's declared secret scope; missing org secrets resolve to an empty string (see [Secrets](#secrets))
 * `actions/checkout` `fetch-depth` (other checkout inputs are not yet threaded)
 
