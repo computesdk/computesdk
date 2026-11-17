@@ -1,12 +1,23 @@
 # TypeScript SDK quickstart
 
-Create a hosted sandbox from a Node.js application using `computesdk`. The platform handles placement; your application does not need provider-specific packages or vendor credentials.
+```typescript
+import { compute } from 'computesdk';
 
-The examples below require a release of `computesdk` containing the built-in router. For `computesdk@4.1.18` and earlier, see [SDK compatibility](../sdk/reference.md#compatibility).
+const sandbox = await compute.instances.create();
+try {
+  const result = await sandbox.runCommand('echo hello');
+  console.log(result.stdout);
+} finally {
+  await sandbox.destroy();
+}
+```
 
-## 1. Set up a project
+Create a sandbox, run a command and destroy it when finished. ComputeSDK handles
+routing across providers. Save this example as `hello.mts`.
 
-Use a supported Node.js release (Node.js 22 or later for this example):
+## Install
+
+Use Node.js 22 or later:
 
 ```bash
 mkdir compute-hello
@@ -16,57 +27,36 @@ npm install computesdk
 npm install --save-dev tsx typescript @types/node
 ```
 
-## 2. Authenticate
+## Set your API key
 
-Sign in to the [platform dashboard](https://platform.computesdk.com), select your organization, and create an API key in **Settings → API keys**. Export the key in the terminal that will run your application:
+Create an organization API key in **Settings → API keys** in the
+[dashboard](https://platform.computesdk.com), then export it:
 
 ```bash
 export COMPUTE_API_KEY="your_org_api_key"
 ```
 
-In PowerShell, use `$env:COMPUTE_API_KEY="your_org_api_key"`. An org API key acts on its own organization. Keep it in your server environment, not browser code or source control.
+In PowerShell, use `$env:COMPUTE_API_KEY="your_org_api_key"`. Keep the key in your
+server environment, outside browser code and source control. See
+[authentication](authentication.md) for details.
 
-Make sure the organization has managed compute credit or a configured BYOK route. See [routing and BYOK](../guides/routing.md). See [authentication](authentication.md) for API key setup.
-
-## 3. Create, execute and clean up
-
-Save this as `hello.ts`:
-
-```typescript
-import { compute } from 'computesdk';
-
-async function main() {
-  const sandbox = await compute.instances.create({ size: 'small' });
-  try {
-    const result = await sandbox.runCommand('echo hello');
-    console.log(result.stdout);
-    if (result.exitCode !== 0) {
-      throw new Error(`Command failed (${result.exitCode}): ${result.stderr}`);
-    }
-  } finally {
-    await sandbox.destroy();
-  }
-}
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
-```
-
-Run it:
+## Run
 
 ```bash
-npx tsx hello.ts
+npx tsx hello.mts
 ```
 
-Expect `hello` on stdout. The `finally` block attempts cleanup even if command execution fails. If cleanup fails, find the sandbox in the dashboard and destroy it there or through the CLI. Closing the Node.js process does not stop billing.
+Expect `hello` on stdout. The `finally` block attempts cleanup even if command
+execution fails. If cleanup fails, destroy the sandbox through the dashboard or
+CLI. Closing the Node.js process does not stop billing.
 
 ## Next steps
 
 - [TypeScript SDK overview](../sdk/README.md)
 - [Commands, files and create options](../platform/sandboxes.md)
 - [Errors, limits and safe retries](../sdk/errors.md)
-- [SDK exports and HTTP client](../sdk/reference.md)
+- [SDK reference](../sdk/reference.md)
+- [Routing and billing](../guides/routing.md)
 
-New examples use `instances`; `sandbox` remains a compatibility alias. The platform API and CLI still call these resources sandboxes.
+This example requires a release containing the built-in router. For older
+versions, see [SDK compatibility](../sdk/reference.md#compatibility).

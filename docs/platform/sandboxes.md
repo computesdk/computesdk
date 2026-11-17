@@ -4,14 +4,6 @@ description: Run code across sandbox providers through the ComputeSDK router wit
 
 # Sandboxes
 
-Run code across providers through the ComputeSDK router. Install `computesdk` and call `compute.instances.create()`; routing, authentication and the sandbox lifecycle are built in. For terminal workflows, see the [CLI quickstart](../getting-started/quick-start.md).
-
-Start with the [TypeScript SDK quickstart](../getting-started/sdk-quick-start.md) for a runnable example with cleanup, or use the [SDK overview](../sdk/README.md) to choose a guide.
-
-```bash
-npm install computesdk
-```
-
 ```typescript
 import { compute } from 'computesdk';
 
@@ -23,6 +15,12 @@ try {
   await sandbox.destroy();
 }
 ```
+
+Run code across providers through `compute.instances`. Install `computesdk` and
+set `COMPUTE_API_KEY` to get started. See the [SDK quickstart](../getting-started/sdk-quick-start.md)
+for a runnable example, or the [CLI quickstart](../getting-started/quick-start.md)
+for terminal workflows.
+
 
 ## Authentication
 
@@ -65,19 +63,21 @@ REST create responses include `sandbox` and may include `next` guidance: a lifet
 
 ## Market pricing
 
-`providerOrder` ranks where the platform tries to place the sandbox — your own provider keys by name, or `'market'` for the compute market. `orderType: 'market' | 'limit'` and `maxPrice: { usd, per: 'hour' }` control the fill. All three can be passed per call or set once as `defaults` on the provider:
+`providerOrder` ranks where the platform tries to place the sandbox — your own provider keys by name, or `'market'` for the compute market. `orderType: 'market' | 'limit'` and `maxPrice: { usd, per: 'hour' }` control the fill. Pass them directly to `compute.instances.create()`:
 
 ```typescript
-import { platform } from 'computesdk';
+import { compute } from 'computesdk';
 
-const provider = platform({
-  apiKey: process.env.COMPUTE_API_KEY,
-  defaults: {
-    size: 'small',
-    providerOrder: ['e2b', 'market'], // own E2B key first, market on failure
-    maxPrice: { usd: 0.5, per: 'hour' },
-  },
+const sandbox = await compute.instances.create({
+  size: 'small',
+  providerOrder: ['e2b', 'market'], // own E2B key first, market on failure
+  maxPrice: { usd: 0.5, per: 'hour' },
 });
+try {
+  console.log((await sandbox.runCommand('echo hello')).stdout);
+} finally {
+  await sandbox.destroy();
+}
 ```
 
 A `providerOrder` with no `'market'` entry never touches the market — no buyer-lane approval, no credits, no cap. Without an explicit order, creation follows the saved router described above.

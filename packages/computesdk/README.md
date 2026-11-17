@@ -2,21 +2,6 @@
 
 One router for sandboxes and Actions. Run code across sandbox providers through the CLI, TypeScript SDK or API. Use ComputeSDK-managed compute or bring your own provider keys.
 
-## Install
-
-```bash
-npm install computesdk
-```
-
-## Run code
-
-Set your organization API key, or sign in using the separately installed ComputeSDK CLI:
-
-```bash
-export COMPUTE_API_KEY="your_org_api_key"
-# Alternatively: compute login
-```
-
 ```typescript
 import { compute } from 'computesdk';
 
@@ -29,9 +14,14 @@ try {
 }
 ```
 
-No factory call or provider adapter is needed. The router follows your organization's saved routing configuration. Sandboxes keep running and billing until destroyed or their lifetime expires.
+## Install and run
 
-Saved CLI sessions are read and refreshed automatically. The SDK does not install the CLI or open browser sign-in; set `COMPUTE_API_KEY` for applications and CI.
+```bash
+npm install computesdk
+export COMPUTE_API_KEY="your_org_api_key"
+```
+
+No factory call or provider adapter is needed. The router follows your organization's saved routing configuration. Sandboxes keep running and billing until destroyed or their lifetime expires.
 
 ## API
 
@@ -42,12 +32,6 @@ Saved CLI sessions are read and refreshed automatically. The SDK does not instal
 - Handles expose `runCommand`, `startProcess`, `filesystem`, `getInfo`, `getUrl` and `destroy`.
 
 `sandbox` remains a compatibility alias for `instances`.
-
-## Explicit configuration
-
-Existing provider and multi-provider configuration continues to work. An explicitly configured provider calls that provider directly; it does not fall back to the ComputeSDK router.
-
-For custom router configuration, `platform`, `PlatformConfig` and `PlatformCreateOptions` are exported by `computesdk`. `@computesdk/platform` remains a compatibility package. [Configuration and compatibility](https://docs.computesdk.com/typescript-sdk/reference) cover both paths.
 
 ## Documentation
 

@@ -57,11 +57,6 @@ compute destroy
 
 ## Build with the TypeScript SDK
 
-```bash
-npm install computesdk
-export COMPUTE_API_KEY="your_org_api_key"
-```
-
 ```typescript
 import { compute } from 'computesdk';
 
@@ -72,6 +67,11 @@ try {
 } finally {
   await sandbox.destroy();
 }
+```
+
+```bash
+npm install computesdk
+export COMPUTE_API_KEY="your_org_api_key"
 ```
 
 Follow the [complete runnable SDK quickstart](docs/getting-started/sdk-quick-start.md) to create an API key and run this from Node.js. See [routing and BYOK](docs/guides/routing.md) to choose account modes and understand billing.

@@ -1,24 +1,37 @@
 # TypeScript SDK
 
-Use the TypeScript SDK to run code in hosted sandboxes from a Node.js application. Create sandboxes, execute commands and work with files through your ComputeSDK organization. The platform manages provider placement and credentials, so your application uses one API for managed compute and BYOK.
+```typescript
+import { compute } from 'computesdk';
 
-Install `computesdk` and call `compute.instances.create()` to get started.
+const sandbox = await compute.instances.create();
+try {
+  const result = await sandbox.runCommand('echo hello');
+  console.log(result.stdout);
+} finally {
+  await sandbox.destroy();
+}
+```
 
-[Start with a runnable example](../getting-started/sdk-quick-start.md).
+Run code across sandbox providers with `computesdk`. Create sandboxes, execute
+commands and work with files through `compute.instances`. ComputeSDK handles
+provider routing and credentials.
 
-## What runs where
+```bash
+npm install computesdk
+export COMPUTE_API_KEY="your_org_api_key"
+```
 
-Your application sends sandbox requests to the platform. Server-side routing selects managed compute or your organization's provider keys, handles placement and tracks sandbox activity. Your application keeps a single platform sandbox ID and a consistent command/filesystem interface.
+[Run the complete example](../getting-started/sdk-quick-start.md).
+
+## Guides
 
 | Task | Guide |
 | --- | --- |
 | Create, execute and destroy | [SDK quickstart](../getting-started/sdk-quick-start.md) |
-| Authenticate using a key or CLI session | [Authentication](../getting-started/authentication.md) |
-| Configure sizes, commands, files and streaming | [Hosted sandboxes](../platform/sandboxes.md) |
-| Choose managed compute or BYOK | [Routing](../guides/routing.md) |
+| Set an organization API key | [Authentication](../getting-started/authentication.md) |
+| Configure sizes, commands, files and streaming | [Sandboxes](../platform/sandboxes.md) |
+| Choose providers and manage billing | [Routing](../guides/routing.md) |
 | Handle limits, errors and uncertain creates | [Errors and retries](errors.md) |
-| Understand exports and the lower-level client | [SDK reference](reference.md) |
+| Browse SDK methods | [SDK reference](reference.md) |
 
-## Other platform operations
-
-The hosted provider supports sandbox operations; it does not imply that every platform REST endpoint has a dedicated typed SDK method. For Actions, benchmark and organization operations, use the CLI, REST API or the lower-level HTTP client where appropriate.
+For Actions and organization operations, use the CLI or [REST API](../platform/api-reference.md).
