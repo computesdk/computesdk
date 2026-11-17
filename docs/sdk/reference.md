@@ -1,4 +1,4 @@
-# Platform SDK reference
+# TypeScript SDK reference
 
 The public package is `@computesdk/platform`. Use it alongside `computesdk` for the common instance interface.
 

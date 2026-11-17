@@ -1,138 +1,46 @@
-# Direct provider setup
+# Start on a provider
 
-## Install a Provider Package
+If you already know which provider you want, use its npm starter. This follows the same ComputeSDK routing and authentication as the CLI.
 
-Install the provider package for the platform you want to use:
+## 1. Create a sandbox
 
-```bash
-# Pick one (or more) providers
-npm install @computesdk/archil
-npm install @computesdk/blaxel
-npm install @computesdk/buddy
-npm install @computesdk/cloudflare
-npm install @computesdk/codesandbox
-npm install @computesdk/daytona
-npm install @computesdk/e2b
-npm install @computesdk/hopx
-npm install @computesdk/modal
-npm install @computesdk/namespace
-npm install @computesdk/runloop
-npm install @computesdk/tensorlake
-npm install @computesdk/upstash
-npm install @computesdk/vercel
-```
-
-You only need to install the providers your project uses.
-
-## Provider Credentials
-
-Each provider requires its own API credentials. Add them to a `.env` file in the root of your project or export them in your shell:
-
-### Archil
-```bash
-ARCHIL_API_KEY=your_archil_api_key
-ARCHIL_REGION=aws-us-east-1
-ARCHIL_DISK_ID=your_archil_disk_id
-```
-
-### Blaxel
-```bash
-BL_API_KEY=your_blaxel_api_key
-BL_WORKSPACE=your_blaxel_workspace
-```
-
-### Buddy
-```bash
-BUDDY_TOKEN=your_buddy_api_token
-BUDDY_WORKSPACE=your_buddy_workspace_domain
-BUDDY_PROJECT=your_buddy_project_name
-```
-
-### Cloudflare
+With Node.js 22 or later and npm installed:
 
 ```bash
-CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
-CLOUDFLARE_SANDBOX_API_KEY=your_sandbox_api_key
+npm create modal@latest
 ```
 
-### CodeSandbox
+The starter offers to install or upgrade `@computesdk/cli` when needed, uses your existing ComputeSDK login or starts browser sign-in, and creates a sandbox pinned to Modal. You do not need a local Modal SDK or provider key. The sandbox becomes current for this directory unless you pass `--no-use`.
+
+The router chooses managed compute or BYOK according to your organization's configuration. Managed compute uses ComputeSDK credits; BYOK uses your organization's saved vendor credentials and is billed by the provider. [Check routing](../guides/routing.md) for account modes and pricing. Creation can incur charges.
+
+Provider-pinned starters return an error if that provider cannot place the sandbox; they do not silently switch to a different provider. If a create fails with an uncertain outcome, inspect `compute list` before creating again.
+
+For another provider, use a [published starter](README.md#start-with-a-provider), or [install the CLI](../getting-started/installation.md#cli) and run `compute new <provider>`. Starter names are not always identical to provider IDs; use the command shown on the provider's website page rather than guessing an npm name.
+
+## 2. Run commands
 
 ```bash
-CSB_API_KEY=your_codesandbox_api_key
+compute exec echo hello
+compute list
 ```
 
-### Daytona
+`exec` uses the selected sandbox. For files, processes and preview URLs, see [command execution](../cli/execution.md).
+
+## 3. Destroy the sandbox
 
 ```bash
-DAYTONA_API_KEY=your_daytona_api_key
+compute destroy
 ```
 
-### E2B
+Closing the terminal does not stop the sandbox or billing. It runs until destroyed or its lifetime expires. Check `compute list` and retry cleanup if destruction fails.
+
+## Let the router choose instead
+
+With the CLI installed:
 
 ```bash
-E2B_API_KEY=your_e2b_api_key
+compute new
 ```
 
-### HopX
-```bash
-HOPX_API_KEY=your_hopx_api_key
-```
-
-### Modal
-
-```bash
-MODAL_TOKEN_ID=your_modal_token_id
-MODAL_TOKEN_SECRET=your_modal_token_secret
-```
-
-### Namespace
-```bash
-NSC_TOKEN=your_namespace_nsc_token
-```
-
-### Runloop
-
-```bash
-RUNLOOP_API_KEY=your_runloop_api_key
-```
-
-### Tensorlake
-
-```bash
-TENSORLAKE_API_KEY=your_tensorlake_api_key
-```
-
-### Upstash
-```bash
-UPSTASH_BOX_API_KEY=your_upstash_box_api_key
-```
-
-### Vercel
-
-```bash
-VERCEL_TOKEN=your_vercel_token
-VERCEL_TEAM_ID=your_team_id
-VERCEL_PROJECT_ID=your_project_id
-```
-
-Refer to each provider's documentation page for the full list of supported environment variables and configuration options.
-
-## Verify Your Setup
-
-After installing a provider and setting credentials, verify everything works:
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-const sandbox = await compute.instances.create();
-
-const result = await sandbox.runCommand('echo "Hello from ComputeSDK!"');
-console.log(result.stdout); // "Hello from ComputeSDK!"
-
-await sandbox.destroy();
-```
-
-Replace the import and configuration with whichever provider you installed.
-
-For hosted compute, start with the [CLI quickstart](../getting-started/quick-start.md) or [Platform SDK quickstart](../getting-started/sdk-quick-start.md).
+Leave out the provider to follow your organization's saved router. Set provider preferences and fallback in [routing and BYOK](../guides/routing.md). Continue with the [CLI quickstart](../getting-started/quick-start.md) or [TypeScript SDK quickstart](../getting-started/sdk-quick-start.md).

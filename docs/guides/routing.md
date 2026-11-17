@@ -1,6 +1,6 @@
 # Routing and BYOK
 
-The hosted platform routes sandbox requests using your organization's saved Sandboxes router. Actions has a separate saved router. Direct provider adapters use their own credentials and client-side core SDK routing.
+ComputeSDK routes sandbox requests using your organization's saved Sandboxes router. Actions has a separate saved router. Choose a provider, configure fallback, or let the router select managed compute or your own provider accounts.
 
 ## Inspect before creating
 
@@ -41,4 +41,4 @@ A plain `sdk.instances.create()` using `platform({})` follows the saved router. 
 
 REST additionally supports per-request `only` and `byok`, documented in the [REST reference](../platform/api-reference.md#sandboxes). These are not typed `PlatformCreateOptions` fields. Do not assume that passing REST fields to the provider forwards them unchanged.
 
-A package in the direct provider catalog does not establish hosted eligibility, available credit or capacity. Use discovery and quotes for the actual organization and requested size.
+A published provider starter or benchmark listing does not establish access, available credit or capacity. Use options and route previews for your organization and requested size.

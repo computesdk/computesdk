@@ -1,4 +1,4 @@
-# Platform SDK quickstart
+# TypeScript SDK quickstart
 
 Create a hosted sandbox from a Node.js application using `computesdk` and `@computesdk/platform`. The platform handles placement; your application does not need provider-specific packages or vendor credentials.
 
@@ -67,7 +67,7 @@ Expect `hello` on stdout. The `finally` block attempts cleanup even if command e
 
 ## Next steps
 
-- [Platform SDK overview](../sdk/README.md)
+- [TypeScript SDK overview](../sdk/README.md)
 - [Commands, files and create options](../platform/sandboxes.md)
 - [Errors, limits and safe retries](../sdk/errors.md)
 - [SDK exports and HTTP client](../sdk/reference.md)

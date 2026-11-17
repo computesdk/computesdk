@@ -6,11 +6,11 @@ description: >-
   or MCP.
 ---
 
-# ComputeSDK Platform
+# ComputeSDK overview
 
-## What the platform is
+## One router for sandboxes and Actions
 
-The ComputeSDK Platform ([platform.computesdk.com](https://platform.computesdk.com)) runs cloud sandboxes for your applications, agents and terminal workflows. Start with the [compute CLI](../getting-started/quick-start.md) or [Platform SDK](../getting-started/sdk-quick-start.md); your organization manages routing, provider credentials and billing centrally.
+ComputeSDK routes sandbox requests and GitHub Actions workflows across compute providers. Let the router choose, select a provider, or set a fallback order. Use managed compute or bring your own provider keys. Start with the [compute CLI](../getting-started/quick-start.md) or [TypeScript SDK](../getting-started/sdk-quick-start.md); your organization manages routing, provider credentials and billing centrally.
 
 The platform places work and tracks resources across:
 
@@ -21,7 +21,7 @@ The platform places work and tracks resources across:
 ## Ways to use the platform
 
 * **[CLI](../getting-started/quick-start.md)** — install `compute`, sign in and run commands from your terminal.
-* **[Platform SDK](../getting-started/sdk-quick-start.md)** — create and control hosted sandboxes from a Node.js application with `computesdk` and `@computesdk/platform`.
+* **[TypeScript SDK](../getting-started/sdk-quick-start.md)** — create and control hosted sandboxes from a Node.js application with `computesdk` and `@computesdk/platform`.
 * **Dashboard** — manage resources at `https://platform.computesdk.com/<org-slug>/...`.
 * **[REST API](api-reference.md)** — call platform routes under `/api/v1`.
 * **[MCP](mcp.md)** — authorize an AI assistant through the OAuth-backed server at `https://platform.computesdk.com/mcp`.
@@ -36,7 +36,7 @@ Org members collaborate through the dashboard. Owners and admins manage API keys
 
 ## Authentication
 
-For applications and automation, the REST API, CLI and Platform SDK accept **organization API keys**:
+For applications and automation, the REST API, CLI and TypeScript SDK accept **organization API keys**:
 
 1. Open **Settings → API keys** (`/<org-slug>/settings/api-keys`) in the dashboard
 2. Create a key — the full value is shown once, store it somewhere safe
@@ -79,7 +79,7 @@ with status `400`, `401`, `403`, `404`, `410`, `429`, or `500`. Successful respo
 ## Where next
 
 * [CLI quickstart](../getting-started/quick-start.md) — create, execute and clean up from a terminal
-* [Platform SDK quickstart](../getting-started/sdk-quick-start.md) — run a complete TypeScript example
+* [TypeScript SDK quickstart](../getting-started/sdk-quick-start.md) — run a complete TypeScript example
 
 * [Sandboxes](sandboxes.md) — create and route hosted sandboxes from code
 * [Actions](actions.md) — connect repos, register provider credentials, dispatch workflows, stream logs

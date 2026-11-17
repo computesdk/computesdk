@@ -217,3 +217,7 @@ redirects:
   core-sdk-reference/sizes: reference/sizes.md
   core-sdk-reference/compute.instances: reference/compute.instances.md
   core-sdk-reference/instance: reference/Instance.md
+  platform-sdk/sdk: sdk/README.md
+  platform-sdk/sandboxes: platform/sandboxes.md
+  platform-sdk/errors: sdk/errors.md
+  platform-sdk/reference: sdk/reference.md

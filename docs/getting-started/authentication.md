@@ -25,7 +25,7 @@ export COMPUTE_API_KEY="your_org_api_key"
 
 The CLI checks an explicit `--api-key`, then `COMPUTE_API_KEY`, then the legacy `BENCHMARKS_PLATFORM_API_KEY`, then stored login credentials. An environment key takes precedence over a browser login.
 
-The Platform SDK follows the same precedence, using `apiKey` in provider configuration in place of the CLI flag. A key-only SDK application needs no CLI or stored login dependency.
+The TypeScript SDK follows the same precedence, using `apiKey` in provider configuration in place of the CLI flag. A key-only SDK application needs no CLI or stored login dependency.
 
 ## Reuse a CLI login in the SDK
 

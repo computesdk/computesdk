@@ -1,6 +1,8 @@
 # CLI quickstart
 
-Create a sandbox, run a command, and destroy it from your terminal.
+Create a sandbox through the ComputeSDK router, run a command, and destroy it from your terminal. Let the router choose a provider or select one yourself.
+
+Already know your provider? Start with `npm create modal@latest` or another [provider starter](../providers/getting-started.md). It sets up the same CLI and creates a sandbox on your chosen provider.
 
 ## 1. Install and sign in
 
@@ -54,5 +56,5 @@ compute run echo hello
 - [Bring and sync a project](../cli/project-sync.md)
 - [Execute commands and expose a server](../cli/execution.md)
 - [Use JSON output in scripts and agents](../cli/automation.md)
-- [Use the Platform SDK from code](sdk-quick-start.md)
+- [Use the TypeScript SDK from code](sdk-quick-start.md)
 - [CLI command reference](../platform/cli.md)

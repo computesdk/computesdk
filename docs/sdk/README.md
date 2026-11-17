@@ -1,6 +1,6 @@
-# Platform SDK
+# TypeScript SDK
 
-Use the Platform SDK to run code in hosted sandboxes from a Node.js application. Create sandboxes, execute commands and work with files through your ComputeSDK organization. The platform manages provider placement and credentials, so your application uses one API for managed compute and BYOK.
+Use the TypeScript SDK to run code in hosted sandboxes from a Node.js application. Create sandboxes, execute commands and work with files through your ComputeSDK organization. The platform manages provider placement and credentials, so your application uses one API for managed compute and BYOK.
 
 Install `computesdk` and `@computesdk/platform` to get started.
 

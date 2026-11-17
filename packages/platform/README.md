@@ -1,8 +1,8 @@
 # @computesdk/platform
 
-ComputeSDK provider for [ComputeSDK Platform](https://platform.computesdk.com) hosted sandboxes — the same `compute` / `sandbox` interface as every other provider, backed by the platform's own sandbox API. Market placement, provider fallback, the secrets vault, warm pools and cost tracking all live server-side; your code gets one sandbox ID space and one API.
+TypeScript access to the [ComputeSDK router](https://www.computesdk.com/sandbox-router). Run code across sandbox providers through one API, using ComputeSDK-managed compute or your organization’s provider keys. Routing, provider fallback and cost tracking run server-side; your application uses one sandbox ID and a consistent command/filesystem interface.
 
-Start with the [runnable Platform SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start), [authentication](https://docs.computesdk.com/start-here/authentication) and [SDK reference](https://docs.computesdk.com/platform-sdk/reference).
+Start with the [runnable TypeScript SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start), [authentication](https://docs.computesdk.com/start-here/authentication) and [SDK reference](https://docs.computesdk.com/platform-sdk/reference).
 
 ```bash
 npm install computesdk @computesdk/platform

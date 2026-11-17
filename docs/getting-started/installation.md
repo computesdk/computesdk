@@ -1,6 +1,16 @@
 # Installation
 
-Install the CLI for terminal workflows or the Platform SDK for Node.js applications. Both connect to your ComputeSDK organization. Create an account at [platform.computesdk.com](https://platform.computesdk.com), then follow the [authentication guide](authentication.md) to sign in or create an API key.
+Install the CLI for terminal workflows or the TypeScript SDK for Node.js applications. Both connect to your ComputeSDK organization. Create an account at [platform.computesdk.com](https://platform.computesdk.com), then follow the [authentication guide](authentication.md) to sign in or create an API key.
+
+## Provider starters
+
+With Node.js 22 or later, start on a specific provider in one command:
+
+```bash
+npm create modal@latest
+```
+
+The starter offers to install or upgrade the CLI, authenticates with ComputeSDK and creates a sandbox. See [Start on a provider](../providers/getting-started.md) for what it does and how to clean up.
 
 ## CLI
 
@@ -31,7 +41,7 @@ compute --help
 
 The binary is `compute`. Continue with the [CLI quickstart](quick-start.md). To update, rerun your installer or, for an npm installation, run `npm install -g @computesdk/cli@latest`. Avoid mixing installation methods if your shell finds an older binary first.
 
-## Platform SDK
+## TypeScript SDK
 
 For Node.js applications:
 
@@ -39,4 +49,4 @@ For Node.js applications:
 npm install computesdk @computesdk/platform
 ```
 
-The SDK connects to the hosted platform. You do not need to install individual provider adapters. Follow the [Platform SDK quickstart](sdk-quick-start.md) for authentication and a runnable example.
+The SDK connects to the hosted platform. You do not need to install individual provider adapters. Follow the [TypeScript SDK quickstart](sdk-quick-start.md) for authentication and a runnable example.

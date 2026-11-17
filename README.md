@@ -6,7 +6,7 @@
 </div>
 
 <div align="center">
-  <strong>Cloud sandboxes from your terminal and your application.</strong>
+  <strong>One router for sandboxes and Actions.</strong>
 </div>
 
 <div align="center">
@@ -20,9 +20,9 @@
 
 ---
 
-## ComputeSDK Platform
+## ComputeSDK
 
-ComputeSDK is a hosted platform for running code in isolated cloud sandboxes. Use the **compute CLI** to work from your terminal and the **Platform SDK** to build sandbox execution into your application or AI agent.
+ComputeSDK is one router for sandboxes and Actions. Run agent code and GitHub workflows across compute providers through one integration. Let ComputeSDK route, choose a provider, or set a fallback order. Use the **CLI** from your terminal and the **TypeScript SDK** from your application or agent.
 
 - **Run commands and work with files** in cloud sandboxes from your terminal or TypeScript application.
 - **Sync local projects** to a sandbox for remote development and execution.
@@ -30,6 +30,17 @@ ComputeSDK is a hosted platform for running code in isolated cloud sandboxes. Us
 - **Manage your organization** through one dashboard for credentials, credits and sandbox activity.
 
 [Open the dashboard](https://platform.computesdk.com) · [Read the docs](https://docs.computesdk.com)
+
+## Start on a provider
+
+Create a sandbox on a specific provider through ComputeSDK:
+
+```bash
+npm create modal@latest
+# Or: npm create e2b@latest
+```
+
+These starters install or upgrade the ComputeSDK CLI when needed, sign you in and create a sandbox pinned to that provider. They use your organization's managed-compute or BYOK routing. See [sandbox providers](docs/providers/README.md) for setup and cleanup.
 
 ## Start with the CLI
 
@@ -44,7 +55,7 @@ compute destroy
 
 [Other installation options](docs/getting-started/installation.md) include macOS/Linux and Windows installers. Creation requires available credit or a configured BYOK route. Sandboxes keep running and billing until destroyed or their lifetime expires.
 
-## Build with the Platform SDK
+## Build with the TypeScript SDK
 
 ```bash
 npm install computesdk @computesdk/platform
@@ -73,13 +84,13 @@ Follow the [complete runnable SDK quickstart](docs/getting-started/sdk-quick-sta
 | --- | --- |
 | Send a local project to a sandbox | [Project sync](docs/cli/project-sync.md) |
 | Configure managed compute and BYOK | [Routing and billing](docs/guides/routing.md) |
-| Use the SDK in an application or agent | [Platform SDK](docs/sdk/README.md) |
+| Use the SDK in an application or agent | [TypeScript SDK](docs/sdk/README.md) |
 | Run workflows on sandbox providers | [Actions](docs/platform/actions.md) |
 | Connect an AI assistant | [MCP server](docs/platform/mcp.md) |
 
 ## Open-source SDK and contributing
 
-For direct vendor integrations, provider development and repository contribution instructions, see the [open-source SDK guide](OPEN_SOURCE.md). The [provider catalog](docs/providers/README.md) documents individual adapters.
+For direct vendor integrations, provider development and repository contribution instructions, see the [open-source SDK guide](OPEN_SOURCE.md). Individual adapters are documented in [their GitHub packages](https://github.com/computesdk/computesdk/tree/main/packages).
 
 ## Community and support
 
