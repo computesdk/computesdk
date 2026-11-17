@@ -1,6 +1,6 @@
 {
   "name": "computesdk",
-  "version": "4.1.18",
+  "version": "4.1.19",
   "description": "One router for sandboxes and Actions. Run code across compute providers with the ComputeSDK TypeScript SDK.",
   "author": "Garrison",
   "license": "MIT",
