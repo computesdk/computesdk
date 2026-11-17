@@ -22,13 +22,17 @@ A create's `timeout` controls the sandbox lifetime in milliseconds. A command's 
 Each create generates an `sdk-create:<uuid>` idempotency key. Replays inside that create reuse the same key. To make a create safe across process restarts, supply a stable key:
 
 ```typescript
-import { compute, type PlatformCreateOptions } from 'computesdk';
+import { compute } from 'computesdk';
 
-const options: PlatformCreateOptions = {
+const sandbox = await compute.instances.create({
   size: 'small',
   idempotencyKey: 'my-job-unique-id',
-};
-const sandbox = await compute.instances.create(options);
+});
+try {
+  console.log(sandbox.sandboxId);
+} finally {
+  await sandbox.destroy();
+}
 ```
 
 This uses the same singleton as the [quickstart](../getting-started/sdk-quick-start.md). Same key and request returns the existing sandbox, including a terminal sandbox; a different request with that key fails with `idempotency_key_reused` (409). A failed placement frees the key.

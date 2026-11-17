@@ -1,44 +1,91 @@
-# Routing and BYOK
+# Routing and provider selection
 
-ComputeSDK routes sandbox requests using your organization's saved Sandboxes router. Actions has a separate saved router. Choose a provider, configure fallback, or let the router select managed compute or your own provider accounts.
+Let ComputeSDK route, choose a provider, or configure a fallback order. Routing
+happens when a sandbox is created. A running sandbox stays on that provider;
+changing preferences affects future placements.
 
-## Inspect before creating
+## Let ComputeSDK choose
+
+```bash
+compute new
+```
+
+The saved Sandboxes router determines placement. Managed compute uses
+ComputeSDK accounts and credits, so you do not need vendor credentials.
+Actions has its own saved routing settings for workflow jobs.
+
+## Choose a provider
+
+```bash
+compute new modal
+```
+
+A provider choice narrows the saved router for this request. It does not change
+your organization's settings. If that provider cannot place the sandbox, the
+request fails rather than silently choosing a different provider. See
+[the catalog](../providers/README.md) for router IDs and npm starters.
+
+## Preferences and fallback
+
+Configure the saved router in the dashboard or through the
+[routing API](../platform/api-reference.md#routing). Owners and admins can
+choose ComputeSDK's recommended managed order, the cheapest available route
+for a size, or a custom order.
+
+Inspect the available options and a placement quote without creating compute:
 
 ```bash
 compute sandboxes options
-compute sandboxes route --size small
+compute sandboxes route --provider modal --size small
 ```
 
-`options` shows managed capacity with offered sizes/rates and BYOK entries with readiness. `route` previews a concrete create, its account type and price. These commands create no sandbox and do not reserve capacity; the final placement can change if a provider refuses the request.
+`options` reports offered sizes, rates and account readiness. A quote does not
+reserve capacity; final placement can change if capacity becomes unavailable.
+See [billing](billing.md) for credits and rates.
 
-## Managed compute and your own keys
+## Optional: your own provider keys
 
-Managed compute runs under ComputeSDK-managed accounts and uses your organization's credits. BYOK runs under the provider credentials saved for your organization; the provider bills you directly.
+Connect provider keys in your organization's settings or with `compute byok`.
+The provider bills that compute directly. Managed and own-account compute use
+the same sandbox interface.
 
-| BYOK mode | Placement order |
+| Mode | Placement order |
 | --- | --- |
 | `off` | Managed accounts only |
 | `first` | Own keys, then managed |
 | `fallback` | Managed, then own keys |
 | `only` | Own keys only |
 
-The managed strategy is `computesdk` (recommended order), `cheapest` (price order for the requested size), or a custom order. Configure the saved router in the dashboard or through the [routing API](../platform/api-reference.md#routing). Owner/admin permissions are needed to change it.
+For one CLI invocation, use `compute new modal --managed` or
+`compute new modal --byok`. Key writes need an owner or admin. Use
+`compute byok --help` for configuration; verifying a key provisions real compute.
 
-## Narrow one CLI request
+## SDK and REST overrides
 
-```bash
-compute new daytona --managed
-compute new e2b --byok
+`compute.instances.create()` follows saved routing by default. An explicit
+`providerOrder` bypasses that routing. An order containing provider names uses
+your organization's keys; its legacy `'market'` entry requests market placement.
+Price caps apply to market placement.
+
+```typescript
+import { compute } from 'computesdk';
+
+const sandbox = await compute.instances.create({
+  providerOrder: ['e2b', 'market'],
+  maxPrice: { usd: 0.5, per: 'hour' },
+});
+try {
+  console.log((await sandbox.runCommand('echo hello')).stdout);
+} finally {
+  await sandbox.destroy();
+}
 ```
 
-A provider choice narrows the saved router; `--managed` or `--byok` selects the account mode for this invocation. Neither changes organization settings. Check `compute sandboxes route --provider e2b --byok --size small` before creating.
+Per-call `providerOrder` takes precedence over provider defaults; either
+bypasses saved routing. Existing explicitly configured direct adapters also
+bypass the router.
 
-Manage stored keys with `compute byok`, `compute byok configure <provider> --key <key>` and `compute byok verify <provider>`. Verification provisions a real sandbox. Multi-field providers use `--field name=value`. Reads are available to members; key writes need an owner/admin. A custom BYOK rate changes cost reporting, not billing.
-
-## SDK and REST requests
-
-Without explicit provider configuration, `compute.instances.create()` follows the saved router. The SDK's `providerOrder`, whether passed per call or set in provider `defaults`, bypasses that routing with the specified order. A call-level order takes precedence over `defaults.providerOrder`. Its legacy `'market'` entry requests market placement; an order with only provider names uses own keys. Price caps apply to market placement.
-
-REST additionally supports per-request `only` and `byok`, documented in the [REST reference](../platform/api-reference.md#sandboxes). These are not typed `PlatformCreateOptions` fields. Do not assume that passing REST fields to the provider forwards them unchanged.
-
-A published provider starter or benchmark listing does not establish access, available credit or capacity. Use options and route previews for your organization and requested size.
+REST supports `only` and `byok` fields for one-request routing, documented in the
+[REST reference](../platform/api-reference.md#sandboxes). These are HTTP fields;
+they are not SDK create options. See the [SDK reference](../sdk/reference.md)
+for the options supported by `compute.instances.create()`.

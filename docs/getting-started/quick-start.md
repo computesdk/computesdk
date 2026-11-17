@@ -1,60 +1,61 @@
 # CLI quickstart
 
-Create a sandbox through the ComputeSDK router, run a command, and destroy it from your terminal. Let the router choose a provider or select one yourself.
-
-Already know your provider? Start with `npm create modal@latest` or another [provider starter](../providers/getting-started.md). It sets up the same CLI and creates a sandbox on your chosen provider.
-
-## 1. Install and sign in
-
-[Install the CLI](installation.md#cli), then run:
-
-```bash
-compute login
-compute whoami
-```
-
-Approve the sign-in in your browser. If it cannot open automatically, use the printed URL and code or run `compute login --no-browser`. Your resources belong to the organization shown after sign-in; use `compute org list` and `compute org use <slug>` to switch.
-
-## 2. Check where work will run
-
-```bash
-compute status
-compute sandboxes options
-compute sandboxes route
-```
-
-The route shows the current placement and rate without creating a sandbox. Managed compute requires available ComputeSDK credit; BYOK requires a configured provider key. If no route is ready, set up [managed compute or BYOK](../guides/routing.md).
-
-## 3. Create and run
+[Install the CLI](installation.md#cli), then create a sandbox and run a command:
 
 ```bash
 compute new
 compute exec echo hello
-compute list
 ```
 
-`new` creates and selects a sandbox for this directory/repository and organization. It can also start browser sign-in when you are in an interactive terminal. `exec` uses that selection, so you do not need to copy an ID for every command.
+The CLI guides setup and selects the new sandbox for this directory and
+organization. `exec` uses that selection, so you do not need to copy an ID.
+ComputeSDK handles provider setup and routing.
 
-## 4. Destroy the sandbox
+## Destroy the sandbox
 
 ```bash
 compute destroy
 ```
 
-A sandbox keeps running and billing until it is destroyed or its lifetime expires. Closing your terminal does not destroy it. Check `compute list` and retry cleanup if destruction fails.
+A sandbox keeps running and billing until destroyed or its lifetime expires.
+Closing your terminal does not stop it. Use `compute list` to check for running
+sandboxes and retry cleanup if needed.
 
-For a single command with automatic cleanup, use:
+For a single command with automatic cleanup:
 
 ```bash
 compute run echo hello
 ```
 
-`run` creates a sandbox, waits for the command, then attempts teardown. `--keep` and `--detach` leave compute running.
+`run` creates a sandbox, executes the command, then attempts teardown.
+`--keep` and `--detach` leave compute running.
+
+## Choose a provider
+
+Already know where you want to run? Use a [provider starter](../providers/README.md):
+
+```bash
+npm create modal@latest
+```
+
+Or, with the CLI installed:
+
+```bash
+compute new modal
+```
+
+Omit the provider to follow your organization's saved router. See
+[routing](../guides/routing.md) for preferences and fallback.
 
 ## Next steps
 
-- [Bring and sync a project](../cli/project-sync.md)
-- [Execute commands and expose a server](../cli/execution.md)
+- [Run commands and follow output](../guides/commands.md)
+- [Work with files](../guides/files.md) or [sync a project](../cli/project-sync.md)
+- [Preview an application](../guides/previews.md)
+- [Reconnect and manage sandbox lifetime](../guides/lifecycle.md)
 - [Use JSON output in scripts and agents](../cli/automation.md)
-- [Use the TypeScript SDK from code](sdk-quick-start.md)
 - [CLI command reference](../platform/cli.md)
+
+If creation cannot be placed, inspect `compute sandboxes options` and
+`compute sandboxes route`. See [billing](../guides/billing.md) for credits or
+[authentication](authentication.md) for noninteractive access.

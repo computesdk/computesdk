@@ -218,3 +218,10 @@ redirects:
   platform-sdk/sandboxes: platform/sandboxes.md
   platform-sdk/errors: sdk/errors.md
   platform-sdk/reference: sdk/reference.md
+
+# Task guides and billing keep source-based links addressable.
+  guides/commands: guides/commands.md
+  guides/files: guides/files.md
+  guides/previews: guides/previews.md
+  guides/lifecycle: guides/lifecycle.md
+  guides/billing: guides/billing.md

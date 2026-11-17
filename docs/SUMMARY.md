@@ -9,6 +9,13 @@
 * [TypeScript SDK quickstart](getting-started/sdk-quick-start.md)
 * [Accounts and authentication](getting-started/authentication.md)
 
+## Sandboxes
+
+* [Run commands](guides/commands.md)
+* [Work with files](guides/files.md)
+* [Preview an application](guides/previews.md)
+* [Sandbox lifecycle](guides/lifecycle.md)
+
 ## CLI
 
 * [Commands and development servers](cli/execution.md)
@@ -24,7 +31,8 @@
 
 ## Guides
 
-* [Routing and BYOK](guides/routing.md)
+* [Routing and provider selection](guides/routing.md)
+* [Pricing and billing](guides/billing.md)
 
 ## Platform
 

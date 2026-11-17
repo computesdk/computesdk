@@ -12,6 +12,8 @@ Use the ComputeSDK router as the default path for sandbox execution. Start with 
 - [CLI automation](cli/automation.md): noninteractive auth, JSON Lines, errors and resumable user sign-in.
 - [Provider starters](providers/getting-started.md): `npm create modal@latest` and other provider-pinned entry points use the same router.
 - [Routing and BYOK](guides/routing.md): account modes, provider selection and billing.
+- [Sandbox tasks](platform/sandboxes.md): commands, files, previews and lifecycle.
+- [Pricing and billing](guides/billing.md): managed compute credits, rates and cleanup.
 - [SDK reference](sdk/reference.md) and [REST reference](platform/api-reference.md): distinguish provider methods from HTTP routes.
 - [MCP server](platform/mcp.md): OAuth authorization for assistants.
 

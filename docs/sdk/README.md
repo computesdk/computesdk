@@ -29,7 +29,10 @@ export COMPUTE_API_KEY="your_org_api_key"
 | --- | --- |
 | Create, execute and destroy | [SDK quickstart](../getting-started/sdk-quick-start.md) |
 | Set an organization API key | [Authentication](../getting-started/authentication.md) |
-| Configure sizes, commands, files and streaming | [Sandboxes](../platform/sandboxes.md) |
+| Execute commands and follow output | [Run commands](../guides/commands.md) |
+| Read, write and transfer files | [Work with files](../guides/files.md) |
+| Start a server and share a URL | [Previews](../guides/previews.md) |
+| Reconnect and release compute | [Lifecycle](../guides/lifecycle.md) |
 | Choose providers and manage billing | [Routing](../guides/routing.md) |
 | Handle limits, errors and uncertain creates | [Errors and retries](errors.md) |
 | Browse SDK methods | [SDK reference](reference.md) |

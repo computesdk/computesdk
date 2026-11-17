@@ -10,13 +10,13 @@ With Node.js 22 or later and npm installed:
 npm create modal@latest
 ```
 
-The starter offers to install or upgrade `@computesdk/cli` when needed, uses your existing ComputeSDK login or starts browser sign-in, and creates a sandbox pinned to Modal. You do not need a local Modal SDK or provider key. The sandbox becomes current for this directory unless you pass `--no-use`.
+The starter offers to install or upgrade `@computesdk/cli` when needed, guides setup and creates a sandbox pinned to Modal. You do not need a local Modal SDK or provider key. The sandbox becomes current for this directory unless you pass `--no-use`.
 
-The router chooses managed compute or BYOK according to your organization's configuration. Managed compute uses ComputeSDK credits; BYOK uses your organization's saved vendor credentials and is billed by the provider. [Check routing](../guides/routing.md) for account modes and pricing. Creation can incur charges.
+Managed compute uses your organization's ComputeSDK credits. If you have configured your own provider keys, your saved routing settings determine which account is used. See [routing](../guides/routing.md) and [billing](../guides/billing.md). Creation can incur charges.
 
 Provider-pinned starters return an error if that provider cannot place the sandbox; they do not silently switch to a different provider. If a create fails with an uncertain outcome, inspect `compute list` before creating again.
 
-For another provider, use a [published starter](README.md#start-with-a-provider), or [install the CLI](../getting-started/installation.md#cli) and run `compute new <provider>`. Starter names are not always identical to provider IDs; use the command shown on the provider's website page rather than guessing an npm name.
+For another provider, use a [published starter](README.md#start-with-a-provider), or [install the CLI](../getting-started/installation.md#cli) and run `compute new <provider>`. Starter names are not always identical to provider IDs; use the verified commands in the catalog rather than guessing an npm name.
 
 ## 2. Run commands
 

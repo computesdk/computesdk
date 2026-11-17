@@ -1,8 +1,8 @@
 ---
 description: >-
   Install and use the `compute` CLI (@computesdk/cli) to drive the ComputeSDK
-  Platform — Actions dispatch, run logs, artifacts, provider credentials,
-  secrets and variables, connected repos, sandboxes, and the bench toolchain.
+  router — run commands, work with files, sync projects, preview applications,
+  and run Actions workflows.
 ---
 
 # CLI reference
