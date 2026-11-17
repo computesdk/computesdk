@@ -6,7 +6,7 @@ description: >-
 
 # API reference
 
-Base URL: `https://platform.computesdk.com/api/v1`. Authenticate every request with `Authorization: Bearer <org API key>` (see [Authentication](README.md#authentication)). Errors are `{ "error": "<message>" }` with a `400`/`401`/`403`/`404`/`410`/`429`/`500` status.
+Base URL: `https://platform.computesdk.com/api/v1`. Authenticate every request with `Authorization: Bearer <org API key>` (see [Authentication](../getting-started/authentication.md)). Errors are `{ "error": "<message>" }` with a `400`/`401`/`403`/`404`/`410`/`429`/`500` status.
 
 ## Identity and organizations
 
