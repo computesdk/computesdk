@@ -236,3 +236,6 @@ redirects:
   typescript-sdk/reference: sdk/reference.md
   guides/routing: guides/routing.md
   providers/providers: providers/README.md
+  start-here/quick-start: getting-started/quick-start.md
+  start-here/sdk-quick-start: getting-started/sdk-quick-start.md
+  start-here/authentication: getting-started/authentication.md
