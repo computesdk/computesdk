@@ -7,7 +7,7 @@ If you already know which provider you want, use its npm starter. This follows t
 With Node.js 22 or later and npm installed:
 
 ```bash
-npm create modal@latest
+npm create modal
 ```
 
 The starter offers to install or upgrade `@computesdk/cli` when needed, guides setup and creates a sandbox pinned to Modal. You do not need a local Modal SDK or provider key. The sandbox becomes current for this directory unless you pass `--no-use`.

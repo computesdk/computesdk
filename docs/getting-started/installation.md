@@ -7,7 +7,7 @@ Install the CLI for terminal workflows or the TypeScript SDK for Node.js applica
 With Node.js 22 or later, start on a specific provider in one command:
 
 ```bash
-npm create modal@latest
+npm create modal
 ```
 
 The starter guides you through setup and creates a sandbox. See [Start on a provider](../providers/getting-started.md) for what it does and how to clean up.
@@ -39,7 +39,7 @@ compute --version
 compute --help
 ```
 
-The binary is `compute`. Continue with the [CLI quickstart](quick-start.md). To update, rerun your installer or, for an npm installation, run `npm install -g @computesdk/cli@latest`. Avoid mixing installation methods if your shell finds an older binary first.
+The binary is `compute`. Continue with the [CLI quickstart](quick-start.md). To update, rerun your installer or, for an npm installation, run `npm install -g @computesdk/cli`. Avoid mixing installation methods if your shell finds an older binary first.
 
 ## TypeScript SDK
 

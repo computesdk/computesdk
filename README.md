@@ -36,8 +36,8 @@ ComputeSDK is one router for sandboxes and Actions. Run agent code and GitHub wo
 Create a sandbox on a specific provider through ComputeSDK:
 
 ```bash
-npm create modal@latest
-# Or: npm create e2b@latest
+npm create modal
+# Or: npm create e2b
 ```
 
 These starters install or upgrade the ComputeSDK CLI when needed, sign you in and create a sandbox pinned to that provider. They use your organization's managed-compute or BYOK routing. See [sandbox providers](docs/providers/README.md) for setup and cleanup.

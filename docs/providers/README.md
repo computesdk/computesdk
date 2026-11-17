@@ -23,46 +23,46 @@ All commands create remote sandboxes and can incur compute charges.
 
 | Provider | Router ID | Start |
 | --- | --- | --- |
-| Agent37 | `agent37` | `npm create agent37@latest` |
-| Archil | `archil` | `npm create archil@latest` |
-| Arker | `arker` | `npm create arker@latest` |
+| Agent37 | `agent37` | `npm create agent37` |
+| Archil | `archil` | `npm create archil` |
+| Arker | `arker` | `npm create arker` |
 | AWS EC2 | `aws-ec2` | `compute new aws-ec2` |
-| Beam | `beam` | `npm create beam@latest` |
-| Blaxel | `blaxel` | `npm create blaxel@latest` |
-| Buddy | `buddy` | `npm create buddy@latest` |
-| Cloudflare | `cloudflare` | `npm create cloudflare-sandbox@latest` |
-| CodeSandbox | `codesandbox` | `npm create codesandbox@latest` |
+| Beam | `beam` | `npm create beam` |
+| Blaxel | `blaxel` | `npm create blaxel` |
+| Buddy | `buddy` | `npm create buddy` |
+| Cloudflare | `cloudflare` | `npm create cloudflare-sandbox` |
+| CodeSandbox | `codesandbox` | `npm create codesandbox` |
 | ComputeSDK managed compute | `computesdk` | `compute new computesdk` |
 | CreateOS | `createos-sandbox` | `compute new createos-sandbox` |
-| Daytona | `daytona` | `npm create daytona@latest` |
-| E2B | `e2b` | `npm create e2b@latest` |
-| Freestyle | `freestyle` | `npm create freestyle@latest` |
+| Daytona | `daytona` | `npm create daytona` |
+| E2B | `e2b` | `npm create e2b` |
+| Freestyle | `freestyle` | `npm create freestyle` |
 | GiveMeANode | `givemeanode` | `compute new givemeanode` |
 | Google Cloud Run | `cloud-run` | `compute new cloud-run` |
-| GravixLayer | `gravixlayer` | `npm create gravixlayer@latest` |
-| Isorun | `isorun` | `npm create isorun@latest` |
+| GravixLayer | `gravixlayer` | `npm create gravixlayer` |
+| Isorun | `isorun` | `npm create isorun` |
 | Leap0 | `leap0` | `compute new leap0` |
 | Lightning | `lightning` | `compute new lightning` |
-| Luxor (Tenki) | `tenki` | `npm create tenki@latest` |
-| Microsandbox | `microsandbox` | `npm create microsandbox@latest` |
-| MIOSA | `miosa` | `npm create miosa@latest` |
-| Modal | `modal` | `npm create modal@latest` |
-| Mosaic | `mosaic` | `npm create mosaic@latest` |
-| Namespace | `namespace` | `npm create namespace@latest` |
-| Novita | `novita` | `npm create novita@latest` |
-| OpenComputer | `opencomputer` | `npm create opencomputer@latest` |
-| Promigence | `promigence` | `npm create promigence@latest` |
+| Luxor (Tenki) | `tenki` | `npm create tenki` |
+| Microsandbox | `microsandbox` | `npm create microsandbox` |
+| MIOSA | `miosa` | `npm create miosa` |
+| Modal | `modal` | `npm create modal` |
+| Mosaic | `mosaic` | `npm create mosaic` |
+| Namespace | `namespace` | `npm create namespace` |
+| Novita | `novita` | `npm create novita` |
+| OpenComputer | `opencomputer` | `npm create opencomputer` |
+| Promigence | `promigence` | `npm create promigence` |
 | Railway | `railway` | `compute new railway` |
 | Run.cloud | `run-cloud` | `compute new run-cloud` |
-| Runloop | `runloop` | `npm create runloop@latest` |
-| Sail | `sail` | `npm create sail@latest` |
+| Runloop | `runloop` | `npm create runloop` |
+| Sail | `sail` | `npm create sail` |
 | Sandbox0 | `sandbox0` | `compute new sandbox0` |
-| Sprites | `sprites` | `npm create sprites@latest` |
-| Superserve | `superserve` | `npm create superserve@latest` |
-| Tensorlake | `tensorlake` | `npm create tensorlake@latest` |
+| Sprites | `sprites` | `npm create sprites` |
+| Superserve | `superserve` | `npm create superserve` |
+| Tensorlake | `tensorlake` | `npm create tensorlake` |
 | Uno | `uno` | `compute new uno` |
-| Upstash | `upstash` | `npm create upstash@latest` |
-| Vercel | `vercel` | `npm create vercel@latest` |
+| Upstash | `upstash` | `npm create upstash` |
+| Vercel | `vercel` | `npm create vercel` |
 
 For CLI usage, every row also accepts `compute new <router-id>`. Leave out the
 ID with `compute new` to let ComputeSDK choose. Luxor retains the router ID
@@ -71,7 +71,7 @@ ID with `compute new` to let ComputeSDK choose. Luxor retains the router ID
 ## Start with a provider
 
 ```bash
-npm create modal@latest
+npm create modal
 compute exec echo hello
 compute destroy
 ```
@@ -82,7 +82,7 @@ are ComputeSDK integrations, not official vendor packages. See
 [the provider quickstart](getting-started.md) for selection and cleanup.
 
 Use the commands in this table rather than guessing npm names. For example,
-ComputeSDK's Cloudflare starter is `npm create cloudflare-sandbox@latest`.
+ComputeSDK's Cloudflare starter is `npm create cloudflare-sandbox`.
 
 ## Check availability
 
