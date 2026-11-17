@@ -50,7 +50,7 @@ Install `computesdk` and set `COMPUTE_API_KEY`.
 {% tab title="Actions" %}
 
 [Connect a repository](platform/actions.md#setup) and enable a workflow such as
-`.github/workflows/hello.yml`:
+`.computesdk/workflows/hello.yml`:
 
 ```yaml
 name: Hello ComputeSDK
@@ -65,7 +65,7 @@ jobs:
 Run it from the dashboard, or dispatch it with the CLI:
 
 ```bash
-compute actions dispatch myorg/myrepo --workflow hello.yml --ref main
+compute actions dispatch myorg/myrepo --workflow .computesdk/workflows/hello.yml --ref main
 ```
 
 Actions provisions compute for the job. Follow its steps, logs and result in
