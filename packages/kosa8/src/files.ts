@@ -33,10 +33,12 @@ export interface FileTarget {
 }
 
 /**
- * Bytes per request (under the API's 100 MB request body limit), and parts moved at once. A
- * mutable object so tests can use small parts.
+ * Bytes per request (under the API's 100 MB request body limit), and parts moved at once: reads
+ * four, writes two (four 64 MiB uploads at once on one connection sometimes made the host's HTTP/2
+ * server end it with ENHANCE_YOUR_CALM, and two are about as fast). A mutable object so tests can
+ * use small parts.
  */
-export const fileParts = { bytes: 64 * 1024 * 1024, concurrency: 4 };
+export const fileParts = { bytes: 64 * 1024 * 1024, concurrency: 4, writeConcurrency: 2 };
 /**
  * Times a request that failed in transit, or with a server error, is sent again. Cloudflare's
  * 52x (host unreachable) are not retried: from the files URL they send the request to the API.
@@ -153,7 +155,7 @@ async function writeTo(t: FileTarget, path: string, bytes: Uint8Array): Promise<
   if (!first.ok) return first;
   const offsets: number[] = [];
   for (let at = fileParts.bytes; at < bytes.length; at += fileParts.bytes) offsets.push(at);
-  return inParallel(offsets, fileParts.concurrency, async (at) => {
+  return inParallel(offsets, fileParts.writeConcurrency, async (at) => {
     const res = await send(t, 'PUT', path, { body: bytes.subarray(at, at + fileParts.bytes), offset: at });
     return res.ok ? null : res;
   });
@@ -202,10 +204,11 @@ export async function writeFileNative(
 ): Promise<void> {
   const bytes = Buffer.from(content, 'utf8');
   if (direct) {
-    const res = await writeTo(direct, path, bytes);
-    if (!res) return;
-    if (!DIRECT_REFUSED.has(res.status)) throw fileError(res, 'write', path);
-    if (res.status === 401 || res.status === 501) sandbox.directFiles = false;
+    // A connection to the host that failed in transit (after retries) leaves the API to try.
+    const res = await writeTo(direct, path, bytes).catch(() => undefined);
+    if (res === null) return;
+    if (res && !DIRECT_REFUSED.has(res.status)) throw fileError(res, 'write', path);
+    if (res && (res.status === 401 || res.status === 501)) sandbox.directFiles = false;
   }
   if (sandbox.files !== false) {
     const res = await writeTo(apiTarget(sandbox), path, bytes);
@@ -267,10 +270,11 @@ const fromBase64 = (s: string) => Buffer.from(s.replace(/\s+/g, ''), 'base64');
  */
 export async function readFileNative(sandbox: Kosa8Sandbox, path: string, run: ExecRunner, direct: FileTarget | null = null): Promise<string> {
   if (direct) {
-    const got = await readFrom(direct, path);
+    // A connection to the host that failed in transit (after retries) leaves the API to try.
+    const got = await readFrom(direct, path).catch(() => undefined);
     if (got instanceof Uint8Array) return Buffer.from(got).toString('utf8');
-    if (!DIRECT_REFUSED.has(got.status)) throw fileError(got, 'open', path);
-    if (got.status === 401 || got.status === 501) sandbox.directFiles = false;
+    if (got && !DIRECT_REFUSED.has(got.status)) throw fileError(got, 'open', path);
+    if (got && (got.status === 401 || got.status === 501)) sandbox.directFiles = false;
   }
   if (sandbox.files !== false) {
     const got = await readFrom(apiTarget(sandbox), path);

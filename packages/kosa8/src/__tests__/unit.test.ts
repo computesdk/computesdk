@@ -579,7 +579,7 @@ const PART = 1024;
 describe('kosa8 files', () => {
   const saved = { ...fileParts };
   beforeEach(() => {
-    Object.assign(fileParts, { bytes: PART, concurrency: 4 });
+    Object.assign(fileParts, { bytes: PART, concurrency: 4, writeConcurrency: 2 });
   });
   afterEach(() => {
     Object.assign(fileParts, saved);
@@ -663,6 +663,20 @@ describe('kosa8 files', () => {
       expect(fileCalls(calls, 'PUT', HOST_FILES)).toHaveLength(0);
       expect(fileCalls(calls, 'PUT')).toHaveLength(1);
     }
+  });
+
+  it('goes through the API when the connection to the host fails in transit', async () => {
+    const store = new Map<string, Buffer>();
+    const route = filesRoute(store, { direct: directWithFiles() });
+    const calls = mockFetch((call) => {
+      if (call.url.startsWith(HOST_FILES)) throw Object.assign(new Error('Stream closed with error code NGHTTP2_ENHANCE_YOUR_CALM'), { code: 'ERR_HTTP2_STREAM_ERROR' });
+      return route(call);
+    });
+    const sandbox = await provider().sandbox.create();
+    await sandbox.filesystem.writeFile('/tmp/a', 'via api');
+    expect(await sandbox.filesystem.readFile('/tmp/a')).toBe('via api');
+    expect(fileCalls(calls, 'PUT')).toHaveLength(1);
+    expect(fileCalls(calls, 'PUT', HOST_FILES)).toHaveLength(3); // the first try and two retries
   });
 
   it('retries a part that failed with a server error', async () => {
