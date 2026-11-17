@@ -58,7 +58,7 @@ Other options: `label`, `secrets` (org vault names injected into every command),
 
 ## Saved routing and REST requests
 
-A create without a provider pin or explicit `providerOrder` walks the org's saved Sandboxes router. Configure its managed strategy and BYOK mode through the [routing API](api-reference.md#routing). Managed accounts use platform billing; BYOK uses the org's own provider keys.
+A create without a provider pin or `providerOrder` (from the call or provider defaults) walks the org's saved Sandboxes router. Configure its managed strategy and BYOK mode through the [routing API](api-reference.md#routing). Managed accounts use platform billing; BYOK uses the org's own provider keys.
 
 For REST `POST /api/v1/sandboxes`, `only` narrows the saved router to a nonempty array of registered provider names without regions, retaining its order. `byok` overrides its mode for this request: `off`, `first`, `fallback`, or `only`. These fields may be combined, but neither may accompany `provider` or `providerOrder`. For example, request a small sandbox using only managed Daytona capacity:
 

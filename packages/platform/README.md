@@ -76,7 +76,7 @@ const provider = platform({
 });
 ```
 
-Without an explicit order, creation follows the organization's saved Sandboxes router. An explicit call-level `providerOrder` overrides provider defaults and bypasses that saved routing. See [routing and BYOK](https://docs.computesdk.com/guides/routing) for managed strategies and own-key modes. REST-only fields such as `only` and `byok` are not typed provider create options.
+Without an explicit order, creation follows the organization's saved Sandboxes router. A `providerOrder`, whether passed per call or set in `defaults`, bypasses that saved routing; a call-level order overrides `defaults.providerOrder`. See [routing and BYOK](https://docs.computesdk.com/guides/routing) for managed strategies and own-key modes. REST-only fields such as `only` and `byok` are not typed provider create options.
 
 ## Errors
 

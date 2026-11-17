@@ -29,12 +29,19 @@ The Platform SDK follows the same precedence, using `apiKey` in provider configu
 
 ## Reuse a CLI login in the SDK
 
-Install the optional login-store dependency in your application:
+Install the optional credential reader in your application:
 
 ```bash
 npm install @benchsdk/cli
+```
+
+Separately, [install the compute CLI](installation.md#cli) (`@computesdk/cli`) if it is not already available, then sign in:
+
+```bash
 compute login
 ```
+
+`@benchsdk/cli` lets the SDK read the saved login; it does not install the `compute` command.
 
 Then use `platform({})` without an explicit key. The SDK reads and refreshes the saved session; it never starts a browser login. Unset key environment variables if you want the stored session to apply.
 

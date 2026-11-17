@@ -4,7 +4,7 @@
 
 ## Installation & Setup
 
-The Render Sandboxes implementation added in [PR #1162](https://github.com/computesdk/computesdk/pull/1162) is available in source but has not yet been published to npm. The current npm `latest`, `@computesdk/render@1.3.2`, is a placeholder whose `render()` function throws. The examples below describe the source implementation; use the installation command after a release containing this implementation is published.
+The examples below require the Render Sandboxes implementation introduced in [PR #1162](https://github.com/computesdk/computesdk/pull/1162). The published `@computesdk/render@1.3.2` is a placeholder whose `render()` function throws; use a release containing the new implementation, or build it from source.
 
 ```bash
 npm install @computesdk/render
