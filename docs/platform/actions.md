@@ -99,8 +99,9 @@ shadowed path. This precedence only affects ComputeSDK's discovery, not GitHub.
 Use `run: |` for a multi-line script. `uses: actions/checkout@v4` checks out
 the repository before commands that need its files. Put credentials in
 [secrets](#secrets-and-variables), then reference `${{ secrets.NAME }}`.
-See [GitHub compatibility](#github-compatibility) for supported features and
-current limitations.
+Use the [GitHub Actions workflow syntax](https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions)
+for field definitions, and check [GitHub compatibility](#github-compatibility)
+for the features ComputeSDK supports and current limitations.
 
 ### Run on pushes, pull requests or a schedule
 
@@ -118,8 +119,7 @@ on:
 ```
 
 The schedule above runs at 09:00 UTC on weekdays. Commit the workflow to the
-watched branch and keep the repository and workflow enabled. Push and
-pull-request events require the connected GitHub App. `workflow_dispatch`
+watched branch and keep the repository and workflow enabled. Connect the GitHub App to receive push and pull-request webhooks. `workflow_dispatch`
 keeps an on-demand entry point alongside automatic triggers.
 
 ## Providers and eligibility
