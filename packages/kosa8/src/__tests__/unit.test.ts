@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBody, execArgv, execBody, kosa8, MAX_EXEC_BODY_BYTES, SCRIPT_ENV, SNAPSHOT_CAPABILITIES, WRITE_CHUNK_CHARS } from '../index';
-import { INLINE_READ_BYTES, INLINE_WRITE_BYTES, MAX_FILE_BYTES, PART_BYTES, workspacePath } from '../files';
+import { fileParts, INLINE_READ_BYTES } from '../files';
 
 const sandboxRow = {
   id: 'sbx_123',
@@ -30,7 +30,7 @@ interface Call {
  * Stubs global fetch with a router; records every call. Never reaches the network. A route may
  * answer with `raw` bytes (a file GET) instead of a JSON body.
  */
-function mockFetch(route: (call: Call) => { status: number; body?: unknown; raw?: Uint8Array }) {
+function mockFetch(route: (call: Call) => { status: number; body?: unknown; raw?: Uint8Array; headers?: Record<string, string> }) {
   const calls: Call[] = [];
   const fetch = vi.fn(async (url: string, init: RequestInit = {}) => {
     const call: Call = {
@@ -41,11 +41,12 @@ function mockFetch(route: (call: Call) => { status: number; body?: unknown; raw?
       ...(init.body instanceof Uint8Array ? { raw: Buffer.from(init.body) } : {}),
     };
     calls.push(call);
-    const { status, body, raw } = route(call);
+    const { status, body, raw, headers } = route(call);
     const bytes = raw ?? Buffer.from(body === undefined ? '' : JSON.stringify(body));
     return {
       ok: status >= 200 && status < 300,
       status,
+      headers: new Headers(headers ?? {}),
       text: async () => Buffer.from(bytes).toString('utf8'),
       arrayBuffer: async () => Uint8Array.from(bytes).buffer,
     } as Response;
@@ -503,247 +504,269 @@ describe('kosa8 template and region defaults from the environment', () => {
 });
 
 /**
- * A fake sandbox for file tests: its file API keeps files in `store` (only under /workspace, at
- * most 8 MiB, as kosa8's does), and its exec answers with what the test supplies.
+ * A fake sandbox for file tests. `store` is the sandbox's disk. Its file stream (`stream`) serves
+ * any path at the API (`/v1/sandboxes/sbx_123/files`) and, with a direct token, at HOST_FILES:
+ * offset= writes keep the rest of the file, Range reads answer 206 or 416. As `legacy` it is an
+ * older host's base64 file API: /workspace only, 8 MiB at most, no offsets, Range ignored. Exec
+ * answers with what the test supplies.
  */
+const HOST_FILES = 'https://h.kosa8.test/host/v1/sandboxes/sbx_123/files/raw';
+const directWithFiles = (ms = 300_000) => ({
+  exec_url: 'https://h.kosa8.test/host/v1/sandboxes/sbx_123/exec',
+  files_url: HOST_FILES,
+  token: 'tok_direct',
+  expires_at: Date.now() + ms,
+});
+
 function filesRoute(
   store: Map<string, Buffer>,
-  exec: (call: Call) => { exit: number | null; stdout?: string; stderr?: string } = () => ({ exit: 0 }),
-  { fileApi = true } = {},
+  {
+    api = 'stream' as 'stream' | 'legacy' | 'none',
+    direct = undefined as ReturnType<typeof directWithFiles> | undefined,
+    host = (_call: Call): { status: number; body?: unknown } | null => null,
+    exec = (_call: Call): { exit: number | null; stdout?: string; stderr?: string; stdout_truncated?: boolean } => ({ exit: 0 }),
+  } = {},
 ) {
-  return (call: Call) => {
-    if (call.method === 'POST' && call.url === `${API}/v1/sandboxes`) return { status: 201, body: { sandbox: sandboxRow } };
-    if (call.url === `${API}/v1/sandboxes/sbx_123/exec`) return { status: 200, body: { stdout: '', stderr: '', ...exec(call) } };
-    if (call.url.startsWith(`${API}/v1/sandboxes/sbx_123/files?`)) {
-      if (!fileApi) return { status: 501, body: { error: 'not_available', message: 'Files are not available on this host' } };
-      const path = new URL(call.url).searchParams.get('path')!;
-      if (!path.startsWith('/workspace/')) return { status: 400, body: { error: 'bad_request', message: 'outside the workspace' } };
-      if (call.method === 'PUT') {
-        if (call.raw!.length > MAX_FILE_BYTES) return { status: 413, body: { error: 'too_large' } };
-        store.set(path, call.raw!);
-        return { status: 200, body: { file: { path } } };
+  const serve = (call: Call, legacy: boolean) => {
+    const u = new URL(call.url);
+    const path = u.searchParams.get('path')!;
+    const offset = u.searchParams.get('offset');
+    if (legacy && !path.startsWith('/workspace/')) return { status: 400, body: { error: 'bad_request', message: `path "${path}" is outside the workspace` } };
+    if (legacy && offset !== null) return { status: 501, body: { error: 'not_available', message: 'offset writes are not available' } };
+    if (call.method === 'PUT') {
+      if (legacy && call.raw!.length > 8 * 1024 * 1024) return { status: 413, body: { error: 'too_large' } };
+      if (offset === null) store.set(path, Buffer.from(call.raw!));
+      else {
+        const at = Number(offset);
+        const old = store.get(path) ?? Buffer.alloc(0);
+        const next = Buffer.alloc(Math.max(old.length, at + call.raw!.length));
+        old.copy(next);
+        call.raw!.copy(next, at);
+        store.set(path, next);
       }
-      const file = store.get(path);
-      if (!file) return { status: 404, body: { error: 'not_found' } };
-      if (file.length > MAX_FILE_BYTES) return { status: 413, body: { error: 'too_large' } };
-      return { status: 200, raw: file };
+      return { status: 200, body: { file: { path } } };
+    }
+    const file = store.get(path);
+    if (!file) return { status: 404, body: { error: 'not_found', message: `no such file or folder: ${path}` } };
+    if (legacy && file.length > 8 * 1024 * 1024) return { status: 413, body: { error: 'too_large' } };
+    const range = /bytes=(\d+)-(\d+)/.exec(call.headers.Range ?? '');
+    if (legacy || !range) return { status: 200, raw: file };
+    const start = Number(range[1]);
+    if (start >= file.length) return { status: 416, body: { error: 'the range starts past the end' } };
+    const end = Math.min(Number(range[2]), file.length - 1);
+    return { status: 206, raw: file.subarray(start, end + 1), headers: { 'content-range': `bytes ${start}-${end}/${file.length}` } };
+  };
+  return (call: Call) => {
+    if (call.method === 'POST' && call.url === `${API}/v1/sandboxes`) return { status: 201, body: { sandbox: sandboxRow, ...(direct ? { direct } : {}) } };
+    if (call.url === `${API}/v1/sandboxes/sbx_123/exec` || call.url === direct?.exec_url) {
+      return { status: 200, body: { stdout: '', stderr: '', ...exec(call) } };
+    }
+    if (call.url.startsWith(`${HOST_FILES}?`)) return host(call) ?? serve(call, false);
+    if (call.url.startsWith(`${API}/v1/sandboxes/sbx_123/files?`)) {
+      if (api === 'none') return { status: 501, body: { error: 'not_available', message: 'Files are not available on this host' } };
+      return serve(call, api === 'legacy');
     }
     return { status: 500, body: { error: 'unexpected', message: `${call.method} ${call.url}` } };
   };
 }
 
 const execs = (calls: Call[]) => calls.filter((c) => c.url.endsWith('/exec'));
-const fileCalls = (calls: Call[], method: string) => calls.filter((c) => c.method === method && c.url.includes('/files?'));
-const pathOf = (c: Call) => new URL(c.url).searchParams.get('path')!;
-/** Content of n bytes with a multibyte character across every part boundary. */
-const bigContent = (n: number) => ('ab'.repeat(PART_BYTES / 2 - 1) + 'ü').repeat(Math.ceil(n / PART_BYTES)).slice(0, n);
+const fileCalls = (calls: Call[], method: string, base = `${API}/v1/sandboxes/sbx_123/files`) =>
+  calls.filter((c) => c.method === method && c.url.startsWith(`${base}?`));
+const query = (c: Call, k: string) => new URL(c.url).searchParams.get(k);
+const PART = 1024;
 
-describe('kosa8 workspace paths', () => {
-  it.each([
-    ['/workspace/a.txt', '/workspace/a.txt'],
-    ['/workspace/x/../b', '/workspace/b'],
-    ['/workspace//d/e', '/workspace/d/e'],
-    ['/workspace', null],
-    ['/workspace/', null],
-    ['/workspace/../etc/passwd', null],
-    ['/workspacefoo/a', null],
-    ['workspace/a', null],
-    ['/tmp/a', null],
-  ])('%s -> %s', (path, want) => expect(workspacePath(path)).toBe(want));
-});
+describe('kosa8 files', () => {
+  const saved = { ...fileParts };
+  beforeEach(() => {
+    Object.assign(fileParts, { bytes: PART, concurrency: 4 });
+  });
+  afterEach(() => {
+    Object.assign(fileParts, saved);
+  });
 
-describe('kosa8 file writes', () => {
-  it('writes a small file with one exec: env-carried base64, then an atomic rename', async () => {
-    const content = 'hello\nü';
-    const calls = mockFetch(filesRoute(new Map()));
+  it('writes and reads any path straight on the host with the direct token', async () => {
+    const store = new Map<string, Buffer>();
+    const calls = mockFetch(filesRoute(store, { direct: directWithFiles() }));
     const sandbox = await provider().sandbox.create();
-    await sandbox.filesystem.writeFile('/tmp/dir/file.txt', content);
-    const [e, ...rest] = execs(calls);
-    expect(rest).toHaveLength(0);
+    await sandbox.filesystem.writeFile('/tmp/a/b.txt', 'hello ü');
+    expect(store.get('/tmp/a/b.txt')!.toString('utf8')).toBe('hello ü');
+    expect(await sandbox.filesystem.readFile('/tmp/a/b.txt')).toBe('hello ü');
+    const host = calls.filter((c) => c.url.startsWith(HOST_FILES));
+    expect(host.map((c) => c.method)).toEqual(['PUT', 'GET']);
+    expect(host.every((c) => c.headers.Authorization === 'Bearer tok_direct')).toBe(true);
     expect(fileCalls(calls, 'PUT')).toHaveLength(0);
-    for (const arg of e.body.cmd) expect(arg.length).toBeLessThanOrEqual(8192);
-    expect(e.body.cmd[2]).toMatch(/mkdir -p .* base64 -d > "\/tmp\/dir\/file\.txt\.computesdk-[0-9a-f]{12}" && mv -f /);
-    expect(Buffer.from(e.body.env[0].replace(/^KOSA8_CHUNK=/, ''), 'base64').toString('utf8')).toBe(content);
-  });
-
-  it('reports a failed small write, and the command removes its temporary file', async () => {
-    const calls = mockFetch(filesRoute(new Map(), () => ({ exit: 1, stderr: 'read-only' })));
-    const sandbox = await provider().sandbox.create();
-    await expect(sandbox.filesystem.writeFile('/ro/file', 'data')).rejects.toThrow(/write '\/ro\/file' failed \(exit 1\): read-only/);
-    expect(execs(calls)[0].body.cmd[2]).toMatch(/\|\| \{ s=\$\?; rm -f "\/ro\/file\.computesdk-[0-9a-f]{12}"; exit \$s; \}$/);
-  });
-
-  it('writes a larger file under /workspace with one PUT of its bytes', async () => {
-    const store = new Map<string, Buffer>();
-    const content = 'ü'.repeat(INLINE_WRITE_BYTES);
-    const calls = mockFetch(filesRoute(store));
-    const sandbox = await provider().sandbox.create();
-    await sandbox.filesystem.writeFile('/workspace/sub/../big.txt', content);
-    expect(execs(calls)).toHaveLength(0);
-    const [put] = fileCalls(calls, 'PUT');
-    expect(pathOf(put)).toBe('/workspace/big.txt');
-    expect(put.headers.Authorization).toBe('Bearer k8c_test_key');
-    expect(store.get('/workspace/big.txt')!.toString('utf8')).toBe(content);
-  });
-
-  it('stages a file outside /workspace, or over 8 MiB, as parts put together by one command', async () => {
-    const store = new Map<string, Buffer>();
-    const content = bigContent(2 * PART_BYTES + 1000);
-    const calls = mockFetch(filesRoute(store));
-    const sandbox = await provider().sandbox.create();
-    await sandbox.filesystem.writeFile('/root/data.bin', content);
-
-    const puts = fileCalls(calls, 'PUT');
-    expect(puts).toHaveLength(3);
-    const dir = pathOf(puts[0]).replace(/\/[^/]+$/, '');
-    expect(dir).toMatch(/^\/workspace\/\.computesdk-[0-9a-f]{12}$/);
-    const parts = [...store.keys()].sort();
-    expect(parts).toEqual([`${dir}/000000`, `${dir}/000001`, `${dir}/000002`]);
-    expect(Buffer.concat(parts.map((k) => store.get(k)!)).toString('utf8')).toBe(content);
-
-    const [assemble, ...rest] = execs(calls);
-    expect(rest).toHaveLength(0);
-    expect(assemble.body.cmd[2]).toContain(`cat "${dir}"/* > "/root/data.bin.computesdk-`);
-    expect(assemble.body.cmd[2]).toContain(`rm -rf "${dir}"`);
-  });
-
-  it('retries a part that failed in transit, then succeeds', async () => {
-    const store = new Map<string, Buffer>();
-    const route = filesRoute(store);
-    let failures = 0;
-    const calls = mockFetch((call) => {
-      if (call.method === 'PUT' && pathOf(call).endsWith('000001') && failures++ < 2) return { status: 503, body: { error: 'host_busy' } };
-      return route(call);
-    });
-    const sandbox = await provider().sandbox.create();
-    const content = bigContent(PART_BYTES + 10);
-    await sandbox.filesystem.writeFile('/root/x', content);
-    expect(fileCalls(calls, 'PUT').filter((c) => pathOf(c).endsWith('000001'))).toHaveLength(3);
-    expect(Buffer.concat([...store.keys()].sort().map((k) => store.get(k)!)).toString('utf8')).toBe(content);
-  });
-
-  it('removes the staged parts when a part upload fails', async () => {
-    const route = filesRoute(new Map());
-    const calls = mockFetch((call) =>
-      call.method === 'PUT' && pathOf(call).endsWith('000001') ? { status: 502, body: { error: 'host_failed' } } : route(call),
-    );
-    const sandbox = await provider().sandbox.create();
-    await expect(sandbox.filesystem.writeFile('/root/x', bigContent(PART_BYTES + 10))).rejects.toThrow(/kosa8 API error \(502\) on write '\/root\/x': host_failed/);
-    expect(execs(calls).at(-1)!.body.cmd[2]).toMatch(/^rm -rf "\/workspace\/\.computesdk-[0-9a-f]{12}"$/);
-  });
-
-  it('starts no more parts after one fails, and cleans up only once the others have finished', async () => {
-    const route = filesRoute(new Map());
-    const calls = mockFetch((call) =>
-      call.method === 'PUT' && pathOf(call).endsWith('000000') ? { status: 400, body: { error: 'bad_request' } } : route(call),
-    );
-    const sandbox = await provider().sandbox.create();
-    await expect(sandbox.filesystem.writeFile('/root/x', bigContent(10 * PART_BYTES))).rejects.toThrow(/\(400\)/);
-    const puts = fileCalls(calls, 'PUT');
-    expect(puts.length).toBeLessThanOrEqual(4);
-    expect(calls.indexOf(execs(calls).at(-1)!)).toBeGreaterThan(calls.indexOf(puts.at(-1)!));
-  });
-
-  it('falls back to exec chunks on a host without the file API, and remembers it', async () => {
-    const calls = mockFetch(filesRoute(new Map(), () => ({ exit: 0 }), { fileApi: false }));
-    const sandbox = await provider().sandbox.create();
-    const content = 'x'.repeat(WRITE_CHUNK_CHARS) + '\nü';
-    await sandbox.filesystem.writeFile('/workspace/a.txt', content);
-    await sandbox.filesystem.writeFile('/workspace/b.txt', content);
-    expect(fileCalls(calls, 'PUT')).toHaveLength(1);
-    const writes = execs(calls);
-    for (const e of writes) for (const arg of e.body.cmd) expect(arg.length).toBeLessThanOrEqual(8192);
-    const chunks = writes.filter((e) => e.body.env.length > 0).map((e) => e.body.env[0].replace(/^KOSA8_CHUNK=/, ''));
-    expect(chunks.length).toBe(4);
-    expect(Buffer.from(chunks.slice(0, 2).join(''), 'base64').toString('utf8')).toBe(content);
-    expect(writes.at(-1)!.body.cmd[2]).toMatch(/^mv -f "\/workspace\/b\.txt\.computesdk-[0-9a-f]{12}" "\/workspace\/b\.txt"$/);
-  });
-});
-
-describe('kosa8 file reads', () => {
-  it('reads a file under /workspace with one GET', async () => {
-    const store = new Map([['/workspace/a.txt', Buffer.from('hello ü\n')]]);
-    const calls = mockFetch(filesRoute(store));
-    const sandbox = await provider().sandbox.create();
-    expect(await sandbox.filesystem.readFile('/workspace/a.txt')).toBe('hello ü\n');
     expect(execs(calls)).toHaveLength(0);
   });
 
-  it('reports a missing /workspace file as ENOENT', async () => {
-    mockFetch(filesRoute(new Map()));
+  it('writes a large file as parts: the first replaces it, the rest go at their offsets', async () => {
+    const store = new Map([['/root/big', Buffer.from('x'.repeat(10 * PART))]]);
+    const calls = mockFetch(filesRoute(store, { direct: directWithFiles() }));
     const sandbox = await provider().sandbox.create();
-    await expect(sandbox.filesystem.readFile('/workspace/nope')).rejects.toThrow(/ENOENT: no such file or directory, open '\/workspace\/nope'/);
+    const content = 'aü'.repeat(Math.ceil((3.5 * PART) / 3)); // multibyte characters across part boundaries
+    await sandbox.filesystem.writeFile('/root/big', content);
+    const puts = fileCalls(calls, 'PUT', HOST_FILES);
+    expect(puts.map((c) => query(c, 'offset'))).toEqual([null, String(PART), String(2 * PART), String(3 * PART)]);
+    expect(store.get('/root/big')!.toString('utf8')).toBe(content); // the old, longer content is gone
   });
 
-  it('reads a small file elsewhere inline with one exec', async () => {
-    const calls = mockFetch(filesRoute(new Map(), () => ({ exit: 0, stdout: `6\n${Buffer.from('hello\n').toString('base64')}\n` })));
+  it('reads a large file in ranges, in parallel', async () => {
+    const content = Buffer.from('bü'.repeat(2 * PART));
+    const calls = mockFetch(filesRoute(new Map([['/tmp/big', content]]), { direct: directWithFiles() }));
     const sandbox = await provider().sandbox.create();
-    expect(await sandbox.filesystem.readFile('/tmp/a.txt')).toBe('hello\n');
-    expect(execs(calls)).toHaveLength(1);
-    expect(fileCalls(calls, 'GET')).toHaveLength(0);
+    expect(await sandbox.filesystem.readFile('/tmp/big')).toBe(content.toString('utf8'));
+    const ranges = fileCalls(calls, 'GET', HOST_FILES).map((c) => c.headers.Range);
+    expect(ranges).toEqual(['bytes=0-1023', 'bytes=1024-2047', 'bytes=2048-3071', 'bytes=3072-4095', 'bytes=4096-5119', 'bytes=5120-6143']);
   });
 
-  it('reports a missing file elsewhere as ENOENT', async () => {
-    mockFetch(filesRoute(new Map(), () => ({ exit: 44 })));
+  it('reads an empty file (416 on the first range)', async () => {
+    mockFetch(filesRoute(new Map([['/tmp/empty', Buffer.alloc(0)]]), { direct: directWithFiles() }));
     const sandbox = await provider().sandbox.create();
-    await expect(sandbox.filesystem.readFile('/tmp/nope')).rejects.toThrow(/ENOENT/);
+    expect(await sandbox.filesystem.readFile('/tmp/empty')).toBe('');
   });
 
-  it('reads a large file as parts split under /workspace, fetched and then removed', async () => {
-    const content = Buffer.from(bigContent(MAX_FILE_BYTES + 5000));
-    const store = new Map<string, Buffer>([['/workspace/big', content]]);
-    const calls = mockFetch(
-      filesRoute(store, (call) => {
-        const cmd: string = call.body.cmd[2];
-        const dir = /mkdir -p "(\/workspace\/\.computesdk-[0-9a-f]{12})"/.exec(cmd)?.[1];
-        if (dir) {
-          for (let i = 0; i * PART_BYTES < content.length; i++) {
-            store.set(`${dir}/${String(i).padStart(6, '0')}`, content.subarray(i * PART_BYTES, (i + 1) * PART_BYTES));
-          }
-          return { exit: 0, stdout: `${content.length}\n` };
-        }
-        return { exit: 0 };
+  it('reports a missing file as ENOENT, and permission or a full disk as EACCES and ENOSPC', async () => {
+    mockFetch(
+      filesRoute(new Map(), {
+        direct: directWithFiles(),
+        host: (call) => {
+          if (query(call, 'path') === '/proc/x') return { status: 403, body: { error: 'Operation not permitted' } };
+          if (query(call, 'path') === '/full') return { status: 507, body: { error: 'disk full' } };
+          return null;
+        },
       }),
     );
     const sandbox = await provider().sandbox.create();
-    expect(await sandbox.filesystem.readFile('/workspace/big')).toBe(content.toString('utf8'));
-    const gets = fileCalls(calls, 'GET').map(pathOf);
-    expect(gets[0]).toBe('/workspace/big'); // 413: over the file API's limit
-    const parts = Array.from({ length: Math.ceil(content.length / PART_BYTES) }, (_, i) => String(i).padStart(6, '0'));
-    expect(parts.length).toBeGreaterThan(1);
-    expect(gets.slice(1).map((p) => p.replace(/.*\//, '')).sort()).toEqual(parts);
-    const [split, cleanup] = execs(calls);
-    expect(split.body.cmd[2]).toContain(`dd if="/workspace/big"`);
-    expect(cleanup.body.cmd[2]).toMatch(/^rm -rf "\/workspace\/\.computesdk-[0-9a-f]{12}"$/);
+    await expect(sandbox.filesystem.readFile('/tmp/nope')).rejects.toThrow(/ENOENT: no such file or directory, open '\/tmp\/nope'/);
+    await expect(sandbox.filesystem.writeFile('/proc/x', 'x')).rejects.toThrow(/EACCES: permission denied, write '\/proc\/x'/);
+    await expect(sandbox.filesystem.writeFile('/full', 'x')).rejects.toThrow(/ENOSPC/);
   });
 
-  it('reads a large file in 1 MiB exec chunks on a host without the file API', async () => {
-    const content = Buffer.from(bigContent(INLINE_READ_BYTES * 2 + 7));
+  it.each([401, 409, 501, 530])('goes through the API when the host refuses the direct token (%i)', async (status) => {
+    const store = new Map<string, Buffer>();
+    const calls = mockFetch(filesRoute(store, { direct: directWithFiles(), host: () => ({ status, body: { error: 'no' } }) }));
+    const sandbox = await provider().sandbox.create();
+    await sandbox.filesystem.writeFile('/tmp/a', 'via api');
+    expect(store.get('/tmp/a')!.toString()).toBe('via api');
+    expect(fileCalls(calls, 'PUT')[0].headers.Authorization).toBe('Bearer k8c_test_key');
+    // A refused token (401) or a host without direct files (501) is not tried again.
+    await sandbox.filesystem.readFile('/tmp/a');
+    expect(fileCalls(calls, 'GET', HOST_FILES)).toHaveLength(status === 401 || status === 501 ? 0 : 1);
+  });
+
+  it('uses the API for files when the direct token does not cover them, or is about to expire', async () => {
+    for (const direct of [{ ...directWithFiles(), files_url: undefined }, directWithFiles(5_000)]) {
+      const store = new Map<string, Buffer>();
+      const calls = mockFetch(filesRoute(store, { direct: direct as any }));
+      const sandbox = await provider().sandbox.create();
+      await sandbox.filesystem.writeFile('/tmp/a', 'x');
+      expect(fileCalls(calls, 'PUT', HOST_FILES)).toHaveLength(0);
+      expect(fileCalls(calls, 'PUT')).toHaveLength(1);
+    }
+  });
+
+  it('retries a part that failed with a server error', async () => {
+    const store = new Map<string, Buffer>();
+    let failures = 0;
     const calls = mockFetch(
-      filesRoute(
-        new Map(),
-        (call) => {
-          const cmd: string = call.body.cmd[2];
-          const skip = /skip=(\d+) count=1/.exec(cmd);
+      filesRoute(store, { host: (c) => (query(c, 'offset') === String(PART) && failures++ < 2 ? { status: 503, body: { error: 'host_busy' } } : null), direct: directWithFiles() }),
+    );
+    const sandbox = await provider().sandbox.create();
+    const content = 'z'.repeat(2 * PART);
+    await sandbox.filesystem.writeFile('/tmp/r', content);
+    expect(fileCalls(calls, 'PUT', HOST_FILES).filter((c) => query(c, 'offset') === String(PART))).toHaveLength(3);
+    expect(store.get('/tmp/r')!.toString()).toBe(content);
+  });
+
+  it('starts no more parts after one fails', async () => {
+    const calls = mockFetch(
+      filesRoute(new Map(), { direct: directWithFiles(), host: (c) => (query(c, 'offset') === String(PART) ? { status: 400, body: { error: 'bad' } } : null) }),
+    );
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.filesystem.writeFile('/tmp/x', 'q'.repeat(20 * PART))).rejects.toThrow(/\(400\)/);
+    expect(fileCalls(calls, 'PUT', HOST_FILES).length).toBeLessThanOrEqual(5);
+  });
+
+  it('on an older host, writes /workspace through its file API and other paths over exec', async () => {
+    const store = new Map<string, Buffer>();
+    const calls = mockFetch(filesRoute(store, { api: 'legacy' }));
+    const sandbox = await provider().sandbox.create();
+    await sandbox.filesystem.writeFile('/workspace/a.txt', 'in workspace');
+    expect(store.get('/workspace/a.txt')!.toString()).toBe('in workspace');
+    expect(execs(calls)).toHaveLength(0);
+    await sandbox.filesystem.writeFile('/tmp/b.txt', 'hello\nü');
+    const [e] = execs(calls);
+    expect(e.body.cmd[2]).toMatch(/mkdir -p .* base64 -d > "\/tmp\/b\.txt\.computesdk-[0-9a-f]{12}" && mv -f /);
+    expect(Buffer.from(e.body.env[0].replace(/^KOSA8_CHUNK=/, ''), 'base64').toString('utf8')).toBe('hello\nü');
+  });
+
+  it('on an older host, reads a file over 8 MiB over exec in 1 MiB chunks', async () => {
+    Object.assign(fileParts, saved);
+    const content = Buffer.from('c'.repeat(INLINE_READ_BYTES * 2 + 7));
+    const calls = mockFetch(
+      filesRoute(new Map([['/workspace/big', Buffer.alloc(9 * 1024 * 1024)]]), {
+        api: 'legacy',
+        exec: (call) => {
+          const skip = /skip=(\d+) count=1/.exec(call.body.cmd[2]);
           if (skip) {
             const i = Number(skip[1]);
             return { exit: 0, stdout: content.subarray(i * INLINE_READ_BYTES, (i + 1) * INLINE_READ_BYTES).toString('base64') };
           }
-          expect(cmd).not.toContain('mkdir');
           return { exit: 0, stdout: `${content.length}\n` };
         },
-        { fileApi: false },
-      ),
+      }),
     );
     const sandbox = await provider().sandbox.create();
     expect(await sandbox.filesystem.readFile('/workspace/big')).toBe(content.toString('utf8'));
     expect(execs(calls)).toHaveLength(4);
   });
 
+  it('on a host without any file API, uses exec and remembers it', async () => {
+    const calls = mockFetch(filesRoute(new Map(), { api: 'none', exec: () => ({ exit: 0, stdout: `6\n${Buffer.from('hello\n').toString('base64')}\n` }) }));
+    const sandbox = await provider().sandbox.create();
+    expect(await sandbox.filesystem.readFile('/tmp/a.txt')).toBe('hello\n');
+    expect(await sandbox.filesystem.readFile('/tmp/a.txt')).toBe('hello\n');
+    expect(fileCalls(calls, 'GET')).toHaveLength(1);
+    expect(execs(calls)).toHaveLength(2);
+  });
+
+  it('fails an exec read whose output the API cut off, rather than return part of the file', async () => {
+    mockFetch(filesRoute(new Map(), { api: 'none', exec: () => ({ exit: 0, stdout: '5\naGVsbG8=', stdout_truncated: true }) }));
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.filesystem.readFile('/tmp/a')).rejects.toThrow(/cut off/);
+  });
+
+  it('reports a failed exec write on an older host, and the command removes its temporary file', async () => {
+    const calls = mockFetch(filesRoute(new Map(), { api: 'none', exec: () => ({ exit: 1, stderr: 'read-only' }) }));
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.filesystem.writeFile('/ro/file', 'data')).rejects.toThrow(/write '\/ro\/file' failed \(exit 1\): read-only/);
+    expect(execs(calls)[0].body.cmd[2]).toMatch(/\|\| \{ s=\$\?; rm -f "\/ro\/file\.computesdk-[0-9a-f]{12}"; exit \$s; \}$/);
+  });
+
   it('checks existence', async () => {
-    mockFetch(filesRoute(new Map(), () => ({ exit: 0, stdout: 'no\n' })));
+    mockFetch(filesRoute(new Map(), { exec: () => ({ exit: 0, stdout: 'no\n' }) }));
     const sandbox = await provider().sandbox.create();
     expect(await sandbox.filesystem.exists('/tmp/missing')).toBe(false);
+  });
+});
+
+describe('kosa8 exec output truncation', () => {
+  it('reports the API cutting off a command output', async () => {
+    mockFetch(
+      filesRoute(new Map(), {
+        exec: () => ({ exit: 0, stdout: 'abc', stdout_truncated: true, stderr_truncated: false, stdout_bytes: 5_000_000, stderr_bytes: 0 } as any),
+      }),
+    );
+    const sandbox = await provider().sandbox.create();
+    const r: any = await sandbox.runCommand('yes | head -c 5000000');
+    expect(r).toMatchObject({ stdout: 'abc', truncated: true, stdoutTruncated: true, stderrTruncated: false, stdoutBytes: 5_000_000, stderrBytes: 0 });
+  });
+
+  it('adds nothing when the API does not report it', async () => {
+    mockFetch(filesRoute(new Map(), { exec: () => ({ exit: 0, stdout: 'ok' }) }));
+    const sandbox = await provider().sandbox.create();
+    const r: any = await sandbox.runCommand('echo ok');
+    expect(r.truncated).toBeUndefined();
   });
 });
 

@@ -102,6 +102,10 @@ function untilAborted<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
   });
 }
 
+/** Each stream's and the whole session's receive window. */
+const WINDOW_BYTES = 16 * 1024 * 1024;
+const SESSION_WINDOW_BYTES = 64 * 1024 * 1024;
+
 /** How long opening a session may take before the origin falls back to `fetch`. */
 const CONNECT_TIMEOUT_MS = 10_000;
 
@@ -148,7 +152,9 @@ function session(origin: string): Promise<Session | null> {
     }
     return new Promise<Session | null>((resolve) => {
       let settled = false;
-      const s = http2.connect(origin);
+      // Large flow-control windows, so a big file moves at the link's speed rather than 64 KiB
+      // per round trip (HTTP/2's default window).
+      const s = http2.connect(origin, { settings: { initialWindowSize: WINDOW_BYTES } });
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
@@ -164,6 +170,11 @@ function session(origin: string): Promise<Session | null> {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        try {
+          s.setLocalWindowSize(SESSION_WINDOW_BYTES);
+        } catch {
+          // An older Node: the default window.
+        }
         // Unreferenced until a request holds it (hold), so a preconnect alone never keeps the
         // process alive.
         if (!inFlight.get(s)) s.unref();

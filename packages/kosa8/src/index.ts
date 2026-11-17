@@ -68,6 +68,8 @@ export interface Kosa8Template {
 /** The create answer's `direct` object: the host's exec endpoint for this sandbox and a token for it. */
 export interface Kosa8Direct {
   exec_url: string;
+  /** The host's raw file endpoint for this sandbox, when the token also covers files (`files.direct`). */
+  files_url?: string;
   token: string;
   /** When the token stops working, ms since the epoch. */
   expires_at: number;
@@ -84,6 +86,8 @@ export interface Kosa8Sandbox {
   refreshing?: Promise<void>;
   /** False once the sandbox's host answered that it has no file API: files then go over exec. */
   files?: boolean;
+  /** False once the host refused file requests with the direct token: files then go through the API. */
+  directFiles?: boolean;
 }
 
 /** A snapshot as the kosa8 Cloud API returns it. */
@@ -131,6 +135,25 @@ interface ExecResponse {
   exit: number | null;
   stdout: string;
   stderr: string;
+  /** Set when the API kept only the first part of a stream (its output limit). */
+  stdout_truncated?: boolean;
+  stderr_truncated?: boolean;
+  /** The stream's full length, kept or not. */
+  stdout_bytes?: number;
+  stderr_bytes?: number;
+}
+
+/**
+ * A command's result. Beyond ComputeSDK's fields it says when the API returned only the first part
+ * of the output (its limit on a buffered command): `truncated`, per stream, and each stream's full
+ * length in bytes. These are absent when the API does not report them.
+ */
+export interface Kosa8CommandResult extends CommandResult {
+  truncated?: boolean;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+  stdoutBytes?: number;
+  stderrBytes?: number;
 }
 
 /** The API's shortest and longest lifetime for a sandbox (ttl_s). */
@@ -228,6 +251,19 @@ const DIRECT_REFRESH_MS = 60_000;
  * command may have run.
  */
 const DIRECT_NOT_RUN = new Set([401, 403, 404, 409, 501, 521, 522, 523, 530]);
+
+/**
+ * The direct token and files URL for file requests, or null when files go through the API: no
+ * token, a host whose token does not cover files, one that refused it, or a token about to expire
+ * (renewed in the background, as for commands).
+ */
+export function directFiles(sandbox: Kosa8Sandbox): { url: string; token: string } | null {
+  const d = sandbox.direct;
+  if (!d?.files_url || sandbox.directFiles === false || !/^https:\/\//.test(d.files_url)) return null;
+  const left = d.expires_at - Date.now();
+  if (left < DIRECT_REFRESH_MS) refreshDirect(sandbox);
+  return left < DIRECT_MARGIN_MS ? null : { url: d.files_url, token: d.token };
+}
 
 /** Renews the direct token in the background; a failure leaves the API path in use. */
 function refreshDirect(sandbox: Kosa8Sandbox): void {
@@ -523,7 +559,7 @@ const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
         await request(auth, 'DELETE', sandboxPath(instanceId));
       },
 
-      runCommand: async (sandbox: Kosa8Sandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+      runCommand: async (sandbox: Kosa8Sandbox, command: string, options?: RunCommandOptions): Promise<Kosa8CommandResult> => {
         const start = Date.now();
         const body = execBody(command, options);
         // The command is stopped in the sandbox at the deadline; the request gets a grace period on top.
@@ -533,12 +569,20 @@ const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
         const data = (await runDirect(sandbox, body, signal)) ??
           (await request<ExecResponse>(sandbox, 'POST', sandboxPath(sandbox.id, '/exec'), body, signal));
         if (!data) throw new Error(`kosa8 sandbox ${sandbox.id} not found`);
-        return {
+        const result: Kosa8CommandResult = {
           stdout: data.stdout ?? '',
           stderr: data.stderr ?? '',
           exitCode: Number.isInteger(data.exit) ? (data.exit as number) : -1,
           durationMs: Date.now() - start,
         };
+        if (typeof data.stdout_truncated === 'boolean' || typeof data.stderr_truncated === 'boolean') {
+          result.stdoutTruncated = data.stdout_truncated === true;
+          result.stderrTruncated = data.stderr_truncated === true;
+          result.truncated = result.stdoutTruncated || result.stderrTruncated;
+        }
+        if (typeof data.stdout_bytes === 'number') result.stdoutBytes = data.stdout_bytes;
+        if (typeof data.stderr_bytes === 'number') result.stderrBytes = data.stderr_bytes;
+        return result;
       },
 
       getInfo: async (sandbox: Kosa8Sandbox): Promise<InstanceInfo> => {
@@ -602,11 +646,11 @@ const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
 
       getInstance: (sandbox: Kosa8Sandbox): Kosa8Sandbox => sandbox,
 
-      // File content through kosa8's file API where the host has it (files.ts), shell commands over
-      // exec otherwise; the rest are single shell commands.
+      // File content straight to the sandbox's host with the direct token, else through the API's
+      // file stream, else (an older host) exec (files.ts); the rest are single shell commands.
       filesystem: {
-        readFile: (sandbox, path, run) => readFileNative(sandbox, path, run),
-        writeFile: (sandbox, path, content, run) => writeFileNative(sandbox, path, content, run),
+        readFile: (sandbox, path, run) => readFileNative(sandbox, path, run, directFiles(sandbox)),
+        writeFile: (sandbox, path, content, run) => writeFileNative(sandbox, path, content, run, directFiles(sandbox)),
         mkdir: (sandbox, path, run) => shellFs(sandbox, run).mkdir(path),
         readdir: (sandbox, path, run) => shellFs(sandbox, run).readdir(path),
         exists: (sandbox, path, run) => shellFs(sandbox, run).exists(path),
