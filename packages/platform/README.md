@@ -2,7 +2,7 @@
 
 TypeScript access to the [ComputeSDK router](https://www.computesdk.com/sandbox-router). Run code across sandbox providers through one API, using ComputeSDK-managed compute or your organization’s provider keys. Routing, provider fallback and cost tracking run server-side; your application uses one sandbox ID and a consistent command/filesystem interface.
 
-Start with the [runnable TypeScript SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start), [authentication](https://docs.computesdk.com/start-here/authentication) and [SDK reference](https://docs.computesdk.com/platform-sdk/reference).
+Start with the [runnable TypeScript SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start), [authentication](https://docs.computesdk.com/start-here/authentication) and [SDK reference](https://docs.computesdk.com/typescript-sdk/reference).
 
 ```bash
 npm install computesdk @computesdk/platform

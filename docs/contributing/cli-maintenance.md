@@ -22,7 +22,7 @@ Product docs live in `docs/` in this repository. The root `gitbook-docs.yaml` po
 
 ## Product documentation scope
 
-ComputeSDK is the router; CLI, TypeScript SDK, API and MCP are its interfaces. Product docs cover providers used through the router. Link to GitHub for direct vendor adapters and custom provider development rather than restoring the full adapter catalog to the product sidebar. Historical adapter source pages remain in this repository for existing links; they are not the current provider onboarding guides.
+ComputeSDK is the router; CLI, TypeScript SDK, API and MCP are its interfaces. Product docs cover providers used through the router. Link to GitHub for direct vendor adapters and custom provider development rather than restoring the full adapter catalog to the product sidebar. Historical adapter source pages remain in GitHub; they are not the current provider onboarding guides.
 
 Provider starters such as `npm create modal` belong in router onboarding. Verify publication and the exact npm name before adding a starter: names can differ from provider IDs, and a published package alone does not establish organization access or capacity. The starters live in the separate `computesdk/create` repository.
 
