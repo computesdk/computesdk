@@ -2,9 +2,9 @@
 description: Create sandboxes from your terminal or application with the ComputeSDK CLI and Platform SDK.
 ---
 
-# Introduction
+# ComputeSDK Platform
 
-ComputeSDK runs your code in isolated cloud sandboxes. Start from your terminal with the **compute CLI**, or create and control sandboxes from TypeScript with the **Platform SDK**. Both use your organization's hosted routing, provider credentials and billing.
+ComputeSDK is a hosted platform for running code in isolated cloud sandboxes. Start from your terminal with the **compute CLI**, or create and control sandboxes from TypeScript with the **Platform SDK**. Both use your organization's hosted routing, provider credentials and billing.
 
 ## Choose your starting point
 
@@ -16,7 +16,6 @@ ComputeSDK runs your code in isolated cloud sandboxes. Start from your terminal 
 | Choose managed compute or bring my own provider keys | [Routing and BYOK](guides/routing.md) |
 | Run GitHub Actions workflows on sandbox providers | [Actions](platform/actions.md) |
 | Give an AI assistant access through MCP | [MCP server](platform/mcp.md) |
-| Call a provider directly without the hosted platform | [Direct providers](providers/README.md) |
 
 ## One platform, two ways to build
 
@@ -26,8 +25,6 @@ The platform routes requests across managed compute and your own provider keys. 
 
 Use the [dashboard](https://platform.computesdk.com) to manage organizations, credentials, credits and sandbox activity. REST and MCP expose additional platform operations alongside the CLI and SDK.
 
-## Direct provider integrations
+## Build on the platform
 
-If you manage infrastructure and credentials in your own application, install individual provider adapters instead. The core SDK offers a common interface and client-side routing. Provider-native capabilities, adapter support and hosted availability are separate: a provider package does not guarantee that the platform can place work on it.
-
-See the [provider catalog](providers/README.md), [direct provider setup](providers/getting-started.md) and [core SDK reference](reference/compute.md).
+Start with [installation](getting-started/installation.md), then follow the CLI or SDK quickstart to create your first sandbox. The [platform overview](platform/README.md) explains organizations, authentication and the API. For application development, continue with [hosted sandboxes](platform/sandboxes.md) and the [SDK reference](sdk/reference.md).

@@ -1,5 +1,7 @@
 # Installation
 
+Install the CLI for terminal workflows or the Platform SDK for Node.js applications. Both connect to your ComputeSDK organization. Create an account at [platform.computesdk.com](https://platform.computesdk.com), then follow the [authentication guide](authentication.md) to sign in or create an API key.
+
 ## CLI
 
 On macOS or Linux:
@@ -38,9 +40,3 @@ npm install computesdk @computesdk/platform
 ```
 
 The SDK connects to the hosted platform. You do not need to install individual provider adapters. Follow the [Platform SDK quickstart](sdk-quick-start.md) for authentication and a runnable example.
-
-## Direct provider SDKs
-
-For applications that call provider APIs themselves, see [direct provider setup](../providers/getting-started.md). These credentials and client-side routing are independent of the hosted platform.
-
-Building this repository from source requires Node.js 22.19.0 or later and pnpm 9 or later. Those are contributor requirements; check the requirements of each published package you install.

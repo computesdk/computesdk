@@ -10,7 +10,9 @@ description: >-
 
 ## What the platform is
 
-The ComputeSDK Platform ([platform.computesdk.com](https://platform.computesdk.com)) is the hosted control plane for ComputeSDK. The open-source SDK gives you one sandbox API across providers. The platform decides where work runs and tracks it for you:
+The ComputeSDK Platform ([platform.computesdk.com](https://platform.computesdk.com)) runs cloud sandboxes for your applications, agents and terminal workflows. Start with the [compute CLI](../getting-started/quick-start.md) or [Platform SDK](../getting-started/sdk-quick-start.md); your organization manages routing, provider credentials and billing centrally.
+
+The platform places work and tracks resources across:
 
 * **[Sandboxes](sandboxes.md), the sandbox router.** Create sandboxes through one endpoint and let the platform place them. It follows your `providerOrder`, using your own provider keys, the compute market, or both, with optional price limits.
 * **[Actions](actions.md), the CI router.** Run GitHub-style workflows on real compute providers instead of fixed runner VMs. Each job is placed by your org's provider order and reports the `provider:region` it ran on.
