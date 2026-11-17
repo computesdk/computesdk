@@ -71,7 +71,7 @@ describe('Modal initialization across provider instances', () => {
     expect(sdk.create).toHaveBeenCalledTimes(100);
     for (let i = 0; i < 100; i++) {
       expect(sdk.create).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
-        name: `sandbox-${i}`, timeoutMs: 1000 + i, encryptedPorts: [8000 + i],
+        name: `sandbox-${i}`, timeoutMs: 1000 + i, encryptedPorts: [8000 + i], runtime: 'vm',
       });
     }
     await modal({ ...credentials }).sandbox.create();
