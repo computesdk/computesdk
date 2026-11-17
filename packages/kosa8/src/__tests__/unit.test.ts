@@ -193,7 +193,7 @@ describe('kosa8 lifecycle', () => {
     );
   });
 
-  it('reports info, mapping a sleeping sandbox to stopped', async () => {
+  it('reports info, mapping a sleeping sandbox to running and a stopped, deleted or expired one to stopped', async () => {
     let state = 'running';
     mockFetch((call) =>
       call.method === 'POST' ? { status: 201, body: { sandbox: sandboxRow } } : { status: 200, body: { sandbox: { ...sandboxRow, state } } },
@@ -206,8 +206,13 @@ describe('kosa8 lifecycle', () => {
       createdAt: new Date(sandboxRow.created_at),
       metadata: { state: 'running', template: 'base', region: 'eu-hel1' },
     });
+    // Sleeping wakes on the next call, so it is alive; the rest are not running.
     state = 'sleeping';
-    expect((await sandbox.getInfo()).status).toBe('stopped');
+    expect((await sandbox.getInfo()).status).toBe('running');
+    for (const gone of ['stopped', 'deleted', 'expired', 'creating', 'paused']) {
+      state = gone;
+      expect((await sandbox.getInfo()).status).toBe('stopped');
+    }
     state = 'error';
     expect((await sandbox.getInfo()).status).toBe('error');
   });

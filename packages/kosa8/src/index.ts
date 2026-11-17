@@ -393,9 +393,11 @@ function execEnv(env?: Record<string, string>): string[] {
 
 function infoStatus(state: string): InstanceInfo['status'] {
   if (state === 'error') return 'error';
-  if (state === 'running') return 'running';
-  // creating, sleeping, paused, stopped and deleted: not running now, so a readiness check keeps waiting.
-  // A sleeping sandbox wakes on its next command.
+  // A sleeping sandbox is alive: its memory and disk are saved, and any call (a command, a file
+  // read or write) wakes it in about a second, so it reports as running.
+  if (state === 'running' || state === 'sleeping') return 'running';
+  // creating, paused, stopped, deleted and expired (past its deadline): not running now, so a
+  // readiness check keeps waiting and a liveness check sees it gone.
   return 'stopped';
 }
 
