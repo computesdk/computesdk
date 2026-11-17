@@ -19,7 +19,10 @@ type Session = import('node:http2').ClientHttp2Session;
 export interface HttpResponse {
   status: number;
   ok: boolean;
+  /** The body as UTF-8 text; empty when the request asked for `binary`. */
   text: string;
+  /** The body's bytes, present when the request asked for `binary`. */
+  bytes?: Uint8Array;
   /** Response headers, names in lower case. */
   headers: Record<string, string>;
 }
@@ -27,8 +30,10 @@ export interface HttpResponse {
 export interface HttpInit {
   method: string;
   headers: Record<string, string>;
-  body?: string;
+  body?: string | Uint8Array;
   signal?: AbortSignal;
+  /** Return the body as bytes (`bytes`) rather than text, for file content. */
+  binary?: boolean;
 }
 
 /** The global fetch as it was when this module loaded; a different one later was put there on purpose. */
@@ -198,11 +203,15 @@ async function viaFetch(url: string, init: HttpInit): Promise<HttpResponse> {
   const res = await fetch(url, {
     method: init.method,
     headers: init.headers,
-    body: init.body,
+    // A Uint8Array body is sent as its bytes (BodyInit types leave out views over a SharedArrayBuffer).
+    body: init.body as BodyInit | undefined,
     signal: init.signal,
   });
   const headers: Record<string, string> = {};
   res.headers?.forEach?.((v, k) => (headers[k.toLowerCase()] = v));
+  if (init.binary) {
+    return { status: res.status, ok: res.ok, text: '', bytes: new Uint8Array(await res.arrayBuffer()), headers };
+  }
   return { status: res.status, ok: res.ok, text: await res.text(), headers };
 }
 
@@ -291,11 +300,13 @@ function viaSession(s: Session, url: string, init: HttpInit): Promise<HttpRespon
     });
     req.on('close', () => {
       if (status !== 0 && ended && !req.rstCode) {
+        const body = Buffer.concat(chunks);
         finish(() =>
           resolve({
             status,
             ok: status >= 200 && status < 300,
-            text: Buffer.concat(chunks).toString('utf8'),
+            text: init.binary ? '' : body.toString('utf8'),
+            ...(init.binary ? { bytes: new Uint8Array(body.buffer, body.byteOffset, body.byteLength) } : {}),
             headers: got,
           }),
         );

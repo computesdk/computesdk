@@ -19,7 +19,11 @@ beforeAll(async () => {
   server.on('stream', (stream, headers) => {
     stream.on('error', () => {}); // the /partial reset, seen from the server side
     let body = '';
-    stream.on('data', (c) => (body += c));
+    const raw: Buffer[] = [];
+    stream.on('data', (c: Buffer) => {
+      body += c;
+      raw.push(c);
+    });
     stream.on('end', () => {
       const path = String(headers[':path']);
       seen.push({ method: String(headers[':method']), path, auth: String(headers.authorization ?? ''), body });
@@ -28,7 +32,11 @@ beforeAll(async () => {
         stream.respond({ ':status': path === '/missing' ? 404 : 200, 'content-type': 'application/json' });
         stream.end(JSON.stringify({ ok: true, path }));
       };
-      if (path === '/slow') setTimeout(reply, 500);
+      if (path === '/echo') {
+        // The request's bytes back, as they came.
+        stream.respond({ ':status': 200, 'content-type': 'application/octet-stream' });
+        stream.end(Buffer.concat(raw));
+      } else if (path === '/slow') setTimeout(reply, 500);
       else if (path === '/partial') {
         // Headers and part of the body, then the connection drops.
         stream.respond({ ':status': 200 });
@@ -76,6 +84,16 @@ describe('kosa8 HTTP/2 transport', () => {
     expect(seen[0].auth).toBe('Bearer k');
     expect(JSON.parse(rs[7].text).path).toBe('/v1/sandboxes/7');
     expect(rs[7].headers['content-type']).toBe('application/json');
+  });
+
+  it('sends and returns bytes unchanged for a binary request', async () => {
+    vi.stubEnv('KOSA8_HTTP_TRANSPORT', 'http2');
+    const bytes = new Uint8Array(3 * 1024 * 1024 + 7);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31) & 0xff; // includes invalid UTF-8
+    const r = await httpRequest(`${base}/echo`, { method: 'PUT', headers: { Authorization: 'Bearer k' }, body: bytes, binary: true });
+    expect(r.status).toBe(200);
+    expect(r.text).toBe('');
+    expect(Buffer.from(r.bytes!).equals(Buffer.from(bytes))).toBe(true);
   });
 
   it('opens the session on preconnect, before the first request', async () => {

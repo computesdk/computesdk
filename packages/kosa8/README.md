@@ -50,7 +50,17 @@ console.log((await sandbox.runCommand('sh /tmp/hello.sh')).stdout); // "42\n"
 await sandbox.pause();
 await sandbox.resume();
 
+// Snapshot: memory (running processes) and disk, saved while the sandbox keeps running.
+// Each restore is a new sandbox that starts exactly where the snapshot was taken.
+const snap = await sdk.snapshot.create(sandbox.sandboxId);
 await sandbox.destroy();
+const clone = await sdk.sandbox.create({ snapshotId: snap.id });
+await clone.destroy();
+await sdk.snapshot.delete(snap.id);
+
+// Boot an OCI image (a VM of its own, 2 vCPU / 4 GiB by default)
+const py = await sdk.sandbox.create({ image: 'python:3.12-slim' });
+await py.destroy();
 ```
 
 ## Configuration
@@ -76,13 +86,16 @@ interface Kosa8Config {
 | `region` | `region` | A region id such as `eu-hel1`. |
 | `timeout` (ms) | `ttl_s` | The sandbox is deleted when its lifetime ends. Rounded up to whole seconds; the API's minimum is 60 s and maximum 90 days. Without it, a sandbox lives until destroyed. |
 | `sleepAfterSeconds` | `sleep_after_s` | Idle seconds before the sandbox sleeps; `0` never sleeps. |
+| `image` | `image` | An OCI image reference such as `node:22`. The sandbox boots a VM of its own (2 vCPU / 4 GiB) from it, and `create` resolves once it runs. Needs a payment method on the organization. The configured default template does not apply. |
+| `snapshotId` | `snapshot` | A snapshot from `snapshot.create()`. The new sandbox is restored from it, memory and disk, on the snapshot's host, and takes its template, size and image from it, so `templateId`, `image` and `region` are refused with it. |
 
-`cpu`, `memory`, disk sizes, `image`, `snapshotId`, `envs` and `volumes` are rejected with an error rather than ignored: a sandbox's size and image come from its template. Pass environment variables per command with `runCommand(cmd, { env })`.
+`cpu`, `memory`, disk sizes, `envs` and `volumes` are rejected with an error rather than ignored: a sandbox's size comes from its template or image. Pass environment variables per command with `runCommand(cmd, { env })`.
 
 ## Features
 
 - **Command execution** with `cwd`, `env`, `timeout` and background commands
-- **Filesystem**: read, write, list, mkdir, exists and remove, run as shell commands over exec
+- **Filesystem**: read, write, list, mkdir, exists and remove. File content moves through kosa8's file API: one request for a file under `/workspace` up to 8 MiB, and parallel 4 MiB parts staged under `/workspace` for larger files and other paths. Small files, and every operation on a host without the file API, are shell commands over exec.
+- **Snapshots**: `snapshot.create(sandboxId)` saves the sandbox's memory and disk while it keeps running; `sandbox.create({ snapshotId })` restores it, as many times as you like, including after the source is destroyed. `snapshot.list()` and `snapshot.delete(id)` manage them.
 - **Pause and resume**: `pause()` puts the sandbox to sleep (memory and disk are snapshotted, its RAM is freed) and `resume()` wakes it. A command sent to a sleeping sandbox also wakes it.
 - **Lifetime**: `extendLifetime(ms)` moves the delete time of a sandbox created with `timeout`
 - **Templates**: `template.list()` returns the templates your organization can start, with their size and regions
@@ -92,7 +105,9 @@ interface Kosa8Config {
 - `getUrl()` (port URLs) is not supported yet and throws.
 - Output is returned when the command finishes; there is no live streaming.
 - `runCommand`'s `timeout` stops the command inside the sandbox with `timeout -s KILL` and reports exit code 124. On an image without the `timeout` utility, the command runs to completion.
-- Templates are offered by kosa8's hosts, so `template.create()` and `template.delete()` throw. Snapshots and forking are not exposed through this provider.
+- Templates are offered by kosa8's hosts, so `template.create()` and `template.delete()` throw.
+- A snapshot is kept on the host its source ran on, and sandboxes restored from it are placed on that host.
+- Volumes are not supported.
 - Sandboxes created without `timeout` live until destroyed, so always call `destroy()` when you are done.
 
 ## Links

@@ -6,16 +6,27 @@
  * and has no SDK dependency.
  *
  * Commands go through the buffered exec endpoint: straight to the sandbox's host when the create
- * answer carries a direct-exec URL and token (see runDirect), otherwise through the API. File operations run as shell commands over
- * that exec (ComputeSDK's shell filesystem; no native file API is used here), and `pause()`/`resume()` map
- * to kosa8's sleep and wake, which snapshot the VM's memory and disk and restore it.
+ * answer carries a direct-exec URL and token (see runDirect), otherwise through the API. File content
+ * moves through kosa8's file API (`/v1/sandboxes/{id}/files`, see files.ts), with shell commands
+ * over exec for small files and for hosts without it. `pause()`/`resume()` map to kosa8's sleep and
+ * wake, and `provider.snapshot` to kosa8 snapshots: both keep the VM's memory (running processes)
+ * as well as its disk.
  */
 
-import { randomBytes } from 'node:crypto';
 import { defineProvider, escapeShellArg, ShellFileSystem } from '@computesdk/provider';
 import { httpRequest, preconnect } from './transport';
+import { readFileNative, writeFileNative, type ExecRunner } from './files';
 
-import type { CommandResult, CreateInstanceOptions, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
+export { WRITE_CHUNK_CHARS, writeFileViaExec } from './files';
+
+import type {
+  CommandResult,
+  CreateInstanceOptions,
+  CreateSnapshotOptions,
+  InstanceInfo,
+  RunCommandOptions,
+  SnapshotCapabilities,
+} from '@computesdk/provider';
 
 export interface Kosa8Config {
   /** kosa8 Cloud API key - if not provided, will fallback to KOSA8_API_KEY environment variable */
@@ -71,6 +82,44 @@ export interface Kosa8Sandbox {
   direct?: Kosa8Direct;
   /** A fresh direct token being fetched (refreshDirect). */
   refreshing?: Promise<void>;
+  /** False once the sandbox's host answered that it has no file API: files then go over exec. */
+  files?: boolean;
+}
+
+/** A snapshot as the kosa8 Cloud API returns it. */
+export interface Kosa8SnapshotData {
+  id: string;
+  name: string | null;
+  state: string;
+  source_sandbox_id: string;
+  template: string;
+  cpus: number;
+  mem_mb: number;
+  image: string | null;
+  bytes: number;
+  region: string | null;
+  created_at: number;
+  [key: string]: unknown;
+}
+
+/** A snapshot as `provider.snapshot` returns it. */
+export interface Kosa8Snapshot {
+  id: string;
+  provider: 'kosa8';
+  createdAt: Date;
+  metadata: {
+    name: string | null;
+    sourceInstanceId: string;
+    state: string;
+    template: string;
+    cpus: number;
+    memMb: number;
+    image: string | null;
+    bytes: number;
+    region: string | null;
+    /** How long the host took to save it, when the API reports it. */
+    createMs?: number | null;
+  };
 }
 
 interface Auth {
@@ -96,11 +145,14 @@ const DONE_ENV = 'KOSA8_DONE';
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/** Create options that kosa8 cannot honour: a template fixes the size and image. */
+/** Create options that kosa8 cannot honour: a template (or an image) fixes the size. */
 const UNSUPPORTED_CREATE_OPTIONS = [
   'cpu', 'cpus', 'vcpus', 'cpuLimit', 'memory', 'memoryMiB', 'memMiB', 'memoryMb', 'diskMb', 'diskMiB',
-  'image', 'snapshotId', 'envs', 'volumes',
+  'envs', 'volumes',
 ] as const;
+
+/** A snapshot name the API accepts; another name is kept only in the snapshot's metadata. */
+const SNAPSHOT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 function resolveConfig(config: Kosa8Config): Auth {
   const env = typeof process !== 'undefined' ? process.env : undefined;
@@ -231,16 +283,33 @@ export function createBody(config: Kosa8Config, options: CreateInstanceOptions =
     if (options[key] !== undefined) {
       throw new Error(
         `kosa8 does not support the '${key}' create option. A sandbox's size and image come from its template; ` +
-          `pick one with 'templateId' (list them with provider.template.list()).`,
+          `pick one with 'templateId' (list them with provider.template.list()), or boot an OCI image with 'image'.`,
       );
     }
   }
   const body: Record<string, unknown> = {};
   const env = typeof process !== 'undefined' ? process.env : undefined;
-  const template = options.templateId ?? config.template ?? (env?.KOSA8_TEMPLATE || undefined);
-  if (template) body.template = template;
-  const region = typeof options.region === 'string' ? options.region : (config.region ?? (env?.KOSA8_REGION || undefined));
-  if (region) body.region = region;
+  if (options.snapshotId !== undefined) {
+    // A sandbox made from a snapshot takes its template, size, image and host from the snapshot.
+    for (const key of ['templateId', 'image', 'region'] as const) {
+      if (options[key] !== undefined) {
+        throw new Error(`kosa8 restores a snapshot with its own template, image and region; leave out '${key}' with 'snapshotId'.`);
+      }
+    }
+    body.snapshot = options.snapshotId;
+  } else if (options.image !== undefined) {
+    // An OCI image boots a VM of its own (the API's default size for an image, 2 vCPU / 4 GiB),
+    // so the configured default template does not apply; an explicit templateId is passed on.
+    body.image = options.image;
+    if (options.templateId) body.template = options.templateId;
+  } else {
+    const template = options.templateId ?? config.template ?? (env?.KOSA8_TEMPLATE || undefined);
+    if (template) body.template = template;
+  }
+  if (options.snapshotId === undefined) {
+    const region = typeof options.region === 'string' ? options.region : (config.region ?? (env?.KOSA8_REGION || undefined));
+    if (region) body.region = region;
+  }
   if (options.sleepAfterSeconds !== undefined) body.sleep_after_s = options.sleepAfterSeconds;
   if (typeof options.timeout === 'number' && options.timeout > 0) {
     // kosa8 deletes the sandbox when its lifetime ends; the API's shortest lifetime is 60 s.
@@ -335,44 +404,74 @@ async function getData(sandbox: Kosa8Sandbox): Promise<Kosa8SandboxData | null> 
   return data?.sandbox ?? null;
 }
 
-type ExecRunner = (sandbox: Kosa8Sandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
+/** How often a sandbox that is still booting (an image's cold boot) is checked, and for how long. */
+const BOOT_POLL_MS = 150;
+const BOOT_TIMEOUT_MS = 5 * 60_000;
 
 /**
- * Base64 characters per write. The exec API caps each argv entry at 8192 characters, too small
- * for the shell filesystem's inline chunks, so file content travels in an environment variable,
- * which counts only toward the 64 KiB request body.
+ * Waits for a sandbox the API answered with `creating` (202: an image booted cold) to run, so the
+ * create resolves to a sandbox that takes commands. Its direct exec token is fetched once it runs.
  */
-export const WRITE_CHUNK_CHARS = 32 * 1024;
+async function waitUntilRunning(sandbox: Kosa8Sandbox, signal?: AbortSignal): Promise<void> {
+  const deadline = Date.now() + BOOT_TIMEOUT_MS;
+  while (sandbox.data.state === 'creating') {
+    if (Date.now() > deadline) throw new Error(`kosa8 sandbox ${sandbox.id} did not start within ${BOOT_TIMEOUT_MS / 1000} s`);
+    signal?.throwIfAborted();
+    await new Promise((r) => setTimeout(r, BOOT_POLL_MS));
+    const current = await request<{ sandbox: Kosa8SandboxData }>(sandbox, 'GET', sandboxPath(sandbox.id), undefined, signal);
+    if (!current?.sandbox) throw new Error(`kosa8 sandbox ${sandbox.id} was deleted while it started`);
+    sandbox.data = current.sandbox;
+  }
+  if (sandbox.data.state !== 'running') {
+    const why = sandbox.data.last_error ? `: ${sandbox.data.last_error}` : '';
+    throw new Error(`kosa8 sandbox ${sandbox.id} is ${sandbox.data.state}, not running${why}`);
+  }
+  if (!sandbox.direct) {
+    const r = await request<{ direct?: unknown }>(sandbox, 'POST', sandboxPath(sandbox.id, '/direct')).catch(() => null);
+    if (isDirect(r?.direct)) {
+      sandbox.direct = r.direct;
+      preconnect(r.direct.exec_url);
+    }
+  }
+}
+
+function toSnapshot(s: Kosa8SnapshotData, createMs?: number | null): Kosa8Snapshot {
+  return {
+    id: s.id,
+    provider: 'kosa8',
+    createdAt: new Date(s.created_at),
+    metadata: {
+      name: s.name ?? null,
+      sourceInstanceId: s.source_sandbox_id,
+      state: s.state,
+      template: s.template,
+      cpus: s.cpus,
+      memMb: s.mem_mb,
+      image: s.image ?? null,
+      bytes: s.bytes ?? 0,
+      region: s.region ?? null,
+      ...(createMs !== undefined ? { createMs } : {}),
+    },
+  };
+}
+
+/**
+ * kosa8 snapshots save the whole VM, memory included, so a restore resumes running processes. The
+ * source keeps running, and one snapshot restores into any number of sandboxes, each copy-on-write
+ * on the snapshot's host. A snapshot is ready when `create` returns.
+ */
+export const SNAPSHOT_CAPABILITIES: SnapshotCapabilities = {
+  scope: 'rootfs',
+  memory: true,
+  destroysSource: false,
+  source: 'kept',
+  fork: true,
+  readiness: 'immediate',
+};
+
 
 const shellFs = (sandbox: Kosa8Sandbox, run: ExecRunner) =>
   new ShellFileSystem((command, options) => run(sandbox, command, options));
-
-async function mustSucceed(run: ExecRunner, sandbox: Kosa8Sandbox, command: string, path: string, env?: Record<string, string>) {
-  const result = await run(sandbox, command, env ? { env } : undefined);
-  if (result.exitCode !== 0) {
-    const detail = (result.stderr || result.stdout).trim();
-    throw new Error(`write '${path}' failed (exit ${result.exitCode})${detail ? `: ${detail}` : ''}`);
-  }
-}
-
-/** Writes a file through exec: base64 chunks into a temporary file beside it, then an atomic rename. */
-export async function writeFileViaExec(sandbox: Kosa8Sandbox, path: string, content: string, run: ExecRunner): Promise<void> {
-  const target = `"${escapeShellArg(path)}"`;
-  const tmp = `"${escapeShellArg(`${path}.computesdk-${randomBytes(6).toString('hex')}`)}"`;
-  const encoded = Buffer.from(content, 'utf8').toString('base64');
-  const chunks: string[] = [];
-  for (let i = 0; i < encoded.length; i += WRITE_CHUNK_CHARS) chunks.push(encoded.slice(i, i + WRITE_CHUNK_CHARS));
-  try {
-    await mustSucceed(run, sandbox, `d=$(dirname ${target}) && mkdir -p "$d" && : > ${tmp}`, path);
-    for (const chunk of chunks) {
-      await mustSucceed(run, sandbox, `printf '%s' "$KOSA8_CHUNK" | base64 -d >> ${tmp}`, path, { KOSA8_CHUNK: chunk });
-    }
-    await mustSucceed(run, sandbox, `mv -f ${tmp} ${target}`, path);
-  } catch (err) {
-    await run(sandbox, `rm -f ${tmp}`).catch(() => {});
-    throw err;
-  }
-}
 
 const notAvailable = (what: string) =>
   new Error(`kosa8 does not support ${what} through ComputeSDK yet.`);
@@ -391,7 +490,17 @@ const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
           options?.signal,
         );
         if (!data?.sandbox) throw new Error('kosa8 API returned no sandbox on create');
-        return { instance: toSandbox(auth, data.sandbox, data.direct), instanceId: data.sandbox.id };
+        const sandbox = toSandbox(auth, data.sandbox, data.direct);
+        if (sandbox.data.state !== 'running') {
+          try {
+            await waitUntilRunning(sandbox, options?.signal);
+          } catch (err) {
+            // A sandbox that never ran is not left behind, billed.
+            await request(auth, 'DELETE', sandboxPath(sandbox.id)).catch(() => {});
+            throw err;
+          }
+        }
+        return { instance: sandbox, instanceId: sandbox.id };
       },
 
       getById: async (config: Kosa8Config, instanceId: string) => {
@@ -491,15 +600,45 @@ const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
 
       getInstance: (sandbox: Kosa8Sandbox): Kosa8Sandbox => sandbox,
 
-      // Shell commands over exec. kosa8's own file API needs a host capability that is not on
-      // every host yet, so it is not used here.
+      // File content through kosa8's file API where the host has it (files.ts), shell commands over
+      // exec otherwise; the rest are single shell commands.
       filesystem: {
-        readFile: (sandbox, path, run) => shellFs(sandbox, run).readFile(path),
-        writeFile: (sandbox, path, content, run) => writeFileViaExec(sandbox, path, content, run),
+        readFile: (sandbox, path, run) => readFileNative(sandbox, path, run),
+        writeFile: (sandbox, path, content, run) => writeFileNative(sandbox, path, content, run),
         mkdir: (sandbox, path, run) => shellFs(sandbox, run).mkdir(path),
         readdir: (sandbox, path, run) => shellFs(sandbox, run).readdir(path),
         exists: (sandbox, path, run) => shellFs(sandbox, run).exists(path),
         remove: (sandbox, path, run) => shellFs(sandbox, run).remove(path),
+      },
+    },
+
+    snapshot: {
+      capabilities: SNAPSHOT_CAPABILITIES,
+
+      // POST /v1/sandboxes/{id}/snapshots: the VM saved as it is now, memory and disk; it keeps running.
+      create: async (config: Kosa8Config, instanceId: string, options?: CreateSnapshotOptions): Promise<Kosa8Snapshot> => {
+        const auth = resolveConfig(config);
+        const name = typeof options?.name === 'string' && SNAPSHOT_NAME.test(options.name) ? options.name : undefined;
+        const data = await request<{ snapshot: Kosa8SnapshotData; ms?: number | null }>(
+          auth,
+          'POST',
+          sandboxPath(instanceId, '/snapshots'),
+          name ? { name } : {},
+        );
+        if (!data?.snapshot) throw new Error(`kosa8 sandbox ${instanceId} not found`);
+        return toSnapshot(data.snapshot, typeof data.ms === 'number' ? data.ms : null);
+      },
+
+      list: async (config: Kosa8Config): Promise<Kosa8Snapshot[]> => {
+        const auth = resolveConfig(config);
+        const data = await request<{ snapshots: Kosa8SnapshotData[] }>(auth, 'GET', '/v1/snapshots');
+        return (data?.snapshots ?? []).map((s) => toSnapshot(s));
+      },
+
+      // A snapshot that is already gone answers 404, which request() returns as null.
+      delete: async (config: Kosa8Config, snapshotId: string): Promise<void> => {
+        const auth = resolveConfig(config);
+        await request(auth, 'DELETE', `/v1/snapshots/${encodeURIComponent(snapshotId)}`);
       },
     },
 
