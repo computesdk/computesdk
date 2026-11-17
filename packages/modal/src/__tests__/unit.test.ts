@@ -121,16 +121,23 @@ describe('modal sandbox creation', () => {
     expect(appFromName).toHaveBeenCalledTimes(2);
   });
 
-  it('creates sandboxes through the standard SDK API without experimental options', async () => {
+  it('defaults CPU sandboxes to the VM runtime through the standard SDK API', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's' });
     const sandbox = await provider.sandbox.create();
 
     expect(sandbox.sandboxId).toBe('sb-test');
     expect(createSandbox).toHaveBeenCalledTimes(1);
-    expect(createSandbox).toHaveBeenCalledWith({}, {}, { encryptedPorts: [38989] });
+    expect(createSandbox).toHaveBeenCalledWith({}, {}, { runtime: 'vm', encryptedPorts: [38989] });
   });
 
-  it('passes GPU and sandbox options to the SDK so it can select the backend', async () => {
+  it('honors an explicit gVisor runtime for CPU sandboxes', async () => {
+    const provider = modal({ tokenId: 't', tokenSecret: 's' });
+    await provider.sandbox.create({ runtime: 'gvisor' });
+
+    expect(createSandbox).toHaveBeenCalledWith({}, {}, { runtime: 'gvisor', encryptedPorts: [38989] });
+  });
+
+  it('defaults GPU sandboxes to gVisor and keeps other sandbox options', async () => {
     const provider = modal({ tokenId: 't', tokenSecret: 's', timeout: 300000 });
     await provider.sandbox.create({
       gpu: 'T4',
@@ -143,6 +150,7 @@ describe('modal sandbox creation', () => {
     expect(createSandbox).toHaveBeenCalledTimes(1);
     expect(createSandbox).toHaveBeenCalledWith({}, {}, {
       gpu: 'T4',
+      runtime: 'gvisor',
       encryptedPorts: [8080, 38989],
       timeoutMs: 600000,
       env: { TEST: 'value' },

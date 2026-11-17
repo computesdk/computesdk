@@ -80,7 +80,7 @@ describe.skipIf(skip)('Modal command output over a quiet interval', () => {
     { runtime: 'vm', disconnect: true },
   ])('keeps all output on $runtime with disconnect=$disconnect', async ({ runtime, disconnect }) => {
     const provider = modal({ appName: 'libmodal-test', environment: process.env.MODAL_ENVIRONMENT, timeout: 180000 });
-    const sandbox = await provider.sandbox.create(runtime === 'vm' ? { runtime: 'vm' } : {});
+    const sandbox = await provider.sandbox.create({ runtime });
     const faults = disconnect ? dropOutputConnections() : undefined;
     try {
       // Leave both streams quiet longer than the interval that exposed output
