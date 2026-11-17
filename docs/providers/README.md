@@ -21,28 +21,26 @@ All commands create remote sandboxes and can incur compute charges.
      lib/providers/{sandbox-builders,registry-extra,endpoint-providers}.ts.
      npm starters verified against package repository metadata. -->
 
-| Provider | Router ID | Start |
+### Start with npm create
+
+These providers have a verified ComputeSDK npm starter. Run the command to
+start setup and create a sandbox on that provider.
+
+| Provider | Router ID | Command |
 | --- | --- | --- |
 | Agent37 | `agent37` | `npm create agent37` |
 | Archil | `archil` | `npm create archil` |
 | Arker | `arker` | `npm create arker` |
-| AWS EC2 | `aws-ec2` | `compute new aws-ec2` |
 | Beam | `beam` | `npm create beam` |
 | Blaxel | `blaxel` | `npm create blaxel` |
 | Buddy | `buddy` | `npm create buddy` |
 | Cloudflare | `cloudflare` | `npm create cloudflare-sandbox` |
 | CodeSandbox | `codesandbox` | `npm create codesandbox` |
-| ComputeSDK managed compute | `computesdk` | `compute new computesdk` |
-| CreateOS | `createos-sandbox` | `compute new createos-sandbox` |
 | Daytona | `daytona` | `npm create daytona` |
 | E2B | `e2b` | `npm create e2b` |
 | Freestyle | `freestyle` | `npm create freestyle` |
-| GiveMeANode | `givemeanode` | `compute new givemeanode` |
-| Google Cloud Run | `cloud-run` | `compute new cloud-run` |
 | GravixLayer | `gravixlayer` | `npm create gravixlayer` |
 | Isorun | `isorun` | `npm create isorun` |
-| Leap0 | `leap0` | `compute new leap0` |
-| Lightning | `lightning` | `compute new lightning` |
 | Luxor (Tenki) | `tenki` | `npm create tenki` |
 | Microsandbox | `microsandbox` | `npm create microsandbox` |
 | MIOSA | `miosa` | `npm create miosa` |
@@ -52,17 +50,32 @@ All commands create remote sandboxes and can incur compute charges.
 | Novita | `novita` | `npm create novita` |
 | OpenComputer | `opencomputer` | `npm create opencomputer` |
 | Promigence | `promigence` | `npm create promigence` |
-| Railway | `railway` | `compute new railway` |
-| Run.cloud | `run-cloud` | `compute new run-cloud` |
 | Runloop | `runloop` | `npm create runloop` |
 | Sail | `sail` | `npm create sail` |
-| Sandbox0 | `sandbox0` | `compute new sandbox0` |
 | Sprites | `sprites` | `npm create sprites` |
 | Superserve | `superserve` | `npm create superserve` |
 | Tensorlake | `tensorlake` | `npm create tensorlake` |
-| Uno | `uno` | `compute new uno` |
 | Upstash | `upstash` | `npm create upstash` |
 | Vercel | `vercel` | `npm create vercel` |
+
+### Start with compute new
+
+These providers use the CLI directly. [Install the CLI](../getting-started/installation.md#cli),
+then run the command for your provider.
+
+| Provider | Router ID | Command |
+| --- | --- | --- |
+| AWS EC2 | `aws-ec2` | `compute new aws-ec2` |
+| ComputeSDK managed compute | `computesdk` | `compute new computesdk` |
+| CreateOS | `createos-sandbox` | `compute new createos-sandbox` |
+| GiveMeANode | `givemeanode` | `compute new givemeanode` |
+| Google Cloud Run | `cloud-run` | `compute new cloud-run` |
+| Leap0 | `leap0` | `compute new leap0` |
+| Lightning | `lightning` | `compute new lightning` |
+| Railway | `railway` | `compute new railway` |
+| Run.cloud | `run-cloud` | `compute new run-cloud` |
+| Sandbox0 | `sandbox0` | `compute new sandbox0` |
+| Uno | `uno` | `compute new uno` |
 
 For CLI usage, every row also accepts `compute new <router-id>`. Leave out the
 ID with `compute new` to let ComputeSDK choose. Luxor retains the router ID
@@ -81,7 +94,7 @@ creates remote compute rather than scaffolding a local application. Starters
 are ComputeSDK integrations, not official vendor packages. See
 [the provider quickstart](getting-started.md) for selection and cleanup.
 
-Use the commands in this table rather than guessing npm names. For example,
+Use the commands in the catalog rather than guessing npm names. For example,
 ComputeSDK's Cloudflare starter is `npm create cloudflare-sandbox`.
 
 ## Check availability

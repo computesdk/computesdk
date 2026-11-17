@@ -50,6 +50,19 @@ Expect `hello` on stdout. The `finally` block attempts cleanup even if command
 execution fails. If cleanup fails, destroy the sandbox through the dashboard or
 CLI. Closing the Node.js process does not stop billing.
 
+## Choose a provider
+
+To select Modal for this example, replace the create call with:
+
+```typescript
+const sandbox = await compute.instances.create({ providerOrder: ['modal'] });
+```
+
+This explicit order uses your organization's connected Modal key and bypasses
+its saved router. Keep the same command and `finally` cleanup. Omit the override
+to use saved routing, including managed compute. See [SDK provider selection](../sdk/README.md#choose-a-provider)
+for fallback orders and the current managed-provider selection options.
+
 ## Next steps
 
 - [TypeScript SDK overview](../sdk/README.md)

@@ -64,7 +64,10 @@ For one CLI invocation, use `compute new modal --managed` or
 
 `compute.instances.create()` follows saved routing by default. An explicit
 `providerOrder` bypasses that routing. An order containing provider names uses
-your organization's keys; its legacy `'market'` entry requests market placement.
+your organization's keys. Use one name, such as `providerOrder: ['modal']`,
+to pin a provider without fallback, or several names for an explicit order.
+See [SDK provider selection](../sdk/README.md#choose-a-provider) for a complete
+example and managed-compute guidance. The legacy `'market'` entry requests market placement.
 Price caps apply to market placement.
 
 ```typescript
