@@ -54,11 +54,7 @@ export interface BoxdVolume extends Volume {
 /** boxd size classes: vCPU → memory in GiB. A request names one dimension and boxd picks the class. */
 const BOXD_SIZES: Record<number, number> = { 1: 4, 2: 8, 4: 16, 8: 32 };
 
-/** The smallest boxd vCPU count that covers `vcpus`, capped at boxd's largest size. */
-function boxdVcpusFor(vcpus: number): number {
-  const options = Object.keys(BOXD_SIZES).map(Number).sort((a, b) => a - b);
-  return options.find((n) => n >= vcpus) ?? options[options.length - 1];
-}
+const BOXD_SIZE_LIST = Object.entries(BOXD_SIZES).map(([vcpu, gib]) => `${vcpu}/${gib}`).join(', ');
 const DEFAULT_SNAPSHOT_TIMEOUT_MS = 300_000;
 const DEFAULT_DISK_SIZE = '10G';
 
@@ -212,15 +208,20 @@ function startStream(
 
 const _provider = defineProvider<BoxdSandbox, BoxdConfig, any, BoxdSnapshot, BoxdVolume>({
   name: 'boxd',
-  // boxd sizes are fixed at 4 GiB per vCPU (1/4, 2/8, 4/16, 8/32), so each standard
-  // class maps to the boxd size with the same vCPU count (more memory than asked).
-  // 2xl (16 vCPU) has no boxd equivalent and maps to the largest size, 8/32.
+  // A standard class is supported only when a boxd size matches it exactly. boxd sizes
+  // are 1/4, 2/8, 4/16 and 8/32 vCPU/GiB, which no current standard class matches.
   sizes: (_config, profile, options) => {
     if (options?.snapshotId !== undefined || options?.templateId !== undefined) {
       return { status: 'unsupported', reason: 'A boxd machine restored from a snapshot keeps the snapshot\'s size; drop snapshotId/templateId to use sizeClass.' };
     }
-    const vcpus = boxdVcpusFor(profile.vcpus);
-    return { status: 'supported', nativeOptions: { vcpus, memoryMiB: BOXD_SIZES[vcpus] * 1024 } };
+    const memoryGiB = BOXD_SIZES[profile.vcpus];
+    if (memoryGiB === undefined || memoryGiB * 1024 !== profile.memoryMiB) {
+      return {
+        status: 'unsupported',
+        reason: `boxd has no ${profile.vcpus} vCPU / ${profile.memoryMiB / 1024} GiB size; it offers ${BOXD_SIZE_LIST} vCPU/GiB. Pass vcpus or memoryMiB to pick one.`,
+      };
+    }
+    return { status: 'supported', nativeOptions: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB } };
   },
   methods: {
     instances: {

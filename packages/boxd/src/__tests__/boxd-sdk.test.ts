@@ -96,12 +96,11 @@ describe('boxd provider (mocked SDK)', () => {
     expect(state.egress).toEqual([['m-1', ['api.example.com']]]);
   });
 
-  it('maps standard size classes to the boxd size with the same vCPU count', async () => {
-    expect(provider.sizes.resolve('xs')).toMatchObject({ status: 'supported', nativeOptions: { vcpus: 1, memoryMiB: 4096 } });
-    expect(provider.sizes.resolve('2xl')).toMatchObject({ status: 'supported', nativeOptions: { vcpus: 8, memoryMiB: 32768 } });
-    expect(provider.sizes.resolve('md', { snapshotId: 'snap' })).toMatchObject({ status: 'unsupported' });
-    await provider.sandbox.create({ sizeClass: 'md' });
-    expect(state.createParams[0].config).toEqual({ vcpu: 2, memory: '8G' });
+  it('reports every standard size class as unsupported, since none matches a boxd size exactly', () => {
+    for (const resolution of provider.sizes.list()) {
+      expect(resolution.status).toBe('unsupported');
+    }
+    expect(provider.sizes.resolve('md')).toMatchObject({ reason: expect.stringContaining('1/4, 2/8, 4/16, 8/32') });
   });
 
   it('rejects the egress router form', async () => {
