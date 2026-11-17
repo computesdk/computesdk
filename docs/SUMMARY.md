@@ -14,7 +14,6 @@
 * [Commands and development servers](cli/execution.md)
 * [Project sync](cli/project-sync.md)
 * [Scripts and agents](cli/automation.md)
-* [Command reference](platform/cli.md)
 
 ## TypeScript SDK
 
@@ -30,6 +29,7 @@
 ## Platform
 
 * [Actions (CI)](platform/actions.md)
+* [CLI reference](platform/cli.md)
 * [MCP server](platform/mcp.md)
 * [REST API reference](platform/api-reference.md)
 * [Benchmarks](platform/benchmarks.md)
