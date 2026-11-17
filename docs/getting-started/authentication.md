@@ -39,9 +39,9 @@ Use `compute.instances.create()` without explicit configuration. The SDK reads a
 
 Older releases using `@computesdk/platform` with `computesdk@4.1.18` or earlier require `@benchsdk/cli` in the application to read a saved login. API-key authentication on those releases does not require that optional package.
 
-## Hosts and deployments
+## API URL
 
-The default platform URL is `https://platform.computesdk.com`. Override it with `COMPUTE_PLATFORM_URL`, the CLI's `--base-url`, or the SDK's `baseUrl`. The legacy `BENCHMARKS_PLATFORM_URL` is a fallback.
+The default ComputeSDK API URL is `https://platform.computesdk.com`. Override it with `COMPUTE_PLATFORM_URL`, the CLI's `--base-url`, or the SDK's `baseUrl`. The legacy `BENCHMARKS_PLATFORM_URL` is a fallback.
 
 Credentials are restricted to computesdk.com and loopback hosts by default. Explicit keys can opt into another HTTPS host with `--allow-untrusted-host` or `allowUntrustedHost: true`. Stored login credentials are never resolved for an untrusted host. Plain HTTP is accepted only for loopback.
 

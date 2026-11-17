@@ -42,20 +42,23 @@ stopping on Ctrl-C; `--dry-run --watch` is invalid. `--json` returns `dryRun`,
 `copied`, and `deleted` (relative path arrays); watch mode emits JSON Lines for
 passes with changes. Errors use the standard stderr JSON envelope.
 
-Sync uses the platform OCI checkpoint engine for scan, diff, capture, and
-integrity-checked restore. Node.js is required in each sandbox. The existing
-transfer API carries only selected OCI layers through the CLI, including sandbox
-relays; a changed file can require its whole top-level directory layer. Only
-planned entries are restored. Deletions occur after a successful restore. Transfers
-are not atomic across the entire directory; avoid concurrent destination edits.
-The sandbox working directory is unchanged: use `exec --cwd /app` for the synced
-project. Watch mode is one-way; it does not merge conflicting edits.
+Node.js is required in each sandbox. Deletions happen after files are copied
+successfully. A sync does not update the entire directory at once, so avoid
+editing destination files while it runs. The sandbox working directory is
+unchanged: use `exec --cwd /app` for the synced project. Watch mode is one-way;
+it does not merge conflicting edits. Literal `*` and `?` characters in endpoint
+paths are unsupported.
 
+## Sync snapshots
 
-## Retained sync captures
+Before copying files, ComputeSDK saves a snapshot of the source directory,
+excluding ignored files. If the snapshot cannot be saved, sync stops before
+changing destination files. The snapshot remains available until its reported
+expiry, even if copying fails.
 
-Sync requires a platform deployment with managed sync snapshot support. Each pass that copies files retains its full filtered source capture before writing destination files; retention failure stops the pass. `sync --json` includes `snapshot: { id, expiresAt }` when a capture is created, and project creation returns `syncSnapshot`. Human output shows the same ID and expiry returned by the platform.
-
-Dry runs, unchanged passes and delete-only passes create no capture. A destination-copy failure does not delete the retained capture. Use the returned expiry rather than assuming a retention period. Literal `*` and `?` characters in endpoint paths are unsupported.
+The CLI prints the snapshot ID and expiry. With `--json`, `compute sync` returns
+these as `snapshot: { id, expiresAt }`; `compute new` with a project directory
+returns them as `syncSnapshot`. Dry runs, unchanged syncs and syncs that only
+delete files do not create a snapshot.
 
 After running your project, use `compute destroy` to release compute.

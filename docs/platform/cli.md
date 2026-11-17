@@ -78,7 +78,7 @@ export COMPUTE_API_KEY="csdk_..."
 compute actions runs myorg/myrepo
 ```
 
-`--base-url` (or `COMPUTE_PLATFORM_URL` / `BENCHMARKS_PLATFORM_URL`) selects a different platform deployment. Default: `https://platform.computesdk.com`.
+`--base-url` (or `COMPUTE_PLATFORM_URL` / `BENCHMARKS_PLATFORM_URL`) sets the ComputeSDK API URL. Default: `https://platform.computesdk.com`.
 
 ## `compute actions` — drive CI on the platform
 
