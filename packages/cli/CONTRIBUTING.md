@@ -1,4 +1,4 @@
-# CLI maintenance
+# Contributing to the CLI
 
 ## Sync checkpoint engine
 
@@ -9,7 +9,7 @@ node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform <revision>
 pnpm --filter @computesdk/cli test
 ```
 
-Do not edit the bundled engine directly. The adapter owns sync filtering and destination guards. Deploy the managed sync snapshot API before releasing a CLI that requires retention. User-visible retention must use the platform's returned snapshot ID and expiry; see [project sync](../cli/project-sync.md).
+Do not edit the bundled engine directly. The adapter owns sync filtering and destination guards. Deploy the managed sync snapshot API before releasing a CLI that requires retention. User-visible retention must use the platform's returned snapshot ID and expiry; see [project sync](../../docs/cli/project-sync.md).
 
 ## Command reference
 

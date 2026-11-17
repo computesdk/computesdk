@@ -576,4 +576,4 @@ v2 removes the legacy console authentication and its commands:
 
 Sync needs the managed sync snapshot API on the target platform. Copies retain their filtered source capture before destination writes; failure to retain stops the pass. JSON output includes `snapshot: {id, expiresAt}` (or `syncSnapshot` on project creation). Use the returned expiry. Dry runs, unchanged and delete-only passes create no capture; failed destination writes leave an existing capture available.
 
-Maintainers: see [CLI maintenance](../../docs/contributing/cli-maintenance.md) for bundled engine updates and manifest generation.
+Maintainers: see [CLI contributor notes](./CONTRIBUTING.md) for bundled engine updates and manifest generation.
