@@ -1,12 +1,12 @@
 /**
- * @computesdk/tenki — ComputeSDK provider for Tenki Cloud sandboxes.
+ * @computesdk/tenki — ComputeSDK provider for Luxor (formerly Tenki Cloud) sandboxes.
  *
  * Usage:
- *   import { tenki } from "@computesdk/tenki";
+ *   import { luxor } from "@computesdk/tenki";
  *   import { compute } from "computesdk";
  *
  *   compute.setConfig({
- *     provider: tenki({ apiKey: "tk_..." }),
+ *     provider: luxor({ apiKey: "lx_..." }),
  *   });
  *
  *   const sandbox = await compute.sandbox.create();
@@ -17,7 +17,7 @@
 import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from "@computesdk/provider";
 import type { RunCommandOptions, CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry } from "computesdk";
 import {
-  TenkiSandbox,
+  LuxorSandbox,
   Session,
   type SessionState,
   type CreateOptions,
@@ -25,16 +25,16 @@ import {
   SessionNotFoundError,
   stdoutText,
   stderrText,
-} from "@tenkicloud/sandbox";
+} from "@luxorai/sandbox";
 
-export interface TenkiConfig {
-  /** Tenki API key (tk_...). Falls back to TENKI_API_KEY / TENKI_AUTH_TOKEN env vars. */
+export interface LuxorConfig {
+  /** Luxor API key (lx_...; tk_... remains accepted). Falls back to LUXOR_API_KEY / LUXOR_AUTH_TOKEN, then LUXORAI_API_KEY / LUXORAI_AUTH_TOKEN, then TENKI_API_KEY / TENKI_AUTH_TOKEN. */
   apiKey?: string;
-  /** API base URL. Falls back to TENKI_API_URL, then https://api.tenki.cloud. */
+  /** API base URL. Falls back to LUXOR_API_ENDPOINT / LUXOR_API_URL, then LUXORAI_API_ENDPOINT / LUXORAI_API_URL, then TENKI_API_ENDPOINT / TENKI_API_URL, then the SDK default (https://api.luxor.ai). */
   baseUrl?: string;
-  /** Workspace to create sandboxes in. Falls back to TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
+  /** Workspace to create sandboxes in. Falls back to LUXOR_WORKSPACE_ID / LUXORAI_WORKSPACE_ID / TENKI_WORKSPACE_ID; workspace API keys infer it server-side. */
   workspaceId?: string;
-  /** @deprecated Tenki no longer scopes sandboxes by project. */
+  /** @deprecated Luxor no longer scopes sandboxes by project. */
   projectId?: string;
   /** Default runCommand timeout in milliseconds. */
   timeout?: number;
@@ -44,41 +44,60 @@ export interface TenkiConfig {
   diskSizeGb?: number;
 }
 
+/** @deprecated Use {@link LuxorConfig}; Tenki is now Luxor. */
+export type TenkiConfig = LuxorConfig;
+
 // ---------------------------------------------------------------------------
 // Client resolution
 // ---------------------------------------------------------------------------
 
 /**
- * One TenkiSandbox client per (token, baseUrl) pair. The client owns a gRPC
+ * One LuxorSandbox client per (token, baseUrl) pair. The client owns a gRPC
  * transport, so we memoize rather than reconnecting on every collection-level
  * call (create/getById/list/destroy).
  */
-const clients = new Map<string, TenkiSandbox>();
+const clients = new Map<string, LuxorSandbox>();
 
-function resolveApiKey(config: TenkiConfig): string {
-  const apiKey = config.apiKey ?? process.env.TENKI_API_KEY ?? process.env.TENKI_AUTH_TOKEN;
+function firstEnv(...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function resolveApiKey(config: LuxorConfig): string {
+  const apiKey = config.apiKey ?? firstEnv('LUXOR_API_KEY', 'LUXOR_AUTH_TOKEN', 'LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN', 'TENKI_API_KEY', 'TENKI_AUTH_TOKEN');
   if (!apiKey) {
     throw new Error(
-      "Missing API key for Tenki.\n\n" +
-        "Create one at https://app.tenki.cloud (workspace settings > API Keys)\n" +
-        'Then pass it: tenki({ apiKey: "tk_..." })\n' +
-        "Or set TENKI_API_KEY (or TENKI_AUTH_TOKEN) in your environment.",
+      "Missing API key for Luxor.\n\n" +
+        "Create one at https://luxor.ai (workspace settings > API Keys)\n" +
+        'Then pass it: luxor({ apiKey: "lx_..." })\n' +
+        "Or set LUXOR_API_KEY (or LUXOR_AUTH_TOKEN) in your environment.",
     );
   }
   return apiKey;
 }
 
-function clientKey(config: TenkiConfig): string {
-  return `${resolveApiKey(config)}::${config.baseUrl ?? process.env.TENKI_API_URL ?? ""}`;
+function resolveBaseUrl(config: LuxorConfig): string | undefined {
+  return config.baseUrl ?? firstEnv('LUXOR_API_ENDPOINT', 'LUXOR_API_URL', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL');
 }
 
-function getClient(config: TenkiConfig): TenkiSandbox {
+function resolveWorkspaceId(config: LuxorConfig): string | undefined {
+  return config.workspaceId ?? firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID');
+}
+
+function clientKey(config: LuxorConfig): string {
+  return `${resolveApiKey(config)}::${resolveBaseUrl(config) ?? ''}`;
+}
+
+function getClient(config: LuxorConfig): LuxorSandbox {
   const key = clientKey(config);
   let client = clients.get(key);
   if (!client) {
-    client = new TenkiSandbox({
+    client = new LuxorSandbox({
       authToken: resolveApiKey(config),
-      baseUrl: config.baseUrl ?? process.env.TENKI_API_URL,
+      baseUrl: resolveBaseUrl(config),
     });
     clients.set(key, client);
   }
@@ -96,9 +115,9 @@ function getClient(config: TenkiConfig): TenkiSandbox {
  * stashed per session as well.
  */
 const observedAt = new WeakMap<Session, Date>();
-const sessionConfig = new WeakMap<Session, TenkiConfig>();
+const sessionConfig = new WeakMap<Session, LuxorConfig>();
 
-function rememberSession(session: Session, config: TenkiConfig): Session {
+function rememberSession(session: Session, config: LuxorConfig): Session {
   if (!observedAt.has(session)) observedAt.set(session, new Date());
   sessionConfig.set(session, config);
   return session;
@@ -121,14 +140,14 @@ function mapStatus(state: SessionState): InstanceInfo["status"] {
   }
 }
 
-function toCreateOptions(config: TenkiConfig, options?: CreateInstanceOptions): CreateOptions {
+function toCreateOptions(config: LuxorConfig, options?: CreateInstanceOptions): CreateOptions {
   const opts: CreateOptions = {};
-  const workspaceId = config.workspaceId ?? process.env.TENKI_WORKSPACE_ID;
+  const workspaceId = resolveWorkspaceId(config);
   if (workspaceId) opts.workspaceId = workspaceId;
   if (options?.name) opts.name = options.name;
   if (options?.envs) opts.env = options.envs;
   if (options?.metadata) {
-    // Tenki metadata values are strings.
+    // Luxor metadata values are strings.
     opts.metadata = Object.fromEntries(Object.entries(options.metadata).map(([k, v]) => [k, String(v)]));
   }
   if (options?.templateId) opts.image = options.templateId;
@@ -174,7 +193,7 @@ function shellQuote(value: string): string {
 
 /**
  * Run a command line through a shell. ComputeSDK passes runCommand a full
- * shell command string, whereas Tenki's Session.exec executes argv directly
+ * shell command string, whereas Luxor's Session.exec executes argv directly
  * (execve, no shell), so we wrap with `sh -lc`.
  */
 async function runShell(session: Session, command: string, options?: RunCommandOptions): Promise<CommandResult> {
@@ -225,14 +244,14 @@ async function runShell(session: Session, command: string, options?: RunCommandO
   const stderr = stderrText(result);
   return {
     stdout: stdoutText(result),
-    stderr: timedOut ? [stderr, "Tenki command timed out."].filter(Boolean).join("\n") : stderr,
+    stderr: timedOut ? [stderr, "Luxor command timed out."].filter(Boolean).join("\n") : stderr,
     exitCode: timedOut ? 124 : result.exitCode,
     durationMs: result.durationMs,
   };
 }
 
 /**
- * Tenki's data-plane filesystem API is scoped to the sandbox workdir
+ * Luxor's data-plane filesystem API is scoped to the sandbox workdir
  * (/home/tenki) and rejects other paths, though the guest can reach them.
  */
 function isOutsideWorkdir(err: unknown): boolean {
@@ -302,7 +321,9 @@ function basename(path: string): string {
 // Provider
 // ---------------------------------------------------------------------------
 
-export const tenki = defineProvider<Session, TenkiConfig>({
+const luxorProvider = defineProvider<Session, LuxorConfig>({
+  // Keep the provider id stable: benchmark history, platform credentials, and
+  // routing keys still use "tenki" for the same Luxor service.
   name: "tenki",
   methods: {
     instances: {
@@ -390,7 +411,7 @@ export const tenki = defineProvider<Session, TenkiConfig>({
         await (sandbox as Session).detachVolume(ref.id ?? ref.name!);
       },
 
-      // Native filesystem: Tenki exposes real file primitives over its data
+      // Native filesystem: Luxor exposes real file primitives over its data
       // plane, so we bypass the shell-based fallback (and its escaping
       // hazards). The runCommand parameter is intentionally unused.
       filesystem: {
@@ -440,7 +461,7 @@ export const tenki = defineProvider<Session, TenkiConfig>({
 
     snapshot: {
       // Memory snapshots: the restore resumes running processes and keeps the
-      // root filesystem, except /tmp, which Tenki empties on the source while
+      // root filesystem, except /tmp, which Luxor empties on the source while
       // capturing. The source keeps running.
       capabilities: { scope: "rootfs", path: "/home/tenki", memory: true, destroysSource: false },
       create: async (config, sandboxId, options) => {
@@ -451,7 +472,7 @@ export const tenki = defineProvider<Session, TenkiConfig>({
       list: async (config, options) => {
         const client = getClient(config);
         const instanceId = options?.instanceId ?? options?.sandboxId;
-        const workspaceId = config.workspaceId ?? process.env.TENKI_WORKSPACE_ID;
+        const workspaceId = resolveWorkspaceId(config);
         const snaps = instanceId
           ? await client.listSessionSnapshots(instanceId)
           : await client.listSnapshots(workspaceId ? { workspaceId } : undefined);
@@ -467,12 +488,11 @@ export const tenki = defineProvider<Session, TenkiConfig>({
     volume: {
       create: async (config, options) => {
         const client = getClient(config);
+        const workspaceId = resolveWorkspaceId(config);
         const v = await client.createVolume({
           name: options.name,
           sizeBytes: options.sizeBytes ?? 10 * 1024 * 1024 * 1024,
-          ...(config.workspaceId ?? process.env.TENKI_WORKSPACE_ID
-            ? { workspaceId: config.workspaceId ?? process.env.TENKI_WORKSPACE_ID }
-            : {}),
+          ...(workspaceId ? { workspaceId } : {}),
         });
         // SYNC_PENDING on a fresh volume is the create-time equivalent of the
         // attach race the API already reports; wait before handing it back.
@@ -499,4 +519,9 @@ export const tenki = defineProvider<Session, TenkiConfig>({
   },
 });
 
-export default tenki;
+export const luxor = luxorProvider;
+
+/** @deprecated Tenki is now Luxor; use {@link luxor}. The provider id remains "tenki" for compatibility. */
+export const tenki = luxorProvider;
+
+export default luxor;

@@ -2885,9 +2885,9 @@ importers:
       '@computesdk/provider':
         specifier: workspace:*
         version: link:../provider
-      '@tenkicloud/sandbox':
-        specifier: ^1.4.0
-        version: 1.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@luxorai/sandbox':
+        specifier: ^1.5.2
+        version: 1.5.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -4917,6 +4917,10 @@ packages:
     resolution: {integrity: sha512-eOuJ1SVYXrzKC7xMOfTX8nnsJZ/p2g97paS/1shFgRn/y85/kNlyrzG9RXwkie5+RNXe049Eqvv4mi5fmz2zEw==}
     engines: {node: '>=18'}
 
+  '@luxorai/sandbox@1.5.2':
+    resolution: {integrity: sha512-JSe9ScfBQpLlpvEi7qXJgGh2GwTXtcmUio7sFyywqt4pxsbBAEdweGB4UTgZqezijcaXmyyKsuNz6TTOOv/iig==}
+    engines: {node: '>=18'}
+
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
 
@@ -6043,10 +6047,6 @@ packages:
         optional: true
       viem:
         optional: true
-
-  '@tenkicloud/sandbox@1.4.0':
-    resolution: {integrity: sha512-1fio6b1I+5gK9uw8UkHYkcdNU0EDzswL2I1/6RRQfC5cAqmO6YjIlvnbn2Ia5APhqufHvPrHVbKZfwq0gp8tXA==}
-    engines: {node: '>=18'}
 
   '@tensorlakeai/native-darwin-arm64@0.5.158':
     resolution: {integrity: sha512-kRbY9oskExWrynR7vCO31vPdf5oOQqhSy5zQwUMJWPDuy9SqKsAdCoXnu31E7gGy6eWUV8J+JVru/4CJ/e23Pw==}
@@ -12246,6 +12246,16 @@ snapshots:
 
   '@lizard-build/sdk@0.1.60': {}
 
+  '@luxorai/sandbox@1.5.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@manypkg/find-root@1.1.0':
     dependencies:
       '@babel/runtime': 7.27.6
@@ -13849,16 +13859,6 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
-
-  '@tenkicloud/sandbox@1.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
-    dependencies:
-      '@bufbuild/protobuf': 2.12.1
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
-      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
-      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
 
   '@tensorlakeai/native-darwin-arm64@0.5.158':
     optional: true
