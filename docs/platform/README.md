@@ -1,17 +1,19 @@
 ---
-description: One router for sandboxes and Actions, available through the CLI, TypeScript SDK, REST API and MCP.
+description: Providers, routing, organizations and billing shared across every ComputeSDK interface.
 ---
 
-# ComputeSDK overview
+# Platform overview
 
 ComputeSDK routes sandbox requests and supported GitHub Actions workflows
 across compute providers. Use one integration and one organization to manage
 resources, credentials and billing.
 
-## Two ways to run
+## Sandboxes and interfaces
 
-- **Sandboxes:** run agent code, tests and scripts; work with files; start a server and share a preview.
-- **Actions:** connect a repository, run supported workflow YAML, inspect logs and rerun failures.
+A [sandbox](sandboxes.md) is the environment where your code runs. Execute
+commands, work with files and preview applications through the interface that
+fits your workflow. The CLI, TypeScript SDK, Actions, MCP and REST API all use
+the same compute routing, organization and billing.
 
 Managed compute is the starting path. ComputeSDK handles provider accounts and
 placement. Choose a provider or set preferences when you need more control;
@@ -24,6 +26,7 @@ created. A running sandbox stays on its provider.
 | --- | --- |
 | [CLI](../getting-started/quick-start.md) | Terminal workflows, projects, scripts and automation |
 | [TypeScript SDK](../getting-started/sdk-quick-start.md) | Sandboxes in applications and agents with `compute.instances` |
+| [Actions](actions.md) | Running supported GitHub workflows and inspecting their results |
 | [REST API](api-reference.md) | HTTP integrations and organization resources |
 | [MCP](mcp.md) | Giving an assistant access to ComputeSDK |
 | [Dashboard](https://platform.computesdk.com) | Resources, routing, keys and billing |
@@ -37,7 +40,7 @@ manage keys, connected repositories and billing in **Settings**.
 The CLI guides interactive setup. Applications use an organization API key:
 see [authentication](../getting-started/authentication.md).
 
-## Where next
+## Manage your compute
 
 - [Available providers](../providers/README.md)
 - [Routing and provider selection](../guides/routing.md)

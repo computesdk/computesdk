@@ -225,3 +225,14 @@ redirects:
   guides/previews: guides/previews.md
   guides/lifecycle: guides/lifecycle.md
   guides/billing: guides/billing.md
+
+# Preserve previous guide and interface entry links after navigation changes.
+  cli/execution: cli/execution.md
+  cli/project-sync: cli/project-sync.md
+  cli/automation: cli/automation.md
+  typescript-sdk/sdk: sdk/README.md
+  typescript-sdk/sandboxes: platform/sandboxes.md
+  typescript-sdk/errors: sdk/errors.md
+  typescript-sdk/reference: sdk/reference.md
+  guides/routing: guides/routing.md
+  providers/providers: providers/README.md

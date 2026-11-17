@@ -46,7 +46,17 @@ Install `computesdk` and set `COMPUTE_API_KEY`.
 {% endtab %}
 {% endtabs %}
 
+## Choose an interface
+
+Use the [CLI](getting-started/quick-start.md) in your terminal, the
+[TypeScript SDK](sdk/README.md) in applications, [Actions](platform/actions.md)
+for GitHub workflows, [MCP](platform/mcp.md) from an assistant, or the
+[REST API](platform/api-reference.md) over HTTP. Every interface uses the same
+ComputeSDK routing, organization and billing.
+
 ## Build with sandboxes
+
+A [sandbox](platform/sandboxes.md) is the environment where your code runs.
 
 | I want to… | Guide |
 | --- | --- |
@@ -66,7 +76,8 @@ its steps, logs and artifacts.
 [MCP](platform/mcp.md) lets an assistant create sandboxes, run commands and work
 with files. Connect from Claude, ChatGPT or another MCP client.
 
-[Open the dashboard](https://platform.computesdk.com) to manage resources and
+The [platform overview](platform/README.md) covers providers, routing and account
+management. [Open the dashboard](https://platform.computesdk.com) to manage resources and
 account settings. See [pricing and billing](guides/billing.md) for credits,
 compute rates and cleanup. A sandbox keeps running until destroyed or its
 lifetime expires.
