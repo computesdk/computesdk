@@ -9,7 +9,7 @@ description: >-
 
 ## Install
 
-Start with the [CLI quickstart](../getting-started/quick-start.md), [installation options](../getting-started/installation.md), [project sync guide](../cli/project-sync.md) or [automation guide](../cli/automation.md). The commands below describe CLI 2.6.14; see [compatibility and migration](../cli/migration.md).
+Start with the [CLI quickstart](../getting-started/quick-start.md), [installation options](../getting-started/installation.md), [project sync guide](../cli/project-sync.md) or [automation guide](../cli/automation.md).
 
 
 ```bash

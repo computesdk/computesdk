@@ -15,7 +15,6 @@
 * [Project sync](cli/project-sync.md)
 * [Scripts and agents](cli/automation.md)
 * [Command reference](platform/cli.md)
-* [Compatibility and migration](cli/migration.md)
 
 ## TypeScript SDK
 
