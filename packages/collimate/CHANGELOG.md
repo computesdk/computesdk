@@ -1,5 +1,13 @@
 # @computesdk/collimate
 
+## 0.1.22
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
 ## 0.1.21
 
 ### Patch Changes

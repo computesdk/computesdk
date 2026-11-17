@@ -1,5 +1,14 @@
 # @computesdk/tenki
 
+## 0.1.25
+
+### Patch Changes
+
+- 43a9bd7: Rebrand the Tenki provider as Luxor. The package and provider id remain `tenki`/`@computesdk/tenki` for compatibility, while the provider exports `luxor`, prefers `LUXOR_*` credentials and endpoint variables with `LUXORAI_*`/`TENKI_*` fallbacks, and updates docs/metadata to luxor.ai.
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
 ## 0.1.24
 
 ### Patch Changes
