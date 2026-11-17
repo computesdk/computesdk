@@ -1,7 +1,6 @@
 # @computesdk/cli
 
-The `compute` CLI for the ComputeSDK platform — Actions CI, the compute market,
-sandboxes, and the benchmarks toolchain.
+The `compute` CLI for ComputeSDK — sandboxes, Actions and automation.
 
 Start with the [CLI quickstart](https://docs.computesdk.com/start-here/quick-start), [project sync](https://docs.computesdk.com/cli/project-sync), or [Platform SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start).
 
@@ -143,7 +142,6 @@ with `sandboxId`, `jobId`, `exitCode`, `elapsedSeconds`, `provider`, `deleted`,
 
 ```
 compute actions …               # Actions API — repos, workflows, dispatch, runs, schedule, logs, vault (see below)
-compute market …                # buy and sell on the compute market (cap, bids, credits, listings)
 compute sandboxes …             # platform sandbox control plane
 compute providers               # SDK provider credentials in this environment
 compute byok …                  # the org's BYOK provider keys and custom rates (see below)
@@ -160,7 +158,7 @@ the stored OAuth credentials. `COMPUTE_PLATFORM_URL` sets the platform URL.
 The active org comes from the stored login (`compute org use` changes it —
 it's per user, so every CLI on every machine sees the switch). For a one-off
 override, pass `--org <slug>` (on the root command or any `sandboxes` /
-`actions` / `market` subcommand) or set `COMPUTE_ORG`; it sends `X-Org-Slug`
+`actions` subcommand) or set `COMPUTE_ORG`; it sends `X-Org-Slug`
 on the request. Precedence: `--org` > `COMPUTE_ORG` > the stored login's org.
 The platform ignores the header for org API keys.
 
@@ -268,7 +266,7 @@ compute actions workflows acme/widgets --all --json                    # {workfl
 compute actions workflows local/fixture --ref feature-ref --json       # {workflows, refOnly}
 compute actions workflows disable acme/widgets ci.yml -y               # owner/admin
 compute actions workflows enable acme/widgets "Nightly" -y
-compute actions workflows set acme/widgets ci.yml --order market,vercel --snapshot-cap 3 -y
+compute actions workflows set acme/widgets ci.yml --order modal,vercel --snapshot-cap 3 -y
 compute actions workflows set acme/widgets ci.yml --inherit-order --dynamic-snapshots -y
 ```
 

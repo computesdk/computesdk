@@ -25,12 +25,47 @@ your organization's settings. If that provider cannot place the sandbox, the
 request fails rather than silently choosing a different provider. See
 [the catalog](../providers/README.md) for router IDs and npm starters.
 
-## Preferences and fallback
+## Define routing rules in the platform
 
-Configure the saved router in the dashboard or through the
-[routing API](../platform/api-reference.md#routing). Owners and admins can
-choose ComputeSDK's recommended managed order, the cheapest available route
-for a size, or a custom order.
+Owners and admins can save routing rules for their organization in the
+[dashboard](https://platform.computesdk.com):
+
+1. Open **Settings → Sandboxes**.
+2. In **Managed accounts**, choose a **Routing** strategy:
+   - **ComputeSDK (recommended)** follows ComputeSDK's recommended provider order.
+   - **Cheapest** tries the lowest price for the requested size first; different sizes can have different orders.
+   - **Custom order** lets you choose and order the available managed accounts.
+3. For **Custom order**, add, remove or reorder accounts, then click **Save order**.
+4. To use managed accounts only, keep **Use BYOK accounts** set to **Off** where that control is shown.
+
+For example, put Modal before E2B in a custom order if both are available to
+your organization. Future creates try that order. Available accounts and
+capacity determine which placements can succeed.
+
+The SDK follows these saved rules with no per-request routing configuration:
+
+```typescript
+import { compute } from 'computesdk';
+
+const sandbox = await compute.instances.create();
+try {
+  console.log((await sandbox.runCommand('echo hello')).stdout);
+} finally {
+  await sandbox.destroy();
+}
+```
+
+Saved rules also apply to unpinned CLI creates such as `compute new`. They are
+shared organization settings, so changes affect other clients that follow the
+router. They do not move running sandboxes. Explicit SDK `providerOrder`
+values, including client defaults, bypass these rules.
+
+Actions has a separate router under **Settings → Actions**, with the same
+managed-routing strategies. Sandbox and workflow routing can be configured
+independently. For programmatic configuration, use the
+[routing API](../platform/api-reference.md#routing).
+
+## Preview routing
 
 Inspect the available options and a placement quote without creating compute:
 
@@ -64,15 +99,16 @@ For one CLI invocation, use `compute new modal --managed` or
 
 `compute.instances.create()` follows saved routing by default. An explicit
 `providerOrder` bypasses that routing. An order containing provider names uses
-your organization's keys; its legacy `'market'` entry requests market placement.
-Price caps apply to market placement.
+your organization's keys. Use one name, such as `providerOrder: ['modal']`,
+to pin a provider without fallback, or several names for an explicit order.
+See [SDK provider selection](../sdk/README.md#choose-a-provider) for a complete
+example and managed-compute guidance.
 
 ```typescript
 import { compute } from 'computesdk';
 
 const sandbox = await compute.instances.create({
-  providerOrder: ['e2b', 'market'],
-  maxPrice: { usd: 0.5, per: 'hour' },
+  providerOrder: ['modal', 'e2b'],
 });
 try {
   console.log((await sandbox.runCommand('echo hello')).stdout);

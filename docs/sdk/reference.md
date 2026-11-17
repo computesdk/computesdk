@@ -43,8 +43,7 @@ creation follows your organization's saved router.
 | `secrets` | Up to 100 organization vault secret names to inject into commands |
 | `disk` | Attach a supported disk with `{ diskId, path, readonly?, branch? }` |
 | `idempotencyKey` | A stable key for safe creation across process restarts, up to 200 characters |
-| `providerOrder` | Explicit placement order; see [routing](../guides/routing.md#sdk-and-rest-overrides) |
-| `orderType`, `maxPrice` | Market order and price limit; `maxPrice` is `{ usd, per: 'second' | 'minute' | 'hour' }` |
+| `providerOrder` | Explicit placement order; named providers use connected provider keys. See [provider selection](README.md#choose-a-provider) |
 
 ```typescript
 import { compute } from 'computesdk';
