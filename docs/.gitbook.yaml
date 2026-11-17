@@ -104,8 +104,6 @@ redirects:
   getting-started/providers/docker: providers/docker.md
   providers/microsandbox: providers/microsandbox.md
   getting-started/providers/microsandbox: providers/microsandbox.md
-  providers/browseruse: providers/browseruse.md
-  getting-started/providers/browseruse: providers/browseruse.md
   providers/tensorlake: providers/tensorlake.md
   getting-started/providers/tensorlake: providers/tensorlake.md
   providers/vercel: providers/vercel.md
@@ -193,7 +191,6 @@ redirects:
   direct-providers/quilt: providers/quilt.md
   direct-providers/docker: providers/docker.md
   direct-providers/microsandbox: providers/microsandbox.md
-  direct-providers/browseruse: providers/browseruse.md
   direct-providers/tensorlake: providers/tensorlake.md
   direct-providers/vercel: providers/vercel.md
   direct-providers/lelantos: providers/lelantos.md

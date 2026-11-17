@@ -283,7 +283,7 @@ npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/novita           # Novita Sandbox provider
 npm install @computesdk/platform         # ComputeSDK Platform hosted sandboxes (market or own keys)
 npm install @computesdk/promigence       # Promigence provider
-# Render Sandboxes: use a release containing #1162; 1.3.2 is a placeholder (see packages/render)
+npm install @computesdk/render           # Render Sandboxes provider
 npm install @computesdk/runloop          # Runloop provider
 npm install @computesdk/runtime          # Runtime provider
 npm install @computesdk/sail             # Sail provider
@@ -338,7 +338,7 @@ See individual provider READMEs for details:
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
 - **[@computesdk/platform](./packages/platform)** - ComputeSDK Platform hosted sandboxes: market placement or your own provider keys, one API and sandbox ID space
 - **[@computesdk/promigence](./packages/promigence)** - Production-grade sandboxes for AI agents, with filesystem and streaming output
-- **[@computesdk/render](./packages/render)** (1.3.2 is a placeholder; see package release requirements) - Render Sandboxes (beta) with native command streaming, file transfer and snapshots
+- **[@computesdk/render](./packages/render)** - Render Sandboxes (beta) with native command streaming, file transfer and snapshots
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
 - **[@computesdk/runtime](./packages/runtime)** - Firecracker microVM sandboxes for AI agents, with native command streaming, private preview URLs and snapshots
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access

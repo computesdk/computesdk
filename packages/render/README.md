@@ -4,8 +4,6 @@
 
 ## Installation & Setup
 
-The examples below require the Render Sandboxes implementation introduced in [PR #1162](https://github.com/computesdk/computesdk/pull/1162). The published `@computesdk/render@1.3.2` is a placeholder whose `render()` function throws; use a release containing the new implementation, or build it from source.
-
 ```bash
 npm install @computesdk/render
 ```
@@ -103,6 +101,6 @@ interface RenderConfig {
 
 - Render Sandboxes are in public beta, and Render documents a single region (Oregon).
 - `getUrl()` throws: Render Sandboxes do not provide public URLs during the beta.
-- `runCommand`'s `timeout` is rounded up to whole seconds and enforced inside the sandbox with the `timeout` utility, with a forced kill after a further 5 seconds if needed. Background commands ignore `timeout` and discard stdout and stderr.
+- `runCommand`'s `timeout` stops the command inside the sandbox with the `timeout` utility and reports exit code 124.
 - Suspended sandboxes are reported by `getInfo()` as `stopped`; Render resumes them automatically on the next command.
-- With `sandboxGroupId` configured, sandbox and snapshot listing is scoped to that group. Without it, sandbox listing covers the workspace, while snapshot listing and deletion use the workspace's default group.
+- Sandboxes and snapshots in groups other than the configured one are not listed.
