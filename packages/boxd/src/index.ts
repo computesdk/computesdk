@@ -51,8 +51,14 @@ export interface BoxdVolume extends Volume {
   native: Disk | { id: string; name: string; sizeBytes: number; status: string };
 }
 
-/** boxd size classes: vCPU → memory. A request names one dimension and boxd picks the class. */
-const BOXD_SIZES: Record<number, string> = { 1: '4G', 2: '8G', 4: '16G', 8: '32G' };
+/** boxd size classes: vCPU → memory in GiB. A request names one dimension and boxd picks the class. */
+const BOXD_SIZES: Record<number, number> = { 1: 4, 2: 8, 4: 16, 8: 32 };
+
+/** The smallest boxd vCPU count that covers `vcpus`, capped at boxd's largest size. */
+function boxdVcpusFor(vcpus: number): number {
+  const options = Object.keys(BOXD_SIZES).map(Number).sort((a, b) => a - b);
+  return options.find((n) => n >= vcpus) ?? options[options.length - 1];
+}
 const DEFAULT_SNAPSHOT_TIMEOUT_MS = 300_000;
 const DEFAULT_DISK_SIZE = '10G';
 
@@ -206,12 +212,16 @@ function startStream(
 
 const _provider = defineProvider<BoxdSandbox, BoxdConfig, any, BoxdSnapshot, BoxdVolume>({
   name: 'boxd',
-  // boxd sizes are fixed at 4 GiB per vCPU (1/4, 2/8, 4/16, 8/32), so no standard
-  // ComputeSDK size class (1/1 ... 16/32 GiB) maps exactly onto one.
-  sizes: (_config, profile) => ({
-    status: 'unsupported',
-    reason: `boxd has no ${profile.vcpus} vCPU / ${profile.memoryMiB / 1024} GiB size; it offers 1/4, 2/8, 4/16 and 8/32 GiB. Pass vcpus or memoryMiB instead.`,
-  }),
+  // boxd sizes are fixed at 4 GiB per vCPU (1/4, 2/8, 4/16, 8/32), so each standard
+  // class maps to the boxd size with the same vCPU count (more memory than asked).
+  // 2xl (16 vCPU) has no boxd equivalent and maps to the largest size, 8/32.
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId !== undefined || options?.templateId !== undefined) {
+      return { status: 'unsupported', reason: 'A boxd machine restored from a snapshot keeps the snapshot\'s size; drop snapshotId/templateId to use sizeClass.' };
+    }
+    const vcpus = boxdVcpusFor(profile.vcpus);
+    return { status: 'supported', nativeOptions: { vcpus, memoryMiB: BOXD_SIZES[vcpus] * 1024 } };
+  },
   methods: {
     instances: {
       create: async (config: BoxdConfig, options?: CreateInstanceOptions) => {

@@ -85,7 +85,8 @@ await compute.snapshot.delete(snapshot.id);
 - Create options:
   - `name` sets the machine name (boxd generates one if omitted).
   - `image` picks the boot image; `envs` sets machine-level environment variables; string `metadata` values become machine labels.
-  - `vcpus` / `memoryMiB` pick a boxd size (1/4, 2/8, 4/16 or 8/32 vCPU/GiB). Standard `sizeClass` values are reported as unsupported because none matches a boxd size exactly.
+  - `sizeClass` maps each standard class to the boxd size with the same vCPU count. boxd sizes have 4 GiB per vCPU, so memory is higher than the standard class asks for: `xs`/`sm` → 1/4, `md` → 2/8, `lg` → 4/16, `xl` → 8/32 vCPU/GiB. `2xl` (16 vCPU) maps to boxd's largest size, 8/32. A snapshot restore keeps the snapshot's size, so `sizeClass` with `snapshotId`/`templateId` is unsupported.
+  - `vcpus` / `memoryMiB` pick a boxd size directly (boxd resolves the whole class from either one).
   - `timeout` (ms) maps to boxd's `deleteAfter`, so the machine is deleted automatically after that long.
   - `egress: ['api.example.com', '*.example.com']` sets the machine's egress allowlist (`['none']` blocks everything). The egress-router object form is not supported.
   - `volumes: [{ volume, mountPath, readOnly? }]` attaches boxd disks at creation (by id, name or volume handle).
@@ -115,5 +116,5 @@ await compute.snapshot.delete(snapshot.id);
 | Lifetime extension | Yes (for machines created with `timeout`) |
 | Volumes | Yes (boxd disks) |
 | Egress allowlist | Yes (`egress: string[]`) |
-| Standard `sizeClass` | No (boxd sizes don't match any standard class exactly; use `vcpus`/`memoryMiB`) |
+| Standard `sizeClass` | Yes (closest boxd size: same vCPU count, 4 GiB per vCPU; `2xl` → 8/32) |
 | Templates | No (boxd has no template API; use snapshots) |
