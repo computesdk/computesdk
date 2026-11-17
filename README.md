@@ -97,6 +97,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Daytona** | `DAYTONA_API_KEY` | Development workspaces |
 | **Declaw** | `DECLAW_API_KEY` | Isolated cloud sandboxes |
 | **E2B** | `E2B_API_KEY` | Data science, Python/Node.js, interactive terminals |
+| **exe.dev** | `EXE_API_KEY` | Standalone Linux VMs (sandboxes) with private HTTPS port URLs |
 | **EC2 Firecrab** | `EC2_FIRECRAB_MICRO_NETWORK_ID` (+ `EC2_FIRECRAB_API_URL`, `EC2_FIRECRAB_TEMPLATE`, `EC2_FIRECRAB_SSH_PROXY_COMMAND`) | Self-hosted Firecracker microVMs on EC2 |
 | **Freestyle** | `FREESTYLE_API_KEY` | Full Linux VMs for long-running agent tasks, with snapshots and persistence |
 | **GravixLayer** | `GRAVIXLAYER_API_KEY` | Cloud runtimes with filesystem, port publishing, and snapshots |
@@ -325,6 +326,7 @@ npm install @computesdk/codesandbox      # CodeSandbox provider
 npm install @computesdk/createos-sandbox # CreateOS VM sandbox provider
 npm install @computesdk/daytona          # Daytona provider
 npm install @computesdk/e2b              # E2B provider
+npm install @computesdk/exe-dev          # exe.dev provider
 npm install @computesdk/ec2-firecrab     # Firecracker microVMs on self-hosted EC2
 npm install @computesdk/freestyle        # Freestyle provider
 npm install @computesdk/givemeanode      # givemeanode provider
@@ -382,6 +384,7 @@ See individual provider READMEs for details:
 - **[@computesdk/createos-sandbox](./packages/createos-sandbox)** - NodeOps VM sandboxes, with pause/resume/fork snapshots and a native-handle escape hatch
 - **[@computesdk/daytona](./packages/daytona)** - Development workspaces
 - **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
+- **[@computesdk/exe-dev](./packages/exe-dev)** - Standalone Linux VMs (sandboxes) with private HTTPS port URLs
 - **[@computesdk/freestyle](./packages/freestyle)** - Full Linux VMs for long-running agent tasks, with snapshots and persistence
 - **[@computesdk/givemeanode](./packages/givemeanode)** - Very fast microVM sandboxes, from any container image
 - **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
