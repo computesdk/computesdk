@@ -62,10 +62,6 @@ await sandbox.destroy();
 Commands, streaming, and `startProcess` use Archil's native process API.
 `getUrl` exposes a persistent VM's service port.
 
-New VMs support `sizeClass` `sm`/`md`/`lg`/`xl` via `vcpus` and
-`memoryMiB`. `xs`/`2xl` are `unknown`. Attaching or restoring a VM cannot
-apply standard size overrides. See [Sandbox sizes](../reference/sizes.md).
-
 Create accepts `name`, `baseImage` (or `image`), `env` (or `envs`), native
 `vcpus`/`memoryMiB`, and `maxTtlSeconds`. Unified `timeout` is milliseconds
 and maps to the session lifetime budget in seconds.
@@ -81,6 +77,29 @@ A snapshot is a separate paused VM fork, not a separate storage object.
 `delete` removes one. `instances.create({ snapshotId })` forks it again into
 a running VM. Delete restored children before snapshots, and snapshots before
 their source VM.
+
+## Standard sizes
+
+New persistent VMs support `sizeClass` through exact `vcpus` / `memoryMiB`
+(sent as Archil's `vcpu_count` / `mem_size_mib`). Archil allows 1–32 vCPU and
+256–65536 MiB per sandbox; the root filesystem is an Archil disk with no size
+field, so no disk is set.
+
+| `sizeClass` | Status | Archil shape |
+| --- | --- | --- |
+| `xs` | supported | 1 vCPU / 1024 MiB |
+| `sm` | supported | 1 vCPU / 2048 MiB |
+| `md` | supported | 2 vCPU / 4096 MiB |
+| `lg` | supported | 4 vCPU / 8192 MiB |
+| `xl` | supported | 8 vCPU / 16384 MiB |
+| `2xl` | supported | 16 vCPU / 32768 MiB |
+| `3xl` | unsupported | Needs 128 GiB; Archil caps memory at 64 GiB |
+
+Exec mode (`execution: 'exec'` or `ephemeral: true`) is `unavailable`.
+Attaching or restoring (`sandboxId`, `instanceId`, `snapshotId`) is
+`unsupported`: Archil fork options take no CPU/RAM fields. Native `vcpuCount` /
+`memSizeMiB` (or `vcpu_count` / `mem_size_mib`, top level or under `sandbox`)
+conflict with `sizeClass`. See [Sandbox sizes](../reference/sizes.md).
 
 ## Disk exec (opt-in)
 
