@@ -413,6 +413,23 @@ async function createSandbox(config: Sandbox0Config, options?: CreateInstanceOpt
 
 const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
   name: 'sandbox0',
+  sizes: (_config, profile) => {
+    // Cloud pricing shows 2 vCPU / 4 GiB. Claims set memory only; Sandbox0
+    // derives CPU from its memory-per-CPU policy.
+    if (profile.memoryMiB > 16 * 1024) {
+      return {
+        status: 'unsupported',
+        reason: 'Sandbox0 documents a 16 GiB platform memory limit and lists no larger public shape.',
+      };
+    }
+    if (profile.memoryMiB < profile.vcpus * 2048) {
+      return {
+        status: 'unsupported',
+        reason: 'Sandbox0 derives 0.5 vCPU at 1 GiB; its 1 vCPU / 2 GiB shape maps to sm.',
+      };
+    }
+    return { status: 'supported', nativeOptions: { memory: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: createSandbox,
@@ -710,7 +727,7 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
     },
 
     volume: {
-      create: async (config: Sandbox0Config, options) => {
+      create: async (config: Sandbox0Config, _options) => {
         const client = createClient(config);
         const volume = await client.volumes.create({ backend: 's0fs' as any, accessMode: 'RWO' as any });
         return { id: volume.id, native: volume };
