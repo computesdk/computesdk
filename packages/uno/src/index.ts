@@ -10,9 +10,10 @@
  * @see https://uno.place/docs/api
  */
 
-import { defineProvider, escapeShellArg } from '@computesdk/provider'
+import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider'
 import type {
   CommandResult,
+  InstanceSizeClass,
   CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
@@ -154,8 +155,37 @@ function parseSize(stdout: string, what: string): number {
   return size
 }
 
+/**
+ * Disk for the standard sizes the ComputeSDK platform also sells on Uno (its
+ * `providerSizePresets`), in MiB. Other sizes keep the configured disk.
+ */
+const STANDARD_DISK_MIB: Partial<Record<InstanceSizeClass, number>> = { sm: 10240, md: 20480, lg: 40960, xl: 81920 }
+
+/** Create options that set CPU, memory or disk directly, besides the ones the core already refuses. */
+const NATIVE_SHAPE_FIELDS = ['vcpu', 'ram_mb', 'ramMb', 'disk_gb', 'diskGb'] as const
+const DISK_FIELDS = ['diskMiB', 'diskMb'] as const
+
 export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
   name: 'uno',
+  // POST /api/v1/boxes takes vcpu / ram_mb / disk_gb as plain integers, so every
+  // standard size is its exact profile. Plan quotas (one machine: Small 1 vCPU /
+  // 1 GiB … Max 32 vCPU / 48 GiB; Enterprise: any) are the account's, not the API's.
+  sizes: (_config, profile, options) => {
+    const native = NATIVE_SHAPE_FIELDS.find(key => options?.[key] !== undefined)
+    if (native) throw new InstanceSizeError('conflict', `cannot combine sizeClass with ${native}`)
+    const diskMiB = STANDARD_DISK_MIB[profile.sizeClass]
+    const disk = diskMiB === undefined ? undefined : DISK_FIELDS.find(key => options?.[key] !== undefined)
+    if (disk) throw new InstanceSizeError('conflict', `cannot combine sizeClass ${profile.sizeClass} (disk ${diskMiB} MiB) with ${disk}`)
+    if (options?.snapshotId !== undefined) {
+      return {
+        status: 'unsupported',
+        reason: 'An Uno machine made from a snapshot keeps the source machine\'s vCPU, memory and disk (the clone call takes no shape); drop snapshotId to create a standard size.',
+      }
+    }
+    const shape = { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB }
+    if (diskMiB === undefined) return { status: 'supported', nativeOptions: shape }
+    return { status: 'supported', nativeOptions: { ...shape, diskMiB }, resolved: { ...shape, diskMiB } }
+  },
   methods: {
     instances: {
       create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {

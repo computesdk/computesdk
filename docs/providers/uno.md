@@ -86,6 +86,25 @@ interface UnoConfig {
 
 `create()` reads the size from `vcpus` / `cpus` / `cpu`, `memoryMiB` / `memMiB` / `memoryMb` / `memory` and `diskMiB` / `diskMb`. Memory is rounded up to a multiple of 256 MiB. `templateId` selects the OS template.
 
+## Standard sizes
+
+`create({ sizeClass })` sends the exact standard profile as `vcpu` / `ram_mb` (and, for `sm`–`xl`, `disk_gb`) to `POST /api/v1/boxes`:
+
+| `sizeClass` | vCPU | Memory (MiB) | Disk |
+| --- | ---: | ---: | --- |
+| `xs` | 1 | 1024 | config `diskGb` (default 10 GB) |
+| `sm` | 1 | 2048 | 10 GiB |
+| `md` | 2 | 4096 | 20 GiB |
+| `lg` | 4 | 8192 | 40 GiB |
+| `xl` | 8 | 16384 | 80 GiB |
+| `2xl` | 16 | 32768 | config `diskGb` (default 10 GB) |
+| `3xl` | 32 | 131072 | config `diskGb` (default 10 GB) |
+
+- Your plan limits one machine: Small 1 vCPU / 1 GiB, Plus 4 / 4 GiB, Pro 16 / 16 GiB, Max 32 / 48 GiB (`max_box` in `GET /api/v1/box-plans`). `3xl` needs Enterprise capacity. A size over your plan fails at create with Uno's 409 (`PEAK_EXCEEDED`, `SHAPE_TOO_LARGE`, …); it never boots a smaller machine.
+- `sizeClass` cannot be combined with `vcpus`/`cpus`/`cpu`, `memoryMiB`/`memMiB`/`memoryMb`/`memory`, `vcpu`, `ram_mb`/`ramMb` or `disk_gb`/`diskGb`, nor with `diskMiB`/`diskMb` on `sm`–`xl`: that is an `InstanceSizeError` with code `conflict`.
+- `sizeClass` with `snapshotId` is `unsupported`: a machine made from a snapshot keeps the source's vCPU, memory and disk.
+- `templateId` (the OS template) works with every size.
+
 ## How commands run
 
 - Commands run as user `uno` in a login `bash` shell, in the home directory. Use `sudo` for root.
