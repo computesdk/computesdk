@@ -56,6 +56,13 @@ function createClient(config: KernelConfig): Kernel {
 }
 
 /**
+ * Inactivity timeout used for `keepAlive: true` when no explicit `timeout` is
+ * given. Kernel keeps a disconnected browser in standby (no usage charges)
+ * until `timeout_seconds` elapses; the API default is 60 s.
+ */
+const KEEP_ALIVE_TIMEOUT_SECONDS = 3600;
+
+/**
  * Map ComputeSDK session options to Kernel create browser params.
  */
 function mapSessionOptions(options?: CreateBrowserSessionOptions) {
@@ -64,7 +71,11 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions) {
   if (!options) return params;
 
   if (options.stealth !== undefined) params.stealth = options.stealth;
-  if (options.timeout !== undefined) params.timeout_seconds = options.timeout;
+  if (options.timeout !== undefined) {
+    params.timeout_seconds = options.timeout;
+  } else if (options.keepAlive === true) {
+    params.timeout_seconds = KEEP_ALIVE_TIMEOUT_SECONDS;
+  }
   if (options.proxies !== undefined) {
     warnOnce('proxies', 'Kernel create-browser supports only a provider proxy_id, which CreateBrowserSessionOptions cannot express.');
   }

@@ -32,4 +32,17 @@ describe('kernel option mapping', () => {
     expect(warn).toHaveBeenCalledWith("[@computesdk/kernel] 'proxies' is ignored: Kernel create-browser supports only a provider proxy_id, which CreateBrowserSessionOptions cannot express.");
     warn.mockRestore();
   });
+
+  it('maps keepAlive to a long inactivity timeout unless timeout is set', async () => {
+    const provider = kernel({ apiKey: 'test' });
+
+    await provider.session.create({ keepAlive: true });
+    expect(sdk.create).toHaveBeenLastCalledWith({ timeout_seconds: 3600 });
+
+    await provider.session.create({ keepAlive: true, timeout: 120 });
+    expect(sdk.create).toHaveBeenLastCalledWith({ timeout_seconds: 120 });
+
+    await provider.session.create({ keepAlive: false });
+    expect(sdk.create).toHaveBeenLastCalledWith({});
+  });
 });
