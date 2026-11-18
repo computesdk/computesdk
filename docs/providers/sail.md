@@ -79,11 +79,41 @@ interface SailConfig {
 Sail's ARM64 Devbox builtin, which includes Node.js and Bun. Pass a different
 image when the workload needs another runtime or architecture.
 
-Create accepts Sailbox `size` values `s`, `m`, and `l`, optional `memoryGib`, a
+Create accepts a standard `sizeClass`, Sail's `vcpuCount` (1 to 64), the
+deprecated Sailbox `size` values `s`, `m`, and `l`, optional `memoryGib`, a
 name, and an `AbortSignal`. Without explicit sizing, it inherits the image's
-resource limits (8 vCPUs by default). `size` and `memoryGib` are sent only when
-explicitly supplied. Unsupported universal options are rejected rather than silently
-ignored.
+resource limits (8 vCPUs and 64 GiB by default). `vcpuCount`, `size` and
+`memoryGib` are sent only when explicitly supplied; `vcpuCount` and `size`
+cannot be combined. Unsupported universal options are rejected rather than
+silently ignored.
+
+## Standard sizes
+
+`sizeClass` sets the Sailbox's per-create `vcpuCount` and memory limit
+(`memoryLimitGib`). Sail rounds both up to a power of two and raises any memory
+limit below 16 GiB to 16 GiB, so every Sailbox holds at least 16 GiB and the
+resolved memory is larger than the standard size for `sm` through `xl`:
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' });
+console.log(sandbox.sizing.resolved); // { vcpus: 2, memoryMiB: 16384 }
+```
+
+| `sizeClass` | Sail limits | Resolved shape |
+| --- | --- | --- |
+| `xs` | unsupported | Sail's smallest shape, 1 vCPU / 16 GiB, is `sm` |
+| `sm` | `vcpuCount: 1`, 16 GiB | 1 vCPU / 16384 MiB |
+| `md` | `vcpuCount: 2`, 16 GiB | 2 vCPU / 16384 MiB |
+| `lg` | `vcpuCount: 4`, 16 GiB | 4 vCPU / 16384 MiB |
+| `xl` | `vcpuCount: 8`, 16 GiB | 8 vCPU / 16384 MiB |
+| `2xl` | `vcpuCount: 16`, 32 GiB | 16 vCPU / 32768 MiB |
+| `3xl` | `vcpuCount: 32`, 128 GiB | 32 vCPU / 131072 MiB |
+
+These are limits, not reserved resources: Sail bills the CPU and memory the
+Sailbox actually uses. Disk keeps the image's limit (256 GiB by default).
+`sizeClass` cannot be combined with `vcpuCount`, `memoryGib`, `memoryLimitGib`
+or `size` (`InstanceSizeError` code `conflict`), and is `unsupported` with
+`snapshotId`, because a checkpoint restore keeps the checkpoint's limits.
 
 ## Supported Operations
 
