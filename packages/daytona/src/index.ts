@@ -4,9 +4,11 @@
 
 import { Daytona, DaytonaNotFoundError, Sandbox as DaytonaSandbox } from '@daytonaio/sdk';
 import { resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, errorText } from '@computesdk/provider';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type {
+  CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, InstanceSizeClass,
+} from '@computesdk/provider';
 
 /**
  * Daytona-specific configuration options
@@ -18,7 +20,20 @@ export interface DaytonaConfig {
   runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Image booted for a `sizeClass` create without an `image`; defaults to `node:22` */
+  sizeImage?: string;
 }
+
+/** Daytona's documented per-sandbox maximum (https://www.daytona.io/docs/en/sandboxes). */
+const DAYTONA_MAX_VCPUS = 4;
+const DAYTONA_MAX_MEMORY_GIB = 8;
+
+/** Disk (GiB) the ComputeSDK platform requests for each Daytona size. */
+const DAYTONA_SIZE_DISK_GIB: Readonly<Partial<Record<InstanceSizeClass, number>>> = Object.freeze({
+  sm: 10,
+  md: 20,
+  lg: 40,
+});
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -80,6 +95,38 @@ const SNAPSHOT_TIMEOUT_S = 900;
  */
 export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
+  sizes: (config, profile, options) => {
+    const native = options as Record<string, unknown> | undefined;
+    if (native?.disk !== undefined || native?.gpu !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Daytona disk/gpu resources');
+    }
+    if (options?.templateId !== undefined || options?.snapshotId !== undefined || native?.snapshot !== undefined) {
+      return {
+        status: 'unsupported',
+        reason: 'A Daytona snapshot fixes CPU, memory and disk; drop templateId/snapshotId/snapshot to boot the standard size from an image.',
+      };
+    }
+    const memoryGiB = profile.memoryMiB / 1024;
+    if (profile.vcpus > DAYTONA_MAX_VCPUS || memoryGiB > DAYTONA_MAX_MEMORY_GIB) {
+      return {
+        status: 'unsupported',
+        reason: `Daytona sandboxes are limited to ${DAYTONA_MAX_VCPUS} vCPU / ${DAYTONA_MAX_MEMORY_GIB} GiB RAM.`,
+      };
+    }
+    const disk = DAYTONA_SIZE_DISK_GIB[profile.sizeClass];
+    // Daytona applies `resources` only to image-based creates; without an
+    // image it boots the default snapshot at 1 vCPU / 1 GiB.
+    return {
+      status: 'supported',
+      nativeOptions: {
+        ...(native?.image === undefined && { image: config.sizeImage ?? 'node:22' }),
+        resources: { cpu: profile.vcpus, memory: memoryGiB, ...(disk !== undefined && { disk }) },
+      },
+      ...(disk !== undefined && {
+        resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: disk * 1024 },
+      }),
+    };
+  },
   methods: {
     instances: {
       create: async (config: DaytonaConfig, options?: CreateInstanceOptions) => {
