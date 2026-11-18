@@ -49,7 +49,7 @@ export const CODESANDBOX_SIZE_TEMPLATES: Readonly<Partial<Record<InstanceSizeCla
 
 function sizeTemplateOf(config: CodesandboxConfig, sizeClass: InstanceSizeClass): string | undefined {
   if (!CODESANDBOX_SIZE_TEMPLATES[sizeClass]) return undefined;
-  return config.sizeTemplates?.[sizeClass] ?? CODESANDBOX_SIZE_TEMPLATES[sizeClass];
+  return config.sizeTemplates?.[sizeClass]?.trim() || CODESANDBOX_SIZE_TEMPLATES[sizeClass];
 }
 
 function missingSizeTemplateHint(config: CodesandboxConfig, templateId: unknown, message: string): string | undefined {
