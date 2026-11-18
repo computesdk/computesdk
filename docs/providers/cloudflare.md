@@ -177,6 +177,23 @@ const sandbox = await compute.instances.create({
 
 Set `vcpu`, `memoryMib`, and `diskMb` together. Without them, the sandbox uses the Worker's default instance type. Without `image`, it uses the Worker's default image.
 
+### Standard sizes
+
+`sizeClass` sets a [custom instance type](https://developers.cloudflare.com/containers/platform/limits/#custom-instance-types) through the Worker's `vcpu`, `memoryMib`, and `diskMb` fields:
+
+| `sizeClass` | vCPU | Memory (MiB) | Disk (MB) |
+| --- | ---: | ---: | ---: |
+| `xs` | 1 | 1024 | 8192 |
+| `sm` | 1 | 2048 | 8192 |
+| `md` | 2 | 4096 | 12288 |
+| `lg` | 4 | 8192 | 20000 |
+
+`xl`, `2xl`, and `3xl` are `unsupported`: Cloudflare Containers allow at most 4 vCPU, 12 GiB memory, and 20 GB disk per instance. `sizeClass` works with `image` and `snapshotId` restores. It is `unsupported` with `sandboxId`, because a running container keeps the instance type it started with, and it cannot be combined with `vcpu`, `memoryMib`, or `diskMb`. `sizing.resolved.diskMiB` reports the disk in MiB (Cloudflare's MB are 1,000,000 bytes).
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' });
+```
+
 ### Configuration Options
 
 ```typescript

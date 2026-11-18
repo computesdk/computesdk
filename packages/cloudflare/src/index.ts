@@ -15,8 +15,9 @@
  * native files, preview URLs and snapshots are used only when it lists them.
  */
 
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, InstanceSizeError } from '@computesdk/provider';
 import type {
+  InstanceSizeClass,
   CommandResult,
   CreateInstanceOptions,
   FileEntry,
@@ -659,8 +660,50 @@ function parseFindOutput(stdout: string): FileEntry[] {
   return entries;
 }
 
+// Cloudflare Containers custom instance types (durable_object scheduling,
+// which both the bridge and demo Workers use) take any vcpu/memoryMib/diskMb
+// up to the per-instance limit of 4 vCPU / 12 GiB / 20 GB, so xs-lg boot at
+// their exact CPU/RAM. Disk matches the platform's Cloudflare presets
+// (8192 / 12288 MB), with lg at the 20 GB (20000 MB) disk ceiling.
+const MAX_INSTANCE = { vcpus: 4, memoryMiB: 12 * 1024, diskMb: 20_000 };
+const SIZE_DISK_MB: Partial<Record<InstanceSizeClass, number>> = {
+  xs: 8192,
+  sm: 8192,
+  md: 12288,
+  lg: 20_000,
+};
+const NATIVE_SIZE_FIELDS = ['vcpu', 'memoryMib', 'diskMb'] as const;
+
+function mbToMiB(mb: number): number {
+  return Math.floor((mb * 1_000_000) / (1024 * 1024));
+}
+
 export const cloudflare = defineProvider<CloudflareSandbox, CloudflareConfig>({
   name: 'cloudflare',
+  sizes: (_config, profile, options) => {
+    const field = NATIVE_SIZE_FIELDS.find((key) => options?.[key] !== undefined);
+    if (field) {
+      throw new InstanceSizeError('conflict', `cannot combine sizeClass with Cloudflare ${field}`);
+    }
+    if (options?.sandboxId) {
+      return {
+        status: 'unsupported',
+        reason: 'Reconnecting with sandboxId keeps the instance type the container started with.',
+      };
+    }
+    const diskMb = SIZE_DISK_MB[profile.sizeClass];
+    if (diskMb === undefined || profile.vcpus > MAX_INSTANCE.vcpus || profile.memoryMiB > MAX_INSTANCE.memoryMiB) {
+      return {
+        status: 'unsupported',
+        reason: `Cloudflare Containers list at most ${MAX_INSTANCE.vcpus} vCPU / 12 GiB / 20 GB per instance (default account limit), not ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB.`,
+      };
+    }
+    return {
+      status: 'supported',
+      nativeOptions: { vcpu: profile.vcpus, memoryMib: profile.memoryMiB, diskMb },
+      resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: mbToMiB(diskMb) },
+    };
+  },
   methods: {
     instances: {
       create: async (
