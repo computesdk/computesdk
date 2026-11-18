@@ -188,8 +188,17 @@ async function runForeground(sandbox: SpritesSandbox, command: string, options?:
     }
 }
 
+/**
+ * Every Sprite runs on the same fixed shape: 8 vCPUs, platform-managed
+ * (autoscaling) memory and 100 GB of storage. POST /v1/sprites takes no CPU,
+ * memory or disk fields, so no standard size can be selected.
+ */
+const FIXED_SHAPE_REASON =
+  'Sprites have a fixed shape (8 vCPUs, platform-managed autoscaling memory, 100 GB storage) and the create API takes no CPU, memory or disk fields, so no standard size can be selected.';
+
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
   name: 'sprites',
+  sizes: () => ({ status: 'unsupported', reason: FIXED_SHAPE_REASON }),
   methods: {
     instances: {
       create: async (config: SpritesConfig, options?: CreateInstanceOptions) => {
