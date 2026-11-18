@@ -35,6 +35,20 @@ Blaxel provider for ComputeSDK
 
 Snapshots declare whole-rootfs and memory preservation with the source kept. Restore with `snapshotId`; see [snapshot semantics and cleanup](../reference/compute.md#snapshot-capabilities).
 
+## Standard sizes
+
+`create({ sizeClass })` sets Blaxel's `memory` (MB). Blaxel has no CPU field: the [API reference](https://docs.blaxel.ai/api-reference/compute/create-sandbox) allocates CPU cores = memory / 2048.
+
+| `sizeClass` | Status | Blaxel `memory` | Resolved shape |
+| --- | --- | ---: | --- |
+| `xs` | `unsupported` | — | 1024 MB gets 0.5 core; the first 1-core shape (2048 MB) is `sm`. |
+| `sm` | supported | 2048 | 1 vCPU / 2048 MiB |
+| `md` | supported | 4096 | 2 vCPU / 4096 MiB |
+| `lg` | supported | 8192 | 4 vCPU / 8192 MiB |
+| `xl`, `2xl`, `3xl` | `unknown` | — | Blaxel's docs disagree on CPU from 16 GB up (API reference: 8 cores at 16 GB; [Sandboxes overview](https://docs.blaxel.ai/Sandboxes/Overview) and troubleshooting: 6 cores), so these are not mapped. |
+
+`sizeClass` overrides the configured `memory` default. It cannot be combined with a native `memory` option (`conflict`), or with `snapshotId` or `sandboxId` (`unsupported`: a fork or an existing sandbox keeps its own memory). `templateId` and `image` still work. The rootfs is an in-memory overlay sized from memory, so no disk is set.
+
 ## Installation & Setup
 
 ```bash
