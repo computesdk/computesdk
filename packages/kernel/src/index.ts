@@ -12,7 +12,9 @@ import type {
   CreateBrowserSessionOptions,
   BrowserProfile,
   BrowserExtension,
+  ProxyConfig,
 } from '@computesdk/provider';
+import type { ProxyCreateParams } from '@onkernel/sdk/resources/proxies';
 
 import type { BrowserCreateResponse } from '@onkernel/sdk/resources/browsers';
 
@@ -76,9 +78,6 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions) {
   } else if (options.keepAlive === true) {
     params.timeout_seconds = KEEP_ALIVE_TIMEOUT_SECONDS;
   }
-  if (options.proxies !== undefined) {
-    warnOnce('proxies', 'Kernel create-browser supports only a provider proxy_id, which CreateBrowserSessionOptions cannot express.');
-  }
 
   // Viewport
   if (options.viewport) {
@@ -99,6 +98,50 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions) {
   }
 
   return params;
+}
+
+/**
+ * Map `proxies` to the Kernel proxy to create, if any. `true` means a managed
+ * US residential proxy, like the other browser providers' `proxies: true`.
+ * `false` keeps Kernel's default egress.
+ */
+function proxyParams(proxies: CreateBrowserSessionOptions['proxies']): ProxyCreateParams | undefined {
+  if (proxies === undefined || proxies === false) return undefined;
+  if (proxies === true) return { type: 'residential', name: 'computesdk-residential-us', config: { country: 'US' } };
+  if (proxies.length > 1) warnOnce('proxies[1]', 'Kernel attaches one proxy per session; only the first entry is used.');
+  const [proxy] = proxies as ProxyConfig[];
+  if (!proxy) return undefined;
+  if (proxy.type === 'custom') {
+    warnOnce('proxies.custom', 'custom proxies need a Kernel proxy created with credentials; create one and pass its proxy_id through the Kernel SDK.');
+    return undefined;
+  }
+  const country = proxy.geolocation?.country?.toUpperCase();
+  return {
+    type: proxy.type,
+    name: `computesdk-${proxy.type}-${(country ?? 'any').toLowerCase()}`,
+    config: country ? { country } : {},
+  };
+}
+
+const proxyIds = new Map<string, Promise<string>>();
+
+/**
+ * Reuse the org's proxy with this name, creating it on first use. Kernel
+ * proxies are org resources referenced by `proxy_id`, so one is shared across
+ * sessions instead of created per session.
+ */
+function resolveProxyId(client: Kernel, apiKey: string, params: ProxyCreateParams): Promise<string> {
+  const key = `${apiKey}:${params.name}`;
+  let id = proxyIds.get(key);
+  if (!id) {
+    id = (async () => {
+      const existing = (await client.proxies.list()).find((p) => p.name === params.name && p.type === params.type);
+      return existing?.id ?? (await client.proxies.create(params)).id!;
+    })();
+    id.catch(() => proxyIds.delete(key));
+    proxyIds.set(key, id);
+  }
+  return id;
 }
 
 /**
@@ -139,6 +182,14 @@ export const kernel = defineBrowserProvider<BrowserCreateResponse, KernelConfig>
       create: async (config, options) => {
         const client = createClient(config);
         const params = mapSessionOptions(options);
+        const proxy = proxyParams(options?.proxies);
+        if (proxy) {
+          try {
+            params.proxy_id = await resolveProxyId(client, resolveConfig(config).apiKey, proxy);
+          } catch (err) {
+            console.warn(`[@computesdk/kernel] could not resolve a ${proxy.type} proxy, using Kernel's default egress: ${err}`);
+          }
+        }
         const browser = await client.browsers.create(params as any);
         return normalizeSession(browser);
       },
