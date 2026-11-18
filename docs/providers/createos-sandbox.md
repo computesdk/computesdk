@@ -69,6 +69,37 @@ console.log(result.stdout); // "Hello from CreateOS!"
 await sandbox.destroy();
 ```
 
+### Standard sizes
+
+`sizeClass` picks a listed CreateOS shape (from the
+[shape catalog](https://createos.sh/docs/Sandbox/Limits)). Each class boots the
+smallest shape that meets its profile, with the overlay disk the benchmarks
+platform uses for that class:
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' })
+```
+
+| `sizeClass` | Shape | vCPU / RAM | Disk |
+| --- | --- | --- | --- |
+| `xs` | `s-1vcpu-1gb` | 1 / 1 GiB | 10 GiB (shape default) |
+| `sm` | `s-1vcpu-2gb` | 1 / 2 GiB | 10 GiB |
+| `md` | `s-2vcpu-4gb` | 2 / 4 GiB | 20 GiB |
+| `lg` | `s-4vcpu-8gb` | 4 / 8 GiB | 40 GiB |
+| `xl` | `s-8vcpu-16gb` | 8 / 16 GiB | 80 GiB |
+| `2xl` | — | unsupported | |
+| `3xl` | — | unsupported | |
+
+`2xl` and `3xl` are unsupported: the largest listed shape (Enterprise) is
+`s-8vcpu-16gb`. The `s-0.25vcpu-512mb` and `s-0.5vcpu-1gb` shapes run on a
+fractional CPU quota and are never used for a standard size. Pass
+`ephemeralDiskMb` to choose another disk size, within your plan's limit.
+
+`sizeClass` cannot be combined with `shape`, `cpus` or `memoryMb` (conflict),
+or with `snapshotId`: a fork keeps the paused source's shape, so sized snapshot
+restores are rejected as unsupported. Plans cap which shapes you can boot; a
+shape above your plan fails at create time.
+
 ### Configuration Options
 
 ```typescript
