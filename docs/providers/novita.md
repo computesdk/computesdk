@@ -26,9 +26,26 @@ layout:
 
 Novita Sandbox provider for ComputeSDK, using the official `novita-sandbox` SDK.
 
-## Account sizes and lifecycle
+## Standard sizes
 
-CPU/RAM are fixed at template build. [Provider Setup](../../ADD-PROVIDER.md#provider-setup) builds the Node 22 size templates for this account; use `templateId` to boot one. This adapter's `sizeClass` resolution is `unknown`, not a per-create CPU override; see [Sandbox sizes](../reference/sizes.md).
+CPU/RAM are fixed when a Novita template is built, so each standard `sizeClass` boots its own account template (node:22):
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' });
+```
+
+| `sizeClass` | Template | Shape |
+| --- | --- | --- |
+| `xs` | `csdk-node22-1cpu-1gb` | 1 vCPU / 1024 MiB / 20480 MiB disk |
+| `sm` | `csdk-node22-1cpu-2gb` | 1 vCPU / 2048 MiB / 20480 MiB disk |
+| `md` | `csdk-node22-2cpu-4gb` | 2 vCPU / 4096 MiB / 20480 MiB disk |
+| `lg` | `csdk-node22-4cpu-8gb` | 4 vCPU / 8192 MiB / 20480 MiB disk |
+
+`xl`, `2xl` and `3xl` are `unsupported`: Novita caps a sandbox at 8 vCPU and 8 GiB of memory on the Free, Paid and (default) Enterprise tiers ([Quota Limits](https://novita.ai/docs/guides/sandbox-quota-limit)). The 20 GB disk is fixed per sandbox and reported in `resolved.diskMiB`.
+
+[Provider Setup](../../ADD-PROVIDER.md#provider-setup) builds the size templates; a mapped template missing on the account fails at create time with setup guidance. Override the names with `sizeTemplates` in the provider config (only `xs`–`lg` are honored; an empty name is `unconfigured`). `sizeClass` cannot be combined with `templateId`, `snapshotId` or `sandboxId` (`unsupported`), or with native `cpuCount`, `memoryMB` or `build` (`conflict`). See [Sandbox sizes](../reference/sizes.md).
+
+## Lifecycle
 
 `pause()`/`resume()` preserve memory and processes; resume re-arms the sandbox's configured lifetime. Snapshot capabilities declare rootfs/memory preservation and the source kept. Snapshot names and metadata are accepted but ignored.
 
@@ -79,6 +96,8 @@ interface NovitaConfig {
   apiKey?: string;
   /** Default sandbox lifetime in milliseconds (default: 300000) */
   timeout?: number;
+  /** Template to boot per standard `sizeClass` (xs–lg); defaults to NOVITA_SIZE_TEMPLATES */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
 }
 ```
 
