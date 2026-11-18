@@ -9,7 +9,7 @@
  * Auth: MIOSA API keys (`msk_*`) via `Authorization: Bearer <key>`.
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
+import { defineProvider, escapeShellArg, InstanceSizeError, resolveVolumeRef, withVolumeSettle } from "@computesdk/provider";
 import { RunnerClient } from "./runner-entry";
 
 import {
@@ -29,6 +29,7 @@ import type { RunOutcome, RunSpec } from "./lazy-create";
 import type {
   CommandResult,
   InstanceInfo,
+  InstanceSizeClass,
   CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
@@ -2062,6 +2063,28 @@ function withLifecycle(sandbox: MiosaSandbox): MiosaSandboxHandle {
   return sandbox as MiosaSandboxHandle;
 }
 
+/**
+ * MIOSA sandboxes run on named resource contracts (docs: Sizing and limits,
+ * Sandboxes API). Each standard size maps to the smallest contract that
+ * covers it; the contract also fixes the disk. `xs` (1 vCPU / 1 GiB) has no
+ * creatable contract (the smallest is `xs`, 1 vCPU / 2 GiB) and `3xl` is past
+ * the 16 vCPU / 32 GiB ceiling.
+ */
+export const MIOSA_SIZE_CONTRACTS: Readonly<
+  Partial<Record<InstanceSizeClass, { size: string; vcpus: number; memoryMiB: number; diskMiB: number }>>
+> = Object.freeze({
+  sm: Object.freeze({ size: "xs", vcpus: 1, memoryMiB: 2048, diskMiB: 10240 }),
+  md: Object.freeze({ size: "small", vcpus: 2, memoryMiB: 4096, diskMiB: 10240 }),
+  lg: Object.freeze({ size: "medium", vcpus: 4, memoryMiB: 8192, diskMiB: 20480 }),
+  xl: Object.freeze({ size: "large", vcpus: 8, memoryMiB: 16384, diskMiB: 40960 }),
+  "2xl": Object.freeze({ size: "xl", vcpus: 16, memoryMiB: 32768, diskMiB: 81920 }),
+});
+
+/** MIOSA's own resource fields, which would compete with the named contract. */
+const MIOSA_RESOURCE_FIELDS = [
+  "cpu_count", "cpuCount", "memory_mb", "disk_size_mb", "diskSizeMb", "disk_mb", "diskMb",
+] as const;
+
 const createMiosaProvider = defineProvider<
   MiosaSandbox,
   MiosaConfig,
@@ -2069,6 +2092,32 @@ const createMiosaProvider = defineProvider<
   MiosaSnapshotRecord
 >({
   name: "miosa",
+  sizes: (_config, profile, options) => {
+    const field = MIOSA_RESOURCE_FIELDS.find(
+      (key) => (options as Record<string, unknown> | undefined)?.[key] !== undefined,
+    );
+    if (field)
+      throw new InstanceSizeError("conflict", `cannot combine sizeClass with MIOSA ${field}`);
+    if (options?.snapshotId !== undefined)
+      return {
+        status: "unsupported",
+        reason: "A MIOSA snapshot restore keeps the source sandbox's resources; drop snapshotId to create a standard size.",
+      };
+    const contract = MIOSA_SIZE_CONTRACTS[profile.sizeClass];
+    if (!contract)
+      return {
+        status: "unsupported",
+        reason:
+          profile.sizeClass === "xs"
+            ? "MIOSA's smallest sandbox size is xs (1 vCPU / 2 GiB), which is sm; it lists no 1 vCPU / 1 GiB contract."
+            : `MIOSA's largest sandbox size is xl (16 vCPU / 32 GiB); it has no ${profile.vcpus} vCPU / ${profile.memoryMiB / 1024} GiB size.`,
+      };
+    return {
+      status: "supported",
+      nativeOptions: { size: contract.size },
+      resolved: { vcpus: contract.vcpus, memoryMiB: contract.memoryMiB, diskMiB: contract.diskMiB },
+    };
+  },
   methods: {
     instances: {
       create: async (config: MiosaConfig, options?: CreateInstanceOptions) => {
@@ -2112,6 +2161,8 @@ const createMiosaProvider = defineProvider<
           // the caller asked for "big", xl is the biggest big we sell.
           body.size = (fit ?? sizes[sizes.length - 1]).size;
         }
+        // A named MIOSA size (what sizeClass resolves to) wins over the hints.
+        if (typeof options?.size === "string") body.size = options.size;
         const profile = runtimeProfile(
           config,
           (options as { runtime?: unknown } | undefined)?.runtime,
