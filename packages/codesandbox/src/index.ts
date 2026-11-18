@@ -4,9 +4,9 @@
 
 import { CodeSandbox } from '@codesandbox/sdk';
 import type { Sandbox as CodesandboxNativeSandbox, SandboxClient } from '@codesandbox/sdk';
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, InstanceSizeError } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, InstanceSizeClass } from '@computesdk/provider';
 
 export interface CodesandboxConfig {
   /** CodeSandbox API key - if not provided, will fallback to CSB_API_KEY environment variable */
@@ -17,6 +17,46 @@ export interface CodesandboxConfig {
   runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Template id or `namespace@alias` per standard size, overriding CODESANDBOX_SIZE_TEMPLATES (2xl, 3xl). */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
+}
+
+type VmTierName = 'Pico' | 'Nano' | 'Micro' | 'Small' | 'Medium' | 'Large' | 'XLarge';
+
+/**
+ * Smallest CodeSandbox VM tier (SDK `VMTier`, docs sdk/pricing) meeting each standard
+ * size. Pico (1 vCPU / 2 GiB) is the smallest tier, so `xs` has none; Large (32/64)
+ * is below the 3xl profile's 128 GiB, so 3xl is XLarge (64/128).
+ */
+const SIZE_TIERS: Readonly<Partial<Record<InstanceSizeClass, { tier: VmTierName; vcpus: number; memoryMiB: number }>>> = {
+  sm: { tier: 'Pico', vcpus: 1, memoryMiB: 2048 },
+  md: { tier: 'Nano', vcpus: 2, memoryMiB: 4096 },
+  lg: { tier: 'Micro', vcpus: 4, memoryMiB: 8192 },
+  xl: { tier: 'Small', vcpus: 8, memoryMiB: 16384 },
+  '2xl': { tier: 'Medium', vcpus: 16, memoryMiB: 32768 },
+  '3xl': { tier: 'XLarge', vcpus: 64, memoryMiB: 131072 },
+};
+
+/**
+ * CodeSandbox applies `vmTier` above Small only to the core count unless the sandbox
+ * forks a template built at that tier (docs sdk/specs), so 2xl and 3xl boot these
+ * template aliases, built with `csb build <dir> --vm-tier <Tier> --alias <alias>`.
+ */
+export const CODESANDBOX_SIZE_TEMPLATES: Readonly<Partial<Record<InstanceSizeClass, string>>> = Object.freeze({
+  '2xl': 'csdk@csdk-node22-16cpu-32gb',
+  '3xl': 'csdk@csdk-node22-64cpu-128gb',
+});
+
+function sizeTemplateOf(config: CodesandboxConfig, sizeClass: InstanceSizeClass): string | undefined {
+  if (!CODESANDBOX_SIZE_TEMPLATES[sizeClass]) return undefined;
+  return config.sizeTemplates?.[sizeClass] ?? CODESANDBOX_SIZE_TEMPLATES[sizeClass];
+}
+
+function missingSizeTemplateHint(config: CodesandboxConfig, templateId: unknown, message: string): string | undefined {
+  if (typeof templateId !== 'string' || !/\b404\b|not found/i.test(message)) return undefined;
+  const sizeClass = (Object.keys(CODESANDBOX_SIZE_TEMPLATES) as InstanceSizeClass[]).find(c => sizeTemplateOf(config, c) === templateId);
+  if (!sizeClass) return undefined;
+  return `CodeSandbox size template '${templateId}' (sizeClass ${sizeClass}) is not built in this workspace; build it with \`csb build <dir> --vm-tier ${SIZE_TIERS[sizeClass]!.tier} --alias ${templateId}\``;
 }
 
 /**
@@ -224,6 +264,30 @@ async function runToCompletion(
 
 export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({
   name: 'codesandbox',
+  sizes: (config, profile, options) => {
+    if ((options as { vmTier?: unknown } | undefined)?.vmTier !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native CodeSandbox vmTier');
+    }
+    const size = SIZE_TIERS[profile.sizeClass];
+    if (!size) {
+      return { status: 'unsupported', reason: `CodeSandbox has no VM tier for ${profile.sizeClass}; its smallest tier, Pico, is 1 vCPU / 2 GiB (sm).` };
+    }
+    const resolved = size.vcpus === profile.vcpus && size.memoryMiB === profile.memoryMiB
+      ? undefined
+      : { vcpus: size.vcpus, memoryMiB: size.memoryMiB };
+    const templateId = sizeTemplateOf(config, profile.sizeClass);
+    if (templateId && (options?.templateId !== undefined || options?.snapshotId !== undefined)) {
+      return {
+        status: 'unsupported',
+        reason: `CodeSandbox gives ${size.tier} its memory only on a template built at that tier; drop templateId/snapshotId to boot the ${profile.sizeClass} size template.`,
+      };
+    }
+    return {
+      status: 'supported',
+      nativeOptions: { ...(templateId ? { templateId } : {}), vmTier: { name: size.tier } },
+      ...(resolved ? { resolved } : {}),
+    };
+  },
   methods: {
     instances: {
       create: async (config: CodesandboxConfig, options?: CreateInstanceOptions) => {
@@ -247,7 +311,8 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
           if (/unauthori[sz]ed|API key/i.test(message)) {
             throw new Error(`CodeSandbox authentication failed. Please check your CSB_API_KEY environment variable. (${message})`);
           }
-          throw new Error(`Failed to create CodeSandbox sandbox: ${message}`);
+          const hint = options?.snapshotId ? undefined : missingSizeTemplateHint(config, options?.templateId, message);
+          throw new Error(`Failed to create CodeSandbox sandbox: ${message}${hint ? `. ${hint}` : ''}`);
         }
       },
 
