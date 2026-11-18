@@ -93,7 +93,7 @@ interface PromigenceConfig {
   snapshot?: string;
   /** Sandbox lifetime in milliseconds when create() sets none; also the bound on a command that sets none */
   timeout?: number;
-  /** Size of a sandbox created from an image: 'xsmall', 'small', 'medium', 'large', 'xlarge' or '2xlarge' */
+  /** Size of a sandbox created from an image: 'xsmall', 'small', 'medium', 'large-16', 'large', 'xlarge' or '2xlarge' */
   tier?: string;
   /** 'start' (the default) or 'compute' (long, memory-heavy jobs on the larger tiers) */
   optimizeFor?: 'start' | 'compute';
@@ -107,6 +107,24 @@ interface PromigenceConfig {
 `templateId` or `snapshotId` picks the snapshot to start from: its id, its alias, `alias@commit`, or the name of a Promigence template (`promigence templates` lists them). Pass `image` instead to start from a container image, such as `python:3.12` or `name@sha256:...`. The first `create()` from an image builds its snapshot, billed per second while it builds, and later ones reuse it; with `image`, `tier` sets the size and `registrySecret` names a stored secret that holds the registry credentials.
 
 `create()` also takes `timeout`, `envs`, `metadata` (labels), `spendCap` and `optimizeFor`. Set `allowInternetAccess: false` for no network access, or `allowHosts: [...]` to reach only those destinations.
+
+## Standard sizes
+
+`create({ sizeClass })` picks the Promigence tier for a [standard size](../reference/sizes.md). Promigence publishes a shape for three tiers (no fixed disk is listed), and each one serves the largest standard size it meets:
+
+| sizeClass | Tier | Promigence shape |
+|---|---|---|
+| `md` | `small` | 2 vCPU, 4 GiB |
+| `lg` | `medium` | 4 vCPU, 16 GiB |
+| `xl` | `large` | 8 vCPU, 32 GiB |
+
+`xs`, `sm`, `2xl` and `3xl` return `unknown`: the tiers `xsmall`, `large-16`, `xlarge` and `2xlarge` exist, but Promigence publishes no vCPU or memory for them.
+
+A tier is chosen only when a sandbox is built from an image, so pass `image` with `sizeClass`. Without `image` or a snapshot, `md` starts the built-in base snapshot, which is `small`, while `lg` and `xl` return `requires-build`. A snapshot keeps the tier it was built at, so `sizeClass` with `templateId`, `snapshotId` or the `snapshot` config is `unsupported`. `sizeClass` together with `tier` (or a CPU or memory field) throws `InstanceSizeError` with code `conflict`.
+
+```typescript
+const sandbox = await compute.instances.create({ image: 'python:3.12', sizeClass: 'lg' }); // tier 'medium'
+```
 
 ## Supported features
 
@@ -122,4 +140,4 @@ Errors from Promigence keep the SDK's `code` and `fix` (what to do next). Every 
 - `snapshot.create()` captures the running sandbox but ends background execs; inspect `metadata.backgroundExecsKilled` before treating it as a process-preserving fork.
 - Templates are snapshots here: the `template` methods throw, and `templateId` names a snapshot.
 - The output of a `background: true` command is not collected.
-- CPU and memory fields on `create()` are ignored, because a sandbox has its snapshot's size.
+- CPU and memory fields on `create()` are ignored, because a sandbox has its snapshot's size; use `tier` or `sizeClass` with `image`.

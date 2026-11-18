@@ -5,13 +5,15 @@
  * operation goes through the Promigence SDK (`@promigence/sdk`).
  */
 
-import { defineProvider, escapeShellArg, TIMEOUT_EXIT_CODE } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError, TIMEOUT_EXIT_CODE } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
   CreateSnapshotOptions,
   FileEntry,
   InstanceInfo,
+  InstanceSizeClass,
+  InstanceSizeResources,
   ListSnapshotsOptions,
   RunCommandOptions,
 } from '@computesdk/provider';
@@ -397,9 +399,58 @@ function toSnapshotInfo(s: SnapshotRecord) {
   };
 }
 
+/**
+ * The tiers Promigence publishes a shape for (www.promigence.ai/#pricing), under the standard size
+ * each one belongs to: the largest whose vCPU and memory it both meets. `xsmall`, `large-16`,
+ * `xlarge` and `2xlarge` are tier names with no published shape, so xs, sm, 2xl and 3xl map to none.
+ */
+export const PROMIGENCE_SIZE_TIERS: Readonly<Partial<Record<InstanceSizeClass, { tier: Tier; shape: InstanceSizeResources }>>> =
+  Object.freeze({
+    md: Object.freeze({ tier: 'small', shape: Object.freeze({ vcpus: 2, memoryMiB: 4096 }) }),
+    lg: Object.freeze({ tier: 'medium', shape: Object.freeze({ vcpus: 4, memoryMiB: 16384 }) }),
+    xl: Object.freeze({ tier: 'large', shape: Object.freeze({ vcpus: 8, memoryMiB: 32768 }) }),
+  });
+
+/** The tier of the built-in `base` snapshot a create with no image and no snapshot starts from. */
+const BASE_TIER: Tier = 'small';
+
 /** The ComputeSDK provider: `promigence({ apiKey })`, or `promigence({})` to read the environment. */
 export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
   name: PROVIDER,
+  // A tier is chosen only when a sandbox is created from an image; a snapshot keeps the tier it
+  // was built at, and the built-in base is small.
+  sizes: (config, profile, options) => {
+    const o = (options ?? {}) as CreateInstanceOptions & PromigenceCreateOptions;
+    if (o.tier !== undefined) throw new InstanceSizeError('conflict', 'cannot combine sizeClass with the Promigence tier option');
+    const entry = PROMIGENCE_SIZE_TIERS[profile.sizeClass];
+    if (!entry) {
+      return {
+        status: 'unknown',
+        reason: `Promigence publishes no tier shape for ${profile.sizeClass} (${profile.vcpus} vCPU / ${profile.memoryMiB} MiB): ` +
+          'its listed tiers are small (2 vCPU, 4 GiB), medium (4 vCPU, 16 GiB) and large (8 vCPU, 32 GiB), so md, lg and xl.',
+      };
+    }
+    const resolved = entry.shape.vcpus === profile.vcpus && entry.shape.memoryMiB === profile.memoryMiB ? undefined : entry.shape;
+    if (o.image !== undefined) {
+      return { status: 'supported', nativeOptions: { tier: entry.tier }, ...(resolved ? { resolved } : {}) };
+    }
+    const snapshot = o.templateId ?? o.snapshotId ?? config.snapshot;
+    if (snapshot !== undefined) {
+      return {
+        status: 'unsupported',
+        reason: `A Promigence snapshot (${show(snapshot)}) keeps the tier it was built at, which is not known here. ` +
+          `Pass image to build at tier ${entry.tier}, or create from the snapshot without sizeClass.`,
+      };
+    }
+    if (entry.tier === BASE_TIER) {
+      return { status: 'supported', nativeOptions: {} as Record<string, string>, ...(resolved ? { resolved } : {}) };
+    }
+    return {
+      status: 'requires-build',
+      reason: `The built-in Promigence base snapshot is small (2 vCPU, 4 GiB). Pass image to build at tier ${entry.tier}, ` +
+        `or build a snapshot with promigence snapshot create --tier ${entry.tier} and create from it without sizeClass.`,
+    };
+  },
   methods: {
     instances: {
       create: async (config: PromigenceConfig, options?: CreateInstanceOptions) => {
