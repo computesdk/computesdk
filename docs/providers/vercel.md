@@ -37,6 +37,25 @@ Create with `{ persistent: true }` to use `pause()`/`resume()`. Pause stops the 
 
 Snapshots capture the rootfs without memory. `snapshot.capabilities` has `destroysSource: true` and `source: 'stopped'`: the source still exists and needs explicit destruction. `destroy()` deletes the sandbox and its automatic snapshots rather than merely stopping it.
 
+## Standard sizes
+
+`create({ sizeClass })` sets Vercel's `resources.vcpus`. Vercel gives each vCPU 2048 MiB of RAM, and allows 1 or an even number of vCPUs up to 32 (Enterprise). Disk is a fixed 64 GiB, or 32 GiB on a deprecated `runtime`; `sizing.resolved.diskMiB` reports it.
+
+| `sizeClass` | Vercel `resources.vcpus` | Shape (vCPU / MiB) |
+| --- | ---: | --- |
+| `sm` | 1 | 1 / 2048 |
+| `md` | 2 | 2 / 4096 |
+| `lg` | 4 | 4 / 8192 |
+| `xl` | 8 | 8 / 16384 |
+| `2xl` | 16 | 16 / 32768 |
+
+- `xs` is `unsupported`: the smallest Vercel shape is 1 vCPU / 2048 MiB, which is `sm`.
+- `3xl` is `unsupported`: the largest Vercel shape is 32 vCPU / 64 GiB, below 128 GiB.
+- The size also applies when creating from `snapshotId`, `templateId` or `source`.
+- Combining `sizeClass` with native `resources` (or `vcpus`, `memory`) throws `InstanceSizeError` with code `conflict`.
+
+Hobby (4 vCPU) and Pro (8 vCPU) plans cap the size; a bigger request fails at create time.
+
 ## Installation & Setup
 
 ```bash
