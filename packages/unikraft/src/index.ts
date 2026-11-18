@@ -105,6 +105,10 @@ async function reconnect(sandbox: Sandbox, config: UnikraftConfig): Promise<Sand
   return remember(sandbox, config, env)
 }
 
+// One `ls -la` line: mode, links, owner, group, size (or `major, minor` for a
+// device), three date fields, then the name with its spaces kept.
+const LS_LINE = /^(\S+)\s+\d+\s+\S+\s+\S+\s+(\d+|\d+,\s*\d+)\s+\S+\s+\S+\s+\S+ (.*)$/
+
 function isNotFound(err: unknown): boolean {
   return err instanceof UnikraftCloudError && err.status === 404
 }
@@ -337,14 +341,17 @@ export const unikraft = defineProvider<Sandbox, UnikraftConfig>({
           const entries: FileEntry[] = []
           for (const line of r.stdout.split('\n')) {
             if (!line.trim() || line.startsWith('total ')) continue
-            const parts = line.split(/\s+/)
-            if (parts.length < 9) continue
-            const name = parts.slice(8).join(' ')
+            const match = LS_LINE.exec(line)
+            if (!match) continue
+            const [, mode, size, listed] = match
+            // A symlink is listed as `name -> target`.
+            const arrow = mode.startsWith('l') ? listed.indexOf(' -> ') : -1
+            const name = arrow === -1 ? listed : listed.slice(0, arrow)
             if (name === '.' || name === '..') continue
             entries.push({
               name,
-              type: parts[0].startsWith('d') ? 'directory' : 'file',
-              size: Number.parseInt(parts[4], 10) || 0,
+              type: mode.startsWith('d') ? 'directory' : 'file',
+              size: Number.parseInt(size, 10) || 0,
             })
           }
           return entries
