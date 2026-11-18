@@ -26,6 +26,10 @@ layout:
 
 Luxor provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH. Tenki Cloud is now Luxor; the `tenki` export remains as a compatibility alias.
 
+## Standard sizes
+
+`sizeClass` supports every standard size (`xs` through `3xl`) through per-create `cpuCores` / `memoryMb`, at the exact profile. Luxor accepts 1-128 cores and 128-524288 MiB (even) per create; Starter workspaces cap machines at 4 cores / 8 GB and Team at 16 cores / 64 GB, and Enterprise offers larger machines, so `2xl` needs Team or Enterprise and `3xl` needs Enterprise. `sm`, `md`, `lg` and `xl` also set the root disk (`diskSizeGb` 5, 10, 20 and 40 GiB, reported as `resolved.diskMiB`); `xs`, `2xl` and `3xl` keep the provider default (5 GiB, or the config `diskSizeGb`). A per-create `diskSizeGb` wins over the size's disk. `sizeClass` overrides config `cpuCores` / `memoryMb`; passing `cpuCores` or `memoryMb` with it is a `conflict`. `templateId` (image) works with `sizeClass`; a `snapshotId` restore is `unknown`, because Luxor does not document restoring a memory snapshot at another size. See [Sandbox sizes](../reference/sizes.md).
+
 ## Lifecycle
 
 `pause()`/`resume()` preserve memory and processes. Snapshot methods `create`/`list`/`delete` are exposed directly. Snapshots preserve rootfs and memory and keep the source; the adapter notes that Luxor empties `/tmp` on the source during capture. Keep durable state outside `/tmp` (the declared path is `/home/tenki`). Restore with `snapshotId`.
