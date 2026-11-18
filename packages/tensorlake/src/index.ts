@@ -12,7 +12,7 @@ import type {
   SandboxClientOptions,
   SandboxInfo,
 } from "tensorlake";
-import { defineProvider } from "@computesdk/provider";
+import { InstanceSizeError, defineProvider } from "@computesdk/provider";
 import { streamTensorlakeCommand } from "./streaming";
 import type {
   CodeResult,
@@ -167,6 +167,12 @@ async function resolveSandboxPath(
   return `/${segments.join("/")}`;
 }
 
+/** Root disk pinned for standard sizes: Tensorlake's default and minimum. */
+const SIZE_DISK_MIB = 10240;
+/** Per-sandbox RAM cap; xl (16384 MiB) is the one class approved to run just below it. */
+const MAX_MEMORY_MIB = 16000;
+const RAM_CAP_NOTE = "Tensorlake caps sandbox RAM at 16000 MB";
+
 function resolveAuth(config: TensorlakeConfig): {
   apiKey: string;
   apiUrl?: string;
@@ -193,6 +199,35 @@ export const tensorlake = defineProvider<
   TensorlakeConfig
 >({
   name: "tensorlake",
+  // Tensorlake takes arbitrary whole-vCPU `cpus` and `memoryMb` (1024–8192
+  // MiB per vCPU, at most 16000 MB per sandbox) plus `diskMb`, so xs–lg boot
+  // their exact profile and xl boots 8 vCPU / 16000 MB, all with a 10240 MiB disk.
+  sizes: (_config, profile, options) => {
+    for (const field of ["diskMb", "ephemeralDiskMb"] as const) {
+      if (options?.[field] !== undefined) {
+        throw new InstanceSizeError("conflict", `cannot combine sizeClass with ${field}`);
+      }
+    }
+    if (options?.snapshotId) {
+      return {
+        status: "unsupported",
+        reason: "A Tensorlake memory snapshot restore keeps the snapshot's CPU and memory; standard sizes apply to fresh creates only.",
+      };
+    }
+    if (profile.memoryMiB > MAX_MEMORY_MIB && profile.sizeClass !== "xl") {
+      return {
+        status: "unsupported",
+        reason: `${RAM_CAP_NOTE}; ${profile.sizeClass} needs ${profile.memoryMiB} MiB.`,
+      };
+    }
+    const memoryMiB = Math.min(profile.memoryMiB, MAX_MEMORY_MIB);
+    return {
+      status: "supported",
+      nativeOptions: { cpus: profile.vcpus, memoryMb: memoryMiB, diskMb: SIZE_DISK_MIB },
+      resolved: { vcpus: profile.vcpus, memoryMiB, diskMiB: SIZE_DISK_MIB },
+      ...(memoryMiB < profile.memoryMiB ? { belowStandard: RAM_CAP_NOTE } : {}),
+    };
+  },
   methods: {
     instances: {
       create: async (
