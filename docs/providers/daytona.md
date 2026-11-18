@@ -67,6 +67,29 @@ console.log(result.stdout); // "Hello from Daytona!"
 await sandbox.destroy();
 ```
 
+### Standard sizes
+
+`sizeClass` requests an exact CPU/RAM shape. Daytona takes per-sandbox
+`resources` (vCPU, GiB RAM, GiB disk) on image-based creates, so each standard
+size boots an image with exactly that shape:
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' })
+```
+
+| `sizeClass` | `resources` (cpu / memory / disk) |
+| --- | --- |
+| `xs` | 1 vCPU / 1 GiB / Daytona default disk |
+| `sm` | 1 vCPU / 2 GiB / 10 GiB |
+| `md` | 2 vCPU / 4 GiB / 20 GiB |
+| `lg` | 4 vCPU / 8 GiB / 40 GiB |
+
+`xl`, `2xl` and `3xl` are unsupported: Daytona limits a sandbox to 4 vCPU /
+8 GiB RAM. Without an `image`, a sized create boots `node:22`; set `sizeImage`
+in the provider config to change it. `sizeClass` cannot be combined with
+`templateId`, `snapshotId` or `snapshot` (a snapshot fixes the resources), or
+with native `cpu`, `memory`, `resources`, `disk` or `gpu`.
+
 ### Configuration Options
 
 ```typescript
@@ -77,5 +100,7 @@ interface DaytonaConfig {
   runtime?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /** Image booted for a `sizeClass` create without an `image`; defaults to `node:22` */
+  sizeImage?: string;
 }
 ```
