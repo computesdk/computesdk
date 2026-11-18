@@ -81,6 +81,24 @@ const PROVIDERS = {
     }),
     boot: (s) => ({ sizeClass: { 1: 'sm', 2: 'md', 4: 'lg', 8: 'xl' }[s.vcpu] }),
   },
+  // CPU and memory are fixed at template build; `sizeClass` boots the
+  // platform `base-*` templates by name. Setup is a no-op where they exist.
+  gravixlayer: {
+    load: async () => (await import('../packages/gravixlayer/dist/index.mjs')).gravixlayer({}),
+    templates: [
+      { name: 'base-xsmall', sizeClass: 'xs', vcpu: 1, memoryMib: 1024 },
+      { name: 'base-small', sizeClass: 'sm', vcpu: 1, memoryMib: 2048 },
+      { name: 'base-medium', sizeClass: 'md', vcpu: 2, memoryMib: 4096 },
+      { name: 'base-large', sizeClass: 'lg', vcpu: 4, memoryMib: 8192 },
+      { name: 'base-xlarge', sizeClass: 'xl', vcpu: 8, memoryMib: 16384 },
+      { name: 'base-2xlarge', sizeClass: '2xl', vcpu: 16, memoryMib: 32768 },
+    ],
+    exists: (t, name) => t.name === name,
+    create: (p, s) => p.template.create({
+      name: s.name, fromImage: NODE, vcpu: s.vcpu, memoryMb: s.memoryMib,
+    }),
+    boot: (s) => ({ sizeClass: s.sizeClass }),
+  },
   // Create only accepts the smaller shapes; 8 vCPU / 16 GiB exists only as a
   // built environment, which instances restore at its captured shape.
   mosaic: {

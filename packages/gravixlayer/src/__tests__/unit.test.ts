@@ -502,19 +502,29 @@ describe('create', () => {
     })
   })
 
-  it('rejects image, because runtimes start from a template', async () => {
-    await expect(provider().sandbox.create({ image: 'node:22' })).rejects.toThrow(
-      /not an image.*templateId.*fromImage/,
-    )
-    await expect(
-      provider().sandbox.create({ templateId: 'base-small', image: 'node:22' }),
-    ).rejects.toThrow(/not an image/)
-    expect(calls('runtime.create')).toHaveLength(0)
+  it('treats image as a template name', async () => {
+    await provider().sandbox.create({ image: 'node:22' })
+    expect(calls('runtime.create')[0].args[0]).toMatchObject({ template: 'node:22' })
+    await provider().sandbox.create({ templateId: 'node:22', image: 'node:22' })
+    expect(calls('runtime.create')[1].args[0]).toMatchObject({ template: 'node:22' })
+    expect(calls('templates.list')).toHaveLength(0)
   })
 
   it('treats a blank image as unset', async () => {
     await provider().sandbox.create({ templateId: 'base-small', image: '  ' })
     expect(calls('runtime.create')[0].args[0]).toMatchObject({ template: 'base-small' })
+  })
+})
+
+describe('create image', () => {
+  it('rejects image plus a different templateId or any snapshotId', async () => {
+    await expect(
+      provider().sandbox.create({ image: 'node:22', templateId: 'base-small' }),
+    ).rejects.toThrow(/two different templates/)
+    await expect(
+      provider().sandbox.create({ image: 'node:22', snapshotId: 'snap_1' }),
+    ).rejects.toThrow(/template or a snapshot/)
+    expect(calls('runtime.create')).toHaveLength(0)
   })
 })
 
