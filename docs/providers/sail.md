@@ -80,15 +80,16 @@ Sail's ARM64 Devbox builtin, which includes Node.js and Bun. Pass a different
 image when the workload needs another runtime or architecture.
 
 Create accepts Sailbox `size` values `s`, `m`, and `l`, optional `memoryGib`, a
-name, and an `AbortSignal`. It defaults to `s`; explicit size choices override
-that default. Unsupported universal options are rejected rather than silently
+name, and an `AbortSignal`. Without explicit sizing, it inherits the image's
+resource limits (8 vCPUs by default). `size` and `memoryGib` are sent only when
+explicitly supplied. Unsupported universal options are rejected rather than silently
 ignored.
 
 ## Supported Operations
 
 | Method | Supported | Notes |
 |---|---|---|
-| `create` | Yes | Defaults to an ARM64 Devbox on `S`. |
+| `create` | Yes | Defaults to an ARM64 Devbox with the image's resource limits. |
 | `getById` | Yes | Returns `null` for missing or terminated Sailboxes. |
 | `list` | Yes | Lists live and actionable Sailboxes for the configured app. |
 | `destroy` | Yes | Terminates the Sailbox. |

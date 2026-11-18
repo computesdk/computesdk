@@ -25,6 +25,7 @@ import {
   type ExecOptions,
   type ImageSpec,
   type SailboxSize,
+  type VolumeInfo,
 } from '@sailresearch/sdk';
 
 /** Configuration for the Sail provider. */
@@ -39,7 +40,6 @@ export interface SailConfig {
 
 const PROVIDER = 'sail';
 const DEFAULT_APP = 'computesdk';
-const DEFAULT_SIZE: SailboxSize = 's';
 const GONE_STATUSES = new Set(['terminating', 'terminated']);
 const MAX_RESOLVED_CONFIGS = 32;
 
@@ -242,57 +242,81 @@ function createWithAbortCleanup(
   });
 }
 
+/** Convert ComputeSDK's millisecond lifetime to Sail's whole seconds. */
+function lifetimeSeconds(timeout: number | undefined): number | undefined {
+  if (timeout === undefined) return undefined;
+  if (!Number.isFinite(timeout) || timeout <= 0 || Math.ceil(timeout / 1_000) > 4_294_967_295) {
+    throw new Error('Sail create timeout must be positive finite milliseconds (at most 4294967295000).');
+  }
+  return Math.ceil(timeout / 1_000);
+}
+
 /** Reject options that Sail cannot honor without changing their meaning. */
 function validateCreateOptions(options: CreateInstanceOptions | undefined): void {
   const supported = new Set([
-    'memoryGib',
-    'name',
-    'provider',
-    'signal',
-    'size',
-    'snapshotId',
-    'timeout',
+    'envs', 'image', 'memoryGib', 'name', 'provider', 'signal', 'size', 'snapshotId', 'timeout', 'volumes',
   ]);
   const unsupported = Object.keys(options ?? {}).filter(
     (key) => options?.[key] !== undefined && !supported.has(key),
   );
   if (unsupported.length > 0) {
-    throw new Error(
-      `Sail does not support create option(s): ${unsupported.join(', ')}. ` +
-        'Configure the image on sail({ image }) and set environment variables per command.',
-    );
+    throw new Error(`Sail does not support create option(s): ${unsupported.join(', ')}.`);
   }
-  if (options?.timeout !== undefined) {
-    throw new Error(
-      'Sail does not support ComputeSDK create timeout because it is a hard ' +
-        'sandbox lifetime. Bound individual commands with runCommand timeout ' +
-        'or call destroy() when finished.',
-    );
+  lifetimeSeconds(options?.timeout);
+  if (options?.size !== undefined && !['s', 'm', 'l'].includes(options.size)) {
+    throw new Error(`Sail does not support size ${options.size}; use s, m, or l.`);
   }
-  if (
-    options?.snapshotId !== undefined &&
-    (options.size !== undefined || options.memoryGib !== undefined)
-  ) {
-    throw new Error(
-      'Sail restores a checkpoint with the source Sailbox\'s resources; ' +
-        'size and memoryGib cannot be combined with snapshotId.',
-    );
+  if (options?.snapshotId !== undefined &&
+      (options.image !== undefined || options.envs !== undefined || options.volumes !== undefined ||
+       options.size !== undefined || options.memoryGib !== undefined)) {
+    throw new Error('Sail restores the checkpoint environment and resources; image, envs, volumes, size, and memoryGib cannot be combined with snapshotId.');
   }
-  if (
-    options?.size !== undefined &&
-    options.size !== 's' &&
-    options.size !== 'm' &&
-    options.size !== 'l'
-  ) {
-    throw new Error(
-      `Sail does not support size ${options.size}; use s, m, or l.`,
-    );
+  if (options?.volumes !== undefined) {
+    if (!Array.isArray(options.volumes)) throw new Error('Sail volumes must be an array of volume mounts.');
+    const paths = new Set<string>();
+    for (const mount of options.volumes) {
+      if (!mount || typeof mount.mountPath !== 'string' || !mount.mountPath.startsWith('/') ||
+          paths.has(mount.mountPath)) {
+        throw new Error('Sail volume mount paths must be absolute and unique.');
+      }
+      paths.add(mount.mountPath);
+      if (mount.readOnly !== undefined && typeof mount.readOnly !== 'boolean') {
+        throw new Error('Sail volume readOnly must be a boolean.');
+      }
+    }
   }
 }
 
-/** Return a size after validateCreateOptions has narrowed it to Sail's tiers. */
-function sailboxSize(size: string | undefined): SailboxSize | undefined {
-  return size as SailboxSize | undefined;
+/** Look up names without minting; ids are resolved from the org inventory. */
+async function findVolume(client: Client, idOrName: string): Promise<VolumeInfo | null> {
+  try {
+    return await client.getVolume(idOrName, false);
+  } catch (error) {
+    if (!(error instanceof NotFoundError)) throw error;
+    return (await client.listVolumes()).find((volume) => volume.volumeId === idOrName) ?? null;
+  }
+}
+
+function toVolume(volume: VolumeInfo) {
+  return { id: volume.volumeId, name: volume.name, createdAt: volume.createdAt };
+}
+
+async function volumeMounts(client: Client, mounts: CreateInstanceOptions['volumes']) {
+  const result: Record<string, { volume: string; readOnly?: boolean }> = {};
+  for (const mount of mounts ?? []) {
+    const ref = mount.volume;
+    let id: string | undefined;
+    if (typeof ref === 'object' && ref !== null && typeof ref.id === 'string') {
+      id = ref.id;
+    } else {
+      const name = typeof ref === 'string' ? ref : ref?.name;
+      if (typeof name !== 'string' || !name) throw new Error('Sail volume must have an id or name.');
+      id = (await findVolume(client, name))?.volumeId;
+      if (!id) throw new Error(`Sail volume not found: ${name}`);
+    }
+    result[mount.mountPath] = { volume: id, readOnly: mount.readOnly };
+  }
+  return result;
 }
 
 /** Map ComputeSDK protocols onto Sail ingress listeners. */
@@ -371,14 +395,14 @@ async function resolveSandboxPath(
 }
 
 /** Translate millisecond ComputeSDK command timeouts into Sail seconds. */
-function toExecOptions(options?: RunCommandOptions): ExecOptions {
+function toExecOptions(options?: RunCommandOptions) {
   return {
     cwd: options?.cwd,
     env: options?.env,
     background: options?.background,
     timeoutSeconds:
       options?.timeout !== undefined ? options.timeout / 1_000 : undefined,
-  };
+  } satisfies ExecOptions;
 }
 
 export const sail = defineProvider<Sailbox, SailConfig>({
@@ -393,6 +417,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         if (options?.snapshotId) {
           const restore = Sailbox.fromCheckpoint({
             checkpointId: options.snapshotId,
+            maxLifetimeSeconds: lifetimeSeconds(options.timeout),
             name,
             client,
           });
@@ -402,13 +427,22 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         const app = await resolveApp(config);
         if (options?.signal?.aborted) throw abortError(options.signal);
 
+        const volumes = options?.volumes === undefined
+          ? undefined
+          : await volumeMounts(client, options.volumes);
+        if (options?.signal?.aborted) throw abortError(options.signal);
         const creation = Sailbox.create({
           app,
           name,
           client,
-          image: config.image ?? Image.devbox('arm64'),
-          size: sailboxSize(options?.size) ?? DEFAULT_SIZE,
-          memoryGib: options?.memoryGib,
+          image: options?.image !== undefined
+            ? Image.fromRegistry(options.image)
+            : config.image ?? Image.devbox('arm64'),
+          ...(options?.size === undefined ? {} : { size: options.size as SailboxSize }),
+          ...(options?.memoryGib === undefined ? {} : { memoryLimitGib: options.memoryGib }),
+          env: options?.envs,
+          volumes,
+          maxLifetimeSeconds: lifetimeSeconds(options?.timeout),
         });
         const sandbox = await createWithAbortCleanup(creation, options?.signal, client);
         return { instance: sandbox, instanceId: sandbox.sailboxId };
@@ -478,7 +512,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           provider: PROVIDER,
           status: toStatus(current.status),
           createdAt: current.createdAt ?? new Date(0),
-          timeout: 0,
+          timeout: current.expiresAt ? Math.max(0, current.expiresAt.getTime() - Date.now()) : 0,
         };
       },
 
@@ -560,6 +594,29 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         await sandbox.resume();
       },
       pauseCapabilities: { memory: true },
+    },
+
+    volume: {
+      create: async (config, options) => {
+        const unsupported = Object.keys(options).filter(
+          (key) => key !== 'name' && options[key] !== undefined,
+        );
+        if (unsupported.length) {
+          throw new Error(`Sail does not support volume create option(s): ${unsupported.join(', ')}. Volumes grow with their contents.`);
+        }
+        return toVolume(await resolve(config).client.getVolume(options.name, true));
+      },
+      get: async (config, idOrName) => {
+        const volume = await findVolume(resolve(config).client, idOrName);
+        return volume ? toVolume(volume) : null;
+      },
+      list: async (config, options) =>
+        (await resolve(config).client.listVolumes(options?.limit)).map(toVolume),
+      delete: async (config, idOrName) => {
+        const { client } = resolve(config);
+        const volume = await findVolume(client, idOrName);
+        if (volume) await client.deleteVolume(volume.volumeId, true);
+      },
     },
 
     snapshot: {

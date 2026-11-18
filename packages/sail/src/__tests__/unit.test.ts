@@ -21,6 +21,10 @@ const h = vi.hoisted(() => {
     }>,
     notFoundOnGet: false,
     terminate: vi.fn(async () => undefined),
+    getVolume: vi.fn(),
+    listVolumes: vi.fn(),
+    deleteVolume: vi.fn(),
+    expiresAt: undefined as Date | undefined,
   };
   return { NotFoundError, state };
 });
@@ -31,6 +35,7 @@ vi.mock('@sailresearch/sdk', () => {
       sailboxId: id,
       status,
       createdAt: new Date('2020-01-02T03:04:05Z'),
+      expiresAt: h.state.expiresAt,
       client: {},
       run: vi.fn(async (command: string) =>
         command === 'pwd'
@@ -66,7 +71,10 @@ vi.mock('@sailresearch/sdk', () => {
   };
 
   return {
-    Image: { devbox: vi.fn(() => ({ base: 'devbox' })) },
+    Image: {
+      devbox: vi.fn(() => ({ base: 'devbox' })),
+      fromRegistry: vi.fn((ref: string) => ({ base: ref })),
+    },
     NotFoundError: h.NotFoundError,
     resolveConfig: vi.fn(() => ({
       mode: undefined,
@@ -84,8 +92,8 @@ vi.mock('@sailresearch/sdk', () => {
       }),
     },
     Client: {
-      fromEnv: vi.fn(() => ({ terminateSailbox: h.state.terminate })),
-      fromConfig: vi.fn(() => ({ terminateSailbox: h.state.terminate })),
+      fromEnv: vi.fn(() => ({ terminateSailbox: h.state.terminate, getVolume: h.state.getVolume, listVolumes: h.state.listVolumes, deleteVolume: h.state.deleteVolume })),
+      fromConfig: vi.fn(() => ({ terminateSailbox: h.state.terminate, getVolume: h.state.getVolume, listVolumes: h.state.listVolumes, deleteVolume: h.state.deleteVolume })),
     },
     Sailbox: {
       create: vi.fn(async (options: Record<string, unknown>) => {
@@ -144,6 +152,13 @@ beforeEach(async () => {
   h.state.lsResult = [];
   h.state.notFoundOnGet = false;
   vi.clearAllMocks();
+  h.state.expiresAt = undefined;
+  h.state.getVolume.mockReset().mockImplementation(async (name: string, mint: boolean) => {
+    if (name === 'data' || mint) return { volumeId: 'vol_1', name, status: 'ready' };
+    throw new h.NotFoundError('missing volume');
+  });
+  h.state.listVolumes.mockReset().mockResolvedValue([{ volumeId: 'vol_1', name: 'data', status: 'ready' }]);
+  h.state.deleteVolume.mockReset().mockResolvedValue(null);
   vi.resetModules();
   ({ sail } = await import('../index'));
 });
@@ -152,7 +167,7 @@ describe('sail provider', () => {
   it('creates named Sailboxes and shares one client and app lookup across providers', async () => {
     const sdk = await import('@sailresearch/sdk');
     const [first, second] = await Promise.all([
-      provider().sandbox.create({ name: 'first', size: 'l', memoryGib: 64 }),
+      provider().sandbox.create({ name: 'first' }),
       provider().sandbox.create(),
     ]);
 
@@ -164,13 +179,13 @@ describe('sail provider', () => {
       app: { id: 'app_demo', name: 'demo' },
       image: { base: 'devbox' },
       name: 'first',
-      size: 'l',
-      memoryGib: 64,
     });
     expect(h.state.createArgs[1]).toMatchObject({
       image: { base: 'devbox' },
-      size: 's',
     });
+    expect(h.state.createArgs[1]).not.toHaveProperty('size');
+    expect(h.state.createArgs[1]).not.toHaveProperty('vcpuCount');
+    expect(h.state.createArgs[1]).not.toHaveProperty('memoryLimitGib');
     expect(String(h.state.createArgs[1].name)).toMatch(/^csdk-/);
     expect(sdk.Image.devbox).toHaveBeenCalledTimes(2);
     expect(sdk.Image.devbox).toHaveBeenCalledWith('arm64');
@@ -217,21 +232,105 @@ describe('sail provider', () => {
     );
   });
 
-  it('rejects unsupported or misleading create options', async () => {
-    const compute = provider();
-    await expect(
-      compute.sandbox.create({ snapshotId: 'ckpt_1', size: 'm' }),
-    ).rejects.toThrow(/snapshotId/);
-    await expect(
-      compute.sandbox.create({ envs: { A: '1' } }),
-    ).rejects.toThrow(/envs/);
-    await expect(compute.sandbox.create({ timeout: 5_000 })).rejects.toThrow(
-      /hard sandbox lifetime/,
-    );
-    await expect(
-      compute.sandbox.create({ size: 'extra-large' }),
-    ).rejects.toThrow(/use s, m, or l/);
+  it('imports a create-time OCI image and passes lifetime and environment to Sail', async () => {
+    const sdk = await import('@sailresearch/sdk');
+    await provider().sandbox.create({ image: 'node:22', envs: { MODE: 'test' }, timeout: 30_001 });
+    expect(sdk.Image.fromRegistry).toHaveBeenCalledWith('node:22');
+    expect(sdk.Image.devbox).not.toHaveBeenCalled();
+    expect(h.state.createArgs[0]).toMatchObject({ image: { base: 'node:22' }, env: { MODE: 'test' }, maxLifetimeSeconds: 31 });
+  });
+
+  it('preserves a configured image and its resource limits', async () => {
+    const image: import('@sailresearch/sdk').ImageSpec = { base: 'devbox', numCpus: 4 };
+    await sail({ app: 'demo', apiKey: 'key', image }).sandbox.create();
+    expect(h.state.createArgs[0].image).toBe(image);
+    expect(h.state.createArgs[0]).not.toHaveProperty('size');
+    expect(h.state.createArgs[0].maxLifetimeSeconds).toBeUndefined();
+  });
+
+  it.each([0, -1, NaN, Infinity, 4_294_967_295_001])('rejects invalid lifetime %s before creating a box', async (timeout) => {
+    await expect(provider().sandbox.create({ timeout })).rejects.toThrow(/timeout/);
     expect(h.state.createArgs).toHaveLength(0);
+  });
+
+  it.each([
+    [{ size: 's' }, { size: 's' }],
+    [{ size: 'm' }, { size: 'm' }],
+    [{ size: 'l' }, { size: 'l' }],
+    [{ memoryGib: 32 }, { memoryLimitGib: 32 }],
+    [{ size: 'l', memoryGib: 64 }, { size: 'l', memoryLimitGib: 64 }],
+  ])('preserves explicit resource options %j', async (options, expected) => {
+    await provider().sandbox.create(options);
+    expect(h.state.createArgs[0]).toMatchObject(expected);
+    if (!('size' in options)) expect(h.state.createArgs[0]).not.toHaveProperty('size');
+    if (!('memoryGib' in options)) expect(h.state.createArgs[0]).not.toHaveProperty('memoryLimitGib');
+  });
+
+  it('rejects invalid sizes and checkpoint overrides without silently ignoring them', async () => {
+    const compute = provider();
+    await expect(compute.sandbox.create({ size: 'extra-large' })).rejects.toThrow(/use s, m, or l/);
+    for (const options of [{ image: 'node:22' }, { envs: { A: '1' } }, { volumes: [] }, { size: 'l' }, { memoryGib: 64 }]) {
+      await expect(compute.sandbox.create({ snapshotId: 'ckpt_1', ...options })).rejects.toThrow(/snapshotId/);
+    }
+    await expect(compute.sandbox.create({ unsupported: true })).rejects.toThrow(/unsupported/);
+    expect(h.state.createArgs).toHaveLength(0);
+  });
+
+  it('passes a hard lifetime to checkpoint restores', async () => {
+    await provider().sandbox.create({ snapshotId: 'ckpt_1', timeout: 10_000 });
+    expect(h.state.createArgs[0]).toMatchObject({ checkpointId: 'ckpt_1', maxLifetimeSeconds: 10 });
+  });
+
+  it('reports remaining lifetime from refreshed state', async () => {
+    const box = await provider().sandbox.create();
+    h.state.expiresAt = new Date(Date.now() + 30_000);
+    const info = await box.getInfo();
+    expect(info.timeout).toBeGreaterThan(29_000);
+    expect(info.timeout).toBeLessThanOrEqual(30_000);
+    h.state.expiresAt = new Date(0);
+    expect((await box.getInfo()).timeout).toBe(0);
+  });
+
+  it('supports volume lifecycle by name and id', async () => {
+    const compute = provider();
+    const volume = await compute.volume!.create({ name: 'data' });
+    expect(volume).toMatchObject({ id: 'vol_1', name: 'data' });
+    expect(h.state.getVolume).toHaveBeenCalledWith('data', true);
+    expect(await compute.volume!.get('vol_1')).toMatchObject({ id: 'vol_1' });
+    expect(await compute.volume!.get('missing')).toBeNull();
+    expect(await compute.volume!.list({ limit: 10 })).toHaveLength(1);
+    expect(h.state.listVolumes).toHaveBeenLastCalledWith(10);
+    await compute.volume!.delete('data');
+    expect(h.state.deleteVolume).toHaveBeenCalledWith('vol_1', true);
+    await compute.volume!.delete('missing');
+    expect(h.state.deleteVolume).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves read-only mounts and resolves names without creating missing volumes', async () => {
+    await provider().sandbox.create({ volumes: [
+      { volume: { id: 'vol_1', name: 'data' }, mountPath: '/data', readOnly: true },
+      { volume: 'data', mountPath: '/shared' },
+    ] });
+    expect(h.state.createArgs[0].volumes).toEqual({
+      '/data': { volume: 'vol_1', readOnly: true }, '/shared': { volume: 'vol_1', readOnly: undefined },
+    });
+    expect(h.state.getVolume).toHaveBeenCalledWith('data', false);
+    await expect(provider().sandbox.create({ volumes: [{ volume: 'missing', mountPath: '/data' }] })).rejects.toThrow(/not found/);
+    expect(h.state.createArgs).toHaveLength(1);
+  });
+
+  it('rejects duplicate mounts and unsupported volume provisioning options', async () => {
+    await expect(provider().sandbox.create({ volumes: [
+      { volume: 'data', mountPath: '/data' }, { volume: 'data', mountPath: '/data' },
+    ] })).rejects.toThrow(/unique/);
+    await expect(provider().volume!.create({ name: 'data', sizeBytes: 1024 })).rejects.toThrow(/sizeBytes/);
+    expect(h.state.getVolume).not.toHaveBeenCalled();
+  });
+
+  it('does not turn volume authorization errors into missing volumes', async () => {
+    h.state.getVolume.mockRejectedValue(new Error('forbidden'));
+    await expect(provider().volume!.get('data')).rejects.toThrow('forbidden');
+    expect(h.state.listVolumes).not.toHaveBeenCalled();
   });
 
   it('cleans up a Sailbox that finishes creating after cancellation', async () => {

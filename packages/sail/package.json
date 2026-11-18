@@ -40,7 +40,7 @@
   ],
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@sailresearch/sdk": "^0.5.1",
+    "@sailresearch/sdk": "^0.18.2",
     "computesdk": "workspace:*"
   },
   "devDependencies": {
