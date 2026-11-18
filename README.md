@@ -90,6 +90,8 @@ Follow the [complete runnable SDK quickstart](docs/getting-started/sdk-quick-sta
 
 For direct vendor integrations, provider development and repository contribution instructions, see the [open-source SDK guide](OPEN_SOURCE.md). Individual adapters are documented in [their GitHub packages](https://github.com/computesdk/computesdk/tree/main/packages).
 
+The proposed [AgentVM dedicated-machine provider](packages/agentvm/README.md) uses `@computesdk/agentvm` for billable managed VMs (not pooled preview jobs).
+
 ## Community and support
 
 [GitHub Discussions](https://github.com/computesdk/computesdk/discussions) · [GitHub Issues](https://github.com/computesdk/computesdk/issues)

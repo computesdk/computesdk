@@ -33,6 +33,7 @@
 * [Overview](platform/README.md "Overview")
 * [Sandbox providers](providers/README.md)
   * [Start on a provider](providers/getting-started.md)
+  * [AgentVM](providers/agentvm.md)
 * [Routing and provider selection](guides/routing.md)
 * [Accounts and authentication](getting-started/authentication.md)
 * [Pricing and billing](guides/billing.md)
