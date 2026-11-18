@@ -12,7 +12,7 @@ import type {
   SandboxClientOptions,
   SandboxInfo,
 } from "tensorlake";
-import { defineProvider } from "@computesdk/provider";
+import { InstanceSizeError, defineProvider } from "@computesdk/provider";
 import { streamTensorlakeCommand } from "./streaming";
 import type {
   CodeResult,
@@ -167,6 +167,12 @@ async function resolveSandboxPath(
   return `/${segments.join("/")}`;
 }
 
+/** Root disk pinned for standard sizes: Tensorlake's default and minimum. */
+const SIZE_DISK_MIB = 10240;
+/** Largest listed per-sandbox shape (Pro plan); Enterprise limits are custom. */
+const MAX_LISTED_VCPUS = 16;
+const MAX_LISTED_MEMORY_MIB = 65536;
+
 function resolveAuth(config: TensorlakeConfig): {
   apiKey: string;
   apiUrl?: string;
@@ -193,6 +199,33 @@ export const tensorlake = defineProvider<
   TensorlakeConfig
 >({
   name: "tensorlake",
+  // Tensorlake takes arbitrary whole-vCPU `cpus` and `memoryMb` (1024–8192
+  // MiB per vCPU, up to 16 vCPU / 64 GB on Pro) plus `diskMb`, so each class
+  // boots its exact profile with the 10240 MiB disk the platform pins.
+  sizes: (_config, profile, options) => {
+    for (const field of ["diskMb", "ephemeralDiskMb"] as const) {
+      if (options?.[field] !== undefined) {
+        throw new InstanceSizeError("conflict", `cannot combine sizeClass with ${field}`);
+      }
+    }
+    if (options?.snapshotId) {
+      return {
+        status: "unsupported",
+        reason: "A Tensorlake memory snapshot restore keeps the snapshot's CPU and memory; standard sizes apply to fresh creates only.",
+      };
+    }
+    if (profile.vcpus > MAX_LISTED_VCPUS || profile.memoryMiB > MAX_LISTED_MEMORY_MIB) {
+      return {
+        status: "unsupported",
+        reason: `Tensorlake lists at most ${MAX_LISTED_VCPUS} vCPU / 64 GB RAM per sandbox (Pro); larger Enterprise shapes are custom quotes.`,
+      };
+    }
+    return {
+      status: "supported",
+      nativeOptions: { cpus: profile.vcpus, memoryMb: profile.memoryMiB, diskMb: SIZE_DISK_MIB },
+      resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: SIZE_DISK_MIB },
+    };
+  },
   methods: {
     instances: {
       create: async (
