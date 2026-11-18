@@ -1,5 +1,13 @@
 # @computesdk/brezel
 
+## 0.1.20
+
+### Patch Changes
+
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+  - @computesdk/provider@2.1.26
+
 ## 0.1.19
 
 ### Patch Changes

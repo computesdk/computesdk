@@ -1,5 +1,12 @@
 # computesdk
 
+## 4.1.20
+
+### Patch Changes
+
+- b979719: The `platform` provider now forwards `type` to `POST /api/v1/sandboxes`, so adapters with an instance-type concept (Agent37 `default` | `performance` | `vm`) can be driven through the platform.
+  - daemond@0.1.9
+
 ## 4.1.19
 
 ### Patch Changes

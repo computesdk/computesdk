@@ -1,5 +1,12 @@
 # @computesdk/platform
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+
 ## 0.2.7
 
 ### Patch Changes

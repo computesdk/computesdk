@@ -1,5 +1,19 @@
 # @computesdk/uno
 
+## 0.1.8
+
+### Patch Changes
+
+- 28746d3: Faster pause, snapshots and restores. `instance.pause()` now pauses the machine in memory, so `resume()` takes milliseconds instead of a wake from disk; after `pauseInMemoryS` seconds (default 300, `0` to sleep on disk at once) the machine goes to sleep on disk on its own. `snapshot.create` copies the disk without booting the copy where the Uno API offers it, so a snapshot costs a flush and a copy-on-write copy. Waiting for a new instance asks the API to answer as soon as the machine is ready instead of polling. Older Uno APIs keep the previous behaviour.
+- 26e5252: Create a sandbox in one request: `create` asks the API to hold its answer until the machine is ready (`wait_ready_s`, up to 30 s within `readyTimeoutMs`) and no longer polls when it is. If create comes back still starting (an older API, or a wait cut short), readiness is polled as before, now every 100 ms for the first 10 s, then once a second, instead of backing off 250 ms → 2 s; the interval counts from the start of each request, so the round trip no longer adds to the wait.
+- 28746d3: Pause and resume, snapshots, and faster files. `instance.pause()`/`resume()` map to Uno's sleep and wake (memory and processes survive). Snapshots: `snapshot.create` copies the machine's disk into a sleeping snapshot machine, `instances.create({ snapshotId })` boots new machines from it (one snapshot serves many), `snapshot.list`/`delete` manage them; disk only, no memory. Files: `readFile`/`writeFile` use Uno's file API in one request where the API offers it, and otherwise need one shell command for a small file instead of two to three; `readdir` is one command. Concurrent commands on one machine are queued in the client instead of retried with backoff on `BOX_BUSY`.
+- 26e5252: Retry `destroy` when the delete is lost on the way: a dropped connection, a timeout, 429 or a 5xx from the edge is tried again up to four times over about 3 s (each attempt capped at 15 s). Before, one lost DELETE left the machine running and failed the caller's cleanup. DELETE is idempotent, and a repeat of a delete that did land answers 404, which counts as done.
+- 26e5252: Repeat a box read (`getBox`, readiness polling) lost on the way — dropped connection, timeout, 429 or 5xx — up to 4 times over ~3 s, so one dropped poll right after create no longer fails the create and deletes a healthy machine.
+- 26e5252: Keep a sandbox's API calls on one connection: each request now waits one timer tick so the previous response's socket is back in the pool. Without it, Node's `fetch` opened a second connection for a call made right after the previous one, which could reach the API through a different edge server with a cold link to the origin (about +0.2 s).
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+  - @computesdk/provider@2.1.26
+
 ## 0.1.7
 
 ### Patch Changes

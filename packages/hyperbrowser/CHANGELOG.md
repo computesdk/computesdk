@@ -1,5 +1,13 @@
 # @computesdk/hyperbrowser
 
+## 0.2.29
+
+### Patch Changes
+
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+  - @computesdk/provider@2.1.26
+
 ## 0.2.28
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @computesdk/kosa8
 
+## 1.0.5
+
+### Patch Changes
+
+- 6a0b829: Run commands on the sandbox's host directly when the create answer offers it (`direct`), falling back to the API when the host did not run the command.
+- 6a0b829: Send requests over one HTTP/2 session per origin, opened when the provider is configured (and to a sandbox's host when it is created), instead of a TLS connection per request; `fetch` remains the fallback.
+- 2f5a5be: `getInfo()` reports a sleeping sandbox as `running`: any command or file call wakes it in about a second. Stopped, deleted and expired sandboxes still report `stopped`.
+- 2f5a5be: Add snapshots (`provider.snapshot` create, list and delete, and `create({ snapshotId })` to restore one, memory and running processes included), boot OCI images with `create({ image })`, and move file content as raw bytes through kosa8's file stream at any path: straight to the sandbox's host with the direct token when it covers files, else through the API; one request up to 64 MiB, parallel 64 MiB offset/range parts above that, and exec on older hosts. `runCommand` results report output the API truncated (`truncated`, `stdoutTruncated`, `stderrTruncated`, `stdoutBytes`, `stderrBytes`).
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+  - @computesdk/provider@2.1.26
+
 ## 1.0.4
 
 ### Patch Changes
