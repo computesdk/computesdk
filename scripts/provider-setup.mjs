@@ -7,7 +7,30 @@
 // --verify boots each template, checks `nproc` and memory, then destroys the
 // instance it created. Run `pnpm build` first.
 
+import { readFileSync } from 'node:fs';
+
 const NODE = 'node:22';
+
+// Superserve size tiers bake Debian coreutils rebuilt with OpenSSL so
+// sha256sum uses the SHA-NI path (~4x) — the sandbox-cpu benchmark hashes
+// through dd|sha256sum. The bases are pinned to the Bookworm/amd64 digests
+// the recipe was validated against; revalidate the recipe if they move.
+const SUPERSERVE_BASE_FULL = 'node:22@sha256:69c6e263db01e9946c7743bbbe9f7b1ba0df384d27ec09e08e5832d6acd3daf3';
+const SUPERSERVE_BASE_SLIM = 'node:22-slim@sha256:47725aca53d3295ec2d3be8f62726599b3033cc262edc2c7e429909b3ac599fc';
+const COREUTILS_RECIPE = readFileSync(new URL('./superserve-coreutils-build.sh', import.meta.url), 'utf8');
+const COREUTILS_VERSION = '9.1-1+0superserve.openssl1';
+
+// API run steps execute under /bin/sh; the helper forces bash via a heredoc.
+function coreutilsBuildStep(recipe) {
+  const delimiter = 'SUPERSERVE_NATIVE_COREUTILS_RECIPE';
+  if (recipe.split('\n').includes(delimiter)) throw new Error('Recipe delimiter collision');
+  return { run: "bash -s <<'" + delimiter + "'\n" + recipe + '\n' + delimiter };
+}
+
+const coreutilsSteps = [
+  coreutilsBuildStep(COREUTILS_RECIPE),
+  { run: `dpkg-query -W coreutils | grep -qF '${COREUTILS_VERSION}' && ldd /usr/bin/sha256sum | grep -q libcrypto.so.3` },
+];
 
 // Shapes are vCPU / MiB. Names stay stable: callers boot them by name.
 const SHAPES = [
@@ -18,18 +41,21 @@ const SHAPES = [
 ];
 
 const PROVIDERS = {
-  // Sandboxes inherit the template's shape and cannot override it. The
-  // built-in `superserve/node-22` already is 2 vCPU / 4 GiB.
+  // Sandboxes inherit the template's shape and cannot override it. Every
+  // size tier bakes the OpenSSL coreutils build so sha256sum uses SHA-NI;
+  // medium is our own slim-based template (built-in superserve/node-22
+  // can't carry the recipe).
   superserve: {
     load: async () => (await import('../packages/superserve/dist/index.mjs')).superserve({}),
     templates: [
-      ...SHAPES.filter((s) => s.vcpu !== 2),
+      ...SHAPES.map((s) => ({ ...s, from: s.vcpu === 2 ? SUPERSERVE_BASE_SLIM : SUPERSERVE_BASE_FULL, steps: coreutilsSteps })),
       // node:22 doesn't fit a 1 GiB disk (image_too_large), so small boxes keep the default disk.
       { name: 'csdk-node22-1cpu-256mb', vcpu: 1, memoryMib: 256 },
     ],
     exists: (t, name) => t.name === name,
     create: (p, s) => p.template.create({
-      name: s.name, from: NODE, vcpu: s.vcpu, memoryMib: s.memoryMib, diskMib: s.diskMib ?? 10240,
+      name: s.name, from: s.from ?? NODE, vcpu: s.vcpu, memoryMib: s.memoryMib, diskMib: s.diskMib ?? 10240,
+      ...(s.steps ? { steps: s.steps } : {}),
     }),
     boot: (s) => ({ templateId: s.name }),
   },
