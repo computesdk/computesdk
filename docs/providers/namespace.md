@@ -26,9 +26,24 @@ layout:
 
 Namespace provider for ComputeSDK - Deploy and manage containerized sandboxes on Namespace's cloud infrastructure.
 
-## Sizes and snapshots
+## Standard sizes
 
-`sizeClass` supports `sm`, `md`, `lg`, and `xl` for Linux amd64 through `instanceOptions.shape.virtual_cpu` and `memory_megabytes`. Other platforms and `xs`/`2xl` are `unknown`. Native shape fields conflict with `sizeClass`; see [Sandbox sizes](../reference/sizes.md).
+Set `sizeClass` when creating a Linux AMD64 sandbox. The adapter sends CPU and RAM through `instanceOptions.shape.virtual_cpu` and `instanceOptions.shape.memory_megabytes`. Namespace provisions ephemeral disk from the shape, and the SDK reports it in `sizing.resolved.diskMiB`.
+
+| Size | vCPU | RAM (MiB) | Ephemeral disk (MiB) |
+| --- | ---: | ---: | ---: |
+| `sm` | 1 | 2,048 | 40,960 |
+| `md` | 2 | 4,096 | 49,152 |
+| `lg` | 4 | 8,192 | 65,536 |
+| `xl` | 8 | 16,384 | 98,304 |
+| `2xl` | 16 | 32,768 | 163,840 |
+| `3xl` | 32 | 131,072 | 557,056 |
+
+`xs` is `unsupported` because the minimum listed Linux shape is 1 vCPU and 2 GiB (`sm`). `3xl` requires high-memory access in your Namespace workspace. [Namespace machine shapes](https://namespace.so/docs/architecture/compute/machine-shapes)
+
+Native per-create CPU or RAM fields conflict with `sizeClass`. The class takes precedence over the provider's factory defaults and also applies when restoring a volume with `snapshotId`. Linux ARM64 resolutions are `unknown` because the architecture alone does not distinguish Ampere from Apple Silicon. Non-Linux instances are `unsupported` on this container create path. [Sandbox sizes](../reference/sizes.md)
+
+## Snapshots
 
 Snapshots preserve **only** the persistent snapshot volume, not the rootfs or memory. Create the source with `snapshotVolume: true` (provider config or create option), and write state under `/workspace` by default. Snapshot-volume options can set a different mount path. `snapshot.create()` shuts down and destroys the source so the volume generation can be captured (`destroysSource: true`, implicit `source: 'destroyed'`). Restore with `snapshotId`; list/delete use the volume-backed snapshot identity. Do not expect running processes or files outside the volume to survive.
 
