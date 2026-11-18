@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { Isorun, Sandbox } from 'isorun'
-import { defineProvider, escapeShellArg } from '@computesdk/provider'
+import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider'
 
 import type {
   CommandResult,
@@ -18,6 +18,7 @@ import type {
   FileEntry,
   RunCommandOptions,
   InstanceInfo,
+  InstanceSizeClass,
 } from '@computesdk/provider'
 
 export interface IsorunConfig {
@@ -96,6 +97,19 @@ async function readChunked(sandbox: Sandbox, q: string, size: number): Promise<B
 
 type FsRunCommand = (sandbox: Sandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>
 
+/**
+ * Isorun sells fixed vcpus/memMiB pairings (docs.isorun.ai/getting-started/pricing:
+ * 1/1 GiB, 2/4, 4/8, 8/16) and rejects other pairings, so each standard size is the
+ * listed shape it equals. No 1 vCPU/2 GiB shape exists, and nothing above 8 vCPU/16 GiB.
+ * Disk is a free scratch dimension; md-xl carry the benchmarks platform's disk for that size.
+ */
+export const ISORUN_SIZE_SHAPES: Readonly<Partial<Record<InstanceSizeClass, { vcpus: number; memMiB: number; diskMiB?: number }>>> = Object.freeze({
+  xs: Object.freeze({ vcpus: 1, memMiB: 1024 }),
+  md: Object.freeze({ vcpus: 2, memMiB: 4096, diskMiB: 16384 }),
+  lg: Object.freeze({ vcpus: 4, memMiB: 8192, diskMiB: 32768 }),
+  xl: Object.freeze({ vcpus: 8, memMiB: 16384, diskMiB: 65536 }),
+})
+
 export interface IsorunSnapshot {
   id: string
   provider: string
@@ -105,6 +119,36 @@ export interface IsorunSnapshot {
 
 export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({
   name: 'isorun',
+  sizes: (_config, profile, options) => {
+    if (options?.vcpus !== undefined || options?.memMiB !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Isorun vcpus/memMiB')
+    }
+    if (options?.snapshotId !== undefined) {
+      return { status: 'unsupported', reason: 'An Isorun snapshot restore inherits the snapshot\'s resources; drop snapshotId to boot a standard size.' }
+    }
+    const shape = ISORUN_SIZE_SHAPES[profile.sizeClass]
+    if (!shape) {
+      return {
+        status: 'unsupported',
+        reason: profile.vcpus > 8
+          ? 'Isorun\'s largest listed shape is 8 vCPU / 16 GiB.'
+          : 'Isorun lists no 1 vCPU / 2 GiB shape (only 1/1, 2/4, 4/8 and 8/16 GiB).',
+      }
+    }
+    const diskMiB = options?.diskMiB ?? shape.diskMiB
+    if (diskMiB !== undefined && (!Number.isSafeInteger(diskMiB) || diskMiB <= 0)) {
+      throw new InstanceSizeError('invalid', 'diskMiB must be a positive integer')
+    }
+    return {
+      status: 'supported',
+      nativeOptions: {
+        vcpus: shape.vcpus,
+        memMiB: shape.memMiB,
+        ...(options?.diskMiB === undefined && shape.diskMiB !== undefined ? { diskMiB: shape.diskMiB } : {}),
+      },
+      resolved: { vcpus: shape.vcpus, memoryMiB: shape.memMiB, ...(diskMiB === undefined ? {} : { diskMiB }) },
+    }
+  },
   methods: {
     instances: {
       create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {

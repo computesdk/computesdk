@@ -90,6 +90,28 @@ interface IsorunConfig {
 | `filesystem` | ✅         | `readFile` / `writeFile` are native; `mkdir`, `readdir`, `exists`, `remove` run via shell commands.                                                        |
 | `snapshot`   | ✅         | `compute.snapshot.create` / `list` / `delete`.                                                                                                             |
 
+### Standard sizes
+
+`sizeClass` requests a standard CPU/RAM size. Isorun sells fixed `vcpus`/`memMiB`
+pairings ([pricing](https://docs.isorun.ai/getting-started/pricing)) and rejects others,
+so each supported size sends the listed shape it equals:
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' })
+```
+
+| `sizeClass` | `vcpus` / `memMiB` | `diskMiB` |
+| --- | --- | --- |
+| `xs` | 1 / 1024 | Isorun default (4096) |
+| `md` | 2 / 4096 | 16384 |
+| `lg` | 4 / 8192 | 32768 |
+| `xl` | 8 / 16384 | 65536 |
+
+`sm` (no 1 vCPU / 2 GiB shape), `2xl` and `3xl` (above Isorun's 8 vCPU / 16 GiB
+ceiling) are `unsupported` and never boot. An explicit `diskMiB` replaces the size's
+disk. Combining `sizeClass` with `vcpus` or `memMiB` is a `conflict`; with
+`snapshotId` it is `unsupported`, because a restore inherits the snapshot's resources.
+
 ### Notes
 
 * The default command/sandbox timeout is 300000 ms (5 minutes).
