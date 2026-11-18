@@ -4,7 +4,7 @@
 
 import { Leap0Client } from 'leap0';
 import type { Sandbox as Leap0Sandbox } from 'leap0';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from 'computesdk';
 
 export interface Leap0Config {
@@ -37,8 +37,30 @@ function createLeap0Client(config: Leap0Config): Leap0Client {
   });
 }
 
+/** Per-sandbox limits from https://leap0.dev/docs/limits (also enforced by the leap0 SDK). */
+export const LEAP0_LIMITS = Object.freeze({ maxVcpu: 8, maxMemoryMiB: 8192, diskMiB: 10240 });
+
 const _provider = defineProvider<Leap0Sandbox, Leap0Config>({
   name: 'leap0',
+  sizes: (_config, profile, options) => {
+    if (options?.vcpu !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Leap0 vcpu/memory');
+    }
+    if (options?.snapshotId !== undefined) {
+      return { status: 'unsupported', reason: 'Leap0 snapshot restores take vCPU/memory from the snapshot, not the request.' };
+    }
+    if (profile.vcpus > LEAP0_LIMITS.maxVcpu || profile.memoryMiB > LEAP0_LIMITS.maxMemoryMiB) {
+      return {
+        status: 'unsupported',
+        reason: `Leap0 sandboxes allow at most ${LEAP0_LIMITS.maxVcpu} vCPU and ${LEAP0_LIMITS.maxMemoryMiB} MiB memory; ${profile.sizeClass} needs ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB.`,
+      };
+    }
+    return {
+      status: 'supported',
+      nativeOptions: { vcpu: profile.vcpus, memory: profile.memoryMiB },
+      resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: LEAP0_LIMITS.diskMiB },
+    };
+  },
   methods: {
     instances: {
       create: async (config: Leap0Config, options?: CreateInstanceOptions) => {

@@ -86,3 +86,22 @@ interface Leap0Config {
   template?: string;
 }
 ```
+
+## Standard sizes
+
+`sizeClass` maps to Leap0's native `vcpu` / `memory` (MiB) create fields. Leap0 allows 1–8 vCPU and 512–8192 MiB memory per sandbox, with a fixed 10 GiB disk ([limits](https://leap0.dev/docs/limits)).
+
+| `sizeClass` | Leap0 request | Resolved shape | Status |
+| --- | --- | --- | --- |
+| `xs` | `vcpu: 1`, `memory: 1024` | 1 vCPU / 1024 MiB / 10240 MiB disk | supported |
+| `sm` | `vcpu: 1`, `memory: 2048` | 1 vCPU / 2048 MiB / 10240 MiB disk | supported |
+| `md` | `vcpu: 2`, `memory: 4096` | 2 vCPU / 4096 MiB / 10240 MiB disk | supported |
+| `lg` | `vcpu: 4`, `memory: 8192` | 4 vCPU / 8192 MiB / 10240 MiB disk | supported |
+| `xl`, `2xl`, `3xl` | — | — | `unsupported`: above the 8 vCPU / 8192 MiB limit |
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md', templateId: 'system/debian:bookworm' });
+console.log(sandbox.sizing?.resolved); // { vcpus: 2, memoryMiB: 4096, diskMiB: 10240 }
+```
+
+`sizeClass` works with `templateId` and the configured `template`. With `snapshotId` it is `unsupported`, because a Leap0 restore takes its compute settings from the snapshot. Combining `sizeClass` with native `vcpu` or `memory` throws `InstanceSizeError` with code `conflict`.
