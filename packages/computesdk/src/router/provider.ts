@@ -171,7 +171,7 @@ const RESOURCE_ALIASES: Record<string, 'cpus' | 'memoryMb' | 'ephemeralDiskMb'> 
 const KNOWN_CREATE_KEYS = new Set([
   'size', 'maxPrice', 'orderType', 'providerOrder', 'secrets', 'disk', 'label',
   'idempotencyKey', 'timeout', 'image', 'templateId', 'snapshotId', 'name',
-  'envs', 'signal', 'provider', 'kind',
+  'envs', 'signal', 'provider', 'kind', 'type',
 ]);
 
 const VALID_SIZES: ReadonlySet<string> = new Set(['small', 'medium', 'large', 'xlarge', '2xlarge', '3xlarge']);
@@ -214,6 +214,8 @@ function buildCreateBody(config: PlatformConfig, options?: CreateInstanceOptions
   if (opts.timeout !== undefined) body.timeoutMs = opts.timeout;
   const image = opts.image ?? opts.templateId;
   if (image !== undefined) body.image = image;
+  /** Provider instance type, forwarded verbatim (Agent37 `default`/`performance`/`vm`). */
+  if (opts.type !== undefined) body.type = opts.type;
   if (opts.snapshotId !== undefined) body.snapshotId = opts.snapshotId;
   const label = opts.label ?? opts.name;
   if (label !== undefined) body.label = label;
