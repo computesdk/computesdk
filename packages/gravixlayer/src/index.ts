@@ -465,7 +465,7 @@ const createGravixLayerProvider = defineProvider<
   name: 'gravixlayer',
   sizes: (config, profile, options) => {
     if (options?.templateId !== undefined || options?.snapshotId !== undefined || options?.sandboxId !== undefined || nonempty(options?.image)) {
-      return { status: 'unsupported', reason: 'A GravixLayer template or snapshot fixes CPU and memory; drop templateId/image/snapshotId to boot the standard size template.' }
+      return { status: 'unsupported', reason: 'A GravixLayer template or snapshot fixes CPU and memory; drop templateId/image/snapshotId/sandboxId to boot the standard size template.' }
     }
     const templateId = sizeTemplateOf(config, profile.sizeClass)
     if (!templateId) {
@@ -546,11 +546,11 @@ const createGravixLayerProvider = defineProvider<
           sandbox = await client.runtime.create(body)
         } catch (error) {
           const notBuilt = missingSizeTemplate(config, options.templateId, error)
-          if (notBuilt) throw new Error(notBuilt)
+          if (notBuilt) throw Object.assign(new Error(notBuilt), { status: 404, cause: error })
           if (image && !template && isNotFound(error)) {
-            throw new Error(
+            throw Object.assign(new Error(
               `GravixLayer template '${image}' is not available on this project; build it with \`template.create\` or pass an existing \`templateId\``,
-            )
+            ), { status: 404, cause: error })
           }
           throw error
         }

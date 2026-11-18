@@ -60,27 +60,18 @@ const PROVIDERS = {
   gravixlayer: {
     load: async () => (await import('../packages/gravixlayer/dist/index.mjs')).gravixlayer({}),
     templates: [
-      { name: 'base-xsmall', vcpu: 1, memoryMib: 1024 },
-      { name: 'base-small', vcpu: 1, memoryMib: 2048 },
-      { name: 'base-medium', vcpu: 2, memoryMib: 4096 },
-      { name: 'base-large', vcpu: 4, memoryMib: 8192 },
-      { name: 'base-xlarge', vcpu: 8, memoryMib: 16384 },
-      { name: 'base-2xlarge', vcpu: 16, memoryMib: 32768 },
+      { name: 'base-xsmall', sizeClass: 'xs', vcpu: 1, memoryMib: 1024 },
+      { name: 'base-small', sizeClass: 'sm', vcpu: 1, memoryMib: 2048 },
+      { name: 'base-medium', sizeClass: 'md', vcpu: 2, memoryMib: 4096 },
+      { name: 'base-large', sizeClass: 'lg', vcpu: 4, memoryMib: 8192 },
+      { name: 'base-xlarge', sizeClass: 'xl', vcpu: 8, memoryMib: 16384 },
+      { name: 'base-2xlarge', sizeClass: '2xl', vcpu: 16, memoryMib: 32768 },
     ],
     exists: (t, name) => t.name === name,
     create: (p, s) => p.template.create({
       name: s.name, fromImage: NODE, vcpu: s.vcpu, memoryMb: s.memoryMib,
     }),
-    boot: (s) => ({
-      sizeClass: {
-        'base-xsmall': 'xs',
-        'base-small': 'sm',
-        'base-medium': 'md',
-        'base-large': 'lg',
-        'base-xlarge': 'xl',
-        'base-2xlarge': '2xl',
-      }[s.name],
-    }),
+    boot: (s) => ({ sizeClass: s.sizeClass }),
   },
   // Create only accepts the smaller shapes; 8 vCPU / 16 GiB exists only as a
   // built environment, which instances restore at its captured shape.
