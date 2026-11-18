@@ -6,9 +6,12 @@
  */
 
 import { Box, EphemeralBox } from '@upstash/box';
+import type { BoxSize } from '@upstash/box';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type {
+  CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, InstanceSizeClass, InstanceSizeResources, RunCommandOptions,
+} from '@computesdk/provider';
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -128,10 +131,34 @@ async function readFileNative(sandbox: UpstashSandboxInstance, path: string): Pr
 }
 
 /**
+ * Upstash Box `size` per standard size class, with the tier's listed shape
+ * (https://upstash.com/pricing/box): small 2 vCPU / 4 GB / 10 GB disk,
+ * medium 4 / 8 / 30, large 8 / 16 / 30.
+ */
+export const UPSTASH_BOX_SIZES: Readonly<Partial<Record<InstanceSizeClass, { size: BoxSize; resolved: InstanceSizeResources }>>> = {
+  md: { size: 'small', resolved: { vcpus: 2, memoryMiB: 4096, diskMiB: 10240 } },
+  lg: { size: 'medium', resolved: { vcpus: 4, memoryMiB: 8192, diskMiB: 30720 } },
+  xl: { size: 'large', resolved: { vcpus: 8, memoryMiB: 16384, diskMiB: 30720 } },
+};
+
+/**
  * Create an Upstash Box provider instance using the factory pattern
  */
 export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
   name: 'upstash',
+  sizes: (_config, profile) => {
+    const tier = UPSTASH_BOX_SIZES[profile.sizeClass];
+    if (!tier) {
+      const why = profile.vcpus < 2
+        ? 'its smallest size is small (2 vCPU / 4 GB)'
+        : 'its largest size is large (8 vCPU / 16 GB)';
+      return {
+        status: 'unsupported',
+        reason: `Upstash Box has no ${profile.sizeClass} size (${profile.vcpus} vCPU / ${profile.memoryMiB} MiB): ${why}. Use md, lg or xl.`,
+      };
+    }
+    return { status: 'supported', nativeOptions: { size: tier.size }, resolved: tier.resolved };
+  },
   methods: {
     instances: {
       // Collection operations (map to compute.sandbox.*)

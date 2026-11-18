@@ -67,6 +67,23 @@ console.log(result.stdout); // "Hello from Upstash!"
 await sandbox.destroy();
 ```
 
+## Standard sizes
+
+`sizeClass` picks an Upstash Box `size` tier. It works on every create path (new box, snapshot restore, ephemeral box and ephemeral restore):
+
+| `sizeClass` | Box `size` | Listed shape (vCPU / RAM / disk) |
+| --- | --- | --- |
+| `md` | `small` | 2 / 4 GB / 10 GB |
+| `lg` | `medium` | 4 / 8 GB / 30 GB |
+| `xl` | `large` | 8 / 16 GB / 30 GB |
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'lg' }); // Box size 'medium'
+console.log(sandbox.sizing?.resolved); // { vcpus: 4, memoryMiB: 8192, diskMiB: 30720 }
+```
+
+`xs` and `sm` are `unsupported` (the smallest Box is 2 vCPU / 4 GB), and so are `2xl` and `3xl` (the largest Box is 8 vCPU / 16 GB). Disk is fixed by the tier and cannot be chosen. Do not combine `sizeClass` with the native `size` option; that is a `conflict`. Without `sizeClass`, Upstash boots its default `small` Box. See [Sandbox sizes](../reference/sizes.md).
+
 ## Box Types
 
 Upstash supports two box variants:
