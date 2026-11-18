@@ -24,6 +24,7 @@ import {
   resolveConfig,
   type ExecOptions,
   type ImageSpec,
+  type SailboxSize,
   type VolumeInfo,
 } from '@sailresearch/sdk';
 
@@ -252,14 +253,8 @@ function lifetimeSeconds(timeout: number | undefined): number | undefined {
 
 /** Reject options that Sail cannot honor without changing their meaning. */
 function validateCreateOptions(options: CreateInstanceOptions | undefined): void {
-  if (options?.size !== undefined || options?.memoryGib !== undefined) {
-    throw new Error(
-      'Sail size and memoryGib are no longer supported. Configure resources ' +
-        'on sail({ image: Image.devbox("arm64").numCpus(8).memoryLimitGib(64) }).',
-    );
-  }
   const supported = new Set([
-    'envs', 'image', 'name', 'provider', 'signal', 'snapshotId', 'timeout', 'volumes',
+    'envs', 'image', 'memoryGib', 'name', 'provider', 'signal', 'size', 'snapshotId', 'timeout', 'volumes',
   ]);
   const unsupported = Object.keys(options ?? {}).filter(
     (key) => options?.[key] !== undefined && !supported.has(key),
@@ -268,9 +263,13 @@ function validateCreateOptions(options: CreateInstanceOptions | undefined): void
     throw new Error(`Sail does not support create option(s): ${unsupported.join(', ')}.`);
   }
   lifetimeSeconds(options?.timeout);
+  if (options?.size !== undefined && !['s', 'm', 'l'].includes(options.size)) {
+    throw new Error(`Sail does not support size ${options.size}; use s, m, or l.`);
+  }
   if (options?.snapshotId !== undefined &&
-      (options.image !== undefined || options.envs !== undefined || options.volumes !== undefined)) {
-    throw new Error('Sail restores the checkpoint environment; image, envs, and volumes cannot be combined with snapshotId.');
+      (options.image !== undefined || options.envs !== undefined || options.volumes !== undefined ||
+       options.size !== undefined || options.memoryGib !== undefined)) {
+    throw new Error('Sail restores the checkpoint environment and resources; image, envs, volumes, size, and memoryGib cannot be combined with snapshotId.');
   }
   if (options?.volumes !== undefined) {
     if (!Array.isArray(options.volumes)) throw new Error('Sail volumes must be an array of volume mounts.');
@@ -439,6 +438,8 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           image: options?.image !== undefined
             ? Image.fromRegistry(options.image)
             : config.image ?? Image.devbox('arm64'),
+          ...(options?.size === undefined ? {} : { size: options.size as SailboxSize }),
+          ...(options?.memoryGib === undefined ? {} : { memoryLimitGib: options.memoryGib }),
           env: options?.envs,
           volumes,
           maxLifetimeSeconds: lifetimeSeconds(options?.timeout),

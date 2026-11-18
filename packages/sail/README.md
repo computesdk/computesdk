@@ -38,8 +38,9 @@ interface SailConfig {
   Bun. Pass another Sail image when the workload needs a different runtime or
   architecture.
 - Creates inherit Sail's image resource limits (8 vCPUs, 64 GiB memory limit,
-  and 256 GiB disk limit by default). The adapter no longer accepts `size`
-  or `memoryGib`; configure limits on the image instead:
+  and 256 GiB disk limit by default). Explicit `size: 's' | 'm' | 'l'` and
+  `memoryGib` options override those limits for that create; omitted options
+  are not sent to Sail. You can also configure limits on the image:
   `sail({ image: Image.devbox('arm64').numCpus(4).memoryLimitGib(32) })`,
   importing `Image` from `@sailresearch/sdk`. These are resource limits;
   Sail bills actual CPU and memory consumption.
@@ -75,7 +76,7 @@ const sandbox = await compute.instances.create();
 
 | Operation | Supported | Notes |
 |---|---|---|
-| `create` | Yes | ARM64 Devbox by default; supports OCI `image`, `envs`, `name`, `timeout`, `volumes`, and cancellation. |
+| `create` | Yes | ARM64 Devbox by default; supports OCI `image`, `envs`, `name`, explicit `size`/`memoryGib`, `timeout`, `volumes`, and cancellation. |
 | `getById` | Yes | Returns `null` for missing or terminated Sailboxes. |
 | `list` | Yes | Scoped to the configured app. |
 | `destroy` | Yes | Terminates the Sailbox. |

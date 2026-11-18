@@ -185,6 +185,7 @@ describe('sail provider', () => {
     });
     expect(h.state.createArgs[1]).not.toHaveProperty('size');
     expect(h.state.createArgs[1]).not.toHaveProperty('vcpuCount');
+    expect(h.state.createArgs[1]).not.toHaveProperty('memoryLimitGib');
     expect(String(h.state.createArgs[1].name)).toMatch(/^csdk-/);
     expect(sdk.Image.devbox).toHaveBeenCalledTimes(2);
     expect(sdk.Image.devbox).toHaveBeenCalledWith('arm64');
@@ -252,12 +253,23 @@ describe('sail provider', () => {
     expect(h.state.createArgs).toHaveLength(0);
   });
 
-  it('rejects retired size options and checkpoint overrides without silently ignoring them', async () => {
+  it.each([
+    [{ size: 's' }, { size: 's' }],
+    [{ size: 'm' }, { size: 'm' }],
+    [{ size: 'l' }, { size: 'l' }],
+    [{ memoryGib: 32 }, { memoryLimitGib: 32 }],
+    [{ size: 'l', memoryGib: 64 }, { size: 'l', memoryLimitGib: 64 }],
+  ])('preserves explicit resource options %j', async (options, expected) => {
+    await provider().sandbox.create(options);
+    expect(h.state.createArgs[0]).toMatchObject(expected);
+    if (!('size' in options)) expect(h.state.createArgs[0]).not.toHaveProperty('size');
+    if (!('memoryGib' in options)) expect(h.state.createArgs[0]).not.toHaveProperty('memoryLimitGib');
+  });
+
+  it('rejects invalid sizes and checkpoint overrides without silently ignoring them', async () => {
     const compute = provider();
-    for (const options of [{ size: 's' }, { size: 'l' }, { memoryGib: 64 }]) {
-      await expect(compute.sandbox.create(options)).rejects.toThrow(/no longer supported/);
-    }
-    for (const options of [{ image: 'node:22' }, { envs: { A: '1' } }, { volumes: [] }]) {
+    await expect(compute.sandbox.create({ size: 'extra-large' })).rejects.toThrow(/use s, m, or l/);
+    for (const options of [{ image: 'node:22' }, { envs: { A: '1' } }, { volumes: [] }, { size: 'l' }, { memoryGib: 64 }]) {
       await expect(compute.sandbox.create({ snapshotId: 'ckpt_1', ...options })).rejects.toThrow(/snapshotId/);
     }
     await expect(compute.sandbox.create({ unsupported: true })).rejects.toThrow(/unsupported/);
