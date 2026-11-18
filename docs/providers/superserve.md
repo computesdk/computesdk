@@ -33,7 +33,7 @@ Superserve provides sandbox infrastructure to run code in isolated cloud environ
 
 ## Account sizes and lifecycle
 
-CPU/RAM are fixed by the account template. [Provider Setup](../../ADD-PROVIDER.md#provider-setup) creates the missing Node 22 size templates idempotently; boot them with `templateId`. The built-in `superserve/node-22` supplies 2 vCPU/4 GiB. This adapter has no standard `sizeClass` mapping (`unknown`); see [Sandbox sizes](../reference/sizes.md).
+CPU/RAM are fixed by the account template. [Provider Setup](../../ADD-PROVIDER.md#provider-setup) creates the missing Node 22 size templates idempotently; boot them with `templateId`. In the repository setup script, the 2-vCPU/4-GiB tier is now the account-owned `csdk-node22-2cpu-4gb`, rather than the built-in `superserve/node-22`. Existing templates are skipped; consult the setup guide before rebuilding them. This adapter has no standard `sizeClass` mapping (`unknown`); see [Sandbox sizes](../reference/sizes.md).
 
 `pause()`/`resume()` preserve memory and processes. Snapshots capture rootfs and memory and keep the source. Create-time `timeout` configures auto-pause, not a command deadline or automatic deletion.
 

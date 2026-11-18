@@ -58,6 +58,6 @@ In multi-provider `compute` mode, `sizeClass` pins the normally selected provide
 | [Mosaic](../providers/mosaic.md) | `unknown` | Smaller native shapes use `vcpu`/`memoryMb`; the 8-vCPU/16-GiB shape restores an account environment through `templateId`. |
 | Other adapters | `unknown` | No declared standard mapping. Use the native resource options documented for that provider; native sizing support alone does not imply `sizeClass` support. |
 
-Provider Setup builds the `csdk-node22-1cpu-2gb`, `csdk-node22-2cpu-4gb`, `csdk-node22-4cpu-8gb`, and `csdk-node22-8cpu-16gb` team templates for E2B and Novita. Superserve uses its built-in `superserve/node-22` for 2 vCPU/4 GiB and builds the other three names (plus a nonstandard 1-vCPU/256-MiB template). Mosaic setup builds only `csdk-node22-8cpu-16gb`. These account resources do not add a standard-size resolver to Superserve, Novita, or Mosaic.
+Provider Setup builds the `csdk-node22-1cpu-2gb`, `csdk-node22-2cpu-4gb`, `csdk-node22-4cpu-8gb`, and `csdk-node22-8cpu-16gb` team templates for E2B, Novita, and Superserve. Superserve setup also includes a nonstandard `csdk-node22-1cpu-256mb` template. The repository setup script now builds Superserve's own 2-vCPU/4-GiB template instead of using the built-in `superserve/node-22`; existing account templates are skipped, not upgraded. Mosaic setup builds only `csdk-node22-8cpu-16gb`. These account resources do not add a standard-size resolver to Superserve, Novita, or Mosaic.
 
 See [Provider Setup](../../ADD-PROVIDER.md#provider-setup) for the idempotent setup workflow.

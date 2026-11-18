@@ -580,12 +580,26 @@ Or use `compute actions dispatch ...` with the CLI installed. `--inputs` takes
 space-separated `key=value` pairs. A real run creates account resources and may
 incur provider charges; start with `dry_run=true` to review the plan.
 
-E2B and Novita build Node 22 templates at 1/2, 2/4, 4/8, and 8/16 vCPU/GiB,
-named `csdk-node22-1cpu-2gb` through `csdk-node22-8cpu-16gb`. Superserve already
-has its built-in 2/4 template and builds the other three sizes plus 1/256 MiB;
-Mosaic builds only the 8/16 environment. E2B's standard `sizeClass` resolver uses
-these team templates. Superserve, Novita, and Mosaic select them by `templateId`,
+E2B, Novita, and Superserve build Node 22 templates at 1/2, 2/4, 4/8, and
+8/16 vCPU/GiB, named `csdk-node22-1cpu-2gb`, `csdk-node22-2cpu-4gb`,
+`csdk-node22-4cpu-8gb`, and `csdk-node22-8cpu-16gb`. Superserve also builds
+`csdk-node22-1cpu-256mb` (1 vCPU/256 MiB). Mosaic builds only the 8/16 environment.
+E2B's standard `sizeClass` resolver uses these team templates. Superserve, Novita, and Mosaic select them by `templateId`,
 not by `sizeClass`. See [Sandbox sizes](docs/reference/sizes.md) for exact mappings.
+
+The repository's Superserve setup script builds the four standard tiers from
+pinned Debian Bookworm/amd64 Node 22 images with OpenSSL-enabled coreutils. The
+2/4 tier uses an account-owned template rather than the built-in
+`superserve/node-22`. The 1-vCPU/256-MiB template keeps the plain Node 22 build
+without the coreutils rebuild.
+
+These are setup-script changes, not an automatic upgrade of account resources.
+Existing templates with matching names are skipped even if they predate the
+recipe. To adopt the updated build, review affected template users before
+removing stale account templates and rerunning setup. Boot the medium tier with
+`templateId: 'csdk-node22-2cpu-4gb'` after that template has been built successfully.
+`verify=true` checks CPU and memory only; the coreutils package and OpenSSL
+linkage checks run during the new template build.
 
 ## 11. Submit Your PR
 
