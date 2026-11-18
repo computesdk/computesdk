@@ -9,9 +9,10 @@
  *    This skips the API's Worker and Cloudflare's 100 MB request limit.
  * 2. Through the API, `/v1/sandboxes/{id}/files`.
  *
- * A file of at most one part (64 MiB) is one request. A larger one is sent in parts: the first
- * replaces the file, and the rest are written at their offsets in parallel. It is read the same way,
- * with ranges.
+ * A file of at most one part (64 MiB) is one request. A larger one is sent in parts to a
+ * temporary name beside it — the first part creates it, the rest are written at their offsets in
+ * parallel — and renamed over its path once every part landed, so a failed part leaves the file
+ * it replaces intact. It is read the same way, with ranges.
  *
  * An older host has the base64 file API instead: /workspace only, 8 MiB at most, no offsets. Its
  * refusals (400 outside /workspace, 413, 501) send the file over exec instead, in base64 chunks.
@@ -203,20 +204,35 @@ export async function writeFileNative(
   direct: FileTarget | null = null,
 ): Promise<void> {
   const bytes = Buffer.from(content, 'utf8');
-  if (direct) {
-    // A connection to the host that failed in transit (after retries) leaves the API to try.
-    const res = await writeTo(direct, path, bytes).catch(() => undefined);
-    if (res === null) return;
-    if (res && !DIRECT_REFUSED.has(res.status)) throw fileError(res, 'write', path);
-    if (res && (res.status === 401 || res.status === 501)) sandbox.directFiles = false;
+  const staged = bytes.length > fileParts.bytes ? `${path}.computesdk-${randomBytes(6).toString('hex')}` : null;
+  const dest = staged ?? path;
+  const commit = async () => {
+    if (staged) await mustSucceed(run, sandbox, `mv -f ${q(staged)} ${q(path)}`, 'write', path);
+  };
+  try {
+    if (direct) {
+      // A connection to the host that failed in transit (after retries) leaves the API to try.
+      const res = await writeTo(direct, dest, bytes).catch(() => undefined);
+      if (res === null) {
+        await commit();
+        return;
+      }
+      if (res && !DIRECT_REFUSED.has(res.status)) throw fileError(res, 'write', path);
+      if (res && (res.status === 401 || res.status === 501)) sandbox.directFiles = false;
+    }
+    if (sandbox.files !== false) {
+      const res = await writeTo(apiTarget(sandbox), dest, bytes);
+      if (!res) {
+        await commit();
+        return;
+      }
+      if (!olderFileApi(res)) throw fileError(res, 'write', path);
+      if (res.status === 501) sandbox.files = false;
+    }
+    return writeFileViaExec(sandbox, path, bytes, run);
+  } finally {
+    if (staged) await run(sandbox, `rm -f ${q(staged)}`).catch(() => {});
   }
-  if (sandbox.files !== false) {
-    const res = await writeTo(apiTarget(sandbox), path, bytes);
-    if (!res) return;
-    if (!olderFileApi(res)) throw fileError(res, 'write', path);
-    if (res.status === 501) sandbox.files = false;
-  }
-  return writeFileViaExec(sandbox, path, bytes, run);
 }
 
 async function mustSucceed(run: ExecRunner, sandbox: Kosa8Sandbox, command: string, what: string, path: string, env?: Record<string, string>) {
@@ -291,7 +307,7 @@ async function readFileViaExec(sandbox: Kosa8Sandbox, path: string, run: ExecRun
   const out = await mustSucceed(
     run,
     sandbox,
-    `[ -f ${p} ] || exit ${NOT_FOUND_EXIT}; s=$(wc -c < ${p} | tr -d ' '); echo "$s"; if [ "$s" -le ${INLINE_READ_BYTES} ]; then base64 < ${p}; fi`,
+    `[ -f ${p} ] || exit ${NOT_FOUND_EXIT}; s=$(wc -c < ${p} | tr -d ' ') || exit $?; echo "$s"; if [ "$s" -le ${INLINE_READ_BYTES} ]; then base64 < ${p}; fi`,
     'open',
     path,
   );

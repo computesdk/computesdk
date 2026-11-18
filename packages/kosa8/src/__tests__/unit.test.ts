@@ -571,6 +571,22 @@ function filesRoute(
 }
 
 const execs = (calls: Call[]) => calls.filter((c) => c.url.endsWith('/exec'));
+
+/** An exec handler that applies the mv and rm commands staged writes send to the fake disk. */
+const applyFsCommands = (store: Map<string, Buffer>) => (call: Call) => {
+  const cmd = call.body.cmd[2];
+  const mv = /mv -f "([^"]+)" "([^"]+)"/.exec(cmd);
+  if (mv) {
+    const f = store.get(mv[1]);
+    if (f) {
+      store.set(mv[2], f);
+      store.delete(mv[1]);
+    }
+  }
+  const rm = /rm -f "([^"]+)"/.exec(cmd);
+  if (rm) store.delete(rm[1]);
+  return { exit: 0 };
+};
 const fileCalls = (calls: Call[], method: string, base = `${API}/v1/sandboxes/sbx_123/files`) =>
   calls.filter((c) => c.method === method && c.url.startsWith(`${base}?`));
 const query = (c: Call, k: string) => new URL(c.url).searchParams.get(k);
@@ -599,15 +615,34 @@ describe('kosa8 files', () => {
     expect(execs(calls)).toHaveLength(0);
   });
 
-  it('writes a large file as parts: the first replaces it, the rest go at their offsets', async () => {
+  it('writes a large file as staged parts, then renames it over the target', async () => {
     const store = new Map([['/root/big', Buffer.from('x'.repeat(10 * PART))]]);
-    const calls = mockFetch(filesRoute(store, { direct: directWithFiles() }));
+    const calls = mockFetch(filesRoute(store, { direct: directWithFiles(), exec: applyFsCommands(store) }));
     const sandbox = await provider().sandbox.create();
     const content = 'aü'.repeat(Math.ceil((3.5 * PART) / 3)); // multibyte characters across part boundaries
     await sandbox.filesystem.writeFile('/root/big', content);
     const puts = fileCalls(calls, 'PUT', HOST_FILES);
     expect(puts.map((c) => query(c, 'offset'))).toEqual([null, String(PART), String(2 * PART), String(3 * PART)]);
+    expect(puts.every((c) => /^\/root\/big\.computesdk-[0-9a-f]{12}$/.test(query(c, 'path')!))).toBe(true);
     expect(store.get('/root/big')!.toString('utf8')).toBe(content); // the old, longer content is gone
+    expect([...store.keys()].filter((k) => k.includes('.computesdk-'))).toEqual([]);
+  });
+
+  it('keeps the replaced file when a staged part fails, and removes the temporary file', async () => {
+    const original = Buffer.from('x'.repeat(10 * PART));
+    const store = new Map([['/root/big', original]]);
+    const calls = mockFetch(
+      filesRoute(store, {
+        direct: directWithFiles(),
+        exec: applyFsCommands(store),
+        host: (c) => (query(c, 'offset') === String(PART) ? { status: 507, body: { error: 'disk full' } } : null),
+      }),
+    );
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.filesystem.writeFile('/root/big', 'q'.repeat(3 * PART))).rejects.toThrow(/ENOSPC/);
+    expect(store.get('/root/big')).toBe(original); // the existing file is untouched
+    expect([...store.keys()].filter((k) => k.includes('.computesdk-'))).toEqual([]);
+    expect(execs(calls).some((c) => /rm -f/.test(c.body.cmd[2]))).toBe(true);
   });
 
   it('reads a large file in ranges, in parallel', async () => {
@@ -683,7 +718,7 @@ describe('kosa8 files', () => {
     const store = new Map<string, Buffer>();
     let failures = 0;
     const calls = mockFetch(
-      filesRoute(store, { host: (c) => (query(c, 'offset') === String(PART) && failures++ < 2 ? { status: 503, body: { error: 'host_busy' } } : null), direct: directWithFiles() }),
+      filesRoute(store, { host: (c) => (query(c, 'offset') === String(PART) && failures++ < 2 ? { status: 503, body: { error: 'host_busy' } } : null), direct: directWithFiles(), exec: applyFsCommands(store) }),
     );
     const sandbox = await provider().sandbox.create();
     const content = 'z'.repeat(2 * PART);
