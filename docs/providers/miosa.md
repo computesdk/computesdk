@@ -88,6 +88,30 @@ interface MiosaConfig {
 | `filesystem` | Yes | Native read, write, directory, list, existence, and remove operations. |
 | `snapshot` | Yes | Account-API Firecracker checkpoints: create, sandbox-scoped list, and delete with owner resolution. Regional sandboxes are not snapshot-capable. |
 
+### Standard sizes
+
+`sizeClass` picks one of MIOSA's named sandbox sizes and sends it as `size`. Each size fixes CPU, memory and disk together, so the disk is reported in `resolved.diskMiB`.
+
+| Size class | MIOSA `size` | Resolved shape |
+|---|---|---|
+| `xs` | — | Unsupported: the smallest MIOSA size is `xs` (1 vCPU / 2 GiB) |
+| `sm` | `xs` | 1 vCPU / 2 GiB / 10 GiB disk |
+| `md` | `small` | 2 vCPU / 4 GiB / 10 GiB disk |
+| `lg` | `medium` | 4 vCPU / 8 GiB / 20 GiB disk |
+| `xl` | `large` | 8 vCPU / 16 GiB / 40 GiB disk |
+| `2xl` | `xl` | 16 vCPU / 32 GiB / 80 GiB disk |
+| `3xl` | — | Unsupported: the largest MIOSA size is `xl` (16 vCPU / 32 GiB) |
+
+```typescript
+const sandbox = await compute.sandbox.create({ sizeClass: 'lg' }); // size: "medium"
+```
+
+- `sizeClass` cannot be combined with `size`, `cpu_count`/`cpuCount`, `memory_mb`, any disk field, or the generic `vcpus`/`cpus`/`memory` hints; the call fails with a `conflict` error.
+- `sizeClass` with `snapshotId` is refused: a restore keeps the source sandbox's resources.
+- With a `templateId`, MIOSA's template catalog decides which sizes that template supports.
+- Sizes above `xs` are always created through the account API; the regional endpoint serves `xs` only.
+- Your plan caps the largest size you can select.
+
 ### Runtime Model
 
 MIOSA serves the default create path from certified snapshot-derived warm slots, immutable shared base images, per-sandbox copy-on-write disks, and preallocated network capacity.
