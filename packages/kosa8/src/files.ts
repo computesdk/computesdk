@@ -207,7 +207,16 @@ export async function writeFileNative(
   const staged = bytes.length > fileParts.bytes ? `${path}.computesdk-${randomBytes(6).toString('hex')}` : null;
   const dest = staged ?? path;
   const commit = async () => {
-    if (staged) await mustSucceed(run, sandbox, `mv -f ${q(staged)} ${q(path)}`, 'write', path);
+    // `[ -d ]` first: `mv` onto an existing directory would move the staged file inside it.
+    if (staged) {
+      await mustSucceed(
+        run,
+        sandbox,
+        `if [ -d ${q(path)} ]; then echo 'target is a directory' >&2; exit 1; fi; mv -f ${q(staged)} ${q(path)}`,
+        'write',
+        path,
+      );
+    }
   };
   try {
     if (direct) {

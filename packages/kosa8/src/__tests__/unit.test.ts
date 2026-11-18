@@ -645,6 +645,20 @@ describe('kosa8 files', () => {
     expect(execs(calls).some((c) => /rm -f/.test(c.body.cmd[2]))).toBe(true);
   });
 
+  it('rejects a large write whose target is an existing directory', async () => {
+    const store = new Map<string, Buffer>();
+    const calls = mockFetch(
+      filesRoute(store, {
+        direct: directWithFiles(),
+        exec: (call) =>
+          call.body.cmd[2].includes('-d "/root/dir"') ? { exit: 1, stderr: 'target is a directory' } : applyFsCommands(store)(call),
+      }),
+    );
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.filesystem.writeFile('/root/dir', 'q'.repeat(3 * PART))).rejects.toThrow(/target is a directory/);
+    expect([...store.keys()].filter((k) => k.includes('.computesdk-'))).toEqual([]);
+  });
+
   it('reads a large file in ranges, in parallel', async () => {
     const content = Buffer.from('bü'.repeat(2 * PART));
     const calls = mockFetch(filesRoute(new Map([['/tmp/big', content]]), { direct: directWithFiles() }));
