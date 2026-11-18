@@ -1,9 +1,9 @@
 import { CommandExitError, FileType, NotFoundError, Novita, TimeoutError, Volume as NovitaVolume } from 'novita-sandbox';
 import type { BuildOptions, SandboxOpts, SnapshotInfo, TemplateClass, TemplateInfo } from 'novita-sandbox';
-import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
 import type {
   CommandResult, CreateTemplateOptions, Provider, ProviderTemplateManager,
-  RunCommandOptions, InstanceInfo,
+  RunCommandOptions, InstanceInfo, InstanceSizeClass, InstanceSizeManager,
 } from '@computesdk/provider';
 
 export type NovitaSandbox = Awaited<ReturnType<Novita['sandbox']['create']>>;
@@ -13,6 +13,40 @@ export interface NovitaConfig {
   apiKey?: string;
   /** Default sandbox lifetime in milliseconds (default: 300000). */
   timeout?: number;
+  /** Template to boot per standard `sizeClass`; defaults to {@link NOVITA_SIZE_TEMPLATES}. Only those sizes are honored. */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
+}
+
+/**
+ * Novita fixes CPU and memory when a template is built, so each standard size
+ * boots its own account template (node:22, same names as E2B). Limits: whole
+ * vCPUs up to 8, memory up to 8 GiB in 512 MiB steps at 0.5-4 GiB per vCPU,
+ * 20 GB disk (https://novita.ai/docs/guides/sandbox-quota-limit). `xl` and up
+ * need more than 8 GiB and are not offered.
+ */
+export const NOVITA_SIZE_TEMPLATES: Readonly<Partial<Record<InstanceSizeClass, string>>> = Object.freeze({
+  xs: 'csdk-node22-1cpu-1gb',
+  sm: 'csdk-node22-1cpu-2gb',
+  md: 'csdk-node22-2cpu-4gb',
+  lg: 'csdk-node22-4cpu-8gb',
+});
+
+/** Fixed runtime disk per sandbox (quota `diskMb: 20480`). */
+const NOVITA_DISK_MIB = 20480;
+
+function sizeTemplateOf(config: NovitaConfig, sizeClass: InstanceSizeClass): string | undefined {
+  if (!Object.prototype.hasOwnProperty.call(NOVITA_SIZE_TEMPLATES, sizeClass)) return undefined;
+  const name = config.sizeTemplates?.[sizeClass] ?? NOVITA_SIZE_TEMPLATES[sizeClass];
+  return typeof name === 'string' && name.trim() ? name : undefined;
+}
+
+/** A create that failed because a standard-size template was never built on this account. */
+function missingSizeTemplate(config: NovitaConfig, templateId: unknown, error: unknown): string | undefined {
+  if (typeof templateId !== 'string') return undefined;
+  if (!(error instanceof NotFoundError) && !/\b404\b|not found/i.test(error instanceof Error ? error.message : String(error))) return undefined;
+  const sizeClass = (Object.keys(NOVITA_SIZE_TEMPLATES) as InstanceSizeClass[]).find(c => sizeTemplateOf(config, c) === templateId);
+  if (!sizeClass) return undefined;
+  return `Novita size template '${templateId}' (sizeClass ${sizeClass}) is not built on this Novita account; run \`node scripts/provider-setup.mjs novita\` (provider-setup.yml) or point \`sizeTemplates.${sizeClass}\` at an existing template`;
 }
 
 export interface NovitaSnapshot extends SnapshotInfo {
@@ -41,6 +75,7 @@ export interface NovitaTemplate extends Partial<TemplateInfo> {
 
 export interface NovitaProvider extends Provider<NovitaSandbox, NovitaTemplate, NovitaSnapshot> {
   template: ProviderTemplateManager<NovitaTemplate, NovitaCreateTemplateOptions>;
+  readonly sizes: InstanceSizeManager;
 }
 
 function client(config: NovitaConfig): Novita {
@@ -114,6 +149,26 @@ function snapshotInfo(snapshot: SnapshotInfo): NovitaSnapshot {
 
 const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaTemplate, NovitaSnapshot>({
   name: 'novita',
+  sizes: (config, profile, options) => {
+    const conflict = (['cpuCount', 'memoryMB', 'build'] as const).find(key => (options as Record<string, unknown> | undefined)?.[key] !== undefined);
+    if (conflict) throw new InstanceSizeError('conflict', `cannot combine sizeClass with native Novita ${conflict}`);
+    if (options?.templateId !== undefined || options?.snapshotId !== undefined || options?.sandboxId !== undefined) {
+      return { status: 'unsupported', reason: 'A Novita template or snapshot fixes CPU and memory; drop templateId/snapshotId/sandboxId to boot the standard size template.' };
+    }
+    if (!Object.prototype.hasOwnProperty.call(NOVITA_SIZE_TEMPLATES, profile.sizeClass)) {
+      return {
+        status: 'unsupported',
+        reason: `Novita sandboxes top out at 8 vCPU and 8 GiB memory on every listed tier; ${profile.sizeClass} needs ${profile.vcpus} vCPU / ${profile.memoryMiB / 1024} GiB.`,
+      };
+    }
+    const templateId = sizeTemplateOf(config, profile.sizeClass);
+    if (!templateId) return { status: 'unconfigured', reason: `sizeTemplates.${profile.sizeClass} is empty; set it to a Novita template built with ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB.` };
+    return {
+      status: 'supported',
+      nativeOptions: { templateId },
+      resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: NOVITA_DISK_MIB },
+    };
+  },
   methods: {
     instances: {
       create: async (config, options) => {
@@ -139,7 +194,14 @@ const createNovitaProvider = defineProvider<NovitaSandbox, NovitaConfig, NovitaT
             })),
           }),
         };
-        const sandbox = await sdk.sandbox.create(options?.templateId || options?.snapshotId || 'base', createOptions);
+        let sandbox: NovitaSandbox;
+        try {
+          sandbox = await sdk.sandbox.create(options?.templateId || options?.snapshotId || 'base', createOptions);
+        } catch (error) {
+          const notBuilt = missingSizeTemplate(config, options?.templateId, error);
+          if (notBuilt) throw new Error(notBuilt);
+          throw error;
+        }
         if (!sandbox.sandboxId) throw new Error('Novita create() returned a sandbox without an ID.');
         sandboxTimeouts.set(sandbox, createOptions.timeoutMs!);
         return { instance: sandbox, instanceId: sandbox.sandboxId };
