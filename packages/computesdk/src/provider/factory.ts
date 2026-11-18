@@ -327,7 +327,7 @@ export interface InstanceMethods<TInstance = any, TConfig = any> {
    */
   startProcess?: (instance: TInstance, command: string, options: StartProcessOptions) => Promise<ProcessHandle>;
   getInfo: (instance: TInstance) => Promise<InstanceInfo>;
-  getUrl: (instance: TInstance, options: { port: number; protocol?: string }) => Promise<string>;
+  getUrl: (instance: TInstance, options: { port: number; protocol?: string; public?: boolean; label?: string }) => Promise<string>;
 
   /**
    * Optional runtime volume attach. Providers that support attaching a volume
@@ -1073,7 +1073,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
     return await this.methods.getInfo(this.instance);
   }
 
-  async getUrl(options: { port: number; protocol?: string }): Promise<string> {
+  async getUrl(options: { port: number; protocol?: string; public?: boolean; label?: string }): Promise<string> {
     return await this.methods.getUrl(this.instance, options);
   }
 

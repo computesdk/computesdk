@@ -251,13 +251,23 @@ export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
       },
 
       // A signed URL that reaches the port without an API key, valid for one hour.
-      getUrl: async (sandbox: Agent37Sandbox, options: { port: number; protocol?: string }): Promise<string> => {
-        const { data } = await request<{ url: string }>(
-          sandbox,
-          'POST',
-          `/v1/instances/${encodeURIComponent(sandbox.id)}/signed-url`,
-          { port: options.port },
-        );
+      // With `public: true` returns a permanent, unauthenticated public-port URL
+      // instead (https://www.agent37.com/docs/agents-api/public-ports); the app
+      // behind the port then carries all of the auth.
+      getUrl: async (sandbox: Agent37Sandbox, options: { port: number; protocol?: string; public?: boolean; label?: string }): Promise<string> => {
+        const { data } = options.public
+          ? await request<{ url: string }>(
+              sandbox,
+              'POST',
+              `/v1/instances/${encodeURIComponent(sandbox.id)}/public-ports`,
+              { port: options.port, ...(options.label !== undefined ? { label: options.label } : {}) },
+            )
+          : await request<{ url: string }>(
+              sandbox,
+              'POST',
+              `/v1/instances/${encodeURIComponent(sandbox.id)}/signed-url`,
+              { port: options.port },
+            );
         if (!data?.url) throw new Error(`Agent37 instance ${sandbox.id} not found`);
         // The URL carries its own access token, so it is only ever handed out encrypted.
         return options.protocol === 'ws' || options.protocol === 'wss' ? data.url.replace(/^https/, 'wss') : data.url;
