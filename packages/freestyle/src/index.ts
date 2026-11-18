@@ -26,6 +26,7 @@ import type {
   CreateSnapshotOptions,
   ListSnapshotsOptions,
   FileEntry,
+  InstanceSizeSupport,
   RunCommandOptions,
 } from '@computesdk/provider';
 
@@ -88,6 +89,14 @@ const RUNTIME_SNAPSHOT_SLUG = 'computesdk-freestyle-runtime-v2';
 /** What the runtime snapshot boots with; `resize` can only grow from here. */
 const RUNTIME_VCPUS = 4;
 const RUNTIME_MEMORY_MIB = 8192;
+/** The runtime snapshot is baked from the platform default, whose disk is 32 GB (the API counts storage in 1000s). */
+const RUNTIME_DISK_MIB = 32_000;
+/**
+ * Freestyle's smallest public Ubuntu snapshot, booted as-is for `md` because
+ * resize cannot shrink the runtime snapshot. Same image as the default, with
+ * Node.js and Python preinstalled.
+ */
+const SM_BASE_SNAPSHOT = { slug: 'freestyle/ubuntu-sm', vcpus: 2, memoryMiB: 4096, diskMiB: 16_000 } as const;
 const RUNTIME_NODE_VERSION = 'v22.19.0';
 /** Snapshot list page size; the API pages, so a single call is never the whole account. */
 const SNAPSHOT_PAGE_SIZE = 200;
@@ -341,7 +350,7 @@ function toSnapshot(data: SnapshotData): FreestyleSnapshot {
  */
 export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleSnapshot>({
   name: 'freestyle',
-  sizes: (config, profile, options) => {
+  sizes: (config, profile, options): InstanceSizeSupport => {
     if (options?.cpu !== undefined || options?.memory !== undefined) {
       throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Freestyle cpu/memory fields');
     }
@@ -349,13 +358,25 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
       (typeof process !== 'undefined' && process.env?.FREESTYLE_SNAPSHOT_ID)) {
       return { status: 'unsupported', reason: 'The snapshot sets the base size of a Freestyle VM; standard sizes apply to the default runtime snapshot only.' };
     }
+    if (profile.vcpus === SM_BASE_SNAPSHOT.vcpus && profile.memoryMiB === SM_BASE_SNAPSHOT.memoryMiB) {
+      return {
+        status: 'supported',
+        nativeOptions: { snapshotId: SM_BASE_SNAPSHOT.slug, cpu: profile.vcpus, memory: profile.memoryMiB },
+        resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: SM_BASE_SNAPSHOT.diskMiB },
+      };
+    }
     if (profile.vcpus < RUNTIME_VCPUS || profile.memoryMiB < RUNTIME_MEMORY_MIB) {
-      return { status: 'unavailable', reason: `Freestyle resize is grow-only; the runtime snapshot boots at ${RUNTIME_VCPUS} vCPU / ${RUNTIME_MEMORY_MIB} MiB.` };
+      return {
+        status: 'unsupported',
+        reason: `Freestyle resize is grow-only and its smallest Ubuntu snapshot is ${SM_BASE_SNAPSHOT.vcpus} vCPU / ${SM_BASE_SNAPSHOT.memoryMiB} MiB; it lists no ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB shape.`,
+      };
     }
-    if (profile.sizeClass === '2xl' || profile.sizeClass === '3xl') {
-      return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
-    }
-    return { status: 'supported', nativeOptions: { cpu: profile.vcpus, memory: profile.memoryMiB } };
+    // Grown from the runtime snapshot, whose disk is not resized.
+    return {
+      status: 'supported',
+      nativeOptions: { cpu: profile.vcpus, memory: profile.memoryMiB },
+      resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: RUNTIME_DISK_MIB },
+    };
   },
   methods: {
     instances: {
