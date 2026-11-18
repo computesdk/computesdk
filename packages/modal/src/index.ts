@@ -2,7 +2,7 @@
  * Modal Provider - Factory-based Implementation
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
 
 import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
 
@@ -16,6 +16,10 @@ type ModalNativeSandbox = Sandbox;
 const DEFAULT_IMAGE = 'node:22';
 const DEFAULT_APP_NAME = 'computesdk-modal';
 const DEFAULT_DAEMON_SSE_PORT = 38989;
+/** Modal's `cpu` counts physical cores; one physical core is 2 vCPUs. */
+const VCPUS_PER_MODAL_CORE = 2;
+/** Sandbox disk cannot be resized: the VM rootfs is a fixed 512 GiB (gVisor's default quota is the same). */
+const MODAL_SANDBOX_DISK_MIB = 512 * 1024;
 
 function mergeExposedPorts(primary?: number[], fallback?: number[], daemonSsePort?: number | false): number[] {
   const daemonPort = daemonSsePort === false ? undefined : (daemonSsePort ?? DEFAULT_DAEMON_SSE_PORT);
@@ -164,6 +168,25 @@ async function resolveSandboxPath(
 
 const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
   name: 'modal',
+  // Request and limit both equal the profile, so the Sandbox neither gets less
+  // nor bursts past it (Modal's default CPU limit is the request + 16 cores).
+  sizes: (_config, profile, options) => {
+    const native = (options ?? {}) as Partial<SandboxCreateParams>;
+    if (native.memoryLimitMiB !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with Modal memoryLimitMiB');
+    }
+    const experimental = native.experimentalOptions;
+    if (experimental !== null && typeof experimental === 'object' &&
+        experimental.vm_sidecar_memory_reserve_mib !== undefined) {
+      return { status: 'unsupported', reason: 'A VM sidecar memory reserve is carved out of the Sandbox memory, leaving the main VM below the standard size.' };
+    }
+    const cores = profile.vcpus / VCPUS_PER_MODAL_CORE;
+    return {
+      status: 'supported',
+      nativeOptions: { cpu: cores, cpuLimit: cores, memoryMiB: profile.memoryMiB, memoryLimitMiB: profile.memoryMiB },
+      resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: MODAL_SANDBOX_DISK_MIB },
+    };
+  },
   methods: {
     instances: {
       create: async (config: ModalInternalConfig, options?: CreateInstanceOptions) => {
