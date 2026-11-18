@@ -16,7 +16,7 @@ jobs=$(nproc); if ((jobs>8)); then jobs=8; fi
 . /etc/os-release
 [[ ${ID:-} = debian && ${VERSION_CODENAME:-} = bookworm ]]
 [[ ! -e $w && ! -e $manifest ]]
-! id "$u" >/dev/null 2>&1
+! id "$u" >/dev/null 2>&1 || false
 mkdir -p "$w/source" /usr/local/share
 installed() { dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' | awk '$2=="installed" {print $1}' | sort -u; }
 installed > "$w/initial-installed"
@@ -56,7 +56,7 @@ coreutils (9.1-1+0superserve.openssl1) bookworm; urgency=medium
 CHANGELOG
 cat "$w/distro-changelog" >> "$src/debian/changelog"
 [[ $(grep -c '^[[:space:]]*dh_auto_configure' "$src/debian/rules") = 1 ]]
-! grep -q -- '--with-openssl' "$src/debian/rules"
+! grep -q -- '--with-openssl' "$src/debian/rules" || false
 sed -i '/^[[:space:]]*dh_auto_configure/ s/$/ --with-openssl=yes/' "$src/debian/rules"
 dpkg --compare-versions 9.1-1+0superserve.openssl1 gt 9.1-1
 dpkg --compare-versions 9.1-1+0superserve.openssl1 lt 9.1-1+deb12u1
@@ -98,7 +98,7 @@ xargs -r apt-mark manual < "$w/initial-installed" >> "$w/apt.log" 2>&1
 awk '$1=="Remv" || $1=="Purg" {print $2}' "$w/autoremove-simulation.log" | while read -r pkg; do dpkg-query -W -f='${binary:Package}\n' "$pkg"; done | sort -u > "$w/planned-removals"
 comm -12 "$w/initial-installed" "$w/planned-removals" > "$w/planned-baseline-removals"
 [[ ! -s $w/planned-baseline-removals ]]
-! grep -Eq '^libssl3(:amd64)?$' "$w/planned-removals"
+! grep -Eq '^libssl3(:amd64)?$' "$w/planned-removals" || false
 "${apt[@]}" -o APT::AutoRemove::RecommendsImportant=false autoremove -y --purge >> "$w/apt.log" 2>&1
 installed > "$w/final-installed"
 comm -23 "$w/initial-installed" "$w/final-installed" > "$w/missing-baseline"

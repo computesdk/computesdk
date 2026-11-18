@@ -21,7 +21,7 @@ const COREUTILS_RECIPE = readFileSync(new URL('./superserve-coreutils-build.sh',
 const COREUTILS_VERSION = '9.1-1+0superserve.openssl1';
 
 // API run steps execute under /bin/sh; the helper forces bash via a heredoc.
-export function coreutilsBuildStep(recipe) {
+function coreutilsBuildStep(recipe) {
   const delimiter = 'SUPERSERVE_NATIVE_COREUTILS_RECIPE';
   if (recipe.split('\n').includes(delimiter)) throw new Error('Recipe delimiter collision');
   return { run: "bash -s <<'" + delimiter + "'\n" + recipe + '\n' + delimiter };
@@ -29,7 +29,7 @@ export function coreutilsBuildStep(recipe) {
 
 const coreutilsSteps = [
   coreutilsBuildStep(COREUTILS_RECIPE),
-  { run: `dpkg-query -W coreutils | grep ${COREUTILS_VERSION} && ldd /usr/bin/sha256sum | grep libcrypto.so.3` },
+  { run: `dpkg-query -W coreutils | grep -qF '${COREUTILS_VERSION}' && ldd /usr/bin/sha256sum | grep -q libcrypto.so.3` },
 ];
 
 // Shapes are vCPU / MiB. Names stay stable: callers boot them by name.
