@@ -115,11 +115,23 @@ function proxyParams(proxies: CreateBrowserSessionOptions['proxies']): ProxyCrea
     warnOnce('proxies.custom', 'custom proxies need a Kernel proxy created with credentials; create one and pass its proxy_id through the Kernel SDK.');
     return undefined;
   }
+  if (proxy.domainPattern) {
+    warnOnce('proxies.domainPattern', 'Kernel attaches a proxy to the whole session, so a domain-scoped proxy is not attached.');
+    return undefined;
+  }
   const country = proxy.geolocation?.country?.toUpperCase();
+  const state = proxy.geolocation?.state;
+  // Kernel names cities in lowercase snake case (los_angeles).
+  const city = proxy.geolocation?.city?.trim().toLowerCase().replace(/\s+/g, '_');
+  if (proxy.type !== 'residential' && (state || city)) {
+    warnOnce('proxies geolocation state and city', `Kernel ${proxy.type} proxies only target a country.`);
+  }
+  const config = proxy.type === 'residential' ? { country, state, city } : { country };
+  const target = Object.values(config).filter(Boolean).join('-').toLowerCase().replace(/[^a-z0-9-]+/g, '_');
   return {
     type: proxy.type,
-    name: `computesdk-${proxy.type}-${(country ?? 'any').toLowerCase()}`,
-    config: country ? { country } : {},
+    name: `computesdk-${proxy.type}-${target || 'any'}`,
+    config: Object.fromEntries(Object.entries(config).filter(([, v]) => v)),
   };
 }
 

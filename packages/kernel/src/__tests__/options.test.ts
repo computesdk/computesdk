@@ -81,6 +81,35 @@ describe('kernel option mapping', () => {
     });
   });
 
+  it('keeps residential state and city in the proxy it attaches', async () => {
+    const provider = kernel({ apiKey: 'test-city' });
+
+    await provider.session.create({
+      proxies: [{ type: 'residential', geolocation: { country: 'us', state: 'CA', city: 'Los Angeles' } }],
+    });
+
+    expect(sdk.createProxy).toHaveBeenCalledWith({
+      type: 'residential',
+      name: 'computesdk-residential-us-ca-los_angeles',
+      config: { country: 'US', state: 'CA', city: 'los_angeles' },
+    });
+  });
+
+  it('does not attach a domain-scoped proxy to the whole session', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const provider = kernel({ apiKey: 'test-domain' });
+
+    await provider.session.create({
+      stealth: true,
+      proxies: [{ type: 'residential', domainPattern: '.*example\\.com' }],
+    });
+
+    expect(sdk.listProxies).not.toHaveBeenCalled();
+    expect(sdk.create).toHaveBeenCalledWith({ stealth: true });
+    expect(warn).toHaveBeenCalledWith("[@computesdk/kernel] 'proxies.domainPattern' is ignored: Kernel attaches a proxy to the whole session, so a domain-scoped proxy is not attached.");
+    warn.mockRestore();
+  });
+
   it('falls back to default egress when the proxy cannot be resolved', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     sdk.listProxies.mockRejectedValueOnce(new Error('boom'));
