@@ -39,6 +39,9 @@ const SHAPES = [
   { name: 'csdk-node22-4cpu-8gb', vcpu: 4, memoryMib: 8192 },
   { name: 'csdk-node22-8cpu-16gb', vcpu: 8, memoryMib: 16384 },
 ];
+// Extra standard-size shapes (sizeClass xs / 2xl) for adapters that boot them by template.
+const XS_SHAPE = { name: 'csdk-node22-1cpu-1gb', vcpu: 1, memoryMib: 1024 };
+const XXL_SHAPE = { name: 'csdk-node22-16cpu-32gb', vcpu: 16, memoryMib: 32768 };
 
 const PROVIDERS = {
   // Sandboxes inherit the template's shape and cannot override it. Every
@@ -48,7 +51,7 @@ const PROVIDERS = {
   superserve: {
     load: async () => (await import('../packages/superserve/dist/index.mjs')).superserve({}),
     templates: [
-      ...SHAPES.map((s) => ({ ...s, from: s.vcpu === 2 ? SUPERSERVE_BASE_SLIM : SUPERSERVE_BASE_FULL, steps: coreutilsSteps })),
+      ...[XS_SHAPE, ...SHAPES, XXL_SHAPE].map((s) => ({ ...s, from: s.vcpu === 2 ? SUPERSERVE_BASE_SLIM : SUPERSERVE_BASE_FULL, steps: coreutilsSteps })),
       // node:22 doesn't fit a 1 GiB disk (image_too_large), so small boxes keep the default disk.
       { name: 'csdk-node22-1cpu-256mb', vcpu: 1, memoryMib: 256 },
     ],
@@ -62,7 +65,8 @@ const PROVIDERS = {
   // E2B-compatible: CPU and memory are set when the template is built.
   novita: {
     load: async () => (await import('../packages/novita/dist/index.mjs')).novita({}),
-    templates: SHAPES,
+    // Novita caps a sandbox at 8 vCPU / 8 GiB, so no 8cpu-16gb.
+    templates: [XS_SHAPE, ...SHAPES.filter((s) => s.memoryMib <= 8192)],
     exists: (t, name) => t.name === name || t.alias === name || (t.aliases ?? []).includes(name),
     create: (p, s) => p.template.create({
       name: s.name, image: NODE, build: { cpuCount: s.vcpu, memoryMB: s.memoryMib },
@@ -103,7 +107,8 @@ const PROVIDERS = {
   // built environment, which instances restore at its captured shape.
   mosaic: {
     load: async () => (await import('../packages/mosaic/dist/index.mjs')).mosaic({}),
-    templates: SHAPES.filter((s) => s.vcpu === 8),
+    // xs is below Mosaic's stock templates; 8cpu-16gb stays for existing callers (sizeClass xl now boots `base`).
+    templates: [XS_SHAPE, ...SHAPES.filter((s) => s.vcpu === 8)],
     exists: (t, name) => t.id === name || t.metadata?.name === name,
     create: (p, s) => p.template.create({ name: s.name, image: NODE, vcpu: s.vcpu, memoryMb: s.memoryMib }),
     boot: (s) => ({ templateId: s.name }),
