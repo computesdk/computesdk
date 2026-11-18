@@ -315,9 +315,10 @@ function getClient(config: GravixLayerConfig): GravixLayer {
  */
 const CREATE_HTTP_TIMEOUT_MS = 180_000
 
-// `files/write` carries content in the JSON body, which the API caps well
-// below the sizes callers legitimately write; at this size the binary
-// `upload` endpoint is the correct channel.
+// `files/write` carries content inside a JSON string body, capped server-side
+// at 2 MiB; escapes (`\"`, `\\`, `\n`, control chars) inflate it past raw
+// UTF-8 length, so writes switch to the binary `upload` endpoint with
+// headroom under the cap.
 const FILE_WRITE_JSON_MAX_BYTES = 1024 * 1024
 
 /** In-flight or completed publish, so concurrent getUrl calls share one request. */
@@ -636,11 +637,12 @@ const createGravixLayerProvider = defineProvider<
         },
 
         writeFile: async (sandbox: Runtime, path: string, content: string): Promise<void> => {
-          // JSON `files/write` is capped by the request body limit; larger
-          // payloads stream through the binary upload endpoint instead.
-          const bytes = new TextEncoder().encode(content)
-          if (bytes.byteLength > FILE_WRITE_JSON_MAX_BYTES) {
-            await sandbox.file.upload(path, bytes)
+          // `files/write` carries content inside a JSON string body capped
+          // server-side; escapes inflate it past raw UTF-8 length, so measure
+          // the encoded form. Larger payloads stream through binary upload.
+          const jsonBytes = new TextEncoder().encode(JSON.stringify(content)).byteLength
+          if (jsonBytes > FILE_WRITE_JSON_MAX_BYTES) {
+            await sandbox.file.upload(path, new TextEncoder().encode(content))
           } else {
             await sandbox.file.write(path, content)
           }

@@ -785,11 +785,12 @@ describe('filesystem', () => {
 
   it('routes writes above the JSON cap through binary upload', async () => {
     const sandbox = await provider().sandbox.create()
-    await sandbox.filesystem.writeFile('/tmp/at.bin', 'x'.repeat(1024 * 1024))
-    await sandbox.filesystem.writeFile('/tmp/over.bin', 'x'.repeat(1024 * 1024 + 1))
+    // JSON.stringify adds the two surrounding quotes to the wire size.
+    await sandbox.filesystem.writeFile('/tmp/at.bin', 'x'.repeat(1024 * 1024 - 2))
+    await sandbox.filesystem.writeFile('/tmp/over.bin', 'x'.repeat(1024 * 1024 - 1))
     expect(calls('file.write')).toHaveLength(1)
     expect(calls('file.upload')).toHaveLength(1)
-    expect(calls('file.upload')[0].args).toEqual(['/tmp/over.bin', 1024 * 1024 + 1])
+    expect(calls('file.upload')[0].args).toEqual(['/tmp/over.bin', 1024 * 1024 - 1])
   })
 
   it('sizes the JSON cap in bytes, not characters', async () => {
@@ -797,6 +798,14 @@ describe('filesystem', () => {
     await sandbox.filesystem.writeFile('/tmp/utf8.txt', 'é'.repeat(600 * 1024))
     expect(calls('file.write')).toHaveLength(0)
     expect(calls('file.upload')[0].args).toEqual(['/tmp/utf8.txt', 600 * 1024 * 2])
+  })
+
+  it('counts JSON escapes toward the cap', async () => {
+    const sandbox = await provider().sandbox.create()
+    // 800 KiB of raw newlines encode as 1600 KiB of `\\n` inside the JSON body.
+    await sandbox.filesystem.writeFile('/tmp/log.txt', '\n'.repeat(800 * 1024))
+    expect(calls('file.write')).toHaveLength(0)
+    expect(calls('file.upload')[0].args).toEqual(['/tmp/log.txt', 800 * 1024])
   })
 
   it('maps directory entries and omits invalid modified dates', async () => {
