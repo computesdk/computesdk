@@ -26,9 +26,20 @@ layout:
 
 [Freestyle](https://www.freestyle.sh) provider for ComputeSDK: full Linux virtual machines designed for long-running, complex agent tasks, with instant startup, persistence, and cheap snapshotting.
 
-## Sizes and lifecycle
+## Standard sizes
 
-`sizeClass` supports `lg` and `xl` by grow-only resizing the default 4-vCPU/8192-MiB runtime snapshot. Smaller tiers are `unavailable`, `2xl` is `unknown`, and explicit sandbox/snapshot/template selection is `unsupported` with standard sizing. See [Sandbox sizes](../reference/sizes.md).
+| `sizeClass` | Freestyle shape | How |
+| --- | --- | --- |
+| `xs`, `sm` | — | `unsupported`: resize is grow-only and the smallest Ubuntu snapshot is 2 vCPU / 4 GiB. |
+| `md` | 2 vCPU / 4096 MiB / 16 GB disk | Boots the public `freestyle/ubuntu-sm` snapshot as-is. |
+| `lg` | 4 vCPU / 8192 MiB / 32 GB disk | The default runtime snapshot, no resize. |
+| `xl` | 8 vCPU / 16384 MiB / 32 GB disk | Runtime snapshot grown with `vm.resize({ cpu, memory })`. |
+| `2xl` | 16 vCPU / 32768 MiB / 32 GB disk | Same; needs the Pro plan (32 vCPU / 64 GiB per-VM maximum). |
+| `3xl` | 32 vCPU / 131072 MiB / 32 GB disk | Same; above Pro's 64 GiB maximum, so it needs Enterprise custom per-VM limits. |
+
+Sizes are exact; the adapter waits for the guest to see the grown vCPUs and memory, and deletes the VM if the snapshot boots larger than requested or the resize fails. Disk is not resized. `sizeClass` cannot be combined with `cpu`/`memory`, and is `unsupported` with `sandboxId`, `snapshotId`, `templateId`, `config.snapshotId` or `FREESTYLE_SNAPSHOT_ID`, because the snapshot sets a Freestyle VM's base size. Plan per-VM maximums are enforced by Freestyle at create time. See [Sandbox sizes](../reference/sizes.md) and Freestyle's [pricing and limits](https://www.freestyle.sh/docs/vms/pricing-and-limits) and [base snapshots](https://www.freestyle.sh/docs/vms/base-snapshots).
+
+## Lifecycle
 
 `pause()`/`resume()` preserve memory and processes. Snapshots declare rootfs and memory preservation with the source kept; restore with `snapshotId`.
 
