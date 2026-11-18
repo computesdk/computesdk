@@ -153,6 +153,13 @@ const h = vi.hoisted(() => {
         write: vi.fn(async (path: string, content: string) => {
           record('file.write', path, content)
         }),
+        upload: vi.fn(async (path: string, data: Uint8Array) => {
+          record('file.upload', path, data.byteLength)
+        }),
+        downloadText: vi.fn(async (path: string) => {
+          record('file.downloadText', path)
+          return 'content'
+        }),
         createDirectory: vi.fn(async (path: string) => {
           record('file.createDirectory', path)
         }),
@@ -769,11 +776,27 @@ describe('filesystem', () => {
     await sandbox.filesystem.remove('/tmp/dir')
 
     expect(calls('file.write')[0].args).toEqual(['/tmp/a.txt', 'hello'])
-    expect(calls('file.read')[0].args).toEqual(['/tmp/a.txt'])
+    expect(calls('file.downloadText')[0].args).toEqual(['/tmp/a.txt'])
     expect(calls('file.createDirectory')[0].args).toEqual(['/tmp/deep'])
     expect(calls('file.getInfo')[0].args).toEqual(['/tmp/there'])
     expect(calls('file.delete')[0].args).toEqual(['/tmp/dir'])
     expect(calls('runCmd')).toHaveLength(0)
+  })
+
+  it('routes writes above the JSON cap through binary upload', async () => {
+    const sandbox = await provider().sandbox.create()
+    await sandbox.filesystem.writeFile('/tmp/at.bin', 'x'.repeat(1024 * 1024))
+    await sandbox.filesystem.writeFile('/tmp/over.bin', 'x'.repeat(1024 * 1024 + 1))
+    expect(calls('file.write')).toHaveLength(1)
+    expect(calls('file.upload')).toHaveLength(1)
+    expect(calls('file.upload')[0].args).toEqual(['/tmp/over.bin', 1024 * 1024 + 1])
+  })
+
+  it('sizes the JSON cap in bytes, not characters', async () => {
+    const sandbox = await provider().sandbox.create()
+    await sandbox.filesystem.writeFile('/tmp/utf8.txt', 'é'.repeat(600 * 1024))
+    expect(calls('file.write')).toHaveLength(0)
+    expect(calls('file.upload')[0].args).toEqual(['/tmp/utf8.txt', 600 * 1024 * 2])
   })
 
   it('maps directory entries and omits invalid modified dates', async () => {
