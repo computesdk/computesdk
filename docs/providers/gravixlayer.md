@@ -72,12 +72,39 @@ await sandbox.destroy()
 ```
 
 `templateId` selects an existing template. To start from a snapshot, pass
-`snapshotId` instead (not both). `image` is not accepted; build a template from
-an image with `template.create({ name, fromImage })` and pass its name as
-`templateId`. Create a snapshot with
+`snapshotId` instead (not both). `image` is a template name: the template
+built from that image, e.g. `image: 'node:22'` boots the template named
+`node:22`. Build it once with
+`template.create({ name: 'node:22', fromImage: 'node:22' })`. Passing both
+`image` and `templateId` with different names is a conflict, as is combining
+a template source with `snapshotId`. Create a snapshot with
 `compute.snapshot.create(instanceId, { name: 'my-snapshot' })` — a name is
 required. Building a new template needs `fromImage` or `dockerfile` on
 `template.create`; pick an existing template with `templateId` on sandbox create.
+
+### Standard sizes
+
+`sizeClass` requests an exact CPU/RAM tier. GravixLayer bakes resources into the
+template at build time, so each standard size boots its own template:
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' })
+```
+
+| `sizeClass` | Template |
+| --- | --- |
+| `xs` | `base-xsmall` |
+| `sm` | `base-small` |
+| `md` | `base-medium` |
+| `lg` | `base-large` |
+| `xl` | `base-xlarge` |
+| `2xl` | `base-2xlarge` |
+
+The `base-*` templates are
+platform-provided; `scripts/provider-setup.mjs gravixlayer` builds them on
+deployments where they are absent. Override the tier names with `sizeTemplates`
+in the provider config. `sizeClass` cannot be combined with `templateId`,
+`image`, `snapshotId`, or `sandboxId`.
 
 ### Configuration Options
 
@@ -97,6 +124,8 @@ interface GravixLayerConfig {
   maxRetries?: number
   /** Use HTTP/2. Defaults to true */
   http2?: boolean
+  /** Template name to boot per standard `sizeClass`; defaults to GRAVIXLAYER_SIZE_TEMPLATES */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>
 }
 ```
 
@@ -109,3 +138,4 @@ interface GravixLayerConfig {
 | `timeout` | — | Request timeout in milliseconds |
 | `maxRetries` | — | Retry budget (default `0`) |
 | `http2` | — | Use HTTP/2 (default `true`) |
+| `sizeTemplates` | — | Per-tier template names for `sizeClass` (defaults to `base-*`) |

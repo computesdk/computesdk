@@ -17,6 +17,8 @@ import type {
   FileEntry,
   ListSnapshotsOptions,
   ListTemplatesOptions,
+  InstanceSizeClass,
+  InstanceSizeManager,
   Provider,
   ProviderTemplateManager,
   RunCommandOptions,
@@ -36,6 +38,36 @@ export interface GravixLayerConfig {
   timeout?: number
   maxRetries?: number
   http2?: boolean
+  /** Template name to boot per standard `sizeClass`; defaults to {@link GRAVIXLAYER_SIZE_TEMPLATES}. */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>
+}
+
+/**
+ * GravixLayer fixes CPU and memory when a template is built, so each standard
+ * size boots its own template. The platform ships these `base-*` templates
+ * with matching shapes; `scripts/provider-setup.mjs gravixlayer` builds them
+ * on deployments where they are absent.
+ */
+export const GRAVIXLAYER_SIZE_TEMPLATES: Readonly<Partial<Record<InstanceSizeClass, string>>> = Object.freeze({
+  xs: 'base-xsmall',
+  sm: 'base-small',
+  md: 'base-medium',
+  lg: 'base-large',
+  xl: 'base-xlarge',
+  '2xl': 'base-2xlarge',
+})
+
+function sizeTemplateOf(config: GravixLayerConfig, sizeClass: InstanceSizeClass): string | undefined {
+  const name = config.sizeTemplates?.[sizeClass] ?? GRAVIXLAYER_SIZE_TEMPLATES[sizeClass]
+  return typeof name === 'string' && name.trim() ? name : undefined
+}
+
+/** A create that failed because a standard-size template was never built on this project. */
+function missingSizeTemplate(config: GravixLayerConfig, templateId: unknown, error: unknown): string | undefined {
+  if (typeof templateId !== 'string' || !isNotFound(error)) return undefined
+  const sizeClass = (Object.keys(GRAVIXLAYER_SIZE_TEMPLATES) as InstanceSizeClass[]).find(c => sizeTemplateOf(config, c) === templateId)
+  if (!sizeClass) return undefined
+  return `GravixLayer size template '${templateId}' (sizeClass ${sizeClass}) is not available on this project; build it with \`template.create\` or point \`sizeTemplates.${sizeClass}\` at an existing template`
 }
 
 /**
@@ -91,6 +123,7 @@ export interface GravixLayerCreateTemplateOptions extends CreateTemplateOptions 
 export interface GravixLayerProvider
   extends Provider<Runtime, GravixLayerTemplate, GravixLayerSnapshot> {
   template: ProviderTemplateManager<GravixLayerTemplate, GravixLayerCreateTemplateOptions>
+  readonly sizes: InstanceSizeManager
 }
 
 interface ResolvedClientOptions {
@@ -430,16 +463,28 @@ const createGravixLayerProvider = defineProvider<
   GravixLayerSnapshot
 >({
   name: 'gravixlayer',
+  sizes: (config, profile, options) => {
+    if (options?.templateId !== undefined || options?.snapshotId !== undefined || options?.sandboxId !== undefined || nonempty(options?.image)) {
+      return { status: 'unsupported', reason: 'A GravixLayer template or snapshot fixes CPU and memory; drop templateId/image/snapshotId to boot the standard size template.' }
+    }
+    const templateId = sizeTemplateOf(config, profile.sizeClass)
+    if (!templateId) {
+      return { status: 'unknown', reason: 'No GravixLayer size template is set up for this standard shape.' }
+    }
+    return { status: 'supported', nativeOptions: { templateId } }
+  },
   methods: {
     instances: {
       create: async (config: GravixLayerConfig, options: CreateInstanceOptions = {}) => {
-        if (nonempty(options.image)) {
-          throw new Error(
-            'GravixLayer runtimes start from a template, not an image. Pass `templateId`, or build a template from the image with `template.create({ name, fromImage })`.',
-          )
-        }
         const template = nonempty(options.templateId)
-        if (template && options.snapshotId) {
+        // `image` is a template name: the template built from that image.
+        // Same source as `templateId`, so a differing pair is a conflict.
+        const image = nonempty(options.image)
+        if (template && image && template !== image) {
+          throw new Error('`image` and `templateId` name two different templates; pass one')
+        }
+        const source = template ?? image
+        if (source && options.snapshotId) {
           throw new Error('A runtime starts from a template or a snapshot, not both')
         }
 
@@ -463,8 +508,8 @@ const createGravixLayerProvider = defineProvider<
 
         if (options.snapshotId) {
           body.snapshot = options.snapshotId
-        } else if (template) {
-          body.template = template
+        } else if (source) {
+          body.template = source
         }
 
         if (Object.keys(envVars).length > 0) body.envVars = envVars
@@ -496,7 +541,19 @@ const createGravixLayerProvider = defineProvider<
           body.requestTimeoutMs = CREATE_HTTP_TIMEOUT_MS
         }
 
-        const sandbox = await client.runtime.create(body)
+        let sandbox: Runtime
+        try {
+          sandbox = await client.runtime.create(body)
+        } catch (error) {
+          const notBuilt = missingSizeTemplate(config, options.templateId, error)
+          if (notBuilt) throw new Error(notBuilt)
+          if (image && !template && isNotFound(error)) {
+            throw new Error(
+              `GravixLayer template '${image}' is not available on this project; build it with \`template.create\` or pass an existing \`templateId\``,
+            )
+          }
+          throw error
+        }
         // Report the lease the runtime actually got: seconds, rounded up.
         rememberTimeout(
           sandbox,
