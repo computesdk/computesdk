@@ -5,7 +5,7 @@
  * through the official `@sailresearch/sdk` package.
  */
 
-import { defineProvider } from '@computesdk/provider';
+import { defineProvider, InstanceSizeError } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -14,6 +14,7 @@ import type {
   FileEntry,
   RunCommandOptions,
   InstanceInfo,
+  InstanceSizeClass,
 } from '@computesdk/provider';
 import {
   App,
@@ -39,6 +40,24 @@ export interface SailConfig {
 }
 
 const PROVIDER = 'sail';
+
+/**
+ * Per-create Sailbox limits for each standard size. Sail rounds `vcpuCount`
+ * (1-64) and the memory limit (16-256 GiB) up to powers of two and raises any
+ * memory limit below 16 GiB to 16 GiB, so every shape holds at least 16 GiB:
+ * the smallest, 1 vCPU / 16 GiB, is `sm`, and `xs` has no Sail shape.
+ */
+export const SAIL_SIZE_SHAPES: Readonly<Partial<Record<InstanceSizeClass, {
+  readonly vcpuCount: number;
+  readonly memoryGib: number;
+}>>> = Object.freeze({
+  sm: { vcpuCount: 1, memoryGib: 16 },
+  md: { vcpuCount: 2, memoryGib: 16 },
+  lg: { vcpuCount: 4, memoryGib: 16 },
+  xl: { vcpuCount: 8, memoryGib: 16 },
+  '2xl': { vcpuCount: 16, memoryGib: 32 },
+  '3xl': { vcpuCount: 32, memoryGib: 128 },
+});
 const DEFAULT_APP = 'computesdk';
 const GONE_STATUSES = new Set(['terminating', 'terminated']);
 const MAX_RESOLVED_CONFIGS = 32;
@@ -254,7 +273,8 @@ function lifetimeSeconds(timeout: number | undefined): number | undefined {
 /** Reject options that Sail cannot honor without changing their meaning. */
 function validateCreateOptions(options: CreateInstanceOptions | undefined): void {
   const supported = new Set([
-    'envs', 'image', 'memoryGib', 'name', 'provider', 'signal', 'size', 'snapshotId', 'timeout', 'volumes',
+    'envs', 'image', 'memoryGib', 'name', 'provider', 'signal', 'size', 'snapshotId', 'timeout', 'vcpuCount',
+    'volumes',
   ]);
   const unsupported = Object.keys(options ?? {}).filter(
     (key) => options?.[key] !== undefined && !supported.has(key),
@@ -266,10 +286,13 @@ function validateCreateOptions(options: CreateInstanceOptions | undefined): void
   if (options?.size !== undefined && !['s', 'm', 'l'].includes(options.size)) {
     throw new Error(`Sail does not support size ${options.size}; use s, m, or l.`);
   }
+  if (options?.size !== undefined && options.vcpuCount !== undefined) {
+    throw new Error('Sail takes vcpuCount or the deprecated size, not both.');
+  }
   if (options?.snapshotId !== undefined &&
       (options.image !== undefined || options.envs !== undefined || options.volumes !== undefined ||
-       options.size !== undefined || options.memoryGib !== undefined)) {
-    throw new Error('Sail restores the checkpoint environment and resources; image, envs, volumes, size, and memoryGib cannot be combined with snapshotId.');
+       options.size !== undefined || options.vcpuCount !== undefined || options.memoryGib !== undefined)) {
+    throw new Error('Sail restores the checkpoint environment and resources; image, envs, volumes, size, vcpuCount, and memoryGib cannot be combined with snapshotId.');
   }
   if (options?.volumes !== undefined) {
     if (!Array.isArray(options.volumes)) throw new Error('Sail volumes must be an array of volume mounts.');
@@ -407,6 +430,28 @@ function toExecOptions(options?: RunCommandOptions) {
 
 export const sail = defineProvider<Sailbox, SailConfig>({
   name: PROVIDER,
+  sizes: (_config, profile, options) => {
+    const field = ['vcpuCount', 'memoryGib', 'memoryLimitGib'].find((key) => options?.[key] !== undefined);
+    if (field) throw new InstanceSizeError('conflict', `cannot combine sizeClass with ${field}`);
+    if (options?.snapshotId !== undefined) {
+      return {
+        status: 'unsupported',
+        reason: 'A Sail checkpoint restore keeps the checkpoint\'s vCPU and memory limits; drop snapshotId to boot a standard size.',
+      };
+    }
+    const shape = SAIL_SIZE_SHAPES[profile.sizeClass];
+    if (!shape) {
+      return {
+        status: 'unsupported',
+        reason: `Sail raises every memory limit below 16 GiB to 16 GiB, so its smallest shape (1 vCPU / 16 GiB) is sm; it has no ${profile.sizeClass} shape.`,
+      };
+    }
+    return {
+      status: 'supported',
+      nativeOptions: { vcpuCount: shape.vcpuCount, memoryGib: shape.memoryGib },
+      resolved: { vcpus: shape.vcpuCount, memoryMiB: shape.memoryGib * 1024 },
+    };
+  },
   methods: {
     instances: {
       create: async (config, options?: CreateInstanceOptions) => {
@@ -439,6 +484,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
             ? Image.fromRegistry(options.image)
             : config.image ?? Image.devbox('arm64'),
           ...(options?.size === undefined ? {} : { size: options.size as SailboxSize }),
+          ...(options?.vcpuCount === undefined ? {} : { vcpuCount: options.vcpuCount }),
           ...(options?.memoryGib === undefined ? {} : { memoryLimitGib: options.memoryGib }),
           env: options?.envs,
           volumes,
