@@ -26,6 +26,16 @@ layout:
 
 Sprites provider for ComputeSDK - cloud sandboxes powered by Sprites
 
+## Standard sizes
+
+Sprites do not support `sizeClass`. Every Sprite runs on the same fixed shape: 8 vCPUs, memory the platform manages and autoscales per Sprite, and 100 GB of storage ([Lifecycle and Persistence](https://docs.fly.io/sprites/concepts/lifecycle.md)). `POST /v1/sprites` takes only `name` and `url_settings`, with no CPU, memory or disk fields ([Create a sprite](https://docs.fly.io/sprites/api/sprites/create-a-sprite.md)).
+
+| `sizeClass` | Status | Reason |
+| --- | --- | --- |
+| `xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `3xl` | `unsupported` | Fixed 8-vCPU shape; memory is not a listed, selectable figure. |
+
+`provider.sizes.resolve(...)` returns `unsupported` for every class, and `create({ sizeClass })` rejects with `InstanceSizeError` (`code: 'unsupported'`, `fallback: false`) before calling the API. Omit `sizeClass` to create a Sprite.
+
 ## Installation & Setup
 
 ```bash
