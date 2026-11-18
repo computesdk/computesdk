@@ -5,15 +5,7 @@
  * in remote sandboxes via configured providers.
  *
  *   import { compute } from 'computesdk';
- *   import { e2b } from '@computesdk/e2b';
- *   import { modal } from '@computesdk/modal';
- *
- *   compute.setConfig({
- *     providers: [
- *       e2b({ apiKey: process.env.E2B_API_KEY }),
- *       modal({ tokenId: process.env.MODAL_TOKEN_ID, tokenSecret: process.env.MODAL_TOKEN_SECRET }),
- *     ],
- *   });
+ *   const sandbox = await compute.instances.create();
  */
 
 // Universal Instance Interface & Types
@@ -98,3 +90,7 @@ export { compute } from './compute';
 export type { CallableCompute, ExplicitComputeConfig, ComputeCreateVolumeOptions } from './compute';
 
 export * from './sizes';
+
+// Shared provider framework and built-in ComputeSDK router.
+export * from './provider/index';
+export * from './router/index';

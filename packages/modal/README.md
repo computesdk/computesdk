@@ -43,6 +43,12 @@ await sandbox.destroy();
 
 ## Configuration
 
+### Sandbox Runtime
+
+ComputeSDK defaults to Modal's VM runtime. GPU sandboxes default to gVisor
+because Modal does not support GPUs in VMs. For a non-GPU sandbox that needs
+gVisor, pass `compute.instances.create({ runtime: 'gvisor' })`.
+
 ### Environment Variables
 
 ```bash

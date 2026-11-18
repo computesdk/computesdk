@@ -1,0 +1,61 @@
+/**
+ * Core Types - Types for provider framework
+ * 
+ * Re-exports universal types from computesdk and adds provider-specific types
+ */
+
+// Import and re-export universal types from computesdk (grandmother package)
+export type {
+  InstanceInterface,
+  CodeResult,
+  CommandResult,
+  InstanceInfo,
+  FileEntry,
+  RunCommandOptions,
+  StartProcessOptions,
+  ProcessStatus,
+  ProcessHandle,
+  ProcessTier,
+  InstanceFileSystem,
+  CreateInstanceOptions,
+  Volume,
+  VolumeMount,
+  CreateVolumeOptions,
+  ListVolumesOptions,
+  InstanceResourceOptions,
+  InstanceEgressOptions,
+  InstanceEgressInfo,
+  RunloopLaunchParameters,
+  VercelSandboxResources,
+  SnapshotCapabilities,
+  PauseCapabilities,
+  LifetimeCapabilities,
+} from '../../index';
+
+// Deprecated Sandbox* aliases for backwards compatibility
+export type {
+  SandboxInterface,
+  SandboxInfo,
+  SandboxFileSystem,
+  CreateSandboxOptions,
+  SandboxResourceOptions,
+  SandboxEgressOptions,
+  SandboxEgressInfo,
+} from '../../index';
+
+// Provider-specific types (defined in this package)
+// Includes: Provider, ProviderInstance, TypedProviderInstance, and all manager interfaces
+export * from './provider';
+
+// Re-export storage types explicitly for clarity
+export type {
+  StorageObject,
+  UploadOptions,
+  DownloadResult,
+  ListOptions,
+  ListResult,
+  StorageProvider,
+} from './provider';
+
+// Browser provider types
+export * from './browser';

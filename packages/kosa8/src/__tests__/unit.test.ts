@@ -404,3 +404,62 @@ describe('kosa8 filesystem over exec', () => {
     expect(await sandbox.filesystem.exists('/tmp/missing')).toBe(false);
   });
 });
+
+describe('kosa8 direct exec', () => {
+  const HOST = 'https://us1.kosa8.test/host/v1/sandboxes/sbx_123/exec';
+  const direct = (ms = 300_000) => ({ exec_url: HOST, token: 'tok_direct', expires_at: Date.now() + ms });
+
+  function directRoute(hostStatus: number, hostBody: unknown, d = direct()) {
+    return (call: Call) => {
+      if (call.method === 'POST' && call.url === `${API}/v1/sandboxes`) return { status: 201, body: { sandbox: sandboxRow, direct: d } };
+      if (call.url === HOST) return { status: hostStatus, body: hostBody };
+      if (call.url === `${API}/v1/sandboxes/sbx_123/exec`) return { status: 200, body: { exit: 0, stdout: 'via api\n', stderr: '' } };
+      if (call.url === `${API}/v1/sandboxes/sbx_123/direct`) return { status: 200, body: { direct: direct() } };
+      return { status: 500, body: { error: 'unexpected', message: `${call.method} ${call.url}` } };
+    };
+  }
+
+  it('sends commands to the host with the direct token, not the API key', async () => {
+    const calls = mockFetch(directRoute(200, { exit: 0, stdout: 'v22.11.0\n', stderr: '' }));
+    const sandbox = await provider().sandbox.create();
+    const r = await sandbox.runCommand('node -v');
+    expect(r.stdout).toBe('v22.11.0\n');
+    expect(r.exitCode).toBe(0);
+    const exec = calls.find((c) => c.url === HOST)!;
+    expect(exec.headers.Authorization).toBe('Bearer tok_direct');
+    expect(exec.body.cmd).toEqual(['sh', '-c', 'node -v']);
+    expect(calls.some((c) => c.url.endsWith('/exec') && c.url.startsWith(API))).toBe(false);
+  });
+
+  it.each([401, 404, 409, 501, 530])('falls back to the API when the host answers %i (the command did not run there)', async (status) => {
+    const calls = mockFetch(directRoute(status, { error: 'no', code: 'use_api' }));
+    const sandbox = await provider().sandbox.create();
+    expect((await sandbox.runCommand('echo hi')).stdout).toBe('via api\n');
+    // And stays on the API afterwards.
+    await sandbox.runCommand('echo again');
+    expect(calls.filter((c) => c.url === HOST)).toHaveLength(1);
+  });
+
+  it('reports a host failure that may have run the command, without running it again', async () => {
+    const calls = mockFetch(directRoute(502, { error: 'exec failed: boom' }));
+    const sandbox = await provider().sandbox.create();
+    await expect(sandbox.runCommand('rm -rf /tmp/x')).rejects.toThrow(/kosa8 host error \(502\).*boom/);
+    expect(calls.filter((c) => c.url.endsWith('/exec'))).toHaveLength(1);
+  });
+
+  it('does not use a token about to expire, and renews it in the background', async () => {
+    const calls = mockFetch(directRoute(200, { exit: 0, stdout: 'direct\n', stderr: '' }, direct(5_000)));
+    const sandbox = await provider().sandbox.create();
+    expect((await sandbox.runCommand('echo hi')).stdout).toBe('via api\n');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls.some((c) => c.url === `${API}/v1/sandboxes/sbx_123/direct`)).toBe(true);
+    expect((await sandbox.runCommand('echo hi')).stdout).toBe('direct\n');
+  });
+
+  it('ignores a malformed or non-https direct object', async () => {
+    const calls = mockFetch(directRoute(200, {}, { exec_url: 'http://plain.test/x', token: 't', expires_at: Date.now() + 300_000 }));
+    const sandbox = await provider().sandbox.create();
+    expect((await sandbox.runCommand('echo hi')).stdout).toBe('via api\n');
+    expect(calls.some((c) => c.url.startsWith('http://'))).toBe(false);
+  });
+});

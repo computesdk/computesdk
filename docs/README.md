@@ -1,195 +1,143 @@
 ---
-description: >-
-  ComputeSDK is a sandbox router and CI router: one API to create sandboxes on
-  any cloud provider, and a CI engine that runs your GitHub Actions workflows
-  on whichever providers you choose.
+description: One router for sandboxes and Actions. Run agent code and GitHub workflows; ComputeSDK handles the compute.
 ---
 
-# Introduction
+# ComputeSDK
 
-## ComputeSDK: one API for every sandbox provider
+One router for sandboxes and Actions. Run agent code and GitHub workflows across
+compute providers. Let ComputeSDK choose, pick a provider, or set a fallback
+order through the same integration.
 
-ComputeSDK routes compute across cloud providers. It does that in two ways:
+Start with managed compute; you do not need a vendor account or provider key.
+Bring your own keys whenever you want more control.
 
-* **Sandbox router.** Create, use, and destroy sandboxes through one API, and choose which provider each one lands on. Pick a provider per call, set a priority order with fallback, spread load round-robin, or let the hosted platform place sandboxes from your own provider keys or the compute market.
-* **CI router.** [Actions](platform/actions.md) runs your existing GitHub Actions workflows inside sandboxes on the providers your organization registers, instead of on fixed hosted runners. Jobs follow your provider order and report where each one ran.
+## Start with an interface
 
-Every provider returns the same sandbox interface, so your code stays the same when you switch providers or add new ones.
+Choose the interface that fits your workflow. All five use the same ComputeSDK
+routing, organization and billing.
 
-## How the sandbox API works
+{% tabs %}
+{% tab title="CLI" %}
 
-ComputeSDK is built around provider packages. Each provider ships as its own package under the `@computesdk/` scope. Install only the providers you need.
-
-**Sandboxes** — Isolated compute environments for running code safely\
-**Providers** — Cloud platforms that host those sandboxes
-
-When you install a package like `@computesdk/e2b`, you get a factory function for that provider. Every provider returns the same sandbox interface, so you can swap infrastructure without rewriting core logic.
-
-## Supported sandbox providers
-
-Providers are platforms that provide sandboxes. Each package under `@computesdk/{provider}` exposes the same sandbox interface, so you can swap infrastructure without rewriting application code.
-
-| Package                        | Provider     |
-| ------------------------------ | ------------ |
-| `@computesdk/archil`           | Archil       |
-| `@computesdk/aws/agentcore`    | AWS Bedrock AgentCore |
-| `@computesdk/beam`             | Beam         |
-| `@computesdk/blaxel`           | Blaxel       |
-| `@computesdk/buddy`            | Buddy        |
-| `@computesdk/gcp/cloud-run`    | Cloud Run    |
-| `@computesdk/cloudflare`       | Cloudflare   |
-| `@computesdk/codesandbox`      | CodeSandbox  |
-| `@computesdk/createos-sandbox` | CreateOS     |
-| `@computesdk/daytona`          | Daytona      |
-| `@computesdk/e2b`              | E2B          |
-| `@computesdk/hopx`             | HopX         |
-| `@computesdk/isorun`           | Isorun       |
-| `@computesdk/lightning`        | Lightning    |
-| `@computesdk/modal`            | Modal        |
-| `@computesdk/northflank`       | Northflank   |
-| `@computesdk/opencomputer`     | OpenComputer |
-| `@computesdk/runloop`          | Runloop      |
-| `@computesdk/sandbox0`         | Sandbox0     |
-| `@computesdk/superserve`       | Superserve   |
-| `@computesdk/tensorlake`       | Tensorlake   |
-| `@computesdk/upstash`          | Upstash      |
-| `@computesdk/vercel`           | Vercel       |
-
-## Why teams use ComputeSDK
-
-**One API, many providers.** Route sandboxes to E2B, Modal, Vercel, Daytona, and dozens more without rewriting code.\
-**Fallback and routing built in.** Priority order, round-robin, and fallback on error, configured once.\
-**CI on your own compute.** Run GitHub Actions workflows on the sandbox providers you already pay for.\
-**Secure code execution.** Run untrusted code in isolated sandboxes.\
-**Lean installs.** Add only the provider packages you need.\
-**TypeScript-native.** Strong typing and clear errors across every provider.
-
-### Common use cases
-
-* **AI agent infrastructure.** Let agents run code, commands, and file operations safely, on whichever provider fits the task.
-* **Provider failover.** Keep working when one sandbox provider is down or out of capacity.
-* **Cost and hardware routing.** Send GPU work to one provider and lightweight tasks to another.
-* **CI on sandbox providers.** Move GitHub Actions jobs off fixed runners and onto the providers you choose.
-* **Code execution platforms.** Execute user-submitted code in isolated sandboxes.
-* **Browser IDEs and education tools.** Provide interactive coding environments.
-
-## Core features
-
-**Multi-provider routing.** One SDK across 50+ sandbox providers, with per-call provider selection and configurable strategies.\
-**Hosted placement.** The [platform](platform/sandboxes.md) places sandboxes from your provider keys or the compute market, with price limits.\
-**Actions CI.** GitHub-compatible workflows that run on your registered providers ([Actions](platform/actions.md)).\
-**Sandbox lifecycle management.** Create, reconnect, list, and destroy sandboxes.\
-**Filesystem and shell.** Read and write files and run commands inside each sandbox.\
-**Type-safe APIs.** Full TypeScript support with clear errors.
-
-## Quick example
-
-Install a provider package:
+[Install the CLI](getting-started/installation.md#cli), then run:
 
 ```bash
-npm install @computesdk/e2b
+compute new
+compute exec echo hello
+compute destroy
 ```
 
-Set your provider credentials:
+The CLI guides setup and selects your sandbox. [CLI quickstart](getting-started/quick-start.md).
 
-```bash
-export E2B_API_KEY=your_e2b_api_key
-```
-
-Create a sandbox and run a command:
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-// Create a compute instance for E2B
-const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-
-// Create a sandbox
-const sandbox = await compute.instances.create();
-
-// Run a command
-const result = await sandbox.runCommand('echo "Hello World!"');
-console.log(result.stdout); // "Hello World!"
-
-// Clean up
-await sandbox.destroy();
-```
-
-This pattern gives you a secure code execution sandbox with a single provider package. The same API shape works across supported providers.
-
-### Use multiple providers
-
-You can use multiple providers in the same project. Install the packages you need and create separate compute instances:
-
-```bash
-npm install @computesdk/e2b @computesdk/modal
-```
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-import { modal } from '@computesdk/modal';
-
-// Create compute instances for each provider
-const e2bCompute = e2b({ apiKey: process.env.E2B_API_KEY });
-const modalCompute = modal({
-  tokenId: process.env.MODAL_TOKEN_ID,
-  tokenSecret: process.env.MODAL_TOKEN_SECRET,
-});
-
-// Use one provider for lightweight tasks
-const lightSandbox = await e2bCompute.sandbox.create();
-await lightSandbox.runCommand('echo "Quick task"');
-await lightSandbox.destroy();
-
-// Use another provider for GPU-intensive workloads
-const gpuSandbox = await modalCompute.sandbox.create();
-await gpuSandbox.runCommand('python -c "import torch; print(torch.cuda.is_available())"');
-await gpuSandbox.destroy();
-```
-
-The sandbox API stays consistent across providers. That makes it easier to route workloads by cost, region, latency, or hardware needs.
-
-### Configure multi-provider routing in one SDK
-
-If you'd rather configure several providers together — for resilience, routing, or load balancing — install the `computesdk` core package alongside the providers you want:
-
-```bash
-npm install computesdk @computesdk/e2b @computesdk/modal
-```
-
-Register multiple providers with `compute.setConfig` and choose a strategy:
+{% endtab %}
+{% tab title="TypeScript SDK" %}
 
 ```typescript
 import { compute } from 'computesdk';
-import { e2b } from '@computesdk/e2b';
-import { modal } from '@computesdk/modal';
 
-compute.setConfig({
-  providers: [
-    e2b({ apiKey: process.env.E2B_API_KEY }),
-    modal({
-      tokenId: process.env.MODAL_TOKEN_ID,
-      tokenSecret: process.env.MODAL_TOKEN_SECRET,
-    }),
-  ],
-  providerStrategy: 'priority', // 'priority' (default) or 'round-robin'
-  fallbackOnError: true,        // try the next provider if one fails
-});
-
-// Uses the configured strategy
 const sandbox = await compute.instances.create();
-
-// Override per call to target a specific provider by name
-const gpuSandbox = await compute.instances.create({ provider: 'modal' });
+try {
+  console.log((await sandbox.runCommand('echo hello')).stdout);
+} finally {
+  await sandbox.destroy();
+}
 ```
 
-**Strategies**
+Install `computesdk` and set `COMPUTE_API_KEY`.
+[TypeScript quickstart](getting-started/sdk-quick-start.md).
 
-* `priority` — always try providers in order; combine with `fallbackOnError: true` to cascade on failure
-* `round-robin` — distribute new sandboxes evenly across providers
+{% endtab %}
+{% tab title="Actions" %}
 
-Operations like `destroy` and snapshots automatically route to the provider that owns each sandbox, so you don't need to track affinity yourself.
+[Connect a repository](platform/actions.md#setup) and enable a workflow such as
+`.computesdk/workflows/hello.yml`:
 
-## Next steps
+```yaml
+name: Hello ComputeSDK
+on: workflow_dispatch
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+```
 
-Start with [Installation](getting-started/installation.md) to set up a provider, then follow [Quick Start](getting-started/quick-start.md) to launch your first sandbox. To route sandboxes or CI through the hosted platform, see the [Platform overview](platform/README.md).
+Run it from the dashboard, or dispatch it with the CLI:
+
+```bash
+compute actions dispatch myorg/myrepo --workflow .computesdk/workflows/hello.yml --ref main
+```
+
+Actions provisions compute for the job. Follow its steps, logs and result in
+the dashboard. [Actions guide](platform/actions.md).
+
+{% endtab %}
+{% tab title="MCP" %}
+
+[Connect Claude, ChatGPT or another MCP client](platform/mcp.md) to:
+
+```text
+https://platform.computesdk.com/mcp
+```
+
+Then ask your assistant:
+
+```text
+Create a ComputeSDK sandbox, run echo hello, show me the output,
+and destroy the sandbox when done.
+```
+
+[MCP setup and permissions](platform/mcp.md).
+
+{% endtab %}
+{% tab title="REST API" %}
+
+Set `COMPUTE_API_KEY` to your [organization API key](getting-started/authentication.md),
+then create a sandbox:
+
+```bash
+curl --fail-with-body https://platform.computesdk.com/api/v1/sandboxes \
+  -H "Authorization: Bearer $COMPUTE_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Copy `sandbox.id` from the response into `SANDBOX_ID`, then run a command and
+release the compute:
+
+```bash
+SANDBOX_ID="<sandbox.id from the response>"
+curl --fail-with-body "https://platform.computesdk.com/api/v1/sandboxes/$SANDBOX_ID/commands" \
+  -H "Authorization: Bearer $COMPUTE_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -d '{"command":"echo hello"}'
+curl --fail-with-body -X DELETE "https://platform.computesdk.com/api/v1/sandboxes/$SANDBOX_ID" \
+  -H "Authorization: Bearer $COMPUTE_API_KEY"
+```
+
+Destroy the sandbox even if your command fails. [REST API reference](platform/api-reference.md#sandboxes).
+
+{% endtab %}
+{% endtabs %}
+
+## Build with sandboxes
+
+A [sandbox](platform/sandboxes.md) is the environment where your code runs.
+
+| I want to… | Guide |
+| --- | --- |
+| Run code, tests or agent tools | [Run commands](guides/commands.md) |
+| Read, write, upload or download files | [Work with files](guides/files.md) |
+| Send a local project to a sandbox | [Project sync](cli/project-sync.md) |
+| Start a server and share a URL | [Preview an application](guides/previews.md) |
+| Reconnect, control lifetime or clean up | [Sandbox lifecycle](guides/lifecycle.md) |
+| Choose where compute runs | [Providers](providers/README.md) and [routing](guides/routing.md) |
+
+## Manage compute
+
+The [platform overview](platform/README.md) covers providers, routing and account
+management. [Open the dashboard](https://platform.computesdk.com) to manage resources and
+account settings. See [pricing and billing](guides/billing.md) for credits,
+compute rates and cleanup. A sandbox keeps running until destroyed or its
+lifetime expires.

@@ -210,6 +210,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           const sandboxOptions: SandboxCreateParams = {
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
+          sandboxOptions.runtime ??= sandboxOptions.gpu ? 'gvisor' : 'vm';
 
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) sandboxOptions.encryptedPorts = ports;

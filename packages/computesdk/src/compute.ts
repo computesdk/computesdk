@@ -1,8 +1,10 @@
 /**
- * Compute API - Direct Provider Implementation
+ * Compute API - Router Default and Explicit Providers
  *
- * `compute` delegates to one or more configured provider instances directly.
+ * `compute` uses the bundled router by default and honors explicit provider configuration.
  */
+
+import { platform } from './router/provider';
 
 import { assertInstanceSizeSupported, hasInstanceSizeRequest, validateInstanceSizeOptions } from './sizes';
 
@@ -197,13 +199,8 @@ class ComputeManager {
   private volumeProviders = new Map<string, DirectProvider>();
   private getProviders(): DirectProvider[] {
     if (this.providers.length === 0) {
-      throw new Error(
-        'No compute provider configured.\n\n' +
-        'Options:\n' +
-        '1. Configure providers: compute.setConfig({ providers: [e2b({...}), modal({...})] })\n' +
-        '2. Configure a single provider: compute.setConfig({ provider: e2b({...}) })\n' +
-        '3. Use provider directly: const sdk = e2b({...}); await sdk.instances.create()'
-      );
+      this.providers = [platform({})];
+      this.fallbackOnError = false;
     }
     return this.providers;
   }

@@ -46,7 +46,7 @@ Provide `apiKey` and `region` in config or through `ARCHIL_API_KEY` and
 ```typescript
 import { archil } from '@computesdk/archil';
 
-const provider = archil({});
+const provider = archil();
 const sandbox = await provider.instances.create({
   sizeClass: 'md',
   image: 'node:24-bookworm',

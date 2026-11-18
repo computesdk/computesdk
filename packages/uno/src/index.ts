@@ -19,7 +19,7 @@ import type {
   RunCommandOptions,
 } from '@computesdk/provider'
 
-import { UnoClient, isTransient, type UnoBox, type UnoClientOptions } from './client.js'
+import { MAX_WAIT_READY_S, UnoClient, isReadyOrThrow, isTransient, type UnoBox, type UnoClientOptions } from './client.js'
 
 export { UnoClient, UnoError, DEFAULT_BASE_URL } from './client.js'
 export type { UnoBox, UnoRun, UnoClientOptions, UnoCreateBoxRequest } from './client.js'
@@ -161,6 +161,7 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
         const name = safeName(options?.name) ?? `computesdk-${requestId.slice(0, 12)}`
         // created_at is server time: allow for clock skew when matching.
         const since = Date.now() - 60_000
+        const readyTimeoutMs = config.readyTimeoutMs ?? 120_000
         let box: UnoBox
         try {
           box = await client.createBox(
@@ -174,6 +175,9 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
               comment: marker,
             },
             options?.signal,
+            // The server holds create until the machine is ready, so a new
+            // sandbox usually takes this one request; polling is the fallback.
+            { waitReadyS: Math.min(MAX_WAIT_READY_S, Math.floor(readyTimeoutMs / 1000)) },
           )
         } catch (err) {
           // The API may have accepted the machine before the connection died
@@ -191,7 +195,9 @@ export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
           box = found
         }
         try {
-          const ready = await client.waitReady(box.id, config.readyTimeoutMs ?? 120_000, options?.signal)
+          const ready = isReadyOrThrow(box)
+            ? box
+            : await client.waitReady(box.id, readyTimeoutMs, options?.signal, box.wait?.waited_ms ?? 0)
           return { instance: toSandbox(client, ready, options?.envs), instanceId: String(ready.id) }
         } catch (err) {
           // Never leave a half-started machine behind on the caller's bill.

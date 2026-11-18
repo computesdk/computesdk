@@ -1,13 +1,16 @@
 ---
 description: >-
   Install and use the `compute` CLI (@computesdk/cli) to drive the ComputeSDK
-  Platform — Actions dispatch, run logs, artifacts, provider credentials,
-  secrets and variables, connected repos, sandboxes, and the bench toolchain.
+  router — run commands, work with files, sync projects, preview applications,
+  and run Actions workflows.
 ---
 
 # CLI reference
 
 ## Install
+
+Start with the [CLI quickstart](../getting-started/quick-start.md), [installation options](../getting-started/installation.md), [project sync guide](../cli/project-sync.md) or [automation guide](../cli/automation.md).
+
 
 ```bash
 pnpm dlx @computesdk/cli <cmd>   # zero-install, always latest
@@ -42,11 +45,15 @@ creates without changing the selection.
 
 ## Authentication
 
-Auth resolves in this order: `--api-key` flag → `COMPUTE_API_KEY` env var → `BENCHMARKS_PLATFORM_API_KEY` (legacy) → stored platform OAuth credentials (`~/.benchsdk/credentials.json`, written by `compute login` or `compute bench auth login`; an expired access token is refreshed silently). Actions commands never start the login flow themselves; with no key anywhere they fail with `no_credentials`.
+Authenticate with `compute login`, or set `COMPUTE_API_KEY` for scripts and CI.
+An explicit `--api-key` takes precedence over the environment key, which takes
+precedence over a saved login. Actions commands require an existing login or
+API key; without either, they fail with `no_credentials`.
 
-`compute login` runs the platform's OAuth device flow (the same one `bench auth login` uses) and writes to `~/.benchsdk/credentials.json`; `compute logout` clears it. `compute --login` / `compute --logout` are shortcuts for the same thing. It opens the verification URL in your browser and prints a URL and code as a
-fallback. Use `compute login --no-browser` for manual sign-in. Press Ctrl-C to
-cancel; expiry or denial explains how to retry.
+`compute login` opens your browser and prints a URL and code as a fallback.
+Use `compute login --no-browser` for manual sign-in. Saved sessions refresh
+automatically. `compute logout` clears the local session; `compute --login`
+and `compute --logout` are shortcuts. Press Ctrl-C to cancel.
 
 Interactive `compute new`, `compute instances create`, and `compute run` start
 this flow when the credential store is empty and no key was supplied, then
@@ -66,16 +73,16 @@ compute org use <slug>    # switch the stored login's active org
 compute org current       # current user + active org
 ```
 
-The active org is stored per user and client on the platform, so `compute org use` applies to every machine sharing the login. A one-off override is `--org <slug>` (root flag, or on any `sandboxes` / `actions` / `market` subcommand) or the `COMPUTE_ORG` env var — it sends `X-Org-Slug` on the request, which the platform accepts for CLI logins (membership is checked) and ignores for org API keys. Precedence: `--org` > `COMPUTE_ORG` > the stored login's org.
+The active org is stored per user and client on the platform, so `compute org use` applies to every machine sharing the login. A one-off override is `--org <slug>` (root flag, or on any `sandboxes` / `actions` subcommand) or the `COMPUTE_ORG` env var — it sends `X-Org-Slug` on the request, which the platform accepts for CLI logins (membership is checked) and ignores for org API keys. Precedence: `--org` > `COMPUTE_ORG` > the stored login's org.
 
-The bearer key is only sent to `computesdk.com` and loopback hosts unless you pass `--allow-untrusted-host`, and only over HTTPS — plain `http://` is accepted for `localhost`/`127.0.0.1`/`::1` only. `--allow-untrusted-host` does not relax the HTTPS requirement, and it only applies to an explicit `--api-key` / `COMPUTE_API_KEY` / `BENCHMARKS_PLATFORM_API_KEY` credential: stored `compute bench auth login` credentials are never resolved or refreshed for a non-`computesdk.com`, non-loopback host (`untrusted_host_stored_auth`).
+The bearer key is only sent to `computesdk.com` and loopback hosts unless you pass `--allow-untrusted-host`, and only over HTTPS — plain `http://` is accepted for `localhost`/`127.0.0.1`/`::1` only. `--allow-untrusted-host` does not relax the HTTPS requirement, and it only applies to an explicit `--api-key` / `COMPUTE_API_KEY` credential: saved login credentials are never resolved or refreshed for a non-`computesdk.com`, non-loopback host (`untrusted_host_stored_auth`).
 
 ```bash
 export COMPUTE_API_KEY="csdk_..."
 compute actions runs myorg/myrepo
 ```
 
-`--base-url` (or `COMPUTE_PLATFORM_URL` / `BENCHMARKS_PLATFORM_URL`) selects a different platform deployment. Default: `https://platform.computesdk.com`.
+`--base-url` (or `COMPUTE_PLATFORM_URL`) sets the ComputeSDK API URL. Default: `https://platform.computesdk.com`.
 
 ## `compute actions` — drive CI on the platform
 
@@ -86,7 +93,7 @@ compute actions repos connect <clone-url>      # connect a generic git remote
 compute actions repos enable <owner>/<repo>    # enable / disable scheduling
 compute actions repos disable <owner>/<repo>
 
-# Where Actions can place (order, act capability, key status)
+# Where Actions can place (order, workflow readiness, key status)
 compute actions providers                      # provider keys themselves: `compute byok` below
 
 # Secrets and variables (owner/admin key required)
@@ -119,44 +126,6 @@ Notes:
 * `vault set` and `vault get` only talk to `computesdk.com` and loopback hosts, even with `--allow-untrusted-host`.
 * Run dashboard URLs look like `https://platform.computesdk.com/<org>/actions/runs/<runId>`.
 
-## `compute bench` — the benchmarks toolchain
-
-`compute bench` folds the full `@benchsdk/runner` bench binary under `compute`:
-
-```bash
-compute bench auth          # browser login / credential management
-compute bench org           # organization info
-compute bench benchmarks    # list benchmarks
-compute bench runs          # list runs
-compute bench runs run-again <benchmark-slug> <runId> [--wait] [--timeout <seconds>]
-compute bench runs run-again-status <benchmark-slug> <runAgainId>
-compute bench results       # query results
-compute bench iterations    # per-iteration data
-compute bench artifacts     # download run artifacts
-compute bench logs          # run logs
-compute bench export        # export results
-compute bench run           # execute a benchmark run
-compute bench check         # validate a benchmark definition
-compute bench fork          # private tracked fork of a catalog benchmark
-```
-
-`compute bench runs list` and `compute bench results` narrow results with the same filters the REST routes accept:
-
-* `--participant <slug[,slug]>` — only runs those participants were in, and only their rows
-* `--steps <name[,name]|all>` — per-step overviews (`results` only)
-* `--since` / `--until <YYYY-MM-DD | ISO | 24h | 7d | 2w>` — bounds on run creation time
-* `--day <YYYY-MM-DD>` — one calendar day (sugar for `--since`/`--until`; can't be combined with them)
-* `--tz <IANA>` — timezone for date-only bounds, defaults to the machine's zone
-* `--source-org <slug>` — read another org's benchmark you can see (`~/` paths) when a bare slug is ambiguous
-
-```bash
-compute bench results dax --participant e2b --steps all --since 7d
-compute bench runs list dax --participant e2b --day 2026-10-22
-compute bench logs dax <runId> --participant e2b --max-lines 500
-```
-
-`--json` prints the raw API response, including the `filter` echo showing what the server applied.
-
 ## Sandboxes
 
 Everyday commands live directly under `compute`: `list`, `get`, `use`, `exec`,
@@ -181,90 +150,11 @@ supported.
 
 ### Executing commands
 
-```bash
-compute exec "npm test"                            # one argument: shell command
-compute exec node -v                               # multiple arguments: preserve argv
-compute exec "echo hello && echo world"            # shell operators run remotely
-compute exec --cwd /app --timeout 120 npm test
-compute exec --stream "npm run build"              # follow output while it runs
-compute exec --timeout 0 "long-running-command"    # no command time limit
-compute exec --detach "npm run dev"                # return a background job ID
-compute logs <sandbox-id> <job-id> --follow          # follow a detached job
-```
-
-Omit the sandbox ID to use the current selection, or place an explicit ID after
-`exec`. A single command argument is interpreted by the remote shell; two or
-more arguments are individually quoted, preserving spaces, quotes and shell
-metacharacters literally. Use `bash -lc '...'` when you want an explicit shell.
-The same command interpretation applies to `spawn`, which remains available.
-
-`--timeout` accepts seconds; `--timeout-ms` remains compatible. Use one spelling
-per invocation. Without either flag, the existing platform command timeout
-applies. A zero timeout removes the command time limit; the sandbox's own
-lifetime still applies. Limits longer than the buffered endpoint's 290-second
-maximum automatically use the process path and follow output, as does zero.
-
-`--stream` follows a tracked process and prints new stdout/stderr incrementally.
-The remote exit code becomes the CLI exit code. A streamed command that exceeds
-its time limit is killed and exits 124; Ctrl-C signals the process and exits 130.
-With `--json`, streamed output is JSON Lines with `stdout`, `stderr` and `exit`
-events. Buffered execution keeps its existing single JSON result.
-
-`--detach` returns immediately with a job ID (or process metadata with `--json`).
-It cannot be combined with `--stream` or a command timeout: the CLI must remain
-connected to enforce those limits. Existing `logs`, `ps`, and
-`compute kill <sandbox-id> <job-id>` and `compute wait <sandbox-id> <job-id>` manage the background job. If
-following output fails, the CLI reports the job ID for recovery without
-starting the command again.
+See [command execution](../cli/execution.md) for argv handling, timeouts, streaming and detached jobs.
 
 ## Project creation and sync
 
-```bash
-compute new e2b .                         # provider first, local project last
-compute new daytona ./my-app
-compute new .                             # use your router
-compute exec --cwd /app npm test
-compute sync . :/app                      # update the selected sandbox
-compute sync :/app ./results              # download directory contents
-compute sync <sandbox-a>:/app <sandbox-b>:/app
-compute sync . :/app --dry-run
-compute sync . :/app --delete
-compute sync . :/app --watch
-```
-
-`new` accepts an optional final local directory using explicit path syntax
-(`.`, `./project`, `../project`, or an absolute path); bare operands remain
-provider names. It validates the source before provisioning, syncs contents to
-`/app`, then selects the sandbox. `--no-use` preserves the existing selection.
-If initial sync fails, teardown is attempted and the old selection is retained;
-a cleanup failure includes the sandbox ID for manual teardown.
-
-`sync <source> <destination>` operates on directory contents, in one direction.
-An endpoint is local, `<sandbox-uuid>:/absolute/path`, or `:/absolute/path` for
-the selected sandbox. At least one endpoint must be remote. Both sandboxes
-use the invocation's credentials, organization, and platform URL.
-
-Content hashes and permissions identify changed files. Local uploads honor
-nested `.gitignore` files and repository ancestor rules. `.git` is excluded;
-`--delete` removes destination-only entries while preserving ignored paths.
-Binary files, executable permissions, and project-contained relative symlinks
-are preserved. Filesystem roots, overlapping endpoints on the same sandbox,
-symlink traversal, and file/directory type conflicts are refused. Source hardlinks are copied as separate files; overwriting hard-linked destination files is refused.
-
-`--dry-run` returns a plan without changing destination files. `--watch` polls
-every two seconds, serializes passes, and finishes the active pass before
-stopping on Ctrl-C; `--dry-run --watch` is invalid. `--json` returns `dryRun`,
-`copied`, and `deleted` (relative path arrays); watch mode emits JSON Lines for
-passes with changes. Errors use the standard stderr JSON envelope.
-
-Sync uses the platform OCI checkpoint engine for scan, diff, capture, and
-integrity-checked restore. Node.js is required in each sandbox. The existing
-transfer API carries only selected OCI layers through the CLI, including sandbox
-relays; a changed file can require its whole top-level directory layer. Only
-planned entries are restored. Deletions occur after a successful restore. Transfers
-are not atomic across the entire directory; avoid concurrent destination edits.
-The sandbox working directory is unchanged: use `exec --cwd /app` for the synced
-project. Watch mode is one-way; it does not merge conflicting edits.
+See [project sync](../cli/project-sync.md) for provider-first project creation, endpoint syntax, ignore rules, watch mode and retained captures.
 
 ## Status, resumable login, and run summaries
 
@@ -320,27 +210,3 @@ deprecated in favour of these.
 ```bash
 compute providers    # SDK provider credentials in this environment (local env vars)
 ```
-
-### Maintaining the sync checkpoint engine
-
-The CLI bundles an exact copy of the platform checkpoint module;
-`checkpoint-provenance.json` records its upstream commit and SHA-256 digest.
-Refresh it with `node scripts/sync-checkpoint-engine.mjs /path/to/benchmarks-platform [revision]`
-from the repository root, then run the CLI tests. Do not edit the bundled engine
-directly. Every invocation uses a private temporary directory and restrictive
-file permissions for upstream scratch archives. Sync-specific filtering and destination guards live in the adapter.
-Literal `*` and `?` characters in addressed paths are unsupported because checkpoint
-selectors use glob syntax. Watch passes skip capture when nothing changed. Each pass that copies entries
-retains its full filtered source capture in platform-owned Tigris storage for
-30 days. Snapshot namespaces are isolated, so expiring a sync capture cannot
-delete permanent snapshot layers. Cross-snapshot layer deduplication is not yet
-implemented. Only local and sandbox scratch files are removed after the pass.
-
-Retained sync snapshots must finish uploading and pass platform integrity checks
-before destination changes begin. `sync --json` includes `snapshot: {id, expiresAt}`
-when a capture is created; project creation includes `syncSnapshot` in its JSON
-result. Human output shows the same ID and expiry. Dry runs, unchanged passes and
-delete-only passes do not create captures. A failed destination copy leaves the
-retained capture available until expiry. There is no new storage charge in this
-release. Deploy the managed sync snapshot API before releasing this CLI; failure
-to retain a capture stops sync rather than falling back to disposable snapshots.
