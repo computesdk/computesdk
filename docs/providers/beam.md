@@ -32,6 +32,17 @@ tags:
 
 Beam provider for ComputeSDK
 
+## Standard sizes
+
+`instances.create({ sizeClass })` maps every standard size to its exact profile through beam-js `cpu` (cores) and `memory` (MiB): `xs` 1/1024, `sm` 1/2048, `md` 2/4096, `lg` 4/8192, `xl` 8/16384, `2xl` 16/32768, `3xl` 32/131072. Beam's default Performance tier takes arbitrary CPU and memory (beam-js accepts 0.1–64 cores). No disk is set.
+
+- Native `cpu` or `memory` with `sizeClass` is a `conflict`.
+- `snapshotId` (checkpoint restore) and `sandboxId` are `unsupported`: the restore keeps the checkpoint's resources.
+- `cpuTier: 'shared'` caps at 8 vCPU / 16 GiB, so `2xl` and `3xl` are `unsupported` there.
+- `gpu`, `gpuCount` or `pool` placement is `unknown`: Beam lists no CPU/RAM limits for it.
+
+See [Sandbox sizes](../reference/sizes.md).
+
 ## Lifecycle
 
 Snapshots declare rootfs and memory preservation with the source kept; the declared path is `/root`. Restore with `snapshotId`; see [snapshot semantics and cleanup](../reference/compute.md#snapshot-capabilities).
