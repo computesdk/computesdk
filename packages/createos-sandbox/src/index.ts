@@ -41,10 +41,11 @@ import type {
   SandboxStatus,
   Shape,
 } from "@nodeops-createos/sandbox";
-import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from "@computesdk/provider";
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from "@computesdk/provider";
 import type {
   CommandResult,
   CreateInstanceOptions,
+  InstanceSizeClass,
   CreateSnapshotOptions,
   FileEntry,
   ListSnapshotsOptions,
@@ -420,8 +421,63 @@ export function parseLsOutput(stdout: string): FileEntry[] {
   return entries;
 }
 
+/** Overlay disk (MiB) every listed shape gets when `disk_mib` is omitted. */
+const SHAPE_DEFAULT_DISK_MIB = 10240;
+
+/**
+ * Standard size → the smallest listed CreateOS shape that meets the profile
+ * (createos.sh/docs/Sandbox/Limits). `diskMiB` is the overlay disk the
+ * benchmarks platform sizes each class with; undefined keeps the shape's
+ * 10 GiB default. No listed shape reaches 16 vCPU / 32 GiB, so 2xl/3xl are
+ * absent; the 25%/50%-quota shapes fall below xs's full vCPU.
+ */
+export const CREATEOS_SIZE_SHAPES: Readonly<Partial<Record<InstanceSizeClass, {
+  readonly id: string;
+  readonly vcpus: number;
+  readonly memoryMiB: number;
+  readonly diskMiB?: number;
+}>>> = Object.freeze({
+  xs: { id: "s-1vcpu-1gb", vcpus: 1, memoryMiB: 1024 },
+  sm: { id: "s-1vcpu-2gb", vcpus: 1, memoryMiB: 2048, diskMiB: 10240 },
+  md: { id: "s-2vcpu-4gb", vcpus: 2, memoryMiB: 4096, diskMiB: 20480 },
+  lg: { id: "s-4vcpu-8gb", vcpus: 4, memoryMiB: 8192, diskMiB: 40960 },
+  xl: { id: "s-8vcpu-16gb", vcpus: 8, memoryMiB: 16384, diskMiB: 81920 },
+});
+
 export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
   name: PROVIDER_NAME,
+  sizes: (_config, profile, options) => {
+    const opts = (options ?? {}) as CreateosCreateOptions;
+    if (opts.shape !== undefined) {
+      throw new InstanceSizeError("conflict", "cannot combine sizeClass with the CreateOS shape option");
+    }
+    if (opts.snapshotId !== undefined) {
+      return {
+        status: "unsupported",
+        reason: "A CreateOS snapshot restore forks the paused source, which keeps its own shape; drop snapshotId to boot a standard size.",
+      };
+    }
+    const shape = CREATEOS_SIZE_SHAPES[profile.sizeClass];
+    if (!shape) {
+      return {
+        status: "unsupported",
+        reason: `CreateOS lists no shape with ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB; its largest is s-8vcpu-16gb (8 vCPU / 16 GiB).`,
+      };
+    }
+    // An explicit caller disk wins; 0 or a non-positive value means the shape default.
+    const callerDisk = opts.ephemeralDiskMb;
+    const diskMiB = callerDisk !== undefined
+      ? (typeof callerDisk === "number" && callerDisk > 0 ? callerDisk : SHAPE_DEFAULT_DISK_MIB)
+      : shape.diskMiB ?? SHAPE_DEFAULT_DISK_MIB;
+    return {
+      status: "supported",
+      nativeOptions: {
+        shape: shape.id,
+        ...(callerDisk === undefined && shape.diskMiB !== undefined ? { ephemeralDiskMb: shape.diskMiB } : {}),
+      },
+      resolved: { vcpus: shape.vcpus, memoryMiB: shape.memoryMiB, diskMiB },
+    };
+  },
   methods: {
     instances: {
       create: async (config: CreateosConfig, options?: CreateInstanceOptions) => {
