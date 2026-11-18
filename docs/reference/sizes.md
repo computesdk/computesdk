@@ -14,7 +14,7 @@
 ```typescript
 import { namespace } from '@computesdk/namespace';
 
-const provider = namespace({});
+const provider = namespace({ token: process.env.NSC_TOKEN });
 console.log(provider.sizes.list());
 console.log(provider.sizes.resolve('md'));
 const sandbox = await provider.instances.create({ sizeClass: 'md' });

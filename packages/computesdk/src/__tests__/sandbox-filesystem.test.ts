@@ -352,12 +352,12 @@ const providerDefinitions: Record<string, ProviderDefinition> = {
   tenki: {
     config: () =>
       envConfig({
-        apiKey: firstEnv('TENKI_API_KEY', 'TENKI_AUTH_TOKEN'),
-        baseUrl: env('TENKI_API_URL'),
-        workspaceId: env('TENKI_WORKSPACE_ID'),
+        apiKey: firstEnv('LUXOR_API_KEY', 'LUXOR_AUTH_TOKEN', 'LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN', 'TENKI_API_KEY', 'TENKI_AUTH_TOKEN'),
+        baseUrl: firstEnv('LUXOR_API_ENDPOINT', 'LUXOR_API_URL', 'LUXORAI_API_ENDPOINT', 'LUXORAI_API_URL', 'TENKI_API_ENDPOINT', 'TENKI_API_URL'),
+        workspaceId: firstEnv('LUXOR_WORKSPACE_ID', 'LUXORAI_WORKSPACE_ID', 'TENKI_WORKSPACE_ID'),
       }),
     isConfigured: () =>
-      hasAnyEnv('TENKI_API_KEY', 'TENKI_AUTH_TOKEN'),
+      hasAnyEnv('LUXOR_API_KEY', 'LUXOR_AUTH_TOKEN', 'LUXORAI_API_KEY', 'LUXORAI_AUTH_TOKEN', 'TENKI_API_KEY', 'TENKI_AUTH_TOKEN'),
     filesystemBasePath: '/home/tenki/computesdk-fs-test',
   },
   tensorlake: {

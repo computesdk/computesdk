@@ -1,5 +1,14 @@
 # @computesdk/vercel
 
+## 1.7.57
+
+### Patch Changes
+
+- 0049109: Update `@vercel/sandbox` to v4 (#1114).
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
 ## 1.7.56
 
 ### Patch Changes

@@ -42,7 +42,7 @@ EC2_FIRECRAB_SSH_TARGET=ubuntu@<host-public-ip>
 EC2_FIRECRAB_SSH_KEY="-----BEGIN OPENSSH PRIVATE KEY-----..."
 # or: EC2_FIRECRAB_SSH_KEY_PATH=~/.ssh/firecrab.pem
 EC2_FIRECRAB_MICRO_NETWORK=lab          # network name (or use ..._NETWORK_ID for a UUID)
-EC2_FIRECRAB_TEMPLATE=catthehacker-ubuntu-act-latest
+EC2_FIRECRAB_TEMPLATE=your-template-id
 ```
 
 Running on the host itself? Skip the SSH vars and set
