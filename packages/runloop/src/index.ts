@@ -6,7 +6,7 @@
  */
 
 import { RunloopSDK, type Runloop } from "@runloop/api-client";
-import { defineProvider } from "@computesdk/provider";
+import { defineProvider, InstanceSizeError } from "@computesdk/provider";
 import { posix as posixPath } from "node:path";
 import type {
   CommandResult,
@@ -474,6 +474,16 @@ export interface CreateBlueprintTemplateOptions {
   keepAliveTimeSeconds?: number;
 }
 
+// Match the platform size presets and use Runloop's default custom disk for 2xl.
+const STANDARD_DISK_GIB = { sm: 4, md: 8, lg: 16, xl: 16, "2xl": 16 } as const;
+
+const NATIVE_SIZE_FIELDS = [
+  "resource_size_request",
+  "custom_cpu_cores",
+  "custom_gb_memory",
+  "custom_disk_size",
+] as const;
+
 /**
  * Create a Runloop provider instance using the factory pattern
  */
@@ -484,6 +494,39 @@ export const runloop = defineProvider<
   Snapshot
 >({
   name: "runloop",
+  sizes: (_config, { sizeClass, vcpus, memoryMiB }, options) => {
+    // Core rejects launch_parameters; the create path also forwards top-level options.
+    const conflict = NATIVE_SIZE_FIELDS.find((field) => options?.[field] !== undefined);
+    if (conflict) {
+      throw new InstanceSizeError("conflict", `cannot combine sizeClass with Runloop ${conflict}`);
+    }
+    if (sizeClass === "xs") {
+      return {
+        status: "unsupported",
+        reason: "Runloop requires at least 2 GiB per vCPU for custom sizes, and its X_SMALL preset has only 0.5 vCPU.",
+      };
+    }
+    if (sizeClass === "3xl") {
+      return {
+        status: "unsupported",
+        reason: "Runloop custom sizes are capped at 16 vCPUs and 64 GiB RAM.",
+      };
+    }
+
+    const diskGiB = STANDARD_DISK_GIB[sizeClass];
+    const launch_parameters = {
+      resource_size_request: "CUSTOM_SIZE",
+      custom_cpu_cores: vcpus,
+      custom_gb_memory: memoryMiB / 1024,
+      custom_disk_size: diskGiB,
+    } satisfies NonNullable<Runloop.DevboxCreateParams["launch_parameters"]>;
+
+    return {
+      status: "supported",
+      resolved: { vcpus, memoryMiB, diskMiB: diskGiB * 1024 },
+      nativeOptions: { launch_parameters },
+    };
+  },
   methods: {
     instances: {
       create: async (config: RunloopConfig, options?: CreateInstanceOptions) => {
