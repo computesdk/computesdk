@@ -1,5 +1,11 @@
 # @computesdk/s3
 
+## 1.2.27
+
+### Patch Changes
+
+- @computesdk/provider@2.1.26
+
 ## 1.2.26
 
 ### Patch Changes

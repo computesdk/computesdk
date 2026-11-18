@@ -1,5 +1,14 @@
 # @computesdk/briq
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+  - @computesdk/provider@2.1.26
+  - daemond@0.1.9
+
 ## 1.0.3
 
 ### Patch Changes

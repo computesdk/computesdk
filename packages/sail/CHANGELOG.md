@@ -1,5 +1,18 @@
 # @computesdk/sail
 
+## 1.0.25
+
+### Patch Changes
+
+- b185abb: Update the Sail SDK to 0.18.2 and expose OCI image creates, environment variables,
+  hard lifetimes, and persistent volume lifecycle/mounts. Stop forcing the legacy
+  small size: creates inherit image resource limits (8 vCPUs by default) unless
+  `size` or `memoryGib` is explicitly supplied. Existing explicit sizing remains
+  supported.
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+  - @computesdk/provider@2.1.26
+
 ## 1.0.24
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @computesdk/miosa
 
+## 1.2.11
+
+### Patch Changes
+
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+  - @computesdk/provider@2.1.26
+
 ## 1.2.10
 
 ### Patch Changes

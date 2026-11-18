@@ -1,5 +1,11 @@
 # @computesdk/tigris
 
+## 1.1.33
+
+### Patch Changes
+
+- @computesdk/provider@2.1.26
+
 ## 1.1.32
 
 ### Patch Changes

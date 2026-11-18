@@ -1,5 +1,18 @@
 # @computesdk/gravixlayer
 
+## 1.0.21
+
+### Patch Changes
+
+- afe5173: `readFile` now streams through the binary download endpoint, and `writeFile` above 1 MiB routes through the binary upload endpoint — writes and reads larger than the JSON body cap succeed instead of failing.
+- 6da0b5b: Add `sizeClass` support: all six tiers (`xs` through `2xl`) boot the per-size `base-*` templates (`base-xsmall` through `base-2xlarge`), `sizeTemplates` config overrides the tier names, and a missing mapped template fails with remediation guidance.
+
+  Accept `image` on create instead of throwing: it is a template name — `image: 'node:22'` boots the template named `node:22` — so a differing `templateId` is a conflict and a missing template fails with remediation guidance (`template.create` or `sizeTemplates`).
+
+- Updated dependencies [b979719]
+  - computesdk@4.1.20
+  - @computesdk/provider@2.1.26
+
 ## 1.0.20
 
 ### Patch Changes
