@@ -1,5 +1,95 @@
 # @computesdk/cli
 
+## 2.6.15
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/platform@0.2.7
+
+## 2.6.14
+
+### Patch Changes
+
+- 6b5e70b: Expose everyday sandbox commands directly under compute, guide users with shorter
+  first-workload examples, and open browser-assisted device login for interactive
+  creation with an empty credential store before continuing the requested command.
+  Keep existing command paths, version shorthand and noninteractive auth behavior.
+
+  Match the familiar exec command pattern: interpret a single argument as a remote
+  shell command, preserve multi-argument quoting, and support --detach, --stream,
+  and --timeout in seconds while keeping spawn and --timeout-ms compatible.
+
+  Add read-only status diagnostics, resumable device login with explicit JSON and
+  wait modes, root-level kill/wait, and run completion summaries with confirmed
+  cleanup and settled cost when available. Machine-readable runs emit JSON Lines.
+
+  Support provider-first project creation (`compute new e2b .`) and one-way sync
+  between local directories and sandboxes, including sandbox relays, gitignore
+  filtering, incremental copies, dry runs, explicit deletion, and polling watch mode.
+
+  Reuse the pinned platform OCI checkpoint engine for sync scanning, diffing,
+  capture and integrity-checked restore, with selected-layer transfers and guarded
+  destination updates instead of a separate snapshot implementation.
+
+  Retain full sync captures in platform-managed storage for 30 days before applying
+  destination changes, and report snapshot IDs and expiry while cleaning only
+  filesystem staging. Storage billing is unchanged.
+
+## 2.6.13
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/platform@0.2.6
+
+## 2.6.12
+
+### Patch Changes
+
+- Updated dependencies [a995462]
+  - @computesdk/platform@0.2.5
+
+## 2.6.11
+
+### Patch Changes
+
+- 83f77cb: `compute sandboxes|actions settings` shows the managed routing strategy (ComputeSDK recommended, Cheapest or Custom) and its order; `settings set --routing` takes `computesdk`, `cheapest` or a provider order. `compute sandboxes options` says how managed accounts are ordered.
+
+## 2.6.10
+
+### Patch Changes
+
+- 73d7ed4: `compute sandboxes create` / `compute new` now say how to use the sandbox next — exec a command, start a server, get its public URL, destroy it — and that it bills until it's destroyed (on stderr; skipped with `-q`/`--json`).
+- 0343caf: Support the platform 2xlarge (16 vCPU / 32 GiB) and 3xlarge (32 vCPU / 128 GiB) sizes in help and per-size price caps.
+
+## 2.6.9
+
+### Patch Changes
+
+- 42d7e47: Add `compute sandboxes options` (and `compute new --list`): everything you can create sandboxes on, in your Sandboxes router's order — each ComputeSDK managed account with its price per size (billed from credit) and each BYOK provider (billed by the provider) — plus where a plain `compute new` would land.
+
+## 2.6.8
+
+### Patch Changes
+
+- 52c6a6f: Fix flags given before a subcommand being silently dropped: `compute credits --org team-b topup 50` now tops up team-b instead of your active org. Applies to every command group that declares shared flags on the parent and its subcommands (`credits`, `byok`, `actions runs|workflows|providers|repos|installations|slack|settings`, `sandboxes settings`, `invitations`, `org invitations`). A flag given to the subcommand itself still wins.
+
+## 2.6.7
+
+### Patch Changes
+
+- 4c627af: Add `compute credits` — your prepaid credit, which managed accounts bill from: `compute credits` (balance and holds), `compute credits ledger`, and `compute credits topup <usd>` (prints the Stripe checkout link, and the credit you'll receive after the top-up fee when the platform reports it). These lived under the hidden `compute market`, where they still work.
+
+## 2.6.6
+
+### Patch Changes
+
+- da83167: Make the CLI router-first. `compute sandboxes settings` / `compute actions settings` show the router: managed routing (ComputeSDK default or your own managed order) and BYOK use, and `settings set` takes `--routing`, `--byok off|first|fallback|only` and `--byok-order` (`--order` stays as a hidden alias). New `compute sandboxes route` shows where a create would land, whether it's billed from ComputeSDK credit (managed) or by your provider (BYOK), the price and the router's walk; `quote` remains as a hidden alias. Sandbox output labels each placement managed or BYOK. Market commands and flags are hidden from help. `compute sandboxes create|route --provider daytona[,e2b]` narrows the router to those providers for one request, keeping its BYOK mode and order. Add `--byok` (only your own keys) or `--managed` (only ComputeSDK managed accounts) to override the router's BYOK mode for that request. `create --order` is hidden (still accepted). New `compute new` is short for `compute sandboxes create`; `compute new vercel` or `compute new --vercel` picks the provider (same as `--provider vercel`). `create` / `new` print where the router will place the sandbox (provider, managed or BYOK, size, who bills it) before waiting for it to boot.
+- Updated dependencies [da83167]
+  - @computesdk/platform@0.2.4
+
 ## 2.6.5
 
 ### Patch Changes

@@ -166,6 +166,12 @@ describe('create', () => {
     expect(calls[1].body?.resources).toEqual({ cpus: 2 });
   });
 
+  it.each(['2xlarge', '3xlarge'])('sends the %s size', async (size) => {
+    const { fetchImpl, calls } = mockFetch(() => json({ sandbox: detail() }, 201));
+    await platform(config(fetchImpl)).sandbox.create({ size } as never);
+    expect(calls[0].body?.size).toBe(size);
+  });
+
   it('rejects size+resources, unknown size, and unknown resource options', async () => {
     const { fetchImpl, calls } = mockFetch(() => json({ sandbox: detail() }, 201));
     const provider = platform(config(fetchImpl));

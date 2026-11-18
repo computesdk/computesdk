@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "bin": "compute",
   "package": "@computesdk/cli",
-  "version": "2.6.5",
+  "version": "2.6.15",
   "source": {
     "repo": "computesdk/computesdk",
     "released": false
@@ -34,6 +34,10 @@
       "args": [],
       "flags": [
         "--base-url",
+        "--no-browser",
+        "--json",
+        "--wait",
+        "--new",
         "--help"
       ],
       "summary": "Authenticate with ComputeSDK (OAuth device flow)"
@@ -381,8 +385,6 @@
         "--manual",
         "--provider",
         "--provider-region",
-        "--max-bid",
-        "--max-bid-per",
         "--with-changes",
         "--api-key",
         "--base-url",
@@ -1483,7 +1485,7 @@
         "--json",
         "--help"
       ],
-      "summary": "Show the org's actions routing policy (order, caps, sizes, pools)"
+      "summary": "Show the Actions router: managed routing, BYOK use, sizes and pools"
     },
     {
       "path": [
@@ -1500,10 +1502,9 @@
       ],
       "args": [],
       "flags": [
-        "--cap",
-        "--general-cap",
-        "--order-type",
-        "--order",
+        "--routing",
+        "--byok",
+        "--byok-order",
         "--api-key",
         "--base-url",
         "--org",
@@ -1514,7 +1515,7 @@
         "--snapshot-pool",
         "--help"
       ],
-      "summary": "Update the org's actions routing policy"
+      "summary": "Change the Actions router (owner/admin)"
     },
     {
       "path": [
@@ -1695,361 +1696,6 @@
     },
     {
       "path": [
-        "market"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--help"
-      ],
-      "summary": "Buy and sell compute capacity on the compute market"
-    },
-    {
-      "path": [
-        "market",
-        "listings"
-      ],
-      "aliases": [
-        [
-          "market",
-          "list"
-        ]
-      ],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Your listings — live, paused, expired, and withdrawn"
-    },
-    {
-      "path": [
-        "market",
-        "sell"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--price",
-        "--per",
-        "--size",
-        "--use-case",
-        "--region",
-        "--capacity",
-        "--expires-in",
-        "--renew",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Post a listing: sell capacity at a price"
-    },
-    {
-      "path": [
-        "market",
-        "price"
-      ],
-      "aliases": [],
-      "args": [
-        "<listing-id>"
-      ],
-      "flags": [
-        "--price",
-        "--per",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Reprice a listing"
-    },
-    {
-      "path": [
-        "market",
-        "pause"
-      ],
-      "aliases": [],
-      "args": [
-        "<listing-id>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Pause a listing — it stays posted but cannot fill"
-    },
-    {
-      "path": [
-        "market",
-        "resume"
-      ],
-      "aliases": [],
-      "args": [
-        "<listing-id>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Resume a paused listing"
-    },
-    {
-      "path": [
-        "market",
-        "withdraw"
-      ],
-      "aliases": [],
-      "args": [
-        "<listing-id>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Withdraw a listing — it leaves the book for good"
-    },
-    {
-      "path": [
-        "market",
-        "replace"
-      ],
-      "aliases": [],
-      "args": [
-        "[listing-id]"
-      ],
-      "flags": [
-        "--fill",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Take capacity back: evict a sale, or pause a listing and evict every sale on it."
-    },
-    {
-      "path": [
-        "market",
-        "book"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--use-case",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Live prices: sellers' asking prices, buyer offers, recent sales"
-    },
-    {
-      "path": [
-        "market",
-        "settlements"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Your monthly payout reports"
-    },
-    {
-      "path": [
-        "market",
-        "status"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Who you are on the market: seller identity, credential, sizes, regions"
-    },
-    {
-      "path": [
-        "market",
-        "cap"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--help"
-      ],
-      "summary": "The org market cap: the most a market-placed job pays without its own bid"
-    },
-    {
-      "path": [
-        "market",
-        "cap",
-        "show"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Show the current cap"
-    },
-    {
-      "path": [
-        "market",
-        "cap",
-        "set"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--price",
-        "--per",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Set the cap"
-    },
-    {
-      "path": [
-        "market",
-        "cap",
-        "clear"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Remove the cap (refused while your placement order still names market)"
-    },
-    {
-      "path": [
-        "market",
-        "bids"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Your org's standing bids — open, filled, and cancelled"
-    },
-    {
-      "path": [
-        "market",
-        "bid"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--size",
-        "--price",
-        "--per",
-        "--region",
-        "--use-case",
-        "--expires-in",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Post a standing bid: the most you will pay for a size tier"
-    },
-    {
-      "path": [
-        "market",
-        "cancel-bid"
-      ],
-      "aliases": [],
-      "args": [
-        "<bid-id>"
-      ],
-      "flags": [
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Cancel an open standing bid"
-    },
-    {
-      "path": [
-        "market",
-        "purchases"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--limit",
-        "--cursor",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "What the market ran for you: seller, price, duration, and cost, newest first"
-    },
-    {
-      "path": [
-        "market",
         "credits"
       ],
       "aliases": [],
@@ -2062,11 +1708,11 @@
         "--json",
         "--help"
       ],
-      "summary": "Prepaid market credits: available balance and reserved holds"
+      "summary": "Your prepaid credit — managed accounts bill from it: balance, ledger, top-ups"
     },
     {
       "path": [
-        "market",
+        "credits",
         "ledger"
       ],
       "aliases": [],
@@ -2081,11 +1727,11 @@
         "--json",
         "--help"
       ],
-      "summary": "Credit history, newest first: top-ups, charges, holds, refunds"
+      "summary": "Credit history, newest first: top-ups, grants, holds, charges, refunds"
     },
     {
       "path": [
-        "market",
+        "credits",
         "topup"
       ],
       "aliases": [],
@@ -2100,44 +1746,11 @@
         "--json",
         "--help"
       ],
-      "summary": "Buy prepaid credits — prints a Stripe checkout link to pay in your browser"
+      "summary": "Add credit — prints a Stripe checkout link to pay in your browser (owner/admin)"
     },
     {
       "path": [
-        "market",
-        "credential"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--help"
-      ],
-      "summary": "Connect the credential your listings fill under"
-    },
-    {
-      "path": [
-        "market",
-        "credential",
-        "connect"
-      ],
-      "aliases": [],
-      "args": [],
-      "flags": [
-        "--field",
-        "--api-key",
-        "--base-url",
-        "--org",
-        "--allow-untrusted-host",
-        "--json",
-        "--help"
-      ],
-      "summary": "Save the executor credential your sold capacity runs under. Each field is read from"
-    },
-    {
-      "path": [
-        "market",
-        "credential",
-        "disconnect"
+        "status"
       ],
       "aliases": [],
       "args": [],
@@ -2147,9 +1760,10 @@
         "--org",
         "--allow-untrusted-host",
         "--json",
+        "--check",
         "--help"
       ],
-      "summary": "Remove the stored credential — listings stop filling until a new one connects"
+      "summary": "Show authentication, effective organization, credits, selected sandbox and routing readiness"
     },
     {
       "path": [
@@ -2186,7 +1800,9 @@
       ],
       "args": [],
       "flags": [
-        "--order",
+        "--provider",
+        "--byok",
+        "--managed",
         "--size",
         "--label",
         "--image",
@@ -2194,13 +1810,10 @@
         "--cpus",
         "--memory-mb",
         "--disk-mb",
-        "--max-price",
-        "--max-price-per",
-        "--market",
-        "--order-type",
         "--timeout-ms",
         "--secret",
         "--no-use",
+        "--no-browser",
         "--quiet",
         "--verbose",
         "--api-key",
@@ -2210,35 +1823,25 @@
         "--org",
         "--help"
       ],
-      "summary": "Place a sandbox (provider order walks 1,2,3; \"market\" bids first)"
+      "summary": "Create a sandbox through your Sandboxes router (`compute sandboxes route` shows where it lands)"
     },
     {
       "path": [
         "instances",
-        "quote"
+        "options"
       ],
       "aliases": [
         [
           "sandboxes",
-          "quote"
+          "options"
         ],
         [
           "sbx",
-          "quote"
+          "options"
         ]
       ],
       "args": [],
       "flags": [
-        "--size",
-        "--cpus",
-        "--memory-mb",
-        "--disk-mb",
-        "--region",
-        "--timeout-ms",
-        "--order-type",
-        "--market",
-        "--max-price",
-        "--max-price-per",
         "--api-key",
         "--base-url",
         "--allow-untrusted-host",
@@ -2246,7 +1849,42 @@
         "--org",
         "--help"
       ],
-      "summary": "Quote a sandbox create: placement, rate, caps and credits — creates nothing"
+      "summary": "List what you can create sandboxes on: managed accounts with prices per size, and your BYOK providers, in router order"
+    },
+    {
+      "path": [
+        "instances",
+        "route"
+      ],
+      "aliases": [
+        [
+          "sandboxes",
+          "route"
+        ],
+        [
+          "sbx",
+          "route"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--size",
+        "--provider",
+        "--byok",
+        "--managed",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--region",
+        "--timeout-ms",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show where a sandbox create would land, how it is billed, and the price — creates nothing"
     },
     {
       "path": [
@@ -2388,7 +2026,9 @@
         "[command...]"
       ],
       "flags": [
-        "--order",
+        "--provider",
+        "--byok",
+        "--managed",
         "--size",
         "--label",
         "--image",
@@ -2396,12 +2036,9 @@
         "--cpus",
         "--memory-mb",
         "--disk-mb",
-        "--max-price",
-        "--max-price-per",
-        "--market",
-        "--order-type",
         "--timeout-ms",
         "--secret",
+        "--no-browser",
         "--keep",
         "--detach",
         "--yes",
@@ -2413,7 +2050,7 @@
         "--org",
         "--help"
       ],
-      "summary": "Create an instance, run a command on it, and tear it down. `run -- <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately."
+      "summary": "Create an instance, run a command on it, and tear it down. `run <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately."
     },
     {
       "path": [
@@ -2471,7 +2108,10 @@
       "flags": [
         "--cwd",
         "--env",
+        "--timeout",
         "--timeout-ms",
+        "--stream",
+        "--detach",
         "--api-key",
         "--base-url",
         "--allow-untrusted-host",
@@ -2479,7 +2119,7 @@
         "--org",
         "--help"
       ],
-      "summary": "Run a one-shot command and print its result (options before the command; -- also works)"
+      "summary": "Run a shell command or argv in a sandbox; --stream follows output, --detach returns a job ID"
     },
     {
       "path": [
@@ -3011,7 +2651,7 @@
         "--json",
         "--help"
       ],
-      "summary": "Show the org's sandboxes routing policy (order, caps, sizes, pools)"
+      "summary": "Show the Sandboxes router: managed routing, BYOK use, sizes and pools"
     },
     {
       "path": [
@@ -3033,10 +2673,9 @@
       ],
       "args": [],
       "flags": [
-        "--cap",
-        "--general-cap",
-        "--order-type",
-        "--order",
+        "--routing",
+        "--byok",
+        "--byok-order",
         "--api-key",
         "--base-url",
         "--org",
@@ -3046,7 +2685,7 @@
         "--warm-pool",
         "--help"
       ],
-      "summary": "Update the org's sandboxes routing policy"
+      "summary": "Change the Sandboxes router (owner/admin)"
     },
     {
       "path": [
@@ -3074,6 +2713,370 @@
         "--help"
       ],
       "summary": "Show the org's sandbox spend: running, settled and per provider"
+    },
+    {
+      "path": [
+        "new"
+      ],
+      "aliases": [],
+      "args": [
+        "[providersAndPath...]"
+      ],
+      "flags": [
+        "--provider",
+        "--byok",
+        "--managed",
+        "--size",
+        "--label",
+        "--image",
+        "--snapshot-id",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--timeout-ms",
+        "--secret",
+        "--no-use",
+        "--no-browser",
+        "--quiet",
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--list",
+        "--help"
+      ],
+      "summary": "Create a sandbox; compute new e2b . creates on e2b and syncs a local project to /app"
+    },
+    {
+      "path": [
+        "list"
+      ],
+      "aliases": [],
+      "args": [],
+      "flags": [
+        "--status",
+        "--customer-only",
+        "--search",
+        "--sort",
+        "--direction",
+        "--limit",
+        "--cursor",
+        "--quiet",
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List sandboxes"
+    },
+    {
+      "path": [
+        "get"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--verbose",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show one sandbox (includes the BYOK attach descriptor)"
+    },
+    {
+      "path": [
+        "use"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--clear",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show or set this directory's current instance (COMPUTE_INSTANCE always wins)"
+    },
+    {
+      "path": [
+        "destroy"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Destroy a sandbox (verified teardown + cost settle)"
+    },
+    {
+      "path": [
+        "run"
+      ],
+      "aliases": [],
+      "args": [
+        "[command...]"
+      ],
+      "flags": [
+        "--provider",
+        "--byok",
+        "--managed",
+        "--size",
+        "--label",
+        "--image",
+        "--snapshot-id",
+        "--cpus",
+        "--memory-mb",
+        "--disk-mb",
+        "--timeout-ms",
+        "--secret",
+        "--no-browser",
+        "--keep",
+        "--detach",
+        "--yes",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Create an instance, run a command on it, and tear it down. `run <cmd>` waits and destroys; `--keep` waits and keeps; `-d` returns immediately."
+    },
+    {
+      "path": [
+        "serve"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--port",
+        "--cwd",
+        "--env",
+        "--timeout-ms",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Start a server, wait for its port to listen publicly, and print the URL"
+    },
+    {
+      "path": [
+        "exec"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--cwd",
+        "--env",
+        "--timeout",
+        "--timeout-ms",
+        "--stream",
+        "--detach",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Run a shell command or argv in a sandbox; --stream follows output, --detach returns a job ID"
+    },
+    {
+      "path": [
+        "spawn"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]",
+        "[command...]"
+      ],
+      "flags": [
+        "--cwd",
+        "--env",
+        "--stdin",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Start a detached process that outlives this request (options before the command; -- also works)"
+    },
+    {
+      "path": [
+        "ps"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "List the sandbox's tracked processes"
+    },
+    {
+      "path": [
+        "logs"
+      ],
+      "aliases": [],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--follow",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Show a process's buffered output (--follow streams until exit)"
+    },
+    {
+      "path": [
+        "wait"
+      ],
+      "aliases": [],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--timeout-ms",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Block until a process exits"
+    },
+    {
+      "path": [
+        "kill"
+      ],
+      "aliases": [],
+      "args": [
+        "[jobOrSandboxId]",
+        "[jobId]"
+      ],
+      "flags": [
+        "--signal",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Signal a process (default SIGTERM)"
+    },
+    {
+      "path": [
+        "cp"
+      ],
+      "aliases": [],
+      "args": [
+        "<src>",
+        "<dst>"
+      ],
+      "flags": [
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--org",
+        "--json",
+        "--help"
+      ],
+      "summary": "Copy files/dirs between here and an instance — remote side is [id:]/abs/path"
+    },
+    {
+      "path": [
+        "url"
+      ],
+      "aliases": [],
+      "args": [
+        "[sandboxId]"
+      ],
+      "flags": [
+        "--port",
+        "--protocol",
+        "--quiet",
+        "--api-key",
+        "--base-url",
+        "--allow-untrusted-host",
+        "--json",
+        "--org",
+        "--help"
+      ],
+      "summary": "Resolve the provider's public URL for a port"
+    },
+    {
+      "path": [
+        "sync"
+      ],
+      "aliases": [],
+      "args": [
+        "<source>",
+        "<destination>"
+      ],
+      "flags": [
+        "--delete",
+        "--dry-run",
+        "--watch",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "One-way directory sync: local paths or [sandbox-id]:/path (empty ID selects the current sandbox)"
     },
     {
       "path": [

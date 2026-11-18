@@ -156,10 +156,13 @@ interface ArchilCreateOptions extends CreateInstanceOptions {
   env?: Record<string, string>;
   /** persistent mode: lifetime budget per powered-on session, in seconds. */
   maxTtlSeconds?: number;
+  /** persistent mode: Archil SDK-native CPU and memory fields. */
+  vcpuCount?: number;
+  memSizeMiB?: number;
   /** persistent mode: extra Archil sandbox fields (network policy, etc.). */
   sandbox?: Omit<
     ArchilSandboxRequest,
-    'name' | 'vcpuCount' | 'memSizeMiB' | 'baseImage' | 'env' | 'maxTtlSeconds'
+    'name' | 'baseImage' | 'env' | 'maxTtlSeconds'
   >;
 }
 
@@ -421,8 +424,11 @@ function toSandboxRequest(options?: ArchilCreateOptions): ArchilSandboxRequest {
     name: options?.name,
     baseImage: options?.baseImage ?? options?.image ?? options?.templateId,
     env: options?.env ?? options?.envs,
-    vcpuCount: options?.vcpus ?? options?.cpu ?? options?.cpus,
-    memSizeMiB: options?.memoryMiB ?? options?.memory,
+    vcpuCount: options?.vcpuCount ?? options?.vcpu_count ??
+      options?.vcpus ?? options?.cpu ?? options?.cpus ?? options?.sandbox?.vcpuCount,
+    memSizeMiB: options?.memSizeMiB ?? options?.mem_size_mib ??
+      options?.memoryMiB ?? options?.memory ?? options?.memoryMb ?? options?.memMiB ??
+      options?.sandbox?.memSizeMiB,
   };
   if (options?.maxTtlSeconds !== undefined) {
     request.maxTtlSeconds = options.maxTtlSeconds;

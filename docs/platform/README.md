@@ -1,77 +1,49 @@
 ---
-description: >-
-  The ComputeSDK Platform is the hosted control plane for ComputeSDK: managed
-  Benchmarks, Actions CI on real compute providers, organizations, and a
-  REST API + CLI for driving all of it.
+description: Providers, routing, organizations and billing shared across every ComputeSDK interface.
 ---
 
-# ComputeSDK Platform
+# Platform overview
 
-## What the platform is
+ComputeSDK routes sandbox requests and supported GitHub Actions workflows
+across compute providers. Use one integration and one organization to manage
+resources, credentials and billing.
 
-The ComputeSDK Platform ([platform.computesdk.com](https://platform.computesdk.com)) is the hosted control plane behind ComputeSDK. Where the open-source SDK gives you a provider-agnostic sandbox API, the platform runs and tracks workloads for you:
+## Sandboxes and interfaces
 
-* **Benchmarks** — managed benchmark runs that measure sandbox, storage, browser, and AI gateway providers and publish reproducible results to your org's feed
-* **Actions** — a CI/workflow engine that executes GitHub-style workflows on real compute providers, not fixed runner VMs
+A [sandbox](sandboxes.md) is the environment where your code runs. Execute
+commands, work with files and preview applications through the interface that
+fits your workflow. The CLI, TypeScript SDK, Actions, MCP and REST API all use
+the same compute routing, organization and billing.
 
-Everything the platform does is available four ways:
+Managed compute is the starting path. ComputeSDK handles provider accounts and
+placement. Choose a provider or set preferences when you need more control;
+optionally connect your own provider keys. Placement happens when a sandbox is
+created. A running sandbox stays on its provider.
 
-* the web dashboard at `https://platform.computesdk.com/<org-slug>/...`
-* the `compute` CLI (`@computesdk/cli` on npm)
-* the REST API under `https://platform.computesdk.com/api/v1`
-* the MCP server at `https://platform.computesdk.com/mcp` — for AI assistants (ChatGPT, Claude, Codex). Connects over OAuth; read tools like `benchmarks_list`/`benchmarks_get_results`/`benchmarks_get_participant_logs` expose the same benchmarks data as the REST routes, alongside the Actions and sandbox tools.
+## Choose an interface
+
+| Interface | Use it for |
+| --- | --- |
+| [CLI](../getting-started/quick-start.md) | Terminal workflows, projects, scripts and automation |
+| [TypeScript SDK](../getting-started/sdk-quick-start.md) | Sandboxes in applications and agents with `compute.instances` |
+| [Actions](actions.md) | Running supported GitHub workflows and inspecting their results |
+| [REST API](api-reference.md) | HTTP integrations and organization resources |
+| [MCP](mcp.md) | Giving an assistant access to ComputeSDK |
+| [Dashboard](https://platform.computesdk.com) | Resources, routing, keys and billing |
 
 ## Organizations
 
-Work is organized into **organizations**. Signing up at the platform creates your personal org; every benchmark run, connected repo, provider credential, and API key belongs to an organization, and every API call resolves to exactly one org — resources in another org are indistinguishable from nonexistent ones (the API returns `404`).
+Sandboxes, workflows, API keys and provider credentials belong to an
+organization. Members collaborate through the dashboard; owners and admins
+manage keys, connected repositories and billing in **Settings**.
 
-Org members collaborate through the dashboard. Owners and admins manage API keys, provider credentials, and connected repositories under **Settings** (`/<org-slug>/settings`).
+The CLI guides interactive setup. Applications use an organization API key:
+see [authentication](../getting-started/authentication.md).
 
-## Authentication
+## Manage your compute
 
-The REST API and CLI authenticate with **organization API keys**:
-
-1. Open **Settings → API keys** (`/<org-slug>/settings/api-keys`) in the dashboard
-2. Create a key — the full value is shown once, store it somewhere safe
-3. Pass it as a bearer token
-
-```bash
-export COMPUTE_API_KEY="csdk_..."
-
-curl https://platform.computesdk.com/api/v1/me \
-  -H "Authorization: Bearer $COMPUTE_API_KEY"
-```
-
-The key implies the organization — no org id is needed on normal calls. `BENCHMARKS_PLATFORM_API_KEY` is accepted as a legacy fallback env var. Pointing at a different deployment (e.g. a preview) is done with `COMPUTE_PLATFORM_URL` / `BENCHMARKS_PLATFORM_URL` or the CLI's `--base-url`.
-
-`GET /api/v1/me` returns the authenticated user and their organizations.
-
-### CLI browser auth
-
-The `compute` CLI can also authenticate interactively — `compute login` (equivalently `compute bench auth login`, or `bench auth login` from `@benchsdk/runner`) runs the platform's OAuth device flow and stores tokens in `~/.benchsdk/credentials.json`, which `compute bench`, `compute actions`, `compute market`, and `compute sandboxes` then use (refreshing expired access tokens automatically). An env var key always wins over stored credentials.
-
-## Products and entitlements
-
-Platform features are gated by per-org **product entitlements**:
-
-* Benchmark categories (compute, storage, browser, AI gateway) unlock benchmark runs in that category
-* **Actions** is free for every org — connected repos, dispatch, and the `/api/v1/actions/*` API work out of the box.
-
-Billing is managed under **Settings → Billing** (`/<org-slug>/settings/billing`). Unentitled API calls return `403`.
-
-## Error model
-
-API errors use a single envelope:
-
-```json
-{ "error": "<message>" }
-```
-
-with status `400`, `401`, `403`, `404`, `410`, `429`, or `500`. Successful responses are wrapped as `{ "ok": true, ... }`-style JSON payloads.
-
-## Where next
-
-* [CLI reference](cli.md) — install and drive the `compute` CLI
-* [Actions](actions.md) — connect repos, register provider credentials, dispatch workflows, stream logs
-* [Benchmarks](benchmarks.md) — benchmarks, runs, and results over the API
-* [API reference](api-reference.md) — the full `/api/v1` endpoint surface
+- [Available providers](../providers/README.md)
+- [Routing and provider selection](../guides/routing.md)
+- [Pricing and billing](../guides/billing.md)
+- [Sandbox lifecycle](../guides/lifecycle.md)
+- [Run an Actions workflow](actions.md)

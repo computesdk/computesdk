@@ -171,6 +171,7 @@ export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
                 apiKey,
                 runtime,
                 timeout,
+                size: (options as any)?.size,
                 env: options?.envs,
               });
             }

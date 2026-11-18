@@ -57,7 +57,7 @@ export interface PromigenceConfig {
    * sets none. Default: your account's.
    */
   timeout?: number;
-  /** Size of a sandbox created from an `image`. A sandbox from a snapshot has that snapshot's size. */
+  /** Size of a sandbox created from an `image`. Rejected without an image: a snapshot keeps its size. */
   tier?: Tier;
   /** `'start'` (the default) or `'compute'` (long, memory-heavy jobs on the larger tiers). */
   optimizeFor?: OptimizeFor;
@@ -427,12 +427,14 @@ export const promigence = defineProvider<PromigenceInstance, PromigenceConfig>({
           ...(o.allowInternetAccess === undefined ? {} : { allowInternetAccess: o.allowInternetAccess }),
           ...(Array.isArray(o.allowHosts) && o.allowHosts.length > 0 ? { allowHosts: o.allowHosts } : {}),
           ...(optimizeFor === undefined ? {} : { optimizeFor }),
+          // Let the vendor SDK refuse a tier without an image. Discarding it
+          // would silently boot a snapshot at its original, possibly smaller size.
+          ...(tier === undefined ? {} : { tier }),
         };
         if (o.image !== undefined) {
           // Passing an image asks for its snapshot: built on first use, reused after.
           opts.image = o.image;
           opts.allowBuild = true;
-          if (tier !== undefined) opts.tier = tier;
           if (typeof o.registrySecret === 'string') opts.registrySecret = o.registrySecret;
         }
 

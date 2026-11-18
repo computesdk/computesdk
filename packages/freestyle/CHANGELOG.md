@@ -1,5 +1,26 @@
 # @computesdk/freestyle
 
+## 0.2.23
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
+## 0.2.22
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 0.2.21
+
+### Patch Changes
+
+- fc09449: Reject CPU or memory requests below the boot snapshot's resources instead of silently returning a larger VM, and honor environment-selected snapshots when checking standard size availability.
+
 ## 0.2.20
 
 ### Patch Changes

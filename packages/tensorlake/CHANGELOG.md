@@ -1,5 +1,20 @@
 # @computesdk/tensorlake
 
+## 0.1.37
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
+## 0.1.36
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 0.1.35
 
 ### Patch Changes

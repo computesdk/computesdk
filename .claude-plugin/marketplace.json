@@ -1,0 +1,17 @@
+{
+  "name": "computesdk",
+  "owner": {
+    "name": "ComputeSDK",
+    "url": "https://www.computesdk.com"
+  },
+  "plugins": [
+    {
+      "name": "computesdk-router",
+      "source": "./plugins/computesdk-router",
+      "description": "Run code in cloud sandboxes across providers, drive your Actions CI, manage provider keys and read benchmark results.",
+      "version": "0.2.0",
+      "category": "development"
+    }
+  ],
+  "description": "ComputeSDK plugins for Claude Code: cloud sandboxes, CI and benchmarks."
+}

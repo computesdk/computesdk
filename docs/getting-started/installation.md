@@ -1,136 +1,52 @@
 # Installation
 
-## Install a Provider Package
+Install the CLI for terminal workflows or the TypeScript SDK for Node.js applications.
 
-Install the provider package for the platform you want to use:
+## Provider starters
 
-```bash
-# Pick one (or more) providers
-npm install @computesdk/archil
-npm install @computesdk/blaxel
-npm install @computesdk/buddy
-npm install @computesdk/cloudflare
-npm install @computesdk/codesandbox
-npm install @computesdk/daytona
-npm install @computesdk/e2b
-npm install @computesdk/hopx
-npm install @computesdk/modal
-npm install @computesdk/namespace
-npm install @computesdk/runloop
-npm install @computesdk/tensorlake
-npm install @computesdk/upstash
-npm install @computesdk/vercel
-```
-
-You only need to install the providers your project uses.
-
-## Provider Credentials
-
-Each provider requires its own API credentials. Add them to a `.env` file in the root of your project or export them in your shell:
-
-### Archil
-```bash
-ARCHIL_API_KEY=your_archil_api_key
-ARCHIL_REGION=aws-us-east-1
-ARCHIL_DISK_ID=your_archil_disk_id
-```
-
-### Blaxel
-```bash
-BL_API_KEY=your_blaxel_api_key
-BL_WORKSPACE=your_blaxel_workspace
-```
-
-### Buddy
-```bash
-BUDDY_TOKEN=your_buddy_api_token
-BUDDY_WORKSPACE=your_buddy_workspace_domain
-BUDDY_PROJECT=your_buddy_project_name
-```
-
-### Cloudflare
+With Node.js 22 or later, start on a specific provider in one command:
 
 ```bash
-CLOUDFLARE_SANDBOX_URL=https://sandbox.<your-subdomain>.workers.dev
-CLOUDFLARE_SANDBOX_API_KEY=your_sandbox_api_key
+npm create modal
 ```
 
-### CodeSandbox
+The starter guides you through setup and creates a sandbox. See [Start on a provider](../providers/getting-started.md) for what it does and how to clean up.
+
+## CLI
+
+On macOS or Linux:
 
 ```bash
-CSB_API_KEY=your_codesandbox_api_key
+curl -fsSL https://computesdk.com/install | sh
 ```
 
-### Daytona
+On Windows, run in PowerShell:
+
+```powershell
+irm https://computesdk.com/install.ps1 | iex
+```
+
+Or install the npm package with Node.js and npm:
 
 ```bash
-DAYTONA_API_KEY=your_daytona_api_key
+npm install -g @computesdk/cli
 ```
 
-### E2B
+Open a new terminal if the installer updated your PATH, then verify:
 
 ```bash
-E2B_API_KEY=your_e2b_api_key
+compute --version
+compute --help
 ```
 
-### HopX
-```bash
-HOPX_API_KEY=your_hopx_api_key
-```
+The binary is `compute`. Continue with the [CLI quickstart](quick-start.md). To update, rerun your installer or, for an npm installation, run `npm install -g @computesdk/cli`. Avoid mixing installation methods if your shell finds an older binary first.
 
-### Modal
+## TypeScript SDK
 
-```bash
-MODAL_TOKEN_ID=your_modal_token_id
-MODAL_TOKEN_SECRET=your_modal_token_secret
-```
-
-### Namespace
-```bash
-NSC_TOKEN=your_namespace_nsc_token
-```
-
-### Runloop
+For Node.js applications:
 
 ```bash
-RUNLOOP_API_KEY=your_runloop_api_key
+npm install computesdk
 ```
 
-### Tensorlake
-
-```bash
-TENSORLAKE_API_KEY=your_tensorlake_api_key
-```
-
-### Upstash
-```bash
-UPSTASH_BOX_API_KEY=your_upstash_box_api_key
-```
-
-### Vercel
-
-```bash
-VERCEL_TOKEN=your_vercel_token
-VERCEL_TEAM_ID=your_team_id
-VERCEL_PROJECT_ID=your_project_id
-```
-
-Refer to each provider's documentation page for the full list of supported environment variables and configuration options.
-
-## Verify Your Setup
-
-After installing a provider and setting credentials, verify everything works:
-
-```typescript
-import { e2b } from '@computesdk/e2b';
-
-const compute = e2b({ apiKey: process.env.E2B_API_KEY });
-const sandbox = await compute.instances.create();
-
-const result = await sandbox.runCommand('echo "Hello from ComputeSDK!"');
-console.log(result.stdout); // "Hello from ComputeSDK!"
-
-await sandbox.destroy();
-```
-
-Replace the import and configuration with whichever provider you installed.
+The SDK includes the ComputeSDK router by default. You do not need to install individual provider adapters. Follow the [TypeScript SDK quickstart](sdk-quick-start.md) for a runnable example.

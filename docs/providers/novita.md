@@ -82,7 +82,7 @@ interface NovitaConfig {
 }
 ```
 
-`novita({})` reads the API key from the environment. Set
+The provider reads `NOVITA_API_KEY` when `apiKey` is omitted. Set
 `compute.instances.create({ timeout: 600_000 })` to override the default lifetime
 for a sandbox. A command's `runCommand(..., { timeout })` is a separate deadline.
 

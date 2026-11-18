@@ -73,6 +73,28 @@ railway({
 
 Per-command execution timeouts are supported via `runCommand`'s options (`{ timeout: ms }`), which maps to Railway's `timeoutSec`.
 
+## CPU and memory
+
+Pass Railway's native `resources` option when creating a sandbox:
+
+```typescript
+const sandbox = await sdk.instances.create({
+  resources: { cpu: 2, memoryGB: 4.294967296 }, // 2 vCPUs, 4096 MiB
+});
+```
+
+`cpu` accepts positive fractional vCPUs. `memoryGB` is **decimal GB**, so
+convert MiB with `memoryMiB * 1024 * 1024 / 1_000_000_000`. Omitted fields use
+the workspace default. Values above the workspace's plan maximum are rejected
+by Railway; this adapter never retries them at a smaller size. Resource
+overrides also apply to `create({ snapshotId, resources })`.
+
+The adapter uses Railway's public `sandboxCreate` API for these overrides
+because the bundled SDK version does not forward them. Both the token and
+environment ID are required. See [Railway sandbox size](https://docs.railway.com/sandboxes#sandbox-size)
+for current plan limits. API support is not a claim that any account or size
+has been live verified.
+
 ## Supported Features
 
 | Feature | Supported | Notes |

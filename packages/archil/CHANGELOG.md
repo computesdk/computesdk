@@ -1,5 +1,26 @@
 # @computesdk/archil
 
+## 0.4.33
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
+## 0.4.32
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 0.4.31
+
+### Patch Changes
+
+- 4e99a2e: Preserve Archil-native CPU and memory fields, nested sandbox shapes, and memory aliases when creating persistent VMs so an explicit resource request cannot silently fall back to the default shape.
+
 ## 0.4.30
 
 ### Patch Changes

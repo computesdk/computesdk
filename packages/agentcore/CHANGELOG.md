@@ -1,5 +1,17 @@
 # @computesdk/agentcore
 
+## 0.1.25
+
+### Patch Changes
+
+- @computesdk/aws@1.0.14
+
+## 0.1.24
+
+### Patch Changes
+
+- @computesdk/aws@1.0.13
+
 ## 0.1.23
 
 ### Patch Changes

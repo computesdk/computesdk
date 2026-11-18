@@ -1,5 +1,19 @@
 # @computesdk/tigris
 
+## 1.1.32
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - @computesdk/provider@2.1.25
+
+## 1.1.31
+
+### Patch Changes
+
+- 1fb3804: Raise the minimum supported Node.js version to 22 (root development floor 22.19.0); Node.js 18 and 20 are EOL.
+  - @computesdk/provider@2.1.24
+
 ## 1.1.30
 
 ### Patch Changes

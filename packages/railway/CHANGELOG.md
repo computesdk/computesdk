@@ -1,5 +1,26 @@
 # @computesdk/railway
 
+## 2.0.23
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
+## 2.0.22
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 2.0.21
+
+### Patch Changes
+
+- fbdf09f: Honor native Railway CPU and decimal-GB memory overrides for sandbox creates and checkpoint restores through the public API. Reject invalid resource values instead of silently using workspace defaults.
+
 ## 2.0.20
 
 ### Patch Changes

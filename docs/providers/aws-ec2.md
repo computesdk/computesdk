@@ -56,7 +56,7 @@ import { ec2, isEc2CapacityError } from '@computesdk/aws/ec2';
 
 const compute = ec2({
   region: 'us-east-2',
-  launchTemplate: 'computesdk-market-medium',
+  launchTemplate: 'computesdk-sandbox-medium',
   instanceType: [
     'c5d.large', 'm7a.large', 'c6in.large', 'r5a.large', 'm5a.large', 'r5ad.large', 'r5b.large',
     'r5n.large', 'c5a.large', 'r6a.large', 'm5ad.large', 'r6in.large', 'm6in.large',

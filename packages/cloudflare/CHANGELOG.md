@@ -1,5 +1,26 @@
 # @computesdk/cloudflare
 
+## 2.1.16
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
+## 2.1.15
+
+### Patch Changes
+
+- b4e7bb0: Restore Node.js in the bridge Worker's `default` container image (base `node:24-trixie-slim` instead of `debian:trixie-slim`) so sandboxes created without an explicit `image` get a Node runtime again.
+
+## 2.1.14
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
 ## 2.1.13
 
 ### Patch Changes

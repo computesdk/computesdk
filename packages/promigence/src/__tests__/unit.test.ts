@@ -272,6 +272,23 @@ describe('promigence provider (unit, fake client)', () => {
     expect(start).toMatchObject({ snapshot: 'other', timeoutMs: 1000, spendCap: 3 });
   });
 
+  // Failure case: discarding a requested tier on the snapshot path boots its
+  // original size, which can silently be smaller than the caller requested.
+  it.each([undefined, 'snap_abc'])('rejects a tier without an image instead of silently using snapshot %s size', async (snapshotId) => {
+    const { client, c } = setup();
+    await expect(c.instances.create({ tier: 'medium', ...(snapshotId ? { snapshotId } : {}) }))
+      .rejects.toMatchObject({ code: 'invalid_argument', message: expect.stringContaining('needs an image') });
+    expect(client.names()).not.toContain('runs.start');
+  });
+
+  it('rejects a configured image tier when creating from a snapshot', async () => {
+    const { client, c } = setup({}, { tier: 'medium' });
+    await expect(c.instances.create()).rejects.toMatchObject({
+      code: 'invalid_argument', message: expect.stringContaining('needs an image'),
+    });
+    expect(client.names()).not.toContain('runs.start');
+  });
+
   it('create options: optimizeFor reaches the start request, with the config as the default', async () => {
     const { client, c } = setup({}, { optimizeFor: 'compute' });
     await c.instances.create();

@@ -300,8 +300,8 @@ export function registerWorkflowsCommands(
       .description('Set a workflow\'s provider order and snapshot cap (owner/admin)')
       .argument('<repo>', 'repository in owner/repo format')
       .argument('<workflow>', 'workflow path, name, file name (ci.yml) or id')
-      .option('--order <providers>', 'provider order for this workflow, comma-separated (e.g. "market,blaxel,vercel")')
-      .option('--inherit-order', 'drop the workflow\'s order: it follows the org order')
+      .option('--order <providers>', 'this workflow walks exactly these BYOK providers instead of the Actions router (e.g. e2b,blaxel)')
+      .option('--inherit-order', 'drop the workflow\'s order: it follows the Actions router')
       .option('--snapshot-cap <n>', 'most snapshots this workflow keeps (0 turns them off)')
       .option('--dynamic-snapshots', 'drop the cap: the workflow uses the dynamic snapshot pool')
       .option('-y, --yes', 'skip the confirmation'),

@@ -40,7 +40,7 @@ No environment variables or credentials are required. just-bash runs entirely lo
 ```typescript
 import { justBash } from '@computesdk/just-bash';
 
-const compute = justBash({});
+const compute = justBash();
 
 // Create sandbox
 const sandbox = await compute.instances.create();

@@ -1,5 +1,22 @@
 # @computesdk/provider
 
+## 2.1.25
+
+### Patch Changes
+
+- 1fc7e73: Bundle the ComputeSDK router in computesdk and use it by default for the compute.instances singleton. Include saved CLI login resolution, retain explicit provider routing, and share the provider/runtime and platform exports with the compatibility packages.
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - daemond@0.1.9
+
+## 2.1.24
+
+### Patch Changes
+
+- Updated dependencies [1fb3804]
+  - daemond@0.1.9
+  - computesdk@4.1.18
+
 ## 2.1.23
 
 ### Patch Changes

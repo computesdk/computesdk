@@ -1,6 +1,6 @@
 {
   "name": "daemond",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Seed launcher script for idempotent local command daemons",
   "author": "ComputeSDK",
   "license": "MIT",
@@ -42,7 +42,7 @@
     "typescript": "^5.0.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "os": [
     "linux",

@@ -6,7 +6,7 @@ description: >-
 
 # API reference
 
-Base URL: `https://platform.computesdk.com/api/v1`. Authenticate every request with `Authorization: Bearer <org API key>` (see [Authentication](README.md#authentication)). Errors are `{ "error": "<message>" }` with a `400`/`401`/`403`/`404`/`410`/`429`/`500` status.
+Base URL: `https://platform.computesdk.com/api/v1`. Authenticate every request with `Authorization: Bearer <org API key>` (see [Authentication](../getting-started/authentication.md)). Errors are `{ "error": "<message>" }` with a `400`/`401`/`403`/`404`/`410`/`429`/`500` status.
 
 ## Identity and organizations
 
@@ -41,7 +41,8 @@ Actions is available to every organization — no product entitlement required. 
 | --- | --- | --- |
 | GET | `/actions/org` | The org's Actions context |
 | GET/POST/PATCH | `/actions/repos` | Connected repos — list, connect a git remote, enable/disable (GitHub App + generic remotes) |
-| GET | `/actions/providers` | Where Actions can place — regions, order, act/usable status, key status |
+| GET | `/actions/providers` | Where Actions can place — regions, order, workflow readiness, key status |
+| GET/PATCH | `/actions/routing` | Read / change the saved [managed and BYOK router](#routing) (owner/admin) |
 | PUT/DELETE | `/actions/providers/{provider}/key` | Deprecated alias of `/providers/{provider}/key` |
 | POST | `/actions/providers/{provider}/verify` | Deprecated alias of `/providers/{provider}/verify` |
 | GET | `/actions/workflows?repo=` | Workflows on enabled repos (`dispatchable: false` ones run via `manual: true`) |
@@ -61,6 +62,62 @@ Actions is available to every organization — no product entitlement required. 
 | GET | `/actions/jobs/{jobId}/logs/download` | Whole log as `text/plain` |
 | GET | `/actions/jobs/{jobId}/artifacts` | Job's artifacts |
 | GET | `/actions/jobs/{jobId}/artifacts/{artifactId}` | Redirect to signed download URL (`410` when expired) |
+
+## Sandboxes
+
+All paths below are relative to `/api/v1`. See [hosted sandboxes](sandboxes.md) and [SDK reference](../sdk/reference.md) for the normalized SDK interface.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET/POST | `/sandboxes` | List or create sandboxes |
+| GET/DELETE | `/sandboxes/{id}` | Inspect or destroy a sandbox |
+| GET | `/sandboxes/options` | Discover managed sizes/prices and BYOK readiness |
+| GET | `/sandboxes/quote` | Preview a create without provisioning |
+| GET/PATCH | `/sandboxes/routing` | Read or update the saved router |
+| GET/PATCH | `/sandboxes/settings` | Resource overrides and warm pools |
+| GET | `/sandboxes/costs` | Running and settled costs |
+| POST | `/sandboxes/{id}/commands` | Execute a command; optionally stream SSE |
+| GET/POST | `/sandboxes/{id}/processes` | List or start background processes |
+| GET/POST/DELETE | `/sandboxes/{id}/files` | Read, write, list or remove files |
+| GET | `/sandboxes/{id}/urls` | Get a port URL |
+
+A REST create may narrow the saved router with `only` (a nonempty array of provider names without regions) and override its account mode with `byok` (`off`, `first`, `fallback`, `only`). Neither may accompany `provider` or `providerOrder`. A quote accepts comma-separated `only` names and the same mode override. These REST fields are distinct from the typed SDK create options.
+
+## Routing
+
+Sandboxes and Actions have separate saved routers. `GET`/`PATCH /sandboxes/routing` and `GET`/`PATCH /actions/routing` use the same contract. Both methods accept an org API key or an owner/admin user credential; OAuth credentials also need the product's read scope for GET or write scope for PATCH, plus `org:admin`.
+
+GET and successful PATCH return:
+
+| Field | Meaning |
+| --- | --- |
+| `strategy` | `computesdk` (recommended order, the default), `cheapest` (price order for the size), or `custom` |
+| `routing` | Custom managed order, or `"default"` for either non-custom strategy; use `strategy` to distinguish them |
+| `managed` | Effective live managed accounts in order for `size` |
+| `size` | Preview size: `medium` for Sandboxes, `xlarge` for Actions |
+| `available` | Live managed accounts a custom order may name |
+| `byok.mode` | `off` (managed only), `first` (own keys first), `fallback` (own keys after managed), or `only` (own keys only) |
+| `byok.order` | Effective own-key order, as `provider[:region]` entries |
+| `byok.inherits` | Sandboxes only: whether its empty BYOK order inherits Actions' order |
+
+PATCH requires at least one of `routing`, `byok`, or `byokOrder`:
+
+| Field | Accepted values |
+| --- | --- |
+| `routing` | `"computesdk"` (`"default"` is an alias), `"cheapest"`, or an array of live managed account names selecting `custom` |
+| `byok` | `"off"`, `"first"`, `"fallback"`, or `"only"` |
+| `byokOrder` | Array of the org's own `provider[:region]` preferences, subject to the product's settings validation |
+
+```bash
+curl https://platform.computesdk.com/api/v1/sandboxes/routing \
+  -H "Authorization: Bearer $COMPUTE_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -X PATCH -d '{"routing":"cheapest","byok":"fallback"}'
+```
+
+Read `available` before saving a custom managed order. Unlisted accounts are excluded; `routing: []` selects an empty custom managed order. An account that is not live returns `400` with `Not a managed account: …`. Switching to `computesdk` or `cheapest` preserves the stored custom order. Sandboxes `byokOrder: []` resumes inheritance from Actions.
+
+The saved router applies to plain sandbox creates and Actions jobs using the org's order. Explicit provider orders and provider pins bypass it. Resource overrides and pool floors use the separate `/sandboxes/settings` and `/actions/settings` endpoints.
 
 ## Vault (secrets and variables)
 

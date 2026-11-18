@@ -221,12 +221,20 @@ function isLegacyGuestAgent(error: unknown): boolean {
 
 /**
  * Apply a requested vCPU count / memory (MiB) to a freshly booted VM. Freestyle
- * sizes come from the snapshot and `resize` is grow-only, so only axes above
- * what the VM booted with are sent; smaller requests keep the snapshot's size.
+ * sizes come from the snapshot and `resize` is grow-only. Refuse a smaller
+ * requested axis rather than silently returning a VM larger than requested.
  */
 async function growResources(vm: Vm, cpu?: number, memory?: number): Promise<void> {
   if (cpu === undefined && memory === undefined) return;
   const { resources } = await vm.data();
+  if (
+    (cpu !== undefined && cpu < resources.cpu) ||
+    (memory !== undefined && memory < resources.memory)
+  ) {
+    throw new Error(
+      `Freestyle resize is grow-only: requested ${cpu ?? resources.cpu} vCPU / ${memory ?? resources.memory} MiB is below the snapshot's ${resources.cpu} vCPU / ${resources.memory} MiB. Choose a smaller snapshot.`,
+    );
+  }
   const patch: { cpu?: number; memory?: number } = {};
   if (cpu !== undefined && cpu > resources.cpu) patch.cpu = cpu;
   if (memory !== undefined && memory > resources.memory) patch.memory = memory;
@@ -337,7 +345,8 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
     if (options?.cpu !== undefined || options?.memory !== undefined) {
       throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Freestyle cpu/memory fields');
     }
-    if (options?.sandboxId || options?.snapshotId || options?.templateId || config.snapshotId) {
+    if (options?.sandboxId || options?.snapshotId || options?.templateId || config.snapshotId ||
+      (typeof process !== 'undefined' && process.env?.FREESTYLE_SNAPSHOT_ID)) {
       return { status: 'unsupported', reason: 'The snapshot sets the base size of a Freestyle VM; standard sizes apply to the default runtime snapshot only.' };
     }
     if (profile.vcpus < RUNTIME_VCPUS || profile.memoryMiB < RUNTIME_MEMORY_MIB) {

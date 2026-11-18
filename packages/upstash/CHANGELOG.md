@@ -1,5 +1,26 @@
 # @computesdk/upstash
 
+## 0.3.32
+
+### Patch Changes
+
+- Updated dependencies [1fc7e73]
+  - computesdk@4.1.19
+  - @computesdk/provider@2.1.25
+
+## 0.3.31
+
+### Patch Changes
+
+- computesdk@4.1.18
+- @computesdk/provider@2.1.24
+
+## 0.3.30
+
+### Patch Changes
+
+- fc09449: Forward the native Box size when restoring full boxes from snapshots, matching fresh and ephemeral box creation.
+
 ## 0.3.29
 
 ### Patch Changes

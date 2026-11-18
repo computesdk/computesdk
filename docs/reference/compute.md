@@ -396,7 +396,10 @@ This direct-provider example uses Cloud Run's declared disk-only fork support
 ```typescript
 import { cloudRun } from '@computesdk/gcp/cloud-run';
 
-const provider = cloudRun({});
+const provider = cloudRun({
+  sandboxUrl: process.env.CLOUD_RUN_SANDBOX_URL,
+  sandboxSecret: process.env.CLOUD_RUN_SANDBOX_SECRET,
+});
 const snapshots = provider.snapshot!;
 const caps = snapshots.capabilities!;
 const source = await provider.instances.create({ ...caps.createOptions });
