@@ -99,7 +99,8 @@ describe('UnoClient', () => {
     ])
     const c = new UnoClient({ apiKey: 'k', baseUrl: 'https://api.test' })
     await expect(c.waitReady(42, 120_000)).resolves.toMatchObject({ status: 'running', provision_state: 'ready' })
-    expect(calls.map(x => `${x.method} ${x.url}`)).toEqual(Array(3).fill('GET https://api.test/api/v1/boxes/42'))
+    // Each poll asks the API to hold the answer until the box is ready.
+    expect(calls.map(x => `${x.method} ${x.url}`)).toEqual(Array(3).fill('GET https://api.test/api/v1/boxes/42?wait_ready_s=5'))
   })
 
   it('gives up on a read after four attempts and does not repeat a refused one', async () => {
@@ -459,6 +460,8 @@ function fsMachine(file: Buffer) {
   const written: Buffer[] = []
   const cmds: string[] = []
   const fn = vi.fn(async (url: string, init: RequestInit) => {
+    // A server without the native file endpoints: an unknown route.
+    if (url.includes('/files?')) return new Response('404 page not found\n', { status: 404 })
     if ((init.method ?? 'GET') !== 'POST' || !url.endsWith('/run')) {
       return new Response(JSON.stringify(box()), { status: url.endsWith('/boxes') ? 201 : 200 })
     }
@@ -468,7 +471,7 @@ function fsMachine(file: Buffer) {
     let m: RegExpMatchArray | null
     if (/stat -c %s/.test(cmd)) stdout = `${file.length}\n`
     else if ((m = cmd.match(/skip=(\d+) count=(\d+)/))) stdout = file.subarray(+m[1], +m[1] + +m[2]).toString('base64')
-    else if ((m = cmd.match(/printf %s '([^']*)' \| base64 -d >>/))) written.push(Buffer.from(m[1], 'base64'))
+    if ((m = cmd.match(/printf %s '([^']*)' \| base64 -d >>?/))) written.push(Buffer.from(m[1], 'base64'))
     return new Response(JSON.stringify({ status: 'finished', exit_code: 0, stdout, stderr: '' }), { status: 200 })
   })
   vi.stubGlobal('fetch', fn)
@@ -481,7 +484,7 @@ describe('filesystem with large files', () => {
     const m = fsMachine(file)
     const sandbox = await uno({ apiKey: 'k', baseUrl: 'https://api.test' }).sandbox.create()
     expect(await sandbox.filesystem.readFile('/data/big.txt')).toBe(file.toString('utf8'))
-    expect(m.cmds.filter(c => c.startsWith('dd ')).length).toBe(Math.ceil(file.length / (128 * 1024)))
+    expect(m.cmds.filter(c => c.startsWith('dd ')).length).toBe(Math.ceil(file.length / (190 * 1024)))
   })
 
   it('writes a file bigger than the 64 KiB command limit in chunks, then renames it into place', async () => {
@@ -491,6 +494,9 @@ describe('filesystem with large files', () => {
     await sandbox.filesystem.writeFile('/data/big.txt', content)
     expect(Buffer.concat(m.written).toString('utf8')).toBe(content)
     expect(m.cmds.every(c => Buffer.byteLength(c) < 64 * 1024)).toBe(true)
-    expect(m.cmds.at(-1)).toMatch(/^mv -f ".*\.tmp" "\/data\/big\.txt"$/)
+    // ~48 KiB of data per command, the last one also renames: no separate create or rename round trips.
+    expect(m.cmds.length).toBe(Math.ceil(Buffer.byteLength(content) / 48_648))
+    expect(m.cmds[0]).toMatch(/^mkdir -p .* base64 -d > ".*\.tmp"$/)
+    expect(m.cmds.at(-1)).toMatch(/base64 -d >> ".*\.tmp" && mv -f ".*\.tmp" "\/data\/big\.txt"$/)
   })
 })

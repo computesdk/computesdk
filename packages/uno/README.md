@@ -67,8 +67,8 @@ interface UnoConfig {
 - Commands run as user `uno` in a login `bash` shell, in the home directory. Use `sudo` for root.
 - A command can run for up to 1 hour (`timeout`, default 5 minutes). Long commands are long-polled, so no single HTTP response hangs on proxy time limits. Retries use an idempotency key, so a dropped connection never starts a command twice.
 - Up to 256 KiB of stdout and 64 KiB of stderr are returned per command; if either was cut, `stderr` ends with an `[uno] … truncated` line. Command text is limited to 64 KiB: write bigger inputs with `filesystem.writeFile` first.
-- `filesystem.readFile`, `writeFile` and `readdir` have no size limit: they move data in chunks, and `writeFile` renames a temp file into place only after every chunk landed.
-- One command runs on a machine at a time. A concurrent `runCommand` on the same machine is retried for a few seconds, then fails with `BOX_BUSY`: use one machine per parallel job, or `background: true`.
+- `filesystem.readFile` and `writeFile` use Uno's file API (one request per file; files over 64 MiB go as parts) where the API offers it, and shell commands otherwise: then a small file is one command, a large one moves in chunks. Either way there is no size limit, and `writeFile` replaces the file atomically: a failed write never leaves a partial file.
+- One command runs on a machine at a time. Concurrent `runCommand` calls on the same machine from one provider instance are queued and start the moment the previous one ends; a command from elsewhere waits while the machine reports `BOX_BUSY`. For truly parallel jobs use one machine per job, or `background: true`.
 
 ## Supported
 
@@ -76,9 +76,18 @@ interface UnoConfig {
 |---|---|
 | create / getById / list / destroy | ✅ |
 | runCommand (cwd, env, timeout, background) | ✅ |
-| filesystem (read, write, mkdir, readdir, exists, remove) | ✅ via shell |
+| filesystem (read, write, mkdir, readdir, exists, remove) | ✅ (file API where available, else shell) |
+| pause / resume | ✅ paused in memory, resumed in milliseconds: memory and running processes survive |
+| snapshots: create, list, delete, `create({ snapshotId })`, fork | ✅ disk only (see below) |
 | getUrl | port 80 only, at `https://<name>.uno4.dev` |
-| live output streaming, snapshots, templates API | not yet |
+| live output streaming, templates API, volumes | not yet |
+
+## Pause and snapshots
+
+- `instance.pause()` stops the machine where it runs and keeps its memory on the server; `resume()` picks up in milliseconds, so running processes carry on. A paused machine counts as running. After `pauseInMemoryS` seconds (default 300, set it in `uno({ pauseInMemoryS })`; `0` skips this step) it goes to sleep on disk on its own: it then uses no CPU or RAM, and `resume()` still brings back memory and processes. A command sent to a paused machine wakes it too.
+- `snapshot.create(instanceId)` flushes the machine's writes to disk, copies the disk copy-on-write (the source is paused for milliseconds and keeps running) and leaves the copy stopped, without booting it. The snapshot is that stopped machine: it is named `computesdk-snapshot-…`, its id is the machine id, and it uses no CPU or RAM. `instances.list()` does not show it; `snapshot.list()` does.
+- `instances.create({ snapshotId })` boots a new machine from a copy of the snapshot's disk, with the snapshot's shape; many instances can come from one snapshot. A live machine's id works as `snapshotId` too: that forks its current disk.
+- Snapshots keep the disk, not memory: processes do not survive, and `/tmp` is emptied when an instance boots from the snapshot. Delete snapshots you no longer need with `snapshot.delete(id)`; each counts as a machine on your account while it exists.
 
 ## Links
 
