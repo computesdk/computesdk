@@ -169,9 +169,9 @@ async function resolveSandboxPath(
 
 /** Root disk pinned for standard sizes: Tensorlake's default and minimum. */
 const SIZE_DISK_MIB = 10240;
-/** Largest listed per-sandbox shape (Pro plan); Enterprise limits are custom. */
-const MAX_LISTED_VCPUS = 16;
-const MAX_LISTED_MEMORY_MIB = 65536;
+/** Per-sandbox RAM cap; xl (16384 MiB) is the one class approved to run just below it. */
+const MAX_MEMORY_MIB = 16000;
+const RAM_CAP_NOTE = "Tensorlake caps sandbox RAM at 16000 MB";
 
 function resolveAuth(config: TensorlakeConfig): {
   apiKey: string;
@@ -200,8 +200,8 @@ export const tensorlake = defineProvider<
 >({
   name: "tensorlake",
   // Tensorlake takes arbitrary whole-vCPU `cpus` and `memoryMb` (1024–8192
-  // MiB per vCPU, up to 16 vCPU / 64 GB on Pro) plus `diskMb`, so each class
-  // boots its exact profile with the 10240 MiB disk the platform pins.
+  // MiB per vCPU, at most 16000 MB per sandbox) plus `diskMb`, so xs–lg boot
+  // their exact profile and xl boots 8 vCPU / 16000 MB, all with a 10240 MiB disk.
   sizes: (_config, profile, options) => {
     for (const field of ["diskMb", "ephemeralDiskMb"] as const) {
       if (options?.[field] !== undefined) {
@@ -214,16 +214,18 @@ export const tensorlake = defineProvider<
         reason: "A Tensorlake memory snapshot restore keeps the snapshot's CPU and memory; standard sizes apply to fresh creates only.",
       };
     }
-    if (profile.vcpus > MAX_LISTED_VCPUS || profile.memoryMiB > MAX_LISTED_MEMORY_MIB) {
+    if (profile.memoryMiB > MAX_MEMORY_MIB && profile.sizeClass !== "xl") {
       return {
         status: "unsupported",
-        reason: `Tensorlake lists at most ${MAX_LISTED_VCPUS} vCPU / 64 GB RAM per sandbox (Pro); larger Enterprise shapes are custom quotes.`,
+        reason: `${RAM_CAP_NOTE}; ${profile.sizeClass} needs ${profile.memoryMiB} MiB.`,
       };
     }
+    const memoryMiB = Math.min(profile.memoryMiB, MAX_MEMORY_MIB);
     return {
       status: "supported",
-      nativeOptions: { cpus: profile.vcpus, memoryMb: profile.memoryMiB, diskMb: SIZE_DISK_MIB },
-      resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: SIZE_DISK_MIB },
+      nativeOptions: { cpus: profile.vcpus, memoryMb: memoryMiB, diskMb: SIZE_DISK_MIB },
+      resolved: { vcpus: profile.vcpus, memoryMiB, diskMiB: SIZE_DISK_MIB },
+      ...(memoryMiB < profile.memoryMiB ? { belowStandard: RAM_CAP_NOTE } : {}),
     };
   },
   methods: {

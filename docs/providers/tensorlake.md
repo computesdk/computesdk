@@ -86,7 +86,7 @@ interface TensorlakeConfig {
 
 ### Standard sizes
 
-`create({ sizeClass })` boots the exact standard profile with Tensorlake's native `cpus` / `memoryMb`, plus a 10240 MiB (10 GiB) root disk via `diskMb`:
+`create({ sizeClass })` sets Tensorlake's native `cpus` / `memoryMb`, plus a 10240 MiB (10 GiB) root disk via `diskMb`. Tensorlake caps sandbox RAM at 16000 MB, so `xl` boots 8 vCPU / 16000 MB (384 MiB under the standard 16384 MiB) and `sandbox.sizing.belowStandard` says why:
 
 | `sizeClass` | `cpus` | `memoryMb` | `diskMb` |
 | --- | ---: | ---: | ---: |
@@ -94,11 +94,10 @@ interface TensorlakeConfig {
 | `sm` | 1 | 2048 | 10240 |
 | `md` | 2 | 4096 | 10240 |
 | `lg` | 4 | 8192 | 10240 |
-| `xl` | 8 | 16384 | 10240 |
-| `2xl` | 16 | 32768 | 10240 |
+| `xl` | 8 | 16000 | 10240 |
 
-- `3xl` (32 vCPU / 128 GiB) is `unsupported`: Tensorlake lists at most 16 vCPU / 64 GB per sandbox (Pro); Enterprise sizes are custom quotes.
-- Your plan still caps what boots (Free: 1 vCPU / 1 GB; Usage Credits: 4 vCPU / 16 GB; Pro: 16 vCPU / 64 GB). A size above your plan fails at create with Tensorlake's limit error; it never falls back to the default 1 vCPU / 1 GiB.
+- `2xl` (16 vCPU / 32 GiB) and `3xl` (32 vCPU / 128 GiB) are `unsupported`: both need more than the 16000 MB RAM cap.
+- A size above your plan's quota fails at create with Tensorlake's limit error; it never falls back to the default 1 vCPU / 1 GiB.
 - `sizeClass` with `snapshotId` is `unsupported`: a memory snapshot restore keeps the snapshot's CPU and memory.
 - Combining `sizeClass` with `cpus`, `memoryMb`, `diskMb`, or `ephemeralDiskMb` throws `InstanceSizeError` with code `conflict`.
 

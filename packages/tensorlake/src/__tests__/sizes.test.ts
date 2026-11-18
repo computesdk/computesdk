@@ -1,15 +1,18 @@
 /**
  * Tensorlake standard sizes (mock-only; no sandboxes are booted).
  *
- * Tensorlake takes arbitrary `cpus` / `memoryMb` (1024–8192 MiB per vCPU, up
- * to 16 vCPU / 64 GB on Pro) and `diskMb` (10240–102400 MiB), so each class
- * maps to its exact profile plus the 10240 MiB disk the platform pins.
+ * Tensorlake takes arbitrary `cpus` / `memoryMb` (1024–8192 MiB per vCPU,
+ * capped at 16000 MB per sandbox) and `diskMb` (capped at 10240 MiB), so xs–lg
+ * map to their exact profile, xl maps to the approved 8 vCPU / 16000 MB
+ * exception with `belowStandard`, and every class pins the 10240 MiB disk.
  *
  * Ways the mapping could fail, each covered below:
  * - Wrong shape: a class resolves to other CPU/RAM than its profile, or
  *   `resolved` omits/misstates the 10240 MiB disk.
- * - Unlisted size accepted: 3xl (32 vCPU, above every listed plan) resolves
- *   as supported instead of `unsupported`.
+ * - Below-standard shape unflagged: xl boots 16000 MB without the exact
+ *   `belowStandard` note, or asks for 16384 MB above the RAM cap.
+ * - Unlisted size accepted: 2xl / 3xl (above the 16000 MB cap) resolve as
+ *   supported, or get shrunk below their profile, instead of `unsupported`.
  * - Silent default boot: `sizeClass` reaches `Sandbox.create` but `cpus`,
  *   `memoryMb` or `diskMb` are missing, so Tensorlake boots 1 vCPU / 1 GiB.
  * - Dropped field: the create path forwards only some native fields, or
@@ -43,23 +46,42 @@ const profiles = [
   ["sm", 1, 2048],
   ["md", 2, 4096],
   ["lg", 4, 8192],
-  ["xl", 8, 16384],
-  ["2xl", 16, 32768],
 ] as const;
+const RAM_CAP_NOTE = "Tensorlake caps sandbox RAM at 16000 MB";
+const XL = { requested: { sizeClass: "xl", vcpus: 8, memoryMiB: 16384 }, resolved: { vcpus: 8, memoryMiB: 16000, diskMiB: DISK_MIB } } as const;
 
 describe("Tensorlake standard sizes", () => {
   beforeEach(() => {
     create.mockClear();
   });
 
-  it("lists xs through 2xl as supported at their exact profile and refuses 3xl", () => {
+  it("lists xs through xl as supported and refuses 2xl and 3xl at the RAM cap", () => {
     const sizes = tensorlake({ apiKey: "test" }).sizes;
-    const list = sizes.list();
-    expect(list.filter((r) => r.status === "supported").map((r) => r.requested.sizeClass))
-      .toEqual(profiles.map(([sizeClass]) => sizeClass));
-    const threeXl = sizes.resolve("3xl");
-    expect(threeXl).toMatchObject({ status: "unsupported" });
-    expect(threeXl.status === "unsupported" && threeXl.reason).toMatch(/16 vCPU/);
+    expect(sizes.list().filter((r) => r.status === "supported").map((r) => r.requested.sizeClass))
+      .toEqual([...profiles.map(([sizeClass]) => sizeClass), "xl"]);
+    for (const sizeClass of ["2xl", "3xl"] as const) {
+      const resolution = sizes.resolve(sizeClass);
+      expect(resolution).toMatchObject({ status: "unsupported" });
+      expect(resolution).not.toHaveProperty("nativeOptions");
+      expect(resolution.status === "unsupported" && resolution.reason).toContain(RAM_CAP_NOTE);
+    }
+  });
+
+  it("resolves xl to the approved 8 vCPU / 16000 MB exception", () => {
+    expect(tensorlake({ apiKey: "test" }).sizes.resolve("xl")).toEqual({
+      ...XL,
+      provenance: "adapter-declared",
+      status: "supported",
+      belowStandard: RAM_CAP_NOTE,
+      nativeOptions: { cpus: 8, memoryMb: 16000, diskMb: DISK_MIB },
+    });
+  });
+
+  it("boots xl with memoryMb 16000 and reports belowStandard on sizing", async () => {
+    const instance = await tensorlake({ apiKey: "test" }).instances.create({ sizeClass: "xl" });
+    expect(create.mock.calls[0][0]).toMatchObject({ cpus: 8, memoryMb: 16000, diskMb: DISK_MIB });
+    expect(create.mock.calls[0][0]).not.toHaveProperty("sizeClass");
+    expect(instance.sizing).toEqual({ ...XL, provenance: "adapter-declared", belowStandard: RAM_CAP_NOTE });
   });
 
   it.each(profiles)("resolves %s to %i vCPU / %i MiB with a 10240 MiB disk", (sizeClass, vcpus, memoryMiB) => {
@@ -98,6 +120,8 @@ describe("Tensorlake standard sizes", () => {
     [{ sizeClass: "md", diskMb: 20480 }, "conflict"],
     [{ sizeClass: "md", ephemeralDiskMb: 20480 }, "conflict"],
     [{ sizeClass: "md", snapshotId: "snap-1" }, "unsupported"],
+    [{ sizeClass: "xl", memoryMb: 16000 }, "conflict"],
+    [{ sizeClass: "2xl" }, "unsupported"],
     [{ sizeClass: "3xl" }, "unsupported"],
   ] as const)("rejects %j with %s before creating", async (options, code) => {
     await expect(tensorlake({ apiKey: "test" }).instances.create(options as never))
