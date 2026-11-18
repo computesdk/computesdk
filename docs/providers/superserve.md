@@ -31,9 +31,28 @@ tags:
 
 Superserve provides sandbox infrastructure to run code in isolated cloud environments powered by Firecracker MicroVMs.
 
-## Account sizes and lifecycle
+## Standard sizes
 
-CPU/RAM are fixed by the account template. [Provider Setup](../../ADD-PROVIDER.md#provider-setup) creates the missing Node 22 size templates idempotently; boot them with `templateId`. The built-in `superserve/node-22` supplies 2 vCPU/4 GiB. This adapter has no standard `sizeClass` mapping (`unknown`); see [Sandbox sizes](../reference/sizes.md).
+`sizeClass` requests a standard CPU/RAM size. Superserve fixes vCPU, memory and disk when a template is built (sandboxes cannot override them), so each standard size boots its own template:
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' });
+```
+
+| `sizeClass` | Template | vCPU / memory / disk |
+| --- | --- | --- |
+| `xs` | `csdk-node22-1cpu-1gb` | 1 / 1 GiB / from the build |
+| `sm` | `csdk-node22-1cpu-2gb` | 1 / 2 GiB / from the build |
+| `md` | `superserve/base` (built in) | 2 / 4 GiB / 8 GiB |
+| `lg` | `csdk-node22-4cpu-8gb` | 4 / 8 GiB / from the build |
+| `xl` | `csdk-node22-8cpu-16gb` | 8 / 16 GiB / from the build |
+| `2xl` | `csdk-node22-16cpu-32gb` | 16 / 32 GiB / from the build |
+
+`3xl` (32 vCPU / 128 GiB) is `unsupported`: Superserve lists at most 16 vCPU / 64 GiB per sandbox (Pro plan). Each team template must exist on the team; [Provider Setup](../../ADD-PROVIDER.md#provider-setup) builds them, and a create that hits a missing one fails with setup guidance. Plan limits apply at create time (Free allows 2 vCPU / 4 GiB, Developer 4 vCPU / 16 GiB, Pro 16 vCPU / 64 GiB).
+
+Override a template name per size with the `sizeTemplates` config, e.g. `superserve({ sizeTemplates: { '3xl': 'acme/node-32cpu-128gb' } })` for a custom-size Enterprise template. `templateId`, `snapshotId`, `sandboxId`, `fromTemplate` or `fromSnapshot` with `sizeClass` is `unsupported` (the template or snapshot fixes the size); native `vcpu`, `vcpuCount`, `memoryMib`, `memoryMaxMib` or `diskMib` with `sizeClass` is a `conflict`. See [Sandbox sizes](../reference/sizes.md).
+
+## Lifecycle
 
 `pause()`/`resume()` preserve memory and processes. Snapshots capture rootfs and memory and keep the source. Create-time `timeout` configures auto-pause, not a command deadline or automatic deletion.
 
@@ -79,6 +98,8 @@ interface SuperserveConfig {
   baseUrl?: string;
   /** Default auto-pause timeout in milliseconds. */
   timeout?: number;
+  /** Template to boot per standard `sizeClass`; defaults to SUPERSERVE_SIZE_TEMPLATES. */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
 }
 ```
 
@@ -98,6 +119,6 @@ interface SuperserveConfig {
 
 ### Notes
 
-* Templates are supported for listing and deletion. `template.create` throws — creating a template requires a build spec (`from` + `steps`), so use `@superserve/sdk` `Template.create()` directly.
+* `template.create` builds a template from an image (`from`) with optional `vcpu`, `memoryMib`, `diskMib` and `steps`, and waits until it is ready.
 * `snapshot.create` connects to the sandbox first, which resumes it if it is paused.
 * Authentication failures (HTTP 401, missing key, SDK `AuthenticationError`) are normalized into a single user-facing message.
