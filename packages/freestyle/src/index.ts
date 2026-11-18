@@ -352,7 +352,7 @@ export const freestyle = defineProvider<Vm, FreestyleConfig, unknown, FreestyleS
     if (profile.vcpus < RUNTIME_VCPUS || profile.memoryMiB < RUNTIME_MEMORY_MIB) {
       return { status: 'unavailable', reason: `Freestyle resize is grow-only; the runtime snapshot boots at ${RUNTIME_VCPUS} vCPU / ${RUNTIME_MEMORY_MIB} MiB.` };
     }
-    if (profile.sizeClass === '2xl') {
+    if (profile.sizeClass === '2xl' || profile.sizeClass === '3xl') {
       return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
     }
     return { status: 'supported', nativeOptions: { cpu: profile.vcpus, memory: profile.memoryMiB } };

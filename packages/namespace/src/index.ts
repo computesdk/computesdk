@@ -669,7 +669,7 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
     if (os !== 'linux' || arch !== 'amd64' || shape.machineArch !== undefined) {
       return { status: 'unknown', reason: 'Standard shapes are verified only for Namespace Linux amd64, not this OS/architecture.' };
     }
-    if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl') {
+    if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl' || profile.sizeClass === '3xl') {
       return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
     }
     return { status: 'supported', nativeOptions: {

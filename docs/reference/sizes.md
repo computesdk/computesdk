@@ -1,6 +1,6 @@
 # Sandbox sizes
 
-`sizeClass` requests an exact CPU/RAM tier on the selected provider. It is opt-in: omitting it (or passing `undefined`) preserves the provider's native defaults and options. It is not an alias for the provider-specific `size` option.
+`sizeClass` requests a standard CPU/RAM size on the selected provider. It is opt-in: omitting it (or passing `undefined`) preserves the provider's native defaults and options. It is not an alias for the provider-specific `size` option.
 
 | `sizeClass` | vCPU | Memory (MiB) |
 | --- | ---: | ---: |
@@ -10,6 +10,7 @@
 | `lg` | 4 | 8192 |
 | `xl` | 8 | 16384 |
 | `2xl` | 16 | 32768 |
+| `3xl` | 32 | 131072 |
 
 ```typescript
 import { namespace } from '@computesdk/namespace';
@@ -22,7 +23,7 @@ console.log(sandbox.sizing);
 await sandbox.destroy();
 ```
 
-`provider.sizes.list(options?)` and `resolve(sizeClass, options?)` are synchronous, local discovery: they do not query availability, validate credentials, build images, or create resources. A supported resolution contains `requested`, `resolved`, `nativeOptions`, and `provenance: 'adapter-declared'`. The instance's immutable `sizing` contains the same request/resource metadata, without `nativeOptions`. These are adapter declarations, not measurements or account/region availability guarantees.
+`provider.sizes.list(options?)` and `resolve(sizeClass, options?)` are synchronous, local discovery: they do not query availability, validate credentials, build images, or create resources. A supported resolution contains `requested`, `resolved`, `nativeOptions`, and `provenance: 'adapter-declared'`. `resolved` is the provider's listed shape for that size (`vcpus`, `memoryMiB`, optional `diskMiB`). It can be bigger than the standard size (e.g. a 64 vCPU / 128 GiB tier as `3xl`). It is smaller only when the adapter sets `belowStandard` with the provider limit that causes it (e.g. a 16000 MB RAM cap); adapters declaring any other smaller shape are rejected as `invalid`. The instance's immutable `sizing` contains the same request/resource metadata, without `nativeOptions`. These are adapter declarations, not measurements or account/region availability guarantees.
 
 ## Errors and conflicts
 
@@ -46,13 +47,13 @@ In multi-provider `compute` mode, `sizeClass` pins the normally selected provide
 
 | Provider | Standard mappings | How sizes are applied / restrictions |
 | --- | --- | --- |
-| [Namespace](../providers/namespace.md) | `sm`, `md`, `lg`, `xl` | Linux amd64 `instanceOptions.shape.virtual_cpu` / `memory_megabytes`. Other OS/architecture contexts, `xs`, and `2xl` are `unknown`. |
-| [Archil](../providers/archil.md) | `sm`, `md`, `lg`, `xl` | New persistent VMs use `vcpus` / `memoryMiB`. Exec mode is `unavailable`; attaching or restoring with `snapshotId`, `sandboxId`, or `instanceId` is `unsupported`. `xs`/`2xl` are `unknown`. |
+| [Namespace](../providers/namespace.md) | `sm`, `md`, `lg`, `xl` | Linux amd64 `instanceOptions.shape.virtual_cpu` / `memory_megabytes`. Other OS/architecture contexts, `xs`, `2xl` and `3xl` are `unknown`. |
+| [Archil](../providers/archil.md) | `sm`, `md`, `lg`, `xl` | New persistent VMs use `vcpus` / `memoryMiB`. Exec mode is `unavailable`; attaching or restoring with `snapshotId`, `sandboxId`, or `instanceId` is `unsupported`. `xs`/`2xl`/`3xl` are `unknown`. |
 | [Arker](../providers/arker.md) | All six tiers on unpinned creates | Per-fork `resources.vcpu` / `memory_mib`; picks the smallest fitting `ubuntu-coding` golden. A pinned known golden outside its bounds is `unsupported`; `snapshotId` is `unknown`. A custom pinned source remains subject to the vendor's bounds check at create time. |
 | [Agent37](../providers/agent37.md) | `md`, `lg` | Per-create CPU/RAM for `default`, `performance`, or `vm` types. Other standard tiers are `unsupported`; other types are `unknown`. Its native 4-vCPU/16- or 32-GiB shapes are not `xl`/`2xl`. |
 | [E2B](../providers/e2b.md) | `sm`, `md`, `lg`, `xl` by default | Per-size team templates built by Provider Setup. `sizeTemplates` config can override tier names. Explicit `templateId`, `snapshotId`, or `sandboxId` is `unsupported` with `sizeClass`. Unmapped tiers are `unknown`; a mapped template missing on the team fails at create time with setup guidance. |
-| [GCP Cloud Run](../providers/cloud-run.md) | `xs` through `xl`, when configured | One gateway per size, via `sizeGateways` or `CLOUD_RUN_SANDBOX_URL_XS`, `_SM`, `_MD`, `_LG`, `_XL`. No entry is `unconfigured`; create checks the gateway's advertised size and reports `unavailable` on mismatch. `2xl` is `unsupported`. |
-| [Freestyle](../providers/freestyle.md) | `lg`, `xl` | Grow-only resize from the default 4-vCPU/8192-MiB runtime snapshot. Smaller tiers are `unavailable`, `2xl` is `unknown`; explicit sandbox/snapshot/template selection is `unsupported`. |
+| [GCP Cloud Run](../providers/cloud-run.md) | `xs` through `xl`, when configured | One gateway per size, via `sizeGateways` or `CLOUD_RUN_SANDBOX_URL_XS`, `_SM`, `_MD`, `_LG`, `_XL`. No entry is `unconfigured`; create checks the gateway's advertised size and reports `unavailable` on mismatch. `2xl` and `3xl` are `unsupported`. |
+| [Freestyle](../providers/freestyle.md) | `lg`, `xl` | Grow-only resize from the default 4-vCPU/8192-MiB runtime snapshot. Smaller tiers are `unavailable`, `2xl` and `3xl` are `unknown`; explicit sandbox/snapshot/template selection is `unsupported`. |
 | [GravixLayer](../providers/gravixlayer.md) | All six tiers | Per-size `base-*` platform templates. `sizeTemplates` config can override tier names. Explicit `templateId`, `image`, `snapshotId`, or `sandboxId` is `unsupported` with `sizeClass`. A mapped template missing on the project fails at create time with remediation guidance. |
 | [Superserve](../providers/superserve.md) | `unknown` | CPU/RAM fixed by account templates; boot with `templateId`, not `sizeClass`. |
 | [Novita](../providers/novita.md) | `unknown` | CPU/RAM fixed at template build; boot with `templateId`, not `sizeClass`. |

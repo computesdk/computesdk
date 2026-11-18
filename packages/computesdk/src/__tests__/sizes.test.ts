@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { compute, type DirectProvider } from '../compute';
+import { createInstanceSizeManager } from '../provider/sizes';
 import { INSTANCE_SIZE_PROFILES, InstanceSizeError, getInstanceSizeProfile, type InstanceSizeClass, type InstanceSizeManager } from '../sizes';
 
 function provider(name = 'legacy', sizes?: InstanceSizeManager): DirectProvider {
@@ -16,7 +17,7 @@ const supported: InstanceSizeManager = {
 describe('standard sizing core contract', () => {
   it('defines immutable explicit CPU/MiB targets (sm matches benchmark S)', () => {
     expect(Object.values(INSTANCE_SIZE_PROFILES).map(p => [p.sizeClass, p.vcpus, p.memoryMiB])).toEqual([
-      ['xs', 1, 1024], ['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192], ['xl', 8, 16384], ['2xl', 16, 32768],
+      ['xs', 1, 1024], ['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192], ['xl', 8, 16384], ['2xl', 16, 32768], ['3xl', 32, 131072],
     ]);
     expect(Object.isFrozen(INSTANCE_SIZE_PROFILES)).toBe(true);
     expect(Object.isFrozen(INSTANCE_SIZE_PROFILES.sm)).toBe(true);
@@ -106,4 +107,19 @@ describe('standard sizing core contract', () => {
     await expect(compute({ providers: [second, first], fallbackOnError: true }).instances.create({ sizeClass: 'md' })).rejects.toBe(nativeError);
     expect(first.sandbox!.create).not.toHaveBeenCalled();
   });
+  // A mapping can record a provider's listed shape: bigger than the profile, or smaller only with a stated reason.
+  it('records a bigger listed shape and its disk', () => {
+    const sizes = createInstanceSizeManager({}, () => ({ status: 'supported', nativeOptions: { tier: 'xlarge' }, resolved: { vcpus: 64, memoryMiB: 131072, diskMiB: 65536 } }));
+    expect(sizes.resolve('3xl')).toMatchObject({ status: 'supported', resolved: { vcpus: 64, memoryMiB: 131072, diskMiB: 65536 } });
+  });
+  it('rejects a shape below the profile unless belowStandard explains it', () => {
+    const below = { vcpus: 8, memoryMiB: 15625 };
+    expect(() => createInstanceSizeManager({}, () => ({ status: 'supported', nativeOptions: {}, resolved: below })).resolve('xl')).toThrow(InstanceSizeError);
+    expect(createInstanceSizeManager({}, () => ({ status: 'supported', nativeOptions: {}, resolved: below, belowStandard: 'Tensorlake caps RAM at 16000 MB' })).resolve('xl'))
+      .toMatchObject({ status: 'supported', resolved: below, belowStandard: 'Tensorlake caps RAM at 16000 MB' });
+  });
+  it.each([{ vcpus: 0, memoryMiB: 2048 }, { vcpus: 1.5, memoryMiB: 2048 }, { vcpus: 1, memoryMiB: Number.NaN }, { vcpus: 1, memoryMiB: 2048, diskMiB: -1 }])(
+    'rejects a non-positive or fractional shape %o', resolved => {
+      expect(() => createInstanceSizeManager({}, () => ({ status: 'supported', nativeOptions: {}, resolved })).resolve('sm')).toThrow(InstanceSizeError);
+    });
 });

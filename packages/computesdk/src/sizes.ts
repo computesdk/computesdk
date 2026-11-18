@@ -1,5 +1,5 @@
 /** Standard request targets, not measurements or guarantees of account/region availability. */
-export type InstanceSizeClass = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+export type InstanceSizeClass = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
 
 export interface InstanceSizeProfile {
   readonly sizeClass: InstanceSizeClass;
@@ -14,6 +14,7 @@ export const INSTANCE_SIZE_PROFILES: Readonly<Record<InstanceSizeClass, Instance
   lg: Object.freeze({ sizeClass: 'lg', vcpus: 4, memoryMiB: 8192 }),
   xl: Object.freeze({ sizeClass: 'xl', vcpus: 8, memoryMiB: 16384 }),
   '2xl': Object.freeze({ sizeClass: '2xl', vcpus: 16, memoryMiB: 32768 }),
+  '3xl': Object.freeze({ sizeClass: '3xl', vcpus: 32, memoryMiB: 131072 }),
 });
 
 export type InstanceSizeStatus = 'supported' | 'unconfigured' | 'unavailable' | 'requires-build' | 'unknown' | 'unsupported';
@@ -21,14 +22,30 @@ export type InstanceSizeErrorCode = Exclude<InstanceSizeStatus, 'supported'> | '
 export type InstanceSizeNativeValue = string | number | boolean | null | readonly InstanceSizeNativeValue[] | { readonly [key: string]: InstanceSizeNativeValue };
 export type InstanceSizeNativeOptions = Readonly<Record<string, InstanceSizeNativeValue>>;
 
-/** The adapter declares an exact request mapping; these are NOT observed resources. */
+/** The provider's listed shape for a standard size: at least the profile, unless `belowStandard` says why not. */
+export interface InstanceSizeResources {
+  readonly vcpus: number;
+  readonly memoryMiB: number;
+  readonly diskMiB?: number;
+}
+
+/** The adapter declares the provider's listed shape for the request; these are NOT observed resources. */
 export interface InstanceSizeMetadata {
   readonly requested: InstanceSizeProfile;
-  readonly resolved: {
-    readonly vcpus: number;
-    readonly memoryMiB: number;
-  };
+  readonly resolved: InstanceSizeResources;
+  /** Why the provider's shape for this size is smaller than the profile (e.g. a 16000 MB RAM cap). */
+  readonly belowStandard?: string;
   readonly provenance: 'adapter-declared';
+}
+
+/** Whether `resolved` is a valid shape for `profile`: positive integers, and at least the profile unless explained. */
+export function isValidInstanceSizeShape(profile: InstanceSizeProfile, resolved: unknown, belowStandard?: unknown): resolved is InstanceSizeResources {
+  if (resolved === null || typeof resolved !== 'object') return false;
+  const { vcpus, memoryMiB, diskMiB } = resolved as Record<string, unknown>;
+  const positive = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+  if (!positive(vcpus) || !positive(memoryMiB) || (diskMiB !== undefined && !positive(diskMiB))) return false;
+  if ((vcpus as number) >= profile.vcpus && (memoryMiB as number) >= profile.memoryMiB) return belowStandard === undefined;
+  return typeof belowStandard === 'string' && belowStandard.trim() !== '';
 }
 
 export type InstanceSizeResolution =
@@ -131,7 +148,7 @@ export function assertInstanceSizeSupported(
   }
   if (resolution.provenance !== 'adapter-declared' || resolution.requested?.sizeClass !== profile.sizeClass ||
       resolution.requested?.vcpus !== profile.vcpus || resolution.requested?.memoryMiB !== profile.memoryMiB ||
-      resolution.resolved?.vcpus !== profile.vcpus || resolution.resolved?.memoryMiB !== profile.memoryMiB) {
-    throw new InstanceSizeError('unknown', 'provider did not declare an exact standard sizing request');
+      !isValidInstanceSizeShape(profile, resolution.resolved, resolution.belowStandard)) {
+    throw new InstanceSizeError('unknown', 'provider did not declare a valid standard sizing shape');
   }
 }

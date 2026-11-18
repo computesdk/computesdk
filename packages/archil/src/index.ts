@@ -649,7 +649,7 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
     if (resolveSizingExecution(config, options) !== 'persistent') {
       return { status: 'unavailable', reason: 'Archil exec containers do not expose VM sizing. Drop execution: "exec" (persistent VMs are the default) or set ephemeral: false.' };
     }
-    if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl') {
+    if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl' || profile.sizeClass === '3xl') {
       return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
     }
     return { status: 'supported', nativeOptions: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB } };
