@@ -98,6 +98,13 @@ function remember(sandbox: Sandbox, config: UnikraftConfig, envs?: Record<string
   return sandbox
 }
 
+// A sandbox found again has no create options to read its variables from, so
+// they come from the instance, which keeps the `env` it was created with.
+async function reconnect(sandbox: Sandbox, config: UnikraftConfig): Promise<Sandbox> {
+  const { env } = await sandbox.instance
+  return remember(sandbox, config, env)
+}
+
 function isNotFound(err: unknown): boolean {
   return err instanceof UnikraftCloudError && err.status === 404
 }
@@ -234,7 +241,7 @@ export const unikraft = defineProvider<Sandbox, UnikraftConfig>({
       getById: async (config: UnikraftConfig, sandboxId: string) => {
         try {
           const sandbox = await getClient(config).sandboxes.get({ uuid: sandboxId })
-          return { instance: remember(sandbox, config), instanceId: sandboxId }
+          return { instance: await reconnect(sandbox, config), instanceId: sandboxId }
         } catch (err) {
           if (isNotFound(err)) return null
           throw err
@@ -242,11 +249,14 @@ export const unikraft = defineProvider<Sandbox, UnikraftConfig>({
       },
 
       list: async (config: UnikraftConfig) => {
-        const found: Array<{ instance: Sandbox; instanceId: string }> = []
-        for await (const sandbox of getClient(config).sandboxes.list()) {
-          found.push({ instance: remember(sandbox, config), instanceId: sandbox.uuid })
-        }
-        return found
+        const found: Sandbox[] = []
+        for await (const sandbox of getClient(config).sandboxes.list()) found.push(sandbox)
+        return Promise.all(
+          found.map(async (sandbox) => ({
+            instance: await reconnect(sandbox, config),
+            instanceId: sandbox.uuid,
+          })),
+        )
       },
 
       destroy: async (config: UnikraftConfig, sandboxId: string) => {
