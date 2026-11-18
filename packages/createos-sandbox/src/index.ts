@@ -441,7 +441,7 @@ export const CREATEOS_SIZE_SHAPES: Readonly<Partial<Record<InstanceSizeClass, {
   sm: { id: "s-1vcpu-2gb", vcpus: 1, memoryMiB: 2048, diskMiB: 10240 },
   md: { id: "s-2vcpu-4gb", vcpus: 2, memoryMiB: 4096, diskMiB: 20480 },
   lg: { id: "s-4vcpu-8gb", vcpus: 4, memoryMiB: 8192, diskMiB: 40960 },
-  xl: { id: "s-8vcpu-16gb", vcpus: 8, memoryMiB: 16384, diskMiB: 81920 },
+  xl: { id: "s-8vcpu-16gb", vcpus: 8, memoryMiB: 16384, diskMiB: 61440 },
 });
 
 export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({

@@ -86,7 +86,7 @@ const sandbox = await compute.instances.create({ sizeClass: 'md' })
 | `sm` | `s-1vcpu-2gb` | 1 / 2 GiB | 10 GiB |
 | `md` | `s-2vcpu-4gb` | 2 / 4 GiB | 20 GiB |
 | `lg` | `s-4vcpu-8gb` | 4 / 8 GiB | 40 GiB |
-| `xl` | `s-8vcpu-16gb` | 8 / 16 GiB | 80 GiB |
+| `xl` | `s-8vcpu-16gb` | 8 / 16 GiB | 60 GiB (plan maximum) |
 | `2xl` | — | unsupported | |
 | `3xl` | — | unsupported | |
 

@@ -28,7 +28,7 @@ const PROFILES = [
   ["sm", 1, 2048, "s-1vcpu-2gb", 10240, 10240],
   ["md", 2, 4096, "s-2vcpu-4gb", 20480, 20480],
   ["lg", 4, 8192, "s-4vcpu-8gb", 40960, 40960],
-  ["xl", 8, 16384, "s-8vcpu-16gb", 81920, 81920],
+  ["xl", 8, 16384, "s-8vcpu-16gb", 61440, 61440],
 ] as const;
 
 const config = { apiKey: "test-key", baseUrl: "https://createos.test" };
