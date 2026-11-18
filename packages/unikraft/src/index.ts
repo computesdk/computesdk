@@ -291,14 +291,28 @@ export const unikraft = defineProvider<Sandbox, UnikraftConfig>({
 
       getUrl: async (sandbox: Sandbox, options: { port: number; protocol?: string }) => {
         const instance = await sandbox.instance
-        const fqdn = instance.service_group?.domains?.[0]?.fqdn
-        if (!fqdn) {
+        const group = instance.service_group
+        const fqdn = group?.domains?.[0]?.fqdn
+        if (!group || !fqdn) {
           throw new Error(
             `Sandbox ${sandbox.uuid} has no public service, so port ${options.port} has no URL. ` +
               'Create the sandbox with a `service_group` that exposes the port.',
           )
         }
-        return `${options.protocol ?? 'https'}://${fqdn}`
+        // The instance names its service group but not the ports it publishes,
+        // so the public port that forwards to `options.port` comes from the group.
+        const config = sandboxState.get(sandbox)?.config ?? {}
+        const { services = [] } = await getClient(config).services.get({ uuid: group.uuid })
+        const service = services.find((s) => (s.destination_port ?? s.port) === options.port)
+        if (!service) {
+          throw new Error(
+            `Sandbox ${sandbox.uuid} publishes no service for port ${options.port}. ` +
+              'Add a service with that `destination_port` to its `service_group`.',
+          )
+        }
+        const protocol = options.protocol ?? 'https'
+        const defaultPort = protocol === 'http' ? 80 : 443
+        return `${protocol}://${fqdn}${service.port === defaultPort ? '' : `:${service.port}`}`
       },
 
       getInstance: (sandbox: Sandbox) => sandbox,
