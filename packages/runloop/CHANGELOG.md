@@ -1,5 +1,14 @@
 # @computesdk/runloop
 
+## 1.3.80
+
+### Patch Changes
+
+- eb16925: Support standard Runloop sizes from `xs` (1 vCPU / 2 GiB, Runloop's minimum RAM per vCPU) through `2xl` with explicit CPU, memory, and disk launch parameters.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.3.79
 
 ### Patch Changes

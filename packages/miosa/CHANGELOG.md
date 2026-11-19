@@ -1,5 +1,14 @@
 # @computesdk/miosa
 
+## 1.2.13
+
+### Patch Changes
+
+- f2a90a0: Map standard `sizeClass` requests onto MIOSA's named sandbox sizes (`xs` and `sm`→`xs`, `md`→`small`, `lg`→`medium`, `xl`→`large`, `2xl`→`xl`, with each size's fixed disk in `resolved`), refuse `3xl` and snapshot restores, reject conflicting native size/CPU/memory/disk fields, and forward a native `size` option to the create request.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.2.12
 
 ### Patch Changes

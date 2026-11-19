@@ -1,5 +1,14 @@
 # @computesdk/modal
 
+## 1.9.35
+
+### Patch Changes
+
+- 0c5de90: Map every standard `sizeClass` (`xs` through `3xl`) to Modal's `cpu`/`cpuLimit` (physical cores, 1 core = 2 vCPUs) and `memoryMiB`/`memoryLimitMiB`, with the fixed 512 GiB sandbox disk in `resolved.diskMiB`. Conflicting native CPU/memory fields are rejected, and a VM sidecar memory reserve is `unsupported`.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.9.34
 
 ### Patch Changes

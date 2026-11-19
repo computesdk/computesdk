@@ -1,5 +1,14 @@
 # @computesdk/sprites
 
+## 0.1.40
+
+### Patch Changes
+
+- 43d4fc3: Declare standard sizes for Sprites: every `sizeClass` is `unsupported` because Sprites run on one fixed shape (8 vCPUs, platform-managed memory, 100 GB storage) and the create API takes no CPU, memory or disk fields. `create({ sizeClass })` now fails with `InstanceSizeError` instead of booting the fixed shape.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.1.39
 
 ### Patch Changes

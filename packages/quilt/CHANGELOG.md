@@ -1,5 +1,13 @@
 # @computesdk/quilt
 
+## 1.0.26
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.25
 
 ### Patch Changes

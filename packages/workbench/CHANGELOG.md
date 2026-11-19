@@ -1,5 +1,56 @@
 # @computesdk/workbench
 
+## 33.0.41
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+- Updated dependencies [a906f9d]
+- Updated dependencies [c06544b]
+- Updated dependencies [9f8807b]
+- Updated dependencies [3633285]
+- Updated dependencies [056bbef]
+- Updated dependencies [ba525c6]
+- Updated dependencies [3c24249]
+- Updated dependencies [0c5de90]
+- Updated dependencies [0a0de19]
+- Updated dependencies [5e0484a]
+- Updated dependencies [eb16925]
+- Updated dependencies [43d4fc3]
+- Updated dependencies [703129f]
+- Updated dependencies [e0910fc]
+- Updated dependencies [7ab94b8]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+  - @computesdk/namespace@1.6.47
+  - @computesdk/freestyle@0.2.26
+  - @computesdk/gcp@0.1.18
+  - @computesdk/beam@0.3.32
+  - @computesdk/blaxel@1.6.48
+  - @computesdk/cloudflare@2.1.19
+  - @computesdk/codesandbox@1.5.76
+  - @computesdk/daytona@1.7.58
+  - @computesdk/isorun@0.1.27
+  - @computesdk/modal@1.9.35
+  - @computesdk/novita@0.0.23
+  - @computesdk/runloop@1.3.80
+  - @computesdk/sprites@0.1.40
+  - @computesdk/tenki@0.1.28
+  - @computesdk/upstash@0.3.35
+  - @computesdk/vercel@1.7.60
+  - @computesdk/agentuity@0.0.36
+  - @computesdk/boat@1.0.6
+  - @computesdk/collimate@0.1.25
+  - @computesdk/e2b@1.7.77
+  - @computesdk/hopx@0.2.51
+  - @computesdk/just-bash@0.4.39
+  - @computesdk/k8s@0.2.28
+  - @computesdk/lelantos@0.2.26
+  - @computesdk/microsandbox@0.1.32
+  - @computesdk/northflank@1.1.27
+  - @computesdk/secure-exec@0.1.35
+  - @computesdk/cloud-run@0.1.34
+
 ## 33.0.40
 
 ### Patch Changes

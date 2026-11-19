@@ -1,5 +1,14 @@
 # @computesdk/sandbox0
 
+## 1.0.29
+
+### Patch Changes
+
+- f4d571b: Support standard sandbox sizes `xs` (claimed at 2 GiB for a whole vCPU) through `xl` via claim-time memory overrides, including template and snapshot claims. Reject unsupported sizes before claiming a sandbox.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.28
 
 ### Patch Changes

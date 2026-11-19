@@ -1,5 +1,14 @@
 # @computesdk/upstash
 
+## 0.3.35
+
+### Patch Changes
+
+- e0910fc: Add the `sizeClass` resolver: `md`, `lg` and `xl` boot the Upstash Box `small`, `medium` and `large` sizes (with each tier's fixed disk in `resolved.diskMiB`) on every create path; `xs`, `sm`, `2xl` and `3xl` are `unsupported`.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.3.34
 
 ### Patch Changes

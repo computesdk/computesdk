@@ -1,5 +1,14 @@
 # @computesdk/sail
 
+## 1.0.27
+
+### Patch Changes
+
+- 87d5968: Map every standard size to Sailbox `vcpuCount` and memory limits (memory is at least 16 GiB, Sail's minimum, so `xs` is 1 vCPU / 16 GiB), and forward a native `vcpuCount` create option.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.26
 
 ### Patch Changes

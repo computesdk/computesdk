@@ -1,5 +1,14 @@
 # @computesdk/givemeanode
 
+## 1.2.22
+
+### Patch Changes
+
+- 0e5cc47: Add standard `sizeClass` sizes: `xs` and `sm` map to `sandbox-sm`, `lg`, `xl` and `2xl` to `sandbox-md`, `sandbox-lg` and `sandbox-xl`; `md`, `3xl` and snapshot forks are refused.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.2.21
 
 ### Patch Changes

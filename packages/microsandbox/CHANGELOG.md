@@ -1,5 +1,13 @@
 # @computesdk/microsandbox
 
+## 0.1.32
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.1.31
 
 ### Patch Changes

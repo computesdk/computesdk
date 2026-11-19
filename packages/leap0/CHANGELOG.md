@@ -1,5 +1,14 @@
 # @computesdk/leap0
 
+## 0.1.25
+
+### Patch Changes
+
+- 57fecaa: Map standard sizes `xs`, `sm`, `md` and `lg` to Leap0's native `vcpu`/`memory` (fixed 10 GiB disk reported in `resolved.diskMiB`). `xl`, `2xl` and `3xl` exceed Leap0's 8 vCPU / 8192 MiB limit and are `unsupported`, as is `sizeClass` with `snapshotId`; native `vcpu`/`memory` with `sizeClass` is a `conflict`.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.1.24
 
 ### Patch Changes

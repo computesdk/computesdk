@@ -1,5 +1,14 @@
 # @computesdk/buddy
 
+## 1.0.28
+
+### Patch Changes
+
+- 961ec47: Add a `sizeClass` resolver: `xs` and `sm` map to the `1x2` resources preset, `md`, `lg` and `xl` to `2x4`, `4x8` and `8x16` (fixed 50 GB disk); `2xl` and `3xl` are unsupported.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.27
 
 ### Patch Changes

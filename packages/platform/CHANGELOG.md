@@ -1,5 +1,12 @@
 # @computesdk/platform
 
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+
 ## 0.2.9
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @computesdk/promigence
 
+## 1.0.16
+
+### Patch Changes
+
+- d32b7b4: Add standard `sizeClass` mappings: md, lg and xl build the image at the small, medium and large tiers; other sizes and snapshot creates are refused.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.15
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @computesdk/r2
 
+## 1.2.29
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - @computesdk/provider@2.1.28
+
 ## 1.2.28
 
 ### Patch Changes

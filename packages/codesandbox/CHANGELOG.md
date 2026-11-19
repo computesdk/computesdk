@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.76
+
+### Patch Changes
+
+- 3633285: Add the `sizeClass` resolver: `xs` and `sm` boot Pico, `md`–`xl` the Nano, Micro and Small VM tiers; `2xl` and `3xl` boot Medium and Large from per-size templates (`sizeTemplates` overrides the names).
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.5.75
 
 ### Patch Changes

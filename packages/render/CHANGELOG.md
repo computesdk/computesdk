@@ -1,5 +1,13 @@
 # @computesdk/render
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.3
 
 ### Patch Changes

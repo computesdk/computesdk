@@ -1,5 +1,14 @@
 # @computesdk/railway
 
+## 2.0.26
+
+### Patch Changes
+
+- f39446b: Map `sizeClass` `xs` through `xl` to exact Railway `resources` (vCPU / decimal GB) on fresh and checkpoint creates; `2xl` and `3xl` are `unsupported` (Railway's listed maximum is 24 vCPU / 24 GB).
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 2.0.25
 
 ### Patch Changes

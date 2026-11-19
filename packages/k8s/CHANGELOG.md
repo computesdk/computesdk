@@ -1,5 +1,13 @@
 # @computesdk/k8s
 
+## 0.2.28
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.2.27
 
 ### Patch Changes
