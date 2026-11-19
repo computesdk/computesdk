@@ -70,6 +70,12 @@ interface E2BConfig {
   apiKey?: string;
   /** Execution timeout in milliseconds */
   timeout?: number;
+  /**
+   * Team template to boot per standard `sizeClass`. Defaults to
+   * `csdk-node22-<cpu>cpu-<gb>gb` (see `E2B_SIZE_TEMPLATES`), which must be
+   * built on your E2B team (e.g. `node scripts/provider-setup.mjs e2b`).
+   */
+  sizeTemplates?: Partial<Record<'sm' | 'md' | 'lg' | 'xl', string>>;
 }
 ```
 
@@ -338,7 +344,7 @@ await sandbox.destroy();
 
 ## Limitations
 
-- **Sandbox Listing**: E2B doesn't support listing all sandboxes (each is managed individually)
+- **Sandbox Listing**: `list` returns running and paused sandboxes via E2B's list API, but reads only the first page (100 sandboxes).
 - **Memory Limits**: Subject to E2B sandbox memory constraints
 - **Network Access**: Limited outbound network access
 - **File Persistence**: Files are not persisted between sandbox sessions
