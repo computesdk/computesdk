@@ -1,5 +1,12 @@
 # computesdk
 
+## 4.1.21
+
+### Patch Changes
+
+- ce6d638: Add `public`/`label` options to `getUrl`: `getUrl({ port, public: true })` returns a permanent, unauthenticated port URL (Agent37 public ports) instead of the provider's ephemeral signed URL. The platform router forwards it via `POST /api/v1/sandboxes/{id}/urls`.
+  - daemond@0.1.9
+
 ## 4.1.20
 
 ### Patch Changes

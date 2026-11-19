@@ -1,5 +1,13 @@
 # @computesdk/cli
 
+## 2.6.17
+
+### Patch Changes
+
+- Updated dependencies [ce6d638]
+  - computesdk@4.1.21
+  - @computesdk/platform@0.2.9
+
 ## 2.6.16
 
 ### Patch Changes
