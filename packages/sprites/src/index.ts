@@ -191,8 +191,8 @@ async function runForeground(sandbox: SpritesSandbox, command: string, options?:
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
   name: 'sprites',
   sizes: (_config, _profile, _options) => ({
-    status: 'unknown',
-    reason: 'The Sprites create API\'s resource fields are not verified yet, so there is no exact standard mapping.',
+    status: 'unsupported',
+    reason: 'Every Sprite runs with a fixed 8 vCPUs and platform-managed, autoscaling memory; the create API (POST /v1/sprites) takes no CPU/RAM options (docs.fly.io/sprites/concepts/lifecycle).',
   }),
   methods: {
     instances: {
