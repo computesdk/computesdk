@@ -131,10 +131,16 @@ function withBlaxelInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): 
  */
 export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	name: 'blaxel',
-	sizes: (_config, _profile, _options) => ({
-		status: 'unknown',
-		reason: 'Blaxel create only takes a memory size; how many vCPUs each memory size gets is not verified yet, so there is no exact standard mapping.',
-	}),
+	sizes: (_config, profile, options) => {
+		if (options?.snapshotId || options?.templateId) {
+			return { status: 'unsupported', reason: 'A Blaxel snapshot/template boot keeps its source shape; drop it to request a standard size.' };
+		}
+		// @blaxel/core: `memory` is MB and also sets CPU (cores = memory / 2048).
+		if (profile.memoryMiB !== profile.vcpus * 2048) {
+			return { status: 'unavailable', reason: `Blaxel allocates 1 CPU per 2048 MB; ${profile.sizeClass} (${profile.vcpus} vCPU/${profile.memoryMiB} MiB) is not that ratio.` };
+		}
+		return { status: 'supported', nativeOptions: { memory: profile.memoryMiB } };
+	},
 	methods: {
 		instances: {
 			// Collection operations (map to compute.sandbox.*)
