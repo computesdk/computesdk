@@ -378,6 +378,10 @@ Get a publicly accessible URL for accessing services running on a specific port 
 - `options` (object, required): URL configuration options
   - `port` (number, required): Port number where the service is running in the sandbox
   - `protocol` (string, optional): Protocol to use ('http' | 'https'). Defaults to 'https'
+  - `public` (boolean, optional): Request a non-expiring, unauthenticated port URL when supported. Omit it for the provider's default URL behavior.
+  - `label` (string, optional): Label for the public port when supported.
+
+For direct [Agent37](../providers/agent37.md#port-urls) instances, `public` and `label` are available in `computesdk` 4.1.21 and `@computesdk/agent37` 0.1.10 or later.
 
 **Returns:** `Promise<string>` - Publicly accessible URL for the specified port
 

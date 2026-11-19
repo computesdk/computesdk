@@ -105,8 +105,19 @@ interface Agent37Config {
 
 - **Command execution** with `cwd`, `env` and background commands
 - **Filesystem** read, write, list, mkdir, exists and remove
-- **Port URLs**: `getUrl({ port })` returns a signed URL that reaches the port without an API key for one hour
 - **Persistence**: a sandbox keeps its files and installed packages until you destroy it
+
+## Port URLs
+
+By default, `getUrl({ port })` returns a signed URL that reaches the port without an API key for one hour.
+
+With the direct Agent37 provider (`@computesdk/agent37` 0.1.10 or later), pass `public: true` for a URL that does not expire. You can also set an optional `label`:
+
+```typescript
+const url = await sandbox.getUrl({ port: 3000, public: true, label: 'preview' });
+```
+
+The public URL requires no authentication. If the service should be restricted, enforce authentication in the service itself or use the default signed URL for temporary access.
 
 ## Limitations
 
