@@ -580,12 +580,17 @@ Or use `compute actions dispatch ...` with the CLI installed. `--inputs` takes
 space-separated `key=value` pairs. A real run creates account resources and may
 incur provider charges; start with `dry_run=true` to review the plan.
 
-E2B and Novita build Node 22 templates at 1/2, 2/4, 4/8, and 8/16 vCPU/GiB,
-named `csdk-node22-1cpu-2gb` through `csdk-node22-8cpu-16gb`. Superserve already
-has its built-in 2/4 template and builds the other three sizes plus 1/256 MiB;
-Mosaic builds only the 8/16 environment. E2B's standard `sizeClass` resolver uses
-these team templates. Superserve, Novita, and Mosaic select them by `templateId`,
-not by `sizeClass`. See [Sandbox sizes](docs/reference/sizes.md) for exact mappings.
+The workflow names the templates `csdk-node22-<vcpus>cpu-<GiB>gb` for the
+following standard sizes:
+
+| Provider | Templates built | How `sizeClass` uses them |
+| --- | --- | --- |
+| E2B | `sm`–`xl` | The resolver boots the matching team template. |
+| Novita | `xs`–`lg` | The resolver boots the matching account template. |
+| Superserve | `xs`–`2xl`, plus `csdk-node22-1cpu-256mb` | The resolver uses the team templates except for `md`, which defaults to built-in `superserve/base`. Set `sizeTemplates.md` to `csdk-node22-2cpu-4gb` to use the built team template instead. |
+| Mosaic | `xs` and `xl` environments | The resolver uses the built `xs` environment. Use `templateId` to select the built `xl` environment directly; `sizeClass: 'xl'` boots the stock `base` template. |
+
+See [Sandbox sizes](docs/reference/sizes.md) for exact mappings and restrictions.
 
 ## 11. Submit Your PR
 

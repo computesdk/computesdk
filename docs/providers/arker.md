@@ -29,7 +29,7 @@ Arker provider for ComputeSDK — sandboxed VMs with persistent per-VM filesyste
 
 ## Sizes and lifecycle
 
-`sizeClass` sizes each fork via `resources.vcpu` and `resources.memory_mib`. Unpinned creates support all six tiers by selecting the smallest fitting `ubuntu-coding` golden; pinned sources retain their own bounds, and snapshot restores have an `unknown` standard mapping. See [Sandbox sizes](../reference/sizes.md).
+`sizeClass` sizes each fork via `resources.vcpu` and `resources.memory_mib`. Unpinned creates support `xs` through `2xl` by selecting the smallest fitting `ubuntu-coding` golden. No public golden fits `3xl`. Pinned sources retain their own bounds, and snapshot restores have an `unknown` standard mapping. See [Sandbox sizes](../reference/sizes.md).
 
 `pause()`/`resume()` preserve memory and processes. Snapshot capabilities declare whole-rootfs and memory preservation with the source kept. Restore with `instances.create({ snapshotId })`; destroy restored children before deleting their snapshot/source.
 
