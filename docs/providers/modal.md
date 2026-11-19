@@ -81,7 +81,7 @@ interface ModalConfig {
   timeout?: number;
   /** Modal environment (sandbox or main) */
   environment?: string;
-  /** Ports to expose (unencrypted by default) */
+  /** Ports to expose (encrypted TLS tunnels by default) */
   ports?: number[];
   /** Optional-daemond SSE port (defaults to 38989); false disables port exposure, not runtime selection */
   daemonSsePort?: number | false;
@@ -91,7 +91,7 @@ interface ModalConfig {
 ```
 
 
-Ports are exposed with unencrypted tunnels by default for maximum compatibility.
+Ports are exposed as encrypted (TLS/`https://`) tunnels by default, matching Modal's recommendation. Pass `unencryptedPorts` through provider options to opt out for a specific sandbox.
 
 Streaming/processes use native hooks where implemented, otherwise the shell tier.
 `processRuntime: 'daemond'` opts into the daemon fallback; `daemonSsePort` alone

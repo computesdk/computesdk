@@ -8,7 +8,7 @@ Modal provider for ComputeSDK — execute code in serverless Modal sandboxes wit
 npm install @computesdk/modal
 ```
 
-This package uses the official [Modal JS SDK](https://www.npmjs.com/package/modal) (v0.7).
+This package uses the official [Modal JS SDK](https://www.npmjs.com/package/modal) (v0.11).
 
 ## Setup
 
@@ -68,7 +68,7 @@ interface ModalConfig {
   timeout?: number;
   /** Modal environment name (e.g. 'main', 'sandbox') */
   environment?: string;
-  /** Ports to expose (unencrypted tunnels by default) */
+  /** Ports to expose (encrypted TLS tunnels by default) */
   ports?: number[];
   /** Modal App name (default: 'computesdk-modal') */
   appName?: string;
@@ -104,7 +104,7 @@ const url = await sandbox.getUrl({ port: 3000 });
 console.log(`Server reachable at: ${url}`);
 ```
 
-> **Note:** Tunnels are unencrypted by default for maximum compatibility.
+> **Note:** Ports are exposed as encrypted (TLS/`https://`) tunnels, matching Modal's recommendation.
 
 ## Features
 
@@ -256,7 +256,7 @@ console.log(results.map(r => r.stdout));
 
 - **Network Access** — subject to Modal's network policies
 - **Billing** — pay-per-use Modal pricing applies
-- **Tunnel Encryption** — exposed ports use unencrypted tunnels by default
+- **Tunnel Encryption** — exposed ports use encrypted (TLS/`https://`) tunnels by default
 
 ## Support
 
