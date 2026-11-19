@@ -1,5 +1,11 @@
 # @computesdk/cli
 
+## 2.6.19
+
+### Patch Changes
+
+- 9099e19: `--size` help now lists `3xlarge` as 32 vCPU / 64 GiB, matching the platform's sizes.
+
 ## 2.6.18
 
 ### Patch Changes
