@@ -494,6 +494,7 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
                 () =>
                   inst.client.post<{ url: string }>(`${SANDBOXES}/${inst.id}/urls`, {
                     port: options.port,
+                    ...(options.protocol !== undefined ? { protocol: options.protocol } : {}),
                     ...(options.label !== undefined ? { label: options.label } : {}),
                   }),
                 true,
