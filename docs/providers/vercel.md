@@ -43,14 +43,16 @@ Snapshots capture the rootfs without memory. `snapshot.capabilities` has `destro
 
 | `sizeClass` | Vercel `resources.vcpus` | Shape (vCPU / MiB) |
 | --- | ---: | --- |
+| `xs` | 1 | 1 / 2048 |
 | `sm` | 1 | 1 / 2048 |
 | `md` | 2 | 2 / 4096 |
 | `lg` | 4 | 4 / 8192 |
 | `xl` | 8 | 8 / 16384 |
 | `2xl` | 16 | 16 / 32768 |
+| `3xl` | 32 | 32 / 65536 |
 
-- `xs` is `unsupported`: the smallest Vercel shape is 1 vCPU / 2048 MiB, which is `sm`.
-- `3xl` is `unsupported`: the largest Vercel shape is 32 vCPU / 64 GiB, below 128 GiB.
+- `xs` boots 1 vCPU / 2048 MiB: vCPU picks the size, and `sizing.resolved` records the extra RAM.
+- `3xl` (32 vCPU) needs the Enterprise plan; Hobby and Pro caps fail at create time.
 - The size also applies when creating from `snapshotId`, `templateId` or `source`.
 - Combining `sizeClass` with native `resources` (or `vcpus`, `memory`) throws `InstanceSizeError` with code `conflict`.
 

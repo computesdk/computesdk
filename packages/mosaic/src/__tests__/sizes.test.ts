@@ -13,7 +13,7 @@
  * - Restores accepted: a snapshot/environment (fixed captured shape) is paired with a size.
  * - Conflict accepted: native CPU/RAM fields (core aliases or Mosaic's vcpu/memory_mb) are
  *   combined with sizeClass instead of raising InstanceSizeError('conflict').
- * - Unoffered size accepted: 3xl (32 vCPU / 128 GiB) exceeds Mosaic's 16 vCPU / 32 GiB cap.
+ * - Unoffered size accepted: 3xl (32 vCPU / 64 GiB) exceeds Mosaic's 16 vCPU / 32 GiB cap.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mosaic, MOSAIC_SIZE_TEMPLATES } from '../index';

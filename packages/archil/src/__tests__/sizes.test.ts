@@ -5,8 +5,7 @@ import { adaptFetchMock } from './fetch-mock';
 /*
  * Ways the Archil size mapping could fail:
  * 1. Wrong shape: a class maps to CPU/RAM other than its exact profile, or a
- *    class Archil cannot provide (3xl needs 128 GiB; Archil caps at 64 GiB) is
- *    reported supported.
+ *    shape past Archil's 32 vCPU / 64 GiB cap is reported supported.
  * 2. Silent default boot: the native fields never reach POST /api/sandboxes,
  *    so Archil boots its 1 vCPU / 2048 MiB default.
  * 3. Dropped field: vcpus reaches the body but memoryMiB does not (or the
@@ -21,7 +20,7 @@ import { adaptFetchMock } from './fetch-mock';
  */
 
 const supported = [
-  ['xs', 1, 1024], ['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192], ['xl', 8, 16384], ['2xl', 16, 32768],
+  ['xs', 1, 1024], ['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192], ['xl', 8, 16384], ['2xl', 16, 32768], ['3xl', 32, 65536],
 ] as const;
 function mockFetch() {
   const fetch = vi.fn(async () => new Response(JSON.stringify({ success: true, data: {
@@ -40,10 +39,7 @@ describe('Archil standard size mapping (mock-only, installed disk SDK)', () => {
   it('discovers persistent VM mappings without credentials or API calls', () => {
     const fetch = mockFetch();
     const list = archil({ execution: 'persistent' }).sizes.list();
-    expect(list.filter(p => p.status === 'supported').map(p => p.requested.sizeClass)).toEqual(['xs', 'sm', 'md', 'lg', 'xl', '2xl']);
-    const xxxl = list.find(p => p.requested.sizeClass === '3xl')!;
-    expect(xxxl.status).toBe('unsupported');
-    expect(xxxl).toMatchObject({ reason: expect.stringContaining('65536 MiB') });
+    expect(list.filter(p => p.status === 'supported').map(p => p.requested.sizeClass)).toEqual(['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl']);
     expect(archil().sizes.resolve('sm').status).toBe('supported');
     expect(archil({ execution: 'exec' }).sizes.resolve('sm').status).toBe('unavailable');
     expect(archil({ execution: 'exec' }).sizes.resolve('sm', { ephemeral: false }).status).toBe('supported');
@@ -72,12 +68,6 @@ describe('Archil standard size mapping (mock-only, installed disk SDK)', () => {
     const fetch = mockFetch();
     await archil({ ...config, execution: 'exec' }).instances.create({ sizeClass: '2xl', ephemeral: false });
     expect(body(fetch)).toMatchObject({ vcpu_count: 16, mem_size_mib: 32768 });
-  });
-
-  it('refuses 3xl with unsupported and no API call', async () => {
-    const fetch = mockFetch();
-    await expect(archil(config).instances.create({ sizeClass: '3xl' })).rejects.toMatchObject({ code: 'unsupported', fallback: false });
-    expect(fetch).not.toHaveBeenCalled();
   });
 
   it.each([

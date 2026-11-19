@@ -43,7 +43,7 @@ describe('Sandbox0 standard sizes', () => {
     const sizes = sandbox0().sizes;
 
     expect(sizes.list().filter(({ status }) => status === 'supported').map(({ requested }) => requested.sizeClass))
-      .toEqual(supported.map(([sizeClass]) => sizeClass));
+      .toEqual(['xs', ...supported.map(([sizeClass]) => sizeClass)]);
     for (const [sizeClass, vcpus, memoryMiB] of supported) {
       expect(sizes.resolve(sizeClass)).toEqual({
         requested: { sizeClass, vcpus, memoryMiB },
@@ -77,8 +77,13 @@ describe('Sandbox0 standard sizes', () => {
     ]);
   });
 
+  it('claims 2 GiB for xs so it gets a whole vCPU', async () => {
+    const instance = await sandbox0({ token: 'mock-token' }).sandbox.create({ sizeClass: 'xs' });
+    expect(claim.mock.calls).toEqual([['coding-agent', { memory: '2048Mi' }]]);
+    expect(instance.sizing).toMatchObject({ requested: { sizeClass: 'xs', memoryMiB: 1024 }, resolved: { vcpus: 1, memoryMiB: 2048 } });
+  });
+
   it.each([
-    ['xs', '0.5 vCPU'],
     ['2xl', '16 GiB'],
     ['3xl', '16 GiB'],
   ] as const)('refuses %s before any vendor call', async (sizeClass, reason) => {

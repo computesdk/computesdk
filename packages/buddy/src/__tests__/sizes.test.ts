@@ -9,7 +9,7 @@
  * Ways the mapping could fail, each covered below:
  * 1. Wrong shape: a class maps to a preset below its profile (e.g. md -> 1x2)
  *    or to a bigger preset than the smallest one that belongs to it (md -> 3x6).
- * 2. A class Buddy cannot serve (xs, 2xl, 3xl) is reported supported, or as
+ * 2. A class Buddy cannot serve (2xl, 3xl) is reported supported, or as
  *    `unknown` instead of `unsupported`, or clamps silently to 1x2/12x24.
  * 3. Silent default boot: the preset is resolved but never reaches the
  *    `addSandbox` body, so Buddy boots its 2x4 default (or config.resources).
@@ -30,6 +30,7 @@ import { BUDDY_DISK_MIB, BUDDY_SIZE_PRESETS, buddy } from '../index';
 const config = { token: 't', workspace: 'w', project: 'p' };
 
 const expected = {
+  xs: { resources: '1x2', vcpus: 1, memoryMiB: 2048 },
   sm: { resources: '1x2', vcpus: 1, memoryMiB: 2048 },
   md: { resources: '2x4', vcpus: 2, memoryMiB: 4096 },
   lg: { resources: '4x8', vcpus: 4, memoryMiB: 8192 },
@@ -52,7 +53,7 @@ afterEach(() => {
 });
 
 describe('Buddy standard sizes', () => {
-  it('maps sm/md/lg/xl to the smallest preset that meets each profile, with the fixed disk', () => {
+  it('maps xs-xl to the smallest preset whose vCPU fits each class, with the fixed disk', () => {
     const sizes = buddy(config).sizes;
     for (const [sizeClass, shape] of Object.entries(expected)) {
       const resolution = sizes.resolve(sizeClass as keyof typeof expected);
@@ -64,22 +65,22 @@ describe('Buddy standard sizes', () => {
       expect(resolution).not.toHaveProperty('belowStandard');
     }
     expect(BUDDY_DISK_MIB).toBe(51200);
-    expect(BUDDY_SIZE_PRESETS).toEqual({ sm: '1x2', md: '2x4', lg: '4x8', xl: '8x16' });
+    expect(BUDDY_SIZE_PRESETS).toEqual({ xs: '1x2', sm: '1x2', md: '2x4', lg: '4x8', xl: '8x16' });
   });
 
-  it('refuses xs, 2xl and 3xl as unsupported with the preset limits', () => {
+  it('refuses 2xl and 3xl as unsupported with the preset limits', () => {
     const list = buddy(config).sizes.list();
-    expect(list.filter(r => r.status === 'supported').map(r => r.requested.sizeClass)).toEqual(['sm', 'md', 'lg', 'xl']);
-    for (const sizeClass of ['xs', '2xl', '3xl'] as const) {
+    expect(list.filter(r => r.status === 'supported').map(r => r.requested.sizeClass)).toEqual(['xs', 'sm', 'md', 'lg', 'xl']);
+    for (const sizeClass of ['2xl', '3xl'] as const) {
       const resolution = list.find(r => r.requested.sizeClass === sizeClass)!;
       expect(resolution.status).toBe('unsupported');
-      expect((resolution as { reason: string }).reason).toMatch(sizeClass === 'xs' ? /1x2/ : /12x24/);
+      expect((resolution as { reason: string }).reason).toMatch(/12x24/);
     }
   });
 
   it('rejects an unsupported class at create without sending a request', async () => {
     const provider = buddy(config);
-    for (const sizeClass of ['xs', '2xl', '3xl'] as const) {
+    for (const sizeClass of ['2xl', '3xl'] as const) {
       const error = await provider.sandbox.create({ sizeClass }).catch(e => e);
       expect(error).toBeInstanceOf(InstanceSizeError);
       expect(error.code).toBe('unsupported');

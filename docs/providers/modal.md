@@ -88,7 +88,7 @@ const sandbox = await compute.instances.create({ sizeClass: 'md' });
 | `lg` | 2 | 8192 |
 | `xl` | 4 | 16384 |
 | `2xl` | 8 | 32768 |
-| `3xl` | 16 | 131072 |
+| `3xl` | 16 | 65536 |
 
 Sandbox disk cannot be resized: the VM runtime's root filesystem is a fixed
 512 GiB, reported as `resolved.diskMiB: 524288`. Sizes apply to the default

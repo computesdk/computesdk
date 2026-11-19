@@ -5,7 +5,7 @@
  * - Wrong shape: a class sent to a type that does not meet it (md -> sandbox-sm, 1 vCPU),
  *   or to a bigger type than the smallest that does (lg -> sandbox-lg), or a bigger type
  *   reported as the profile instead of its real shape in `resolved`.
- * - Silent default boot: a class givemeanode has no type for (xs, md, 3xl) creates the
+ * - Silent default boot: a class givemeanode has no type for (md, 3xl) creates the
  *   default 1 vCPU / 2 GiB sandbox instead of refusing; a refusal that still sends a request.
  * - Dropped field: `size` never reaches POST /preview/sandboxes, or reaches it beside
  *   `ram_gib` (the door takes one or the other), or is lost on the container-image path,
@@ -42,6 +42,7 @@ function provider(extra: Record<string, unknown> = {}) {
 }
 
 const mapped = [
+  ['xs', 'sandbox-sm', 1, 2048],
   ['sm', 'sandbox-sm', 1, 2048],
   ['lg', 'sandbox-md', 4, 8192],
   ['xl', 'sandbox-lg', 8, 32768],
@@ -49,10 +50,10 @@ const mapped = [
 ] as const
 
 describe('givemeanode standard sizes (mock-only)', () => {
-  it('lists sm, lg, xl and 2xl and refuses xs, md and 3xl as unsupported', () => {
+  it('lists xs, sm, lg, xl and 2xl and refuses md and 3xl as unsupported', () => {
     const list = provider().compute.sizes.list()
-    expect(list.filter(r => r.status === 'supported').map(r => r.requested.sizeClass)).toEqual(['sm', 'lg', 'xl', '2xl'])
-    for (const sizeClass of ['xs', 'md', '3xl'] as const) {
+    expect(list.filter(r => r.status === 'supported').map(r => r.requested.sizeClass)).toEqual(['xs', 'sm', 'lg', 'xl', '2xl'])
+    for (const sizeClass of ['md', '3xl'] as const) {
       const r = list.find(x => x.requested.sizeClass === sizeClass)!
       expect(r.status).toBe('unsupported')
       expect(r).toHaveProperty('reason', expect.stringMatching(/givemeanode/))
@@ -98,7 +99,6 @@ describe('givemeanode standard sizes (mock-only)', () => {
   })
 
   it.each([
-    [{ sizeClass: 'xs' }, 'unsupported'],
     [{ sizeClass: 'md' }, 'unsupported'],
     [{ sizeClass: '3xl' }, 'unsupported'],
     [{ sizeClass: 'sm', snapshotId: 'env-snap' }, 'unsupported'],

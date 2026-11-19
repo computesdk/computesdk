@@ -422,13 +422,14 @@ const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
         reason: 'Sandbox0 documents a 16 GiB platform memory limit and lists no larger public shape.',
       };
     }
-    if (profile.memoryMiB < profile.vcpus * 2048) {
-      return {
-        status: 'unsupported',
-        reason: 'Sandbox0 derives 0.5 vCPU at 1 GiB; its 1 vCPU / 2 GiB shape maps to sm.',
-      };
-    }
-    return { status: 'supported', nativeOptions: { memory: profile.memoryMiB } };
+    // CPU follows memory at 2 GiB per vCPU (1 GiB gets 0.5 vCPU), so xs claims
+    // 2 GiB for a whole vCPU; vCPU picks the class and the extra RAM is recorded.
+    const memoryMiB = Math.max(profile.memoryMiB, profile.vcpus * 2048);
+    return {
+      status: 'supported',
+      nativeOptions: { memory: memoryMiB },
+      ...(memoryMiB === profile.memoryMiB ? {} : { resolved: { vcpus: profile.vcpus, memoryMiB } }),
+    };
   },
   methods: {
     instances: {

@@ -12,8 +12,8 @@
  *   silently raise to 16 GiB).
  * - Mis-declared shape: `resolved` hides the 16 GiB memory floor and reports
  *   the profile instead of what Sail actually configures.
- * - xs accepted: every Sail shape has at least 16 GiB, so the smallest one
- *   (1 vCPU / 16 GiB) is sm; xs must be refused, not booted as sm.
+ * - xs refused or mis-sized: every Sail shape has at least 16 GiB; vCPU picks the
+ *   class, so xs boots 1 vCPU / 16 GiB and records the extra RAM.
  * - Silent default boot: the resolved fields never reach `Sailbox.create`, so
  *   the box boots with the image defaults (8 vCPU / 64 GiB).
  * - Dropped field: only one of vcpuCount / memoryLimitGib is forwarded.
@@ -71,12 +71,13 @@ import { sail, SAIL_SIZE_SHAPES } from '../index';
 const provider = () => sail({ apiKey: 'sail-key' });
 
 const mapped = [
+  ['xs', 1, 1024, 1, 16],
   ['sm', 1, 2048, 1, 16],
   ['md', 2, 4096, 2, 16],
   ['lg', 4, 8192, 4, 16],
   ['xl', 8, 16384, 8, 16],
   ['2xl', 16, 32768, 16, 32],
-  ['3xl', 32, 131072, 32, 128],
+  ['3xl', 32, 65536, 32, 64],
 ] as const;
 
 describe('Sail standard size mapping (mock-only)', () => {
@@ -85,13 +86,10 @@ describe('Sail standard size mapping (mock-only)', () => {
     h.restoreArgs.length = 0;
   });
 
-  it('supports sm-3xl and refuses xs as unsupported', () => {
+  it('supports every class', () => {
     const sizes = provider().sizes;
     expect(sizes.list().filter((r) => r.status === 'supported').map((r) => r.requested.sizeClass))
-      .toEqual(['sm', 'md', 'lg', 'xl', '2xl', '3xl']);
-    const xs = sizes.resolve('xs');
-    expect(xs).toMatchObject({ status: 'unsupported' });
-    expect(xs.status !== 'supported' && xs.reason).toMatch(/16 GiB/);
+      .toEqual(['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl']);
   });
 
   it.each(mapped)('%s resolves to %i vCPU / %i MiB as vcpuCount %i + %i GiB memory', (sizeClass, vcpus, memoryMiB, vcpuCount, memoryGib) => {
@@ -127,7 +125,6 @@ describe('Sail standard size mapping (mock-only)', () => {
   });
 
   it.each([
-    { sizeClass: 'xs' },
     { sizeClass: 'md', vcpuCount: 2 },
     { sizeClass: 'md', memoryGib: 16 },
     { sizeClass: 'md', memoryLimitGib: 16 },

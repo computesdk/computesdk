@@ -12,14 +12,13 @@
  * - Regional endpoint: a non-xs size is served by the runner (which only
  *   runs xs) instead of falling back to the account API with `size` intact.
  * - Clamped request: `3xl` is quietly turned into `xl` (16 vCPU / 32 GiB)
- *   like the legacy hint mapping does, or `xs` is quietly upsized.
+ *   like the legacy hint mapping does.
  * - Conflict accepted: sizeClass combined with a native size, CPU, memory
  *   or disk field is not rejected, so two shapes compete.
  * - Snapshot restore accepted: sizeClass with snapshotId pretends to size a
  *   sandbox whose resources come from the snapshot.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { InstanceSizeError } from "@computesdk/provider";
 
 import { MIOSA_SIZE_CONTRACTS, miosa } from "../index";
 import type { MiosaSandboxRecord } from "../index";
@@ -77,6 +76,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 const EXPECTED = {
+  xs: { size: "xs", vcpus: 1, memoryMiB: 2048, diskMiB: 10240 },
   sm: { size: "xs", vcpus: 1, memoryMiB: 2048, diskMiB: 10240 },
   md: { size: "small", vcpus: 2, memoryMiB: 4096, diskMiB: 10240 },
   lg: { size: "medium", vcpus: 4, memoryMiB: 8192, diskMiB: 20480 },
@@ -125,12 +125,6 @@ describe("miosa standard sizes", () => {
       expect(MIOSA_SIZE_CONTRACTS).toEqual(EXPECTED);
     });
 
-    it("refuses xs: the smallest contract is 1 vCPU / 2 GiB", async () => {
-      const resolution = await provider().sizes.resolve("xs");
-      expect(resolution).toMatchObject({ status: "unsupported", reason: expect.stringMatching(/smallest/) });
-      expect(resolution).not.toHaveProperty("nativeOptions");
-    });
-
     it("refuses 3xl instead of clamping to xl", async () => {
       const resolution = await provider().sizes.resolve("3xl");
       expect(resolution).toMatchObject({ status: "unsupported", reason: expect.stringMatching(/largest/) });
@@ -170,9 +164,6 @@ describe("miosa standard sizes", () => {
       await expect(provider().instances.create({ sizeClass: "3xl" })).rejects.toMatchObject({
         code: "unsupported",
       });
-      await expect(provider().instances.create({ sizeClass: "xs" })).rejects.toBeInstanceOf(
-        InstanceSizeError,
-      );
       expect(fetchMock).not.toHaveBeenCalled();
     });
 

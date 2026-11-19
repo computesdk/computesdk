@@ -93,7 +93,7 @@ field, so no disk is set.
 | `lg` | supported | 4 vCPU / 8192 MiB |
 | `xl` | supported | 8 vCPU / 16384 MiB |
 | `2xl` | supported | 16 vCPU / 32768 MiB |
-| `3xl` | unsupported | Needs 128 GiB; Archil caps memory at 64 GiB |
+| `3xl` | supported | 32 vCPU / 65536 MiB (Archil's maximum) |
 
 Exec mode (`execution: 'exec'` or `ephemeral: true`) is `unavailable`.
 Attaching or restoring (`sandboxId`, `instanceId`, `snapshotId`) is

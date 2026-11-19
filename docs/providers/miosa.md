@@ -94,7 +94,7 @@ interface MiosaConfig {
 
 | Size class | MIOSA `size` | Resolved shape |
 |---|---|---|
-| `xs` | — | Unsupported: the smallest MIOSA size is `xs` (1 vCPU / 2 GiB) |
+| `xs` | `xs` | 1 vCPU / 2 GiB / 10 GiB disk (vCPU picks the size; extra RAM recorded) |
 | `sm` | `xs` | 1 vCPU / 2 GiB / 10 GiB disk |
 | `md` | `small` | 2 vCPU / 4 GiB / 10 GiB disk |
 | `lg` | `medium` | 4 vCPU / 8 GiB / 20 GiB disk |

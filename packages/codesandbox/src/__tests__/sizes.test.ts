@@ -3,10 +3,10 @@
  *
  * Ways the mapping could fail, each covered below:
  * - Wrong shape: a class mapped to the wrong VM tier (e.g. sm → Nano, 2xl → Large,
- *   3xl → Large, whose 64 GiB is below the 128 GiB profile), or `resolved` not
- *   reporting XLarge's 64 vCPU for 3xl.
- * - Silent default boot: an unsupported class (xs) or a refused combination creating a
- *   sandbox on the workspace default tier instead of throwing InstanceSizeError.
+ *   3xl → XLarge, whose 64 vCPU is past the class), or `resolved` not reporting
+ *   Pico's 2 GiB for xs.
+ * - Silent default boot: a refused combination creating a sandbox on the workspace
+ *   default tier instead of throwing InstanceSizeError.
  * - Dropped field: `vmTier` not reaching `sdk.sandboxes.create` (on the default
  *   template, explicit templateId or snapshotId restore branch), or the 2xl/3xl size
  *   template id not reaching it as `id`, or `config.templateId` overriding the size template.
@@ -31,25 +31,24 @@ const provider = (config = {}) => codesandbox({ apiKey: 'csb_test', ...config })
 const lastCreate = () => create.mock.calls.at(-1)![0] as Record<string, unknown>;
 
 const tiers = [
+  ['xs', 1, 1024, 'Pico', 1, 2048],
   ['sm', 1, 2048, 'Pico', 1, 2048],
   ['md', 2, 4096, 'Nano', 2, 4096],
   ['lg', 4, 8192, 'Micro', 4, 8192],
   ['xl', 8, 16384, 'Small', 8, 16384],
   ['2xl', 16, 32768, 'Medium', 16, 32768],
-  ['3xl', 32, 131072, 'XLarge', 64, 131072],
+  ['3xl', 32, 65536, 'Large', 32, 65536],
 ] as const;
 
 describe('CodeSandbox standard size mapping (mock-only)', () => {
   afterEach(() => { create.mockClear(); });
 
-  it('lists sm-3xl as supported and xs as unsupported', () => {
+  it('lists every class as supported', () => {
     const list = provider().sizes.list();
     expect(list.map(r => [r.requested.sizeClass, r.status])).toEqual([
-      ['xs', 'unsupported'], ['sm', 'supported'], ['md', 'supported'], ['lg', 'supported'],
+      ['xs', 'supported'], ['sm', 'supported'], ['md', 'supported'], ['lg', 'supported'],
       ['xl', 'supported'], ['2xl', 'supported'], ['3xl', 'supported'],
     ]);
-    const xs = provider().sizes.resolve('xs');
-    expect(xs.status === 'unsupported' && xs.reason).toMatch(/Pico/);
   });
 
   it.each(tiers)('resolves %s to the %s-sized tier', (sizeClass, vcpus, memoryMiB, tier, rv, rm) => {
@@ -77,13 +76,13 @@ describe('CodeSandbox standard size mapping (mock-only)', () => {
     await provider().instances.create({ sizeClass: '2xl' });
     expect(lastCreate()).toMatchObject({ id: CODESANDBOX_SIZE_TEMPLATES['2xl'], vmTier: { name: 'Medium' } });
     await provider().instances.create({ sizeClass: '3xl' });
-    expect(lastCreate()).toMatchObject({ id: CODESANDBOX_SIZE_TEMPLATES['3xl'], vmTier: { name: 'XLarge' } });
-    expect(CODESANDBOX_SIZE_TEMPLATES).toEqual({ '2xl': 'csdk@csdk-node22-16cpu-32gb', '3xl': 'csdk@csdk-node22-64cpu-128gb' });
+    expect(lastCreate()).toMatchObject({ id: CODESANDBOX_SIZE_TEMPLATES['3xl'], vmTier: { name: 'Large' } });
+    expect(CODESANDBOX_SIZE_TEMPLATES).toEqual({ '2xl': 'csdk@csdk-node22-16cpu-32gb', '3xl': 'csdk@csdk-node22-32cpu-64gb' });
   });
 
   it('honors sizeTemplates and keeps the size template over config.templateId', async () => {
     await provider({ templateId: 'my-template', sizeTemplates: { '3xl': 'team@big' } }).instances.create({ sizeClass: '3xl' });
-    expect(lastCreate()).toMatchObject({ id: 'team@big', vmTier: { name: 'XLarge' } });
+    expect(lastCreate()).toMatchObject({ id: 'team@big', vmTier: { name: 'Large' } });
     await provider({ templateId: 'my-template' }).instances.create({ sizeClass: '2xl' });
     expect(lastCreate()).toMatchObject({ id: CODESANDBOX_SIZE_TEMPLATES['2xl'] });
   });
@@ -105,7 +104,6 @@ describe('CodeSandbox standard size mapping (mock-only)', () => {
   });
 
   it.each([
-    [{ sizeClass: 'xs' }, 'unsupported'],
     [{ sizeClass: 'sm', vmTier: { name: 'Small' } }, 'conflict'],
     [{ sizeClass: 'md', cpu: 2 }, 'conflict'],
     [{ sizeClass: 'md', memoryMiB: 4096 }, 'conflict'],

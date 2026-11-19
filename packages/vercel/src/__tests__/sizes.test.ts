@@ -7,10 +7,8 @@
  *
  * Ways the mapping could fail, each covered below:
  * - Wrong shape: a class maps to the wrong vCPU count (memory follows vCPUs,
- *   so a wrong count is also wrong RAM), or 1 vCPU / 2048 MiB is sold as xs.
- * - Below-profile shape: 3xl (32/131072) mapped to 32 vCPU / 64 GiB.
- * - Silent default boot: an unsupported class (xs, 3xl) reaches
- *   Sandbox.create and boots the 2-vCPU default instead of refusing.
+ *   so a wrong count is also wrong RAM). xs is 1 vCPU / 2048 MiB: vCPU picks
+ *   the class and the extra RAM is recorded in resolved.
  * - Dropped field: `resources.vcpus` is lost on the plain, snapshot, template
  *   or `source` create branches, or sizeClass leaks to the vendor call.
  * - Wrong disk: resolved.diskMiB not 64 GiB, or not 32 GiB for `runtime`.
@@ -30,21 +28,17 @@ vi.mock('@vercel/sandbox', () => ({
 }));
 
 const config = { token: 'tok', teamId: 'team', projectId: 'proj' };
-const supported = [['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192], ['xl', 8, 16384], ['2xl', 16, 32768]] as const;
+const supported = [['xs', 1, 2048], ['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192], ['xl', 8, 16384], ['2xl', 16, 32768], ['3xl', 32, 65536]] as const;
 
 describe('Vercel standard sizes (mock-only)', () => {
   beforeEach(() => { create.mockClear(); });
 
-  it('lists sm-2xl as supported and xs/3xl as unsupported', () => {
+  it('lists every class as supported (xs on the 1 vCPU / 2048 MiB shape, 3xl at the 32 vCPU maximum)', () => {
     const list = vercel(config).sizes.list();
     expect(list.map(r => [r.requested.sizeClass, r.status])).toEqual([
-      ['xs', 'unsupported'], ['sm', 'supported'], ['md', 'supported'], ['lg', 'supported'],
-      ['xl', 'supported'], ['2xl', 'supported'], ['3xl', 'unsupported'],
+      ['xs', 'supported'], ['sm', 'supported'], ['md', 'supported'], ['lg', 'supported'],
+      ['xl', 'supported'], ['2xl', 'supported'], ['3xl', 'supported'],
     ]);
-    const xs = vercel(config).sizes.resolve('xs');
-    const xxxl = vercel(config).sizes.resolve('3xl');
-    expect(xs.status === 'unsupported' && xs.reason).toMatch(/1 vCPU \/ 2048 MiB/);
-    expect(xxxl.status === 'unsupported' && xxxl.reason).toMatch(/32 vCPU \/ 65536 MiB/);
   });
 
   it.each(supported)('resolves %s to exactly %i vCPU / %i MiB with a 64 GiB disk', (sizeClass, vcpus, memoryMiB) => {
@@ -87,12 +81,6 @@ describe('Vercel standard sizes (mock-only)', () => {
   ])('rejects conflicting native sizing without creating: %j', async (options) => {
     await expect(vercel(config).instances.create(options as any))
       .rejects.toMatchObject({ name: 'InstanceSizeError', code: 'conflict', fallback: false });
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it.each(['xs', '3xl'] as const)('refuses %s without booting the default size', async (sizeClass) => {
-    await expect(vercel(config).instances.create({ sizeClass }))
-      .rejects.toMatchObject({ name: 'InstanceSizeError', code: 'unsupported', fallback: false });
     expect(create).not.toHaveBeenCalled();
   });
 

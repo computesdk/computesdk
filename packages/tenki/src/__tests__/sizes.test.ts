@@ -3,7 +3,7 @@
  *
  * Ways the mapping could fail, each covered below:
  * 1. Wrong shape: a class maps to CPU/RAM other than its exact profile, or a
- *    shape below the profile (e.g. 3xl sent with 64 GiB instead of 128 GiB).
+ *    shape below the profile (e.g. 3xl sent with 32 GiB instead of 64 GiB).
  * 2. Silent default boot: a sizeClass request reaches createAndWait without
  *    cpuCores/memoryMb, so Luxor boots its 2 vCPU / 4096 MB default.
  * 3. Dropped field: toCreateOptions drops cpuCores, memoryMb or diskSizeGb,
@@ -59,7 +59,7 @@ const shapes = [
   ['lg', 4, 8192, 20],
   ['xl', 8, 16384, 40],
   ['2xl', 16, 32768, undefined],
-  ['3xl', 32, 131072, undefined],
+  ['3xl', 32, 65536, undefined],
 ] as const;
 
 describe('Luxor standard sizes (mock-only)', () => {
@@ -100,7 +100,7 @@ describe('Luxor standard sizes (mock-only)', () => {
     expect(createCalls[0].diskSizeGb).toBe(20);
     await provider.instances.create({ sizeClass: '3xl' });
     expect(createCalls[1].diskSizeGb).toBe(50);
-    expect(provider.sizes.resolve('3xl')).toMatchObject({ resolved: { vcpus: 32, memoryMiB: 131072, diskMiB: 51200 } });
+    expect(provider.sizes.resolve('3xl')).toMatchObject({ resolved: { vcpus: 32, memoryMiB: 65536, diskMiB: 51200 } });
   });
 
   it('a per-create diskSizeGb wins and is reported in resolved', async () => {

@@ -86,6 +86,6 @@ interface RunloopConfig {
 | `xl` | 8 | 16384 | 16384 |
 | `2xl` | 16 | 32768 | 16384 |
 
-`xs` is unsupported because Runloop's `X_SMALL` preset has 0.5 vCPU and a custom 1-vCPU Devbox requires at least 2 GiB of RAM. `3xl` exceeds Runloop's custom limits of 16 vCPUs and 64 GiB of RAM. [Runloop sizing guide](https://docs.runloop.ai/docs/devboxes/configuration/sizes)
+`xs` boots a custom 1 vCPU / 2 GiB Devbox, since custom sizes need at least 2 GiB per vCPU (vCPU picks the size; the extra RAM is recorded in `sizing.resolved`). `3xl` exceeds Runloop's custom limits of 16 vCPUs and 64 GiB of RAM. [Runloop sizing guide](https://docs.runloop.ai/docs/devboxes/configuration/sizes)
 
 Omit `sizeClass` when supplying native `launch_parameters`.

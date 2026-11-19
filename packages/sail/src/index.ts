@@ -44,19 +44,20 @@ const PROVIDER = 'sail';
 /**
  * Per-create Sailbox limits for each standard size. Sail rounds `vcpuCount`
  * (1-64) and the memory limit (16-256 GiB) up to powers of two and raises any
- * memory limit below 16 GiB to 16 GiB, so every shape holds at least 16 GiB:
- * the smallest, 1 vCPU / 16 GiB, is `sm`, and `xs` has no Sail shape.
+ * memory limit below 16 GiB to 16 GiB, so every shape holds at least 16 GiB.
+ * vCPU picks the class, so `xs` and `sm` both take 1 vCPU / 16 GiB (extra RAM).
  */
 export const SAIL_SIZE_SHAPES: Readonly<Partial<Record<InstanceSizeClass, {
   readonly vcpuCount: number;
   readonly memoryGib: number;
 }>>> = Object.freeze({
+  xs: { vcpuCount: 1, memoryGib: 16 },
   sm: { vcpuCount: 1, memoryGib: 16 },
   md: { vcpuCount: 2, memoryGib: 16 },
   lg: { vcpuCount: 4, memoryGib: 16 },
   xl: { vcpuCount: 8, memoryGib: 16 },
   '2xl': { vcpuCount: 16, memoryGib: 32 },
-  '3xl': { vcpuCount: 32, memoryGib: 128 },
+  '3xl': { vcpuCount: 32, memoryGib: 64 },
 });
 const DEFAULT_APP = 'computesdk';
 const GONE_STATUSES = new Set(['terminating', 'terminated']);
@@ -443,7 +444,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
     if (!shape) {
       return {
         status: 'unsupported',
-        reason: `Sail raises every memory limit below 16 GiB to 16 GiB, so its smallest shape (1 vCPU / 16 GiB) is sm; it has no ${profile.sizeClass} shape.`,
+        reason: `Sail has no ${profile.sizeClass} shape.`,
       };
     }
     return {

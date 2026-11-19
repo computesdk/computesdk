@@ -123,7 +123,7 @@ const sandbox = await compute.instances.create({ sizeClass: 'md' });
 | `lg` | `4x8` | 4 vCPU / 8192 MiB / 51200 MiB disk |
 | `xl` | `8x16` | 8 vCPU / 16384 MiB / 51200 MiB disk |
 
-`xs` is `unsupported` (the smallest preset, `1x2`, is `sm`), and `2xl`/`3xl` are `unsupported` (the largest preset, `12x24`, is below 16 vCPU / 32 GiB). The preset also applies when booting from `snapshotId` or `templateId`, and overrides the config `resources` default. `sizeClass` cannot be combined with `resources`, `cpu`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB` or `memMiB`.
+`xs` uses `1x2` like `sm` (vCPU picks the size; the extra RAM is recorded in `sizing.resolved`), and `2xl`/`3xl` are `unsupported` (the largest preset, `12x24`, is below 16 vCPU / 32 GiB). The preset also applies when booting from `snapshotId` or `templateId`, and overrides the config `resources` default. `sizeClass` cannot be combined with `resources`, `cpu`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB` or `memMiB`.
 
 ## Commands
 

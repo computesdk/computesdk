@@ -24,17 +24,18 @@ export interface CodesandboxConfig {
 type VmTierName = 'Pico' | 'Nano' | 'Micro' | 'Small' | 'Medium' | 'Large' | 'XLarge';
 
 /**
- * Smallest CodeSandbox VM tier (SDK `VMTier`, docs sdk/pricing) meeting each standard
- * size. Pico (1 vCPU / 2 GiB) is the smallest tier, so `xs` has none; Large (32/64)
- * is below the 3xl profile's 128 GiB, so 3xl is XLarge (64/128).
+ * Smallest CodeSandbox VM tier (SDK `VMTier`, docs sdk/pricing) in each standard size.
+ * vCPU picks the class, so `xs` takes Pico (1 vCPU / 2 GiB, extra RAM) like `sm`, and
+ * `3xl` takes Large (32 vCPU / 64 GiB); XLarge (64/128) is never needed.
  */
 const SIZE_TIERS: Readonly<Partial<Record<InstanceSizeClass, { tier: VmTierName; vcpus: number; memoryMiB: number }>>> = {
+  xs: { tier: 'Pico', vcpus: 1, memoryMiB: 2048 },
   sm: { tier: 'Pico', vcpus: 1, memoryMiB: 2048 },
   md: { tier: 'Nano', vcpus: 2, memoryMiB: 4096 },
   lg: { tier: 'Micro', vcpus: 4, memoryMiB: 8192 },
   xl: { tier: 'Small', vcpus: 8, memoryMiB: 16384 },
   '2xl': { tier: 'Medium', vcpus: 16, memoryMiB: 32768 },
-  '3xl': { tier: 'XLarge', vcpus: 64, memoryMiB: 131072 },
+  '3xl': { tier: 'Large', vcpus: 32, memoryMiB: 65536 },
 };
 
 /**
@@ -44,7 +45,7 @@ const SIZE_TIERS: Readonly<Partial<Record<InstanceSizeClass, { tier: VmTierName;
  */
 export const CODESANDBOX_SIZE_TEMPLATES: Readonly<Partial<Record<InstanceSizeClass, string>>> = Object.freeze({
   '2xl': 'csdk@csdk-node22-16cpu-32gb',
-  '3xl': 'csdk@csdk-node22-64cpu-128gb',
+  '3xl': 'csdk@csdk-node22-32cpu-64gb',
 });
 
 function sizeTemplateOf(config: CodesandboxConfig, sizeClass: InstanceSizeClass): string | undefined {
@@ -270,7 +271,7 @@ export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig,
     }
     const size = SIZE_TIERS[profile.sizeClass];
     if (!size) {
-      return { status: 'unsupported', reason: `CodeSandbox has no VM tier for ${profile.sizeClass}; its smallest tier, Pico, is 1 vCPU / 2 GiB (sm).` };
+      return { status: 'unsupported', reason: `CodeSandbox has no VM tier for ${profile.sizeClass}.` };
     }
     const resolved = size.vcpus === profile.vcpus && size.memoryMiB === profile.memoryMiB
       ? undefined

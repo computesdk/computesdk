@@ -32,14 +32,15 @@ Set `sizeClass` when creating a Linux AMD64 sandbox. The adapter sends CPU and R
 
 | Size | vCPU | RAM (MiB) | Ephemeral disk (MiB) |
 | --- | ---: | ---: | ---: |
+| `xs` | 1 | 2,048 | 40,960 |
 | `sm` | 1 | 2,048 | 40,960 |
 | `md` | 2 | 4,096 | 49,152 |
 | `lg` | 4 | 8,192 | 65,536 |
 | `xl` | 8 | 16,384 | 98,304 |
 | `2xl` | 16 | 32,768 | 163,840 |
-| `3xl` | 32 | 131,072 | 557,056 |
+| `3xl` | 32 | 65,536 | 294,912 |
 
-`xs` is `unsupported` because the minimum listed Linux shape is 1 vCPU and 2 GiB (`sm`). `3xl` requires high-memory access in your Namespace workspace. [Namespace machine shapes](https://namespace.so/docs/architecture/compute/machine-shapes)
+`xs` boots the minimum listed Linux shape, 1 vCPU / 2 GiB: vCPU picks the size and the extra RAM is recorded in `sizing.resolved`. [Namespace machine shapes](https://namespace.so/docs/architecture/compute/machine-shapes)
 
 Native per-create CPU or RAM fields conflict with `sizeClass`. The class takes precedence over the provider's factory defaults and also applies when restoring a volume with `snapshotId`. Linux ARM64 resolutions are `unknown` because the architecture alone does not distinguish Ampere from Apple Silicon. Non-Linux instances are `unsupported` on this container create path. [Sandbox sizes](../reference/sizes.md)
 

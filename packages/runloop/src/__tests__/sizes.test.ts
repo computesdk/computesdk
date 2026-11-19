@@ -23,6 +23,7 @@ beforeEach(() => {
 
 describe("Runloop standard sizes", () => {
   it.each([
+    ["xs", 1, 2048, 4096, 2, 4],
     ["sm", 1, 2048, 4096, 2, 4],
     ["md", 2, 4096, 8192, 4, 8],
     ["lg", 4, 8192, 16384, 8, 16],
@@ -39,7 +40,7 @@ describe("Runloop standard sizes", () => {
 
     expect(provider.sizes!.resolve(sizeClass)).toMatchObject({
       status: "supported",
-      requested: { sizeClass, vcpus, memoryMiB },
+      requested: { sizeClass, vcpus },
       resolved,
       nativeOptions: { launch_parameters },
     });
@@ -75,7 +76,7 @@ describe("Runloop standard sizes", () => {
     });
   });
 
-  it.each(["xs", "3xl"] as const)("rejects %s before making a Runloop request", async (sizeClass) => {
+  it.each(["3xl"] as const)("rejects %s before making a Runloop request", async (sizeClass) => {
     const resolution = provider.sizes!.resolve(sizeClass);
     expect(resolution).toMatchObject({ status: "unsupported", reason: expect.any(String) });
     await expect(provider.instances.create({ sizeClass })).rejects.toMatchObject({

@@ -32,7 +32,7 @@ vi.mock('freestyle', () => ({
 import { FreestyleApiError } from 'freestyle';
 import { freestyle } from '../index';
 
-const grown = [['xl', 8, 16384], ['2xl', 16, 32768], ['3xl', 32, 131072]] as const;
+const grown = [['xl', 8, 16384], ['2xl', 16, 32768], ['3xl', 32, 65536]] as const;
 
 function bootsAt(cpu: number, memory: number) {
   mocks.data.mockResolvedValue({ resources: { cpu, memory } });

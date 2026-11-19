@@ -3,8 +3,9 @@
  *
  * Tensorlake takes arbitrary `cpus` / `memoryMb` (1024–8192 MiB per vCPU,
  * capped at 16000 MB per sandbox) and `diskMb` (capped at 10240 MiB), so xs–lg
- * map to their exact profile, xl maps to the approved 8 vCPU / 16000 MB
- * exception with `belowStandard`, and every class pins the 10240 MiB disk.
+ * map to their exact profile, xl maps to 8 vCPU / 16000 MB (within the 10%
+ * memory tolerance, with `belowStandard` and the 384 MiB shortfall), and every
+ * class pins the 10240 MiB disk.
  *
  * Ways the mapping could fail, each covered below:
  * - Wrong shape: a class resolves to other CPU/RAM than its profile, or
@@ -67,12 +68,13 @@ describe("Tensorlake standard sizes", () => {
     }
   });
 
-  it("resolves xl to the approved 8 vCPU / 16000 MB exception", () => {
+  it("resolves xl to 8 vCPU / 16000 MB, within the memory tolerance", () => {
     expect(tensorlake({ apiKey: "test" }).sizes.resolve("xl")).toEqual({
       ...XL,
       provenance: "adapter-declared",
       status: "supported",
       belowStandard: RAM_CAP_NOTE,
+      memoryShortfallMiB: 384,
       nativeOptions: { cpus: 8, memoryMb: 16000, diskMb: DISK_MIB },
     });
   });
@@ -81,7 +83,7 @@ describe("Tensorlake standard sizes", () => {
     const instance = await tensorlake({ apiKey: "test" }).instances.create({ sizeClass: "xl" });
     expect(create.mock.calls[0][0]).toMatchObject({ cpus: 8, memoryMb: 16000, diskMb: DISK_MIB });
     expect(create.mock.calls[0][0]).not.toHaveProperty("sizeClass");
-    expect(instance.sizing).toEqual({ ...XL, provenance: "adapter-declared", belowStandard: RAM_CAP_NOTE });
+    expect(instance.sizing).toEqual({ ...XL, provenance: "adapter-declared", belowStandard: RAM_CAP_NOTE, memoryShortfallMiB: 384 });
   });
 
   it.each(profiles)("resolves %s to %i vCPU / %i MiB with a 10240 MiB disk", (sizeClass, vcpus, memoryMiB) => {

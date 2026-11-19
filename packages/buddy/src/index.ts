@@ -87,10 +87,12 @@ export async function deleteSandbox(client: BuddyApiClient, sandboxId: string): 
 export const BUDDY_DISK_MIB = 50 * 1024;
 
 /**
- * Smallest `resources` preset (`{vCPU}x{RAM GB}`, 1x2 through 12x24) that meets
- * each standard size. 1x2 already exceeds `xs`, and 12x24 is below `2xl`.
+ * Smallest `resources` preset (`{vCPU}x{RAM GB}`, 1x2 through 12x24) whose vCPU
+ * puts it in each standard size. `xs` takes 1x2 (extra RAM); 12x24 has too few
+ * vCPU for `2xl`.
  */
 export const BUDDY_SIZE_PRESETS: Readonly<Partial<Record<InstanceSizeClass, BuddyResources>>> = Object.freeze({
+  xs: '1x2',
   sm: '1x2',
   md: '2x4',
   lg: '4x8',
@@ -107,9 +109,7 @@ export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapsh
     if (!preset) {
       return {
         status: 'unsupported',
-        reason: profile.vcpus < 1 || profile.memoryMiB < 2048
-          ? `Buddy's smallest preset is 1x2 (1 vCPU / 2 GB RAM), so it has no ${profile.sizeClass} size.`
-          : `Buddy's largest preset is 12x24 (12 vCPU / 24 GB RAM), below ${profile.sizeClass} (${profile.vcpus} vCPU / ${profile.memoryMiB} MiB).`,
+        reason: `Buddy's largest preset is 12x24 (12 vCPU / 24 GB RAM), below ${profile.sizeClass} (${profile.vcpus} vCPU / ${profile.memoryMiB} MiB).`,
       };
     }
     const [vcpus, memoryGb] = preset.split('x').map(Number);

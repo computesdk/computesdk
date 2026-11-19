@@ -101,13 +101,13 @@ console.log(sandbox.sizing.resolved); // { vcpus: 2, memoryMiB: 16384 }
 
 | `sizeClass` | Sail limits | Resolved shape |
 | --- | --- | --- |
-| `xs` | unsupported | Sail's smallest shape, 1 vCPU / 16 GiB, is `sm` |
+| `xs` | `vcpuCount: 1`, 16 GiB | 1 vCPU / 16384 MiB (Sail's 16 GiB floor) |
 | `sm` | `vcpuCount: 1`, 16 GiB | 1 vCPU / 16384 MiB |
 | `md` | `vcpuCount: 2`, 16 GiB | 2 vCPU / 16384 MiB |
 | `lg` | `vcpuCount: 4`, 16 GiB | 4 vCPU / 16384 MiB |
 | `xl` | `vcpuCount: 8`, 16 GiB | 8 vCPU / 16384 MiB |
 | `2xl` | `vcpuCount: 16`, 32 GiB | 16 vCPU / 32768 MiB |
-| `3xl` | `vcpuCount: 32`, 128 GiB | 32 vCPU / 131072 MiB |
+| `3xl` | `vcpuCount: 32`, 64 GiB | 32 vCPU / 65536 MiB |
 
 These are limits, not reserved resources: Sail bills the CPU and memory the
 Sailbox actually uses. Disk keeps the image's limit (256 GiB by default).

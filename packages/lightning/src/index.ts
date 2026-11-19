@@ -35,7 +35,7 @@ export const LIGHTNING_SIZE_INSTANCE_TYPES: Readonly<Partial<Record<InstanceSize
 
 const UNSUPPORTED_SIZE_REASONS: Partial<Record<InstanceSizeClass, string>> = {
   sm: 'Lightning has no 1-vCPU instance type with 2 GiB RAM: cpu-1 has 1 GB, and cpu-2 (2 vCPU / 8 GB) is the md size.',
-  '3xl': 'Lightning\'s largest instance type is cpu-16 (16 vCPU / 64 GB); it has no 32-vCPU / 128 GiB type.',
+  '3xl': 'Lightning\'s largest instance type is cpu-16 (16 vCPU / 64 GB); it has no 32-vCPU type.',
 };
 
 /** Minimal view of the `@lightningai/sdk` `FileStat` we rely on. */

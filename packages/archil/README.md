@@ -149,12 +149,12 @@ handles. `cwd`, `env` and installs do not persist between commands.
 ## Standard sizes (persistent VMs only)
 
 `archil().sizes.list()` / `resolve('sm')` declares exact `xs`, `sm`, `md`, `lg`,
-`xl`, and `2xl` requests. `create({ sizeClass: 'sm' })` maps to adapter `vcpus: 1`,
+`xl`, `2xl`, and `3xl` requests. `create({ sizeClass: 'sm' })` maps to adapter `vcpus: 1`,
 `memoryMiB: 2048`, then native `vcpuCount` / `memSizeMiB`. Exec mode
 (`execution: 'exec'` or `ephemeral: true`) reports `unavailable` for VM sizing. Attach (`sandboxId`/`instanceId`)
 and fork (`snapshotId`) standard requests reject as `unsupported` before API calls;
 those paths cannot apply a new VM size. Conflicting native controls reject too.
-`3xl` (32 vCPU / 128 GiB) is `unsupported`: Archil caps memory at 64 GiB.
+`3xl` (32 vCPU / 64 GiB) is Archil's maximum shape.
 
 The persistent API documents 1–32 vCPUs and 256–65536 MiB, but adapter declarations
 are not account/quota/region guarantees or measurements. Discovery is pure and

@@ -24,7 +24,7 @@ import { beam } from '../index';
 
 const profiles = [
   ['xs', 1, 1024], ['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192],
-  ['xl', 8, 16384], ['2xl', 16, 32768], ['3xl', 32, 131072],
+  ['xl', 8, 16384], ['2xl', 16, 32768], ['3xl', 32, 65536],
 ] as const;
 
 const credentials = { token: 'token', workspaceId: 'workspace' };

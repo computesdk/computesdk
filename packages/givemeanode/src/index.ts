@@ -130,12 +130,13 @@ type ConfigWithClient = GivemeanodeConfig & { __client?: GmnClient }
 
 /**
  * Standard sizes on givemeanode's listed instance types (docs: "Sizes").
- * Each class takes the smallest type that meets both its vCPU and RAM. The
- * door has no per-sandbox CPU field, so classes with no type of their own
- * (xs: sandbox-sm is already sm; md: the next type, sandbox-md, is lg; 3xl:
+ * vCPU picks the class and each class takes the smallest type in it (extra RAM
+ * is recorded), so xs and sm share sandbox-sm. The door has no per-sandbox CPU
+ * field, so classes with no type of their own (md: no 2 vCPU type; 3xl:
  * nothing past 16 vCPU / 64 GiB) are refused.
  */
 export const GIVEMEANODE_SIZE_TYPES: Readonly<Partial<Record<InstanceSizeClass, { size: string; resolved: InstanceSizeResources }>>> = Object.freeze({
+  xs: { size: 'sandbox-sm', resolved: { vcpus: 1, memoryMiB: 2048 } },
   sm: { size: 'sandbox-sm', resolved: { vcpus: 1, memoryMiB: 2048 } },
   lg: { size: 'sandbox-md', resolved: { vcpus: 4, memoryMiB: 8192 } },
   xl: { size: 'sandbox-lg', resolved: { vcpus: 8, memoryMiB: 32768 } },
@@ -143,9 +144,8 @@ export const GIVEMEANODE_SIZE_TYPES: Readonly<Partial<Record<InstanceSizeClass, 
 })
 
 const UNSIZED_REASONS: Readonly<Partial<Record<InstanceSizeClass, string>>> = {
-  xs: 'givemeanode has no 1 vCPU / 1 GiB type; its smallest, sandbox-sm (1 vCPU / 2 GiB), is the sm size.',
   md: 'givemeanode has no 2 vCPU type; sandbox-sm is 1 vCPU / 2 GiB and sandbox-md (4 vCPU / 8 GiB) is the lg size.',
-  '3xl': 'givemeanode tops out at sandbox-xl (16 vCPU / 64 GiB, the 64 GiB platform RAM cap); there is no 32 vCPU / 128 GiB type.',
+  '3xl': 'givemeanode tops out at sandbox-xl (16 vCPU / 64 GiB, the 64 GiB platform RAM cap); there is no 32 vCPU type.',
 }
 
 function getClient(config: ConfigWithClient): GmnClient {

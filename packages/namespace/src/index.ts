@@ -641,14 +641,17 @@ async function streamNamespaceCommand(sandbox: NamespaceSandbox, command: WireCo
 
 // Published Linux machine shapes. Namespace derives ephemeral disk from the
 // CPU/RAM shape, so disk is reported as metadata and never sent in the request.
+// The minimum shape is 1x2, so xs boots 1 vCPU / 2 GiB (vCPU picks the class).
 // https://namespace.so/docs/architecture/compute/machine-shapes
+const LINUX_MIN_MEMORY_MIB = 2048;
 const LINUX_DISK_GIB = {
+  xs: 40,
   sm: 40,
   md: 48,
   lg: 64,
   xl: 96,
   '2xl': 160,
-  '3xl': 544,
+  '3xl': 288,
 };
 
 /**
@@ -686,16 +689,14 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
     if (os !== 'linux') {
       return { status: 'unsupported', reason: 'The Namespace adapter starts a container, which requires a Linux instance.' };
     }
-    if (profile.sizeClass === 'xs') {
-      return { status: 'unsupported', reason: 'The minimum listed Namespace Linux shape is 1 vCPU / 2 GiB, which maps to sm.' };
-    }
     if (arch === 'arm64') {
       return { status: 'unknown', reason: 'Namespace lists different shapes and disks for Linux on Ampere and Apple Silicon. The ARM64 architecture alone does not identify which machine family will be used.' };
     }
     if (arch !== 'amd64') {
       return { status: 'unsupported', reason: 'Namespace lists Linux machines for AMD64 and ARM64.' };
     }
-    const { vcpus, memoryMiB } = profile;
+    const vcpus = profile.vcpus;
+    const memoryMiB = Math.max(profile.memoryMiB, LINUX_MIN_MEMORY_MIB);
     return {
       status: 'supported',
       nativeOptions: { instanceOptions: { shape: { virtual_cpu: vcpus, memory_megabytes: memoryMiB, os, machine_arch: arch } } },

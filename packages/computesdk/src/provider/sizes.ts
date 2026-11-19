@@ -7,8 +7,9 @@ import {
 
 /**
  * Exact, non-secret resource-only native patch; never copy caller passthrough bodies.
- * `resolved` is the provider's listed shape when it differs from the profile (a bigger tier,
- * or disk); a shape below the profile also needs `belowStandard` explaining the provider limit.
+ * `resolved` is the provider's listed shape when it differs from the profile (more RAM, or disk).
+ * vCPU picks the class; RAM may sit up to 10% below the profile only with `belowStandard`
+ * explaining the provider limit (see `isValidInstanceSizeShape`).
  */
 export type InstanceSizeSupport =
   | {
@@ -116,11 +117,13 @@ export function createInstanceSizeManager<TConfig>(config: TConfig, resolver?: I
     if (support.status === 'supported') {
       const resolved = support.resolved ?? { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB };
       if (!isValidInstanceSizeShape(profile, resolved, support.belowStandard)) {
-        throw new InstanceSizeError('invalid', `adapter declared an invalid ${profile.sizeClass} shape; a shape below the standard size needs belowStandard`);
+        throw new InstanceSizeError('invalid', `adapter declared an invalid ${profile.sizeClass} shape; vCPU must be in the class and RAM at most 10% below it, with belowStandard when below`);
       }
       resolution = {
         ...base, status: 'supported', resolved, nativeOptions: support.nativeOptions,
-        ...(support.belowStandard === undefined ? {} : { belowStandard: support.belowStandard }),
+        ...(support.belowStandard === undefined ? {} : {
+          belowStandard: support.belowStandard, memoryShortfallMiB: profile.memoryMiB - resolved.memoryMiB,
+        }),
       };
     } else {
       resolution = { ...base, status: support.status, reason: support.reason };

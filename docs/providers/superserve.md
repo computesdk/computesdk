@@ -48,9 +48,9 @@ const sandbox = await compute.instances.create({ sizeClass: 'md' });
 | `xl` | `csdk-node22-8cpu-16gb` | 8 / 16 GiB / from the build |
 | `2xl` | `csdk-node22-16cpu-32gb` | 16 / 32 GiB / from the build |
 
-`3xl` (32 vCPU / 128 GiB) is `unsupported`: Superserve lists at most 16 vCPU / 64 GiB per sandbox (Pro plan). Each team template must exist on the team; [Provider Setup](../../ADD-PROVIDER.md#provider-setup) builds them, and a create that hits a missing one fails with setup guidance. Plan limits apply at create time (Free allows 2 vCPU / 4 GiB, Developer 4 vCPU / 16 GiB, Pro 16 vCPU / 64 GiB).
+`3xl` (32 vCPU / 64 GiB) is `unsupported`: Superserve lists at most 16 vCPU / 64 GiB per sandbox (Pro plan). Each team template must exist on the team; [Provider Setup](../../ADD-PROVIDER.md#provider-setup) builds them, and a create that hits a missing one fails with setup guidance. Plan limits apply at create time (Free allows 2 vCPU / 4 GiB, Developer 4 vCPU / 16 GiB, Pro 16 vCPU / 64 GiB).
 
-Override a template name per size with the `sizeTemplates` config, e.g. `superserve({ sizeTemplates: { '3xl': 'acme/node-32cpu-128gb' } })` for a custom-size Enterprise template. `templateId`, `snapshotId`, `sandboxId`, `fromTemplate` or `fromSnapshot` with `sizeClass` is `unsupported` (the template or snapshot fixes the size); native `vcpu`, `vcpuCount`, `memoryMib`, `memoryMaxMib` or `diskMib` with `sizeClass` is a `conflict`. See [Sandbox sizes](../reference/sizes.md).
+Override a template name per size with the `sizeTemplates` config, e.g. `superserve({ sizeTemplates: { '3xl': 'acme/node-32cpu-64gb' } })` for a custom-size Enterprise template. `templateId`, `snapshotId`, `sandboxId`, `fromTemplate` or `fromSnapshot` with `sizeClass` is `unsupported` (the template or snapshot fixes the size); native `vcpu`, `vcpuCount`, `memoryMib`, `memoryMaxMib` or `diskMib` with `sizeClass` is a `conflict`. See [Sandbox sizes](../reference/sizes.md).
 
 ## Lifecycle
 

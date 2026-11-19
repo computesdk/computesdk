@@ -12,7 +12,7 @@ import type {
   SandboxClientOptions,
   SandboxInfo,
 } from "tensorlake";
-import { InstanceSizeError, defineProvider } from "@computesdk/provider";
+import { InstanceSizeError, defineProvider, instanceSizeMemoryFloorMiB } from "@computesdk/provider";
 import { streamTensorlakeCommand } from "./streaming";
 import type {
   CodeResult,
@@ -169,7 +169,7 @@ async function resolveSandboxPath(
 
 /** Root disk pinned for standard sizes: Tensorlake's default and minimum. */
 const SIZE_DISK_MIB = 10240;
-/** Per-sandbox RAM cap; xl (16384 MiB) is the one class approved to run just below it. */
+/** Per-sandbox RAM cap, as Tensorlake lists it; xl (16384 MiB) runs just below its profile. */
 const MAX_MEMORY_MIB = 16000;
 const RAM_CAP_NOTE = "Tensorlake caps sandbox RAM at 16000 MB";
 
@@ -214,7 +214,9 @@ export const tensorlake = defineProvider<
         reason: "A Tensorlake memory snapshot restore keeps the snapshot's CPU and memory; standard sizes apply to fresh creates only.",
       };
     }
-    if (profile.memoryMiB > MAX_MEMORY_MIB && profile.sizeClass !== "xl") {
+    // The RAM cap applies to every class; a capped class is still offered while
+    // its RAM stays within the standard 10% memory tolerance (xl: 16000 of 16384).
+    if (Math.min(profile.memoryMiB, MAX_MEMORY_MIB) < instanceSizeMemoryFloorMiB(profile)) {
       return {
         status: "unsupported",
         reason: `${RAM_CAP_NOTE}; ${profile.sizeClass} needs ${profile.memoryMiB} MiB.`,

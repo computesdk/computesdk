@@ -105,8 +105,10 @@ const sandbox = await compute.instances.create({ sizeClass: 'xl' })
 console.log(sandbox.sizing.resolved) // { vcpus: 8, memoryMiB: 32768 }
 ```
 
-- `xs`, `md` and `3xl` are `unsupported`: there is no 1 vCPU / 1 GiB type,
-  no 2 vCPU type, and nothing above 16 vCPU / 64 GiB.
+- `xs` boots `sandbox-sm` like `sm` (vCPU picks the size; the extra RAM is
+  recorded in `sizing.resolved`).
+- `md` and `3xl` are `unsupported`: there is no 2 vCPU type, and nothing
+  above 16 vCPU.
 - A container `image` is baked at the class size; a curated `image` or
   `templateId` (`sbx-min`) is created at it.
 - `snapshotId`, or a `templateId` starting with `env-`, is `unsupported`: a

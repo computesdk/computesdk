@@ -12,7 +12,7 @@ const profiles = [
   ['lg', 4, 8192, 65536],
   ['xl', 8, 16384, 98304],
   ['2xl', 16, 32768, 163840],
-  ['3xl', 32, 131072, 557056],
+  ['3xl', 32, 65536, 294912],
 ] as const;
 
 function mockFetch() {
@@ -32,7 +32,7 @@ describe('Namespace standard size mapping (mock-only)', () => {
     const fetch = mockFetch();
     const sizes = namespace({ tokenFile: '/must-not-read' }).sizes;
     expect(sizes.list().filter(p => p.status === 'supported').map(p => p.requested.sizeClass))
-      .toEqual(profiles.map(([sizeClass]) => sizeClass));
+      .toEqual(['xs', ...profiles.map(([sizeClass]) => sizeClass)]);
     expect(fetch).not.toHaveBeenCalled();
   });
   it.each(profiles)('maps %s to the published shape and overrides only config defaults', async (sizeClass, cpu, memory, diskMiB) => {
@@ -59,19 +59,20 @@ describe('Namespace standard size mapping (mock-only)', () => {
     const create = fetch.mock.calls.find(([url]) => url.endsWith('/CreateInstance'));
     expect(create).toBeDefined();
     expect(JSON.parse(String(create![1].body))).toMatchObject({
-      shape: { os: 'linux', machine_arch: 'amd64', virtual_cpu: 32, memory_megabytes: 131072 },
+      shape: { os: 'linux', machine_arch: 'amd64', virtual_cpu: 32, memory_megabytes: 65536 },
       containers: [{ image_ref: 'example.invalid/custom:1' }],
       placement: ['cell:iad3-a'],
       volumes: [{ from_snapshot_id: 'vol_1', tag: 'data', size_mb: 2048 }],
     });
   });
-  it('rejects xs before credentials or restore lookups', async () => {
+  it('boots xs on the 1x2 minimum shape and records the extra RAM', async () => {
     const fetch = mockFetch();
-    const provider = namespace({ tokenFile: '/must-not-read' });
-    expect(provider.sizes.resolve('xs')).toMatchObject({ status: 'unsupported', reason: /minimum.*2 GiB/ });
-    await expect(provider.sandbox.create({ sizeClass: 'xs', snapshotId: 'data/vol_1' }))
-      .rejects.toMatchObject({ code: 'unsupported', fallback: false });
-    expect(fetch).not.toHaveBeenCalled();
+    const provider = namespace({ token: 'test' });
+    const resolved = { vcpus: 1, memoryMiB: 2048, diskMiB: 40960 };
+    expect(provider.sizes.resolve('xs')).toMatchObject({ status: 'supported', resolved });
+    const result = await provider.instances.create({ sizeClass: 'xs' });
+    expect(JSON.parse(String(fetch.mock.calls[0][1].body)).shape).toMatchObject({ virtual_cpu: 1, memory_megabytes: 2048 });
+    expect(result.sizing).toEqual({ requested: { sizeClass: 'xs', vcpus: 1, memoryMiB: 1024 }, resolved, provenance: 'adapter-declared' });
   });
   it.each([
     { sizeClass: 'sm', instanceOptions: { shape: { virtual_cpu: 1 } } },

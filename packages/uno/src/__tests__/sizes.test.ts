@@ -61,7 +61,7 @@ const shapes = [
   ['lg', 4, 8192, 40, 40960],
   ['xl', 8, 16384, 80, 81920],
   ['2xl', 16, 32768, 10, undefined],
-  ['3xl', 32, 131072, 10, undefined],
+  ['3xl', 32, 65536, 10, undefined],
 ] as const
 
 describe('Uno standard sizes', () => {

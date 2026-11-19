@@ -90,7 +90,7 @@ export type * from './types';
 
 export { createInstanceSizeManager } from './sizes';
 export type { InstanceSizeResolver, InstanceSizeSupport } from './sizes';
-export { InstanceSizeError, INSTANCE_SIZE_PROFILES, isInstanceSizeManager, isValidInstanceSizeShape } from '../sizes';
+export { InstanceSizeError, INSTANCE_SIZE_PROFILES, isInstanceSizeManager, isValidInstanceSizeShape, INSTANCE_SIZE_MEMORY_TOLERANCE, instanceSizeMemoryFloorMiB, nextInstanceSizeVcpus } from '../sizes';
 export type { InstanceSizeClass, InstanceSizeProfile, InstanceSizeResources, InstanceSizeManager, InstanceSizeResolution, InstanceSizeMetadata, InstanceSizeStatus, InstanceSizeErrorCode, InstanceSizeNativeOptions, InstanceSizeNativeValue } from '../sizes';
 
 export { applyInstanceSizePatch } from './sizes';

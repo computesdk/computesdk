@@ -475,7 +475,9 @@ export interface CreateBlueprintTemplateOptions {
 }
 
 // Match the platform size presets and use Runloop's default custom disk for 2xl.
-const STANDARD_DISK_GIB = { sm: 4, md: 8, lg: 16, xl: 16, "2xl": 16 } as const;
+const STANDARD_DISK_GIB = { xs: 4, sm: 4, md: 8, lg: 16, xl: 16, "2xl": 16 } as const;
+/** Runloop custom sizes need at least 2 GiB of RAM per vCPU. */
+const MIN_MEMORY_MIB_PER_VCPU = 2048;
 
 const NATIVE_SIZE_FIELDS = [
   "resource_size_request",
@@ -500,12 +502,6 @@ export const runloop = defineProvider<
     if (conflict) {
       throw new InstanceSizeError("conflict", `cannot combine sizeClass with Runloop ${conflict}`);
     }
-    if (sizeClass === "xs") {
-      return {
-        status: "unsupported",
-        reason: "Runloop requires at least 2 GiB per vCPU for custom sizes, and its X_SMALL preset has only 0.5 vCPU.",
-      };
-    }
     if (sizeClass === "3xl") {
       return {
         status: "unsupported",
@@ -514,16 +510,18 @@ export const runloop = defineProvider<
     }
 
     const diskGiB = STANDARD_DISK_GIB[sizeClass];
+    // vCPU picks the class; xs takes 1 vCPU / 2 GiB, the smallest custom size with a whole vCPU.
+    const sizedMemoryMiB = Math.max(memoryMiB, vcpus * MIN_MEMORY_MIB_PER_VCPU);
     const launch_parameters = {
       resource_size_request: "CUSTOM_SIZE",
       custom_cpu_cores: vcpus,
-      custom_gb_memory: memoryMiB / 1024,
+      custom_gb_memory: sizedMemoryMiB / 1024,
       custom_disk_size: diskGiB,
     } satisfies NonNullable<Runloop.DevboxCreateParams["launch_parameters"]>;
 
     return {
       status: "supported",
-      resolved: { vcpus, memoryMiB, diskMiB: diskGiB * 1024 },
+      resolved: { vcpus, memoryMiB: sizedMemoryMiB, diskMiB: diskGiB * 1024 },
       nativeOptions: { launch_parameters },
     };
   },

@@ -128,19 +128,17 @@ function withBlaxelInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): 
 
 /**
  * Standard sizes as Blaxel `memory` (MB). Blaxel takes no CPU field: the API
- * reference allocates cores = memory / 2048, which these three sizes meet exactly.
+ * reference allocates cores = memory / 2048. vCPU picks the class, so xs takes
+ * the first 1-core shape (2048 MB, extra RAM); 1024 MB would be only 0.5 core.
  */
 export const BLAXEL_SIZE_MEMORY: Readonly<Partial<Record<InstanceSizeClass, number>>> = Object.freeze({
+	xs: 2048,
 	sm: 2048,
 	md: 4096,
 	lg: 8192,
 });
 
 const BLAXEL_UNMAPPED_SIZES: Readonly<Partial<Record<InstanceSizeClass, { status: 'unsupported' | 'unknown'; reason: string }>>> = Object.freeze({
-	xs: {
-		status: 'unsupported',
-		reason: 'Blaxel allocates 1 CPU core per 2048 MB: 1024 MB gets 0.5 core, and the first 1-core shape (2048 MB) is sm.',
-	},
 	...Object.fromEntries((['xl', '2xl', '3xl'] as const).map(sizeClass => [sizeClass, {
 		status: 'unknown' as const,
 		reason: 'Blaxel documents conflicting CPU for 16 GB and up (API reference: memory / 2048 cores; Sandboxes overview: 16 GB = 6 cores), so this size is not verified.',

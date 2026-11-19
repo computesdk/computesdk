@@ -2065,14 +2065,15 @@ function withLifecycle(sandbox: MiosaSandbox): MiosaSandboxHandle {
 
 /**
  * MIOSA sandboxes run on named resource contracts (docs: Sizing and limits,
- * Sandboxes API). Each standard size maps to the smallest contract that
- * covers it; the contract also fixes the disk. `xs` (1 vCPU / 1 GiB) has no
- * creatable contract (the smallest is `xs`, 1 vCPU / 2 GiB) and `3xl` is past
- * the 16 vCPU / 32 GiB ceiling.
+ * Sandboxes API). vCPU picks the class and each class takes the smallest
+ * contract in it; the contract also fixes the disk. Standard `xs` takes MIOSA's
+ * `xs` contract (1 vCPU / 2 GiB, extra RAM), like `sm`; `3xl` is past the
+ * 16 vCPU / 32 GiB ceiling.
  */
 export const MIOSA_SIZE_CONTRACTS: Readonly<
   Partial<Record<InstanceSizeClass, { size: string; vcpus: number; memoryMiB: number; diskMiB: number }>>
 > = Object.freeze({
+  xs: Object.freeze({ size: "xs", vcpus: 1, memoryMiB: 2048, diskMiB: 10240 }),
   sm: Object.freeze({ size: "xs", vcpus: 1, memoryMiB: 2048, diskMiB: 10240 }),
   md: Object.freeze({ size: "small", vcpus: 2, memoryMiB: 4096, diskMiB: 10240 }),
   lg: Object.freeze({ size: "medium", vcpus: 4, memoryMiB: 8192, diskMiB: 20480 }),
@@ -2107,10 +2108,7 @@ const createMiosaProvider = defineProvider<
     if (!contract)
       return {
         status: "unsupported",
-        reason:
-          profile.sizeClass === "xs"
-            ? "MIOSA's smallest sandbox size is xs (1 vCPU / 2 GiB), which is sm; it lists no 1 vCPU / 1 GiB contract."
-            : `MIOSA's largest sandbox size is xl (16 vCPU / 32 GiB); it has no ${profile.vcpus} vCPU / ${profile.memoryMiB / 1024} GiB size.`,
+        reason: `MIOSA's largest sandbox size is xl (16 vCPU / 32 GiB); it has no ${profile.vcpus} vCPU / ${profile.memoryMiB / 1024} GiB size.`,
       };
     return {
       status: "supported",

@@ -41,7 +41,7 @@ Snapshots declare whole-rootfs and memory preservation with the source kept. Res
 
 | `sizeClass` | Status | Blaxel `memory` | Resolved shape |
 | --- | --- | ---: | --- |
-| `xs` | `unsupported` | — | 1024 MB gets 0.5 core; the first 1-core shape (2048 MB) is `sm`. |
+| `xs` | `supported` | 2048 MB (1 core / 2048 MiB) | vCPU picks the size: 1024 MB would get 0.5 core, so `xs` takes the first 1-core shape and records the extra RAM. |
 | `sm` | supported | 2048 | 1 vCPU / 2048 MiB |
 | `md` | supported | 4096 | 2 vCPU / 4096 MiB |
 | `lg` | supported | 8192 | 4 vCPU / 8192 MiB |

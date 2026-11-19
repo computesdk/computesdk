@@ -113,8 +113,8 @@ and derives CPU from memory. The mappings follow its
 | `lg` | 4 | 8192 |
 | `xl` | 8 | 16384 |
 
-`xs` is unsupported: 1 GiB gets 0.5 vCPU, and the 1 vCPU / 2 GiB shape is
-`sm`. `2xl` and `3xl` exceed the documented 16 GiB limit; Sandbox0 lists no
+`xs` claims 2 GiB: 1 GiB would get only 0.5 vCPU, and vCPU picks the size, so
+`sizing.resolved` reports 1 vCPU / 2048 MiB. `2xl` and `3xl` exceed the documented 16 GiB limit; Sandbox0 lists no
 larger public shape.
 
 Sizing works with `templateId` and `snapshotId` because each claim sets memory

@@ -1156,7 +1156,10 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
       }
       sizing = Object.freeze({
         requested: resolution.requested, resolved: resolution.resolved, provenance: resolution.provenance,
-        ...(resolution.belowStandard === undefined ? {} : { belowStandard: resolution.belowStandard }),
+        ...(resolution.belowStandard === undefined ? {} : {
+          belowStandard: resolution.belowStandard,
+          ...(resolution.memoryShortfallMiB === undefined ? {} : { memoryShortfallMiB: resolution.memoryShortfallMiB }),
+        }),
       });
       const { sizeClass: _sizeClass, ...legacyOptions } = options;
       options = applyInstanceSizePatch(legacyOptions, resolution.nativeOptions);

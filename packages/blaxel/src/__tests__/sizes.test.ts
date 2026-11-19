@@ -8,7 +8,7 @@
  *
  * Ways this mapping could fail, each covered below:
  * - wrong shape: a class sends memory that does not give its vCPU/RAM
- *   (sm 2048, md 4096, lg 8192), or `resolved` misstates the shape;
+ *   (xs and sm 2048, md 4096, lg 8192), or `resolved` misstates the shape;
  * - below-profile boot: xs mapped to 1024 MB (0.5 core), or xl+ mapped to
  *   16 GB+ where the docs disagree on the core count (6 vs 8);
  * - silent default boot: sizeClass dropped so the SDK default 4096 MB or the
@@ -39,14 +39,13 @@ beforeEach(() => {
 const mapped = [['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192]] as const;
 
 describe('Blaxel standard size mapping (mock-only)', () => {
-	it('lists sm, md and lg; xs unsupported; xl, 2xl and 3xl unknown', () => {
+	it('lists xs, sm, md and lg; xl, 2xl and 3xl unknown', () => {
 		const list = blaxel({}).sizes.list();
 		expect(Object.fromEntries(list.map(r => [r.requested.sizeClass, r.status]))).toEqual({
-			xs: 'unsupported', sm: 'supported', md: 'supported', lg: 'supported',
+			xs: 'supported', sm: 'supported', md: 'supported', lg: 'supported',
 			xl: 'unknown', '2xl': 'unknown', '3xl': 'unknown',
 		});
 		for (const r of list) if (r.status !== 'supported') expect(r.reason).toMatch(/\S/);
-		expect(blaxel({}).sizes.resolve('xs')).toMatchObject({ reason: expect.stringMatching(/0\.5/) });
 		expect(blaxel({}).sizes.resolve('xl')).toMatchObject({ reason: expect.stringMatching(/6 cores/) });
 	});
 
@@ -54,6 +53,15 @@ describe('Blaxel standard size mapping (mock-only)', () => {
 		expect(blaxel({}).sizes.resolve(sizeClass)).toMatchObject({
 			status: 'supported', nativeOptions: { memory: memoryMiB }, resolved: { vcpus, memoryMiB },
 		});
+	});
+
+	it('resolves xs to the first 1-core shape, 2048 MB, not 1024 MB (0.5 core)', async () => {
+		expect(blaxel({}).sizes.resolve('xs')).toMatchObject({
+			status: 'supported', nativeOptions: { memory: 2048 }, resolved: { vcpus: 1, memoryMiB: 2048 },
+		});
+		const result = await blaxel({}).instances.create({ sizeClass: 'xs' });
+		expect(vi.mocked(core.SandboxInstance.createIfNotExists).mock.calls[0][0]).toMatchObject({ memory: 2048 });
+		expect(result.sizing).toMatchObject({ requested: { sizeClass: 'xs', vcpus: 1, memoryMiB: 1024 }, resolved: { vcpus: 1, memoryMiB: 2048 } });
 	});
 
 	it.each(mapped)('creates %s with its memory, overriding the configured default', async (sizeClass, vcpus, memoryMiB) => {
@@ -70,7 +78,7 @@ describe('Blaxel standard size mapping (mock-only)', () => {
 	});
 
 	it.each([
-		{ sizeClass: 'xs' }, { sizeClass: 'xl' }, { sizeClass: '2xl' }, { sizeClass: '3xl' },
+		{ sizeClass: 'xl' }, { sizeClass: '2xl' }, { sizeClass: '3xl' },
 		{ sizeClass: 'sm', memory: 2048 }, { sizeClass: 'sm', snapshotId: 'snap_1' }, { sizeClass: 'sm', sandboxId: 'sbx-0' },
 	])('rejects without creating: %j', async (options) => {
 		await expect(blaxel({}).instances.create(options as any)).rejects.toMatchObject({ name: 'InstanceSizeError', fallback: false });

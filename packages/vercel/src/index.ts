@@ -139,16 +139,13 @@ const resolveVercelSize: InstanceSizeResolver<VercelConfig> = (_config, profile,
   if (native?.resources !== undefined) {
     throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Vercel resources');
   }
-  const vcpus = Math.max(profile.vcpus, Math.ceil(profile.memoryMiB / VERCEL_MEMORY_MIB_PER_VCPU));
+  // vCPU picks the class; RAM follows at 2048 MiB per vCPU, so xs boots 1 vCPU / 2048 MiB (extra RAM).
+  const vcpus = profile.vcpus;
   const allowed = vcpus === 1 || (vcpus % 2 === 0 && vcpus <= VERCEL_MAX_VCPUS);
-  if (!allowed) {
-    const max = VERCEL_MAX_VCPUS * VERCEL_MEMORY_MIB_PER_VCPU;
-    return { status: 'unsupported', reason: `Vercel Sandbox tops out at ${VERCEL_MAX_VCPUS} vCPU / ${max} MiB (2048 MiB per vCPU); ${profile.sizeClass} needs ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB.` };
-  }
   const memoryMiB = vcpus * VERCEL_MEMORY_MIB_PER_VCPU;
-  if (vcpus !== profile.vcpus || memoryMiB !== profile.memoryMiB) {
-    // Each shape belongs to the largest class it meets: 1 vCPU / 2048 MiB is sm, so xs has none.
-    return { status: 'unsupported', reason: `Vercel Sandbox has no ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB shape; its smallest is 1 vCPU / 2048 MiB (sm).` };
+  if (!allowed || memoryMiB < profile.memoryMiB) {
+    const max = VERCEL_MAX_VCPUS * VERCEL_MEMORY_MIB_PER_VCPU;
+    return { status: 'unsupported', reason: `Vercel Sandbox takes 1 or an even 2-${VERCEL_MAX_VCPUS} vCPU at 2048 MiB per vCPU (max ${VERCEL_MAX_VCPUS} vCPU / ${max} MiB); it has no ${profile.sizeClass} shape (${profile.vcpus} vCPU / ${profile.memoryMiB} MiB).` };
   }
   const diskMiB = native?.runtime !== undefined ? VERCEL_RUNTIME_DISK_MIB : VERCEL_DISK_MIB;
   return { status: 'supported', nativeOptions: { resources: { vcpus } }, resolved: { vcpus, memoryMiB, diskMiB } };
