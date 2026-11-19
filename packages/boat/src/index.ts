@@ -1,7 +1,7 @@
 import { BoatApi, Configuration, ResponseError } from '@boatdev/sdk';
 import type { CreateSandboxRequest, InitOverrideFunction, RequestOpts, Sandbox } from '@boatdev/sdk';
 import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
-import type { Provider, ProviderSnapshotManager, ProviderTemplateManager, CreateTemplateOptions } from '@computesdk/provider';
+import type { Provider, ProviderSnapshotManager, ProviderTemplateManager, CreateTemplateOptions, InstanceSizeManager } from '@computesdk/provider';
 import { checked, run } from './commands';
 import { readBoatFile, writeBoatFile } from './files';
 import { saveSnapshot, listSnapshots, templateInfo } from './snapshots';
@@ -122,6 +122,7 @@ export interface BoatCreateTemplateOptions extends CreateTemplateOptions {
 export interface BoatProvider extends Provider<BoatSandbox, BoatTemplate, BoatSnapshot> {
   snapshot: ProviderSnapshotManager<BoatSnapshot>;
   template: ProviderTemplateManager<BoatTemplate, BoatCreateTemplateOptions>;
+  readonly sizes: InstanceSizeManager;
 }
 
 /** docs.boat.dev/machines: vCPU / GB per machine type. xlarge needs Boat's $100/month plan. */
