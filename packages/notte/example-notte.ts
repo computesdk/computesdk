@@ -5,8 +5,8 @@ import 'dotenv/config';
 async function main() {
   const n = notte({ apiKey: process.env.NOTTE_API_KEY });
 
-  // Create a new session
-  const session = await n.session.create();
+  // Keep the session open after disconnect up to its lifetime (15 minutes by default), with a 30-minute idle cap.
+  const session = await n.session.create({ keepAlive: true });
 
   // Connect to the session
   const browser = await chromium.connectOverCDP(session.connectUrl);
