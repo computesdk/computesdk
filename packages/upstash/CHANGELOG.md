@@ -1,5 +1,11 @@
 # @computesdk/upstash
 
+## 0.3.36
+
+### Patch Changes
+
+- bf79cbb: Update `@upstash/box` to 0.8.1.
+
 ## 0.3.35
 
 ### Patch Changes
