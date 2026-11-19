@@ -516,6 +516,10 @@ const notAvailable = (what: string) =>
 
 const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
   name: 'kosa8',
+  sizes: (_config, _profile, _options) => ({
+    status: 'requires-build',
+    reason: 'kosa8 sizes come from templates; build a template at this shape and pass it as templateId.',
+  }),
   methods: {
     instances: {
       create: async (config: Kosa8Config, options?: CreateInstanceOptions) => {

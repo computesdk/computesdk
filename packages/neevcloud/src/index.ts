@@ -403,5 +403,11 @@ const templateMethods: TemplateMethods<SandboxTemplate, NeevCloudConfig> = {
 // Usage: `createCompute({ defaultProvider: neevcloud({ apiKey }) })`.
 export const neevcloud = defineProvider<Sandbox, NeevCloudConfig, SandboxTemplate, NeevCloudSnapshot>({
   name: "neevcloud",
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId || options?.image) {
+      return { status: 'unsupported', reason: 'A NeevCloud snapshot/template/image does not apply CPU/RAM overrides; drop it to request a standard size.' };
+    }
+    return { status: 'supported', nativeOptions: { cpu: profile.vcpus, memory: profile.memoryMiB } };
+  },
   methods: { instances: sandboxMethods, snapshot: snapshotMethods, template: templateMethods },
 });

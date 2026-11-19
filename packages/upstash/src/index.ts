@@ -132,6 +132,15 @@ async function readFileNative(sandbox: UpstashSandboxInstance, path: string): Pr
  */
 export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
   name: 'upstash',
+  sizes: (_config, profile, _options) => {
+    // @upstash/box presets: small 2c/4 GB, medium 4c/8 GB, large 8c/16 GB.
+    const presets = { md: 'small', lg: 'medium', xl: 'large' } as const;
+    const size = presets[profile.sizeClass as keyof typeof presets];
+    if (!size) {
+      return { status: 'unavailable', reason: `Upstash Box sizes are small (2c/4G), medium (4c/8G) and large (8c/16G); ${profile.sizeClass} matches none.` };
+    }
+    return { status: 'supported', nativeOptions: { size } };
+  },
   methods: {
     instances: {
       // Collection operations (map to compute.sandbox.*)

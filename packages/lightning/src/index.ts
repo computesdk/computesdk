@@ -234,6 +234,16 @@ function toSnapshot(snap: LightningSnapshotData): LightningSnapshot {
 
 export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({
   name: 'lightning',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Lightning snapshot boot keeps its source shape; drop it to request a standard size.' };
+    }
+    // lightning.ai/docs/platform/build/sandbox: cpu-1 1/1 GB, cpu-2 2/8, cpu-4 4/16, cpu-8 8/32, cpu-16 16/64.
+    if (profile.sizeClass !== 'xs') {
+      return { status: 'unavailable', reason: `Lightning instance types are cpu-1 (1/1 GB) and cpu-2..cpu-16 (4 GB per vCPU); ${profile.sizeClass} (${profile.vcpus} vCPU/${profile.memoryMiB} MiB) matches none.` };
+    }
+    return { status: 'supported', nativeOptions: { instanceType: 'cpu-1' } };
+  },
   methods: {
     instances: {
       create: async (config: LightningConfig, options?: CreateInstanceOptions) => {
@@ -253,7 +263,7 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
 
         const params: Record<string, unknown> = {
           ...providerOptions,
-          instanceType: config.instanceType ?? DEFAULT_INSTANCE_TYPE,
+          instanceType: (providerOptions as { instanceType?: string }).instanceType ?? config.instanceType ?? DEFAULT_INSTANCE_TYPE,
         };
 
         if (name) params.name = name;

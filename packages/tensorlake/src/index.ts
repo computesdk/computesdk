@@ -193,6 +193,17 @@ export const tensorlake = defineProvider<
   TensorlakeConfig
 >({
   name: "tensorlake",
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Tensorlake snapshot/template boot does not apply CPU/RAM overrides; drop it to request a standard size.' };
+    }
+    // Observed Tensorlake limits: guest memory is clamped to 16000 MB, and a
+    // 2048 MiB request was seen silently delivering 1024 MiB.
+    if (profile.memoryMiB === 1024 || (profile.memoryMiB >= 4096 && profile.memoryMiB <= 16000)) {
+      return { status: 'supported', nativeOptions: { cpus: profile.vcpus, memoryMb: profile.memoryMiB } };
+    }
+    return { status: 'unavailable', reason: `Tensorlake clamps guest memory outside 4096-16000 MB (a 2048 MiB request delivered 1024 MiB); ${profile.sizeClass} (${profile.vcpus} vCPU/${profile.memoryMiB} MiB) would silently mis-size.` };
+  },
   methods: {
     instances: {
       create: async (

@@ -284,6 +284,13 @@ async function readLargeText(sandbox: SandboxInstance, path: string, resolveLink
 
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'Beam snapshot restores keep the source container\'s resources; drop it to request a standard size.' };
+    }
+    // @beamcloud/beam-js Sandbox: `cpu` is cores, `memory` is MiB.
+    return { status: 'supported', nativeOptions: { cpu: profile.vcpus, memory: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: async (config: BeamConfig, options?: CreateInstanceOptions) =>

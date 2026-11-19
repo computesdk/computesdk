@@ -126,6 +126,16 @@ async function execCommand(sandbox: VercelSandbox, command: string, options?: Ru
 
 export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'Vercel snapshot boots keep the source shape; drop it to request a standard size.' };
+    }
+    // @vercel/sandbox: `resources.vcpus` comes with 2048 MB of memory per vCPU.
+    if (profile.memoryMiB !== profile.vcpus * 2048) {
+      return { status: 'unavailable', reason: `Vercel allocates 2048 MB per vCPU; ${profile.sizeClass} (${profile.vcpus} vCPU/${profile.memoryMiB} MiB) is not that ratio.` };
+    }
+    return { status: 'supported', nativeOptions: { resources: { vcpus: profile.vcpus } } };
+  },
   methods: {
     instances: {
       create: async (config: VercelConfig, options?: CreateInstanceOptions) => {

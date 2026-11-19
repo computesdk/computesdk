@@ -190,6 +190,10 @@ async function runForeground(sandbox: SpritesSandbox, command: string, options?:
 
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
   name: 'sprites',
+  sizes: (_config, _profile, _options) => ({
+    status: 'unknown',
+    reason: 'The Sprites create API\'s resource fields are not verified yet, so there is no exact standard mapping.',
+  }),
   methods: {
     instances: {
       create: async (config: SpritesConfig, options?: CreateInstanceOptions) => {

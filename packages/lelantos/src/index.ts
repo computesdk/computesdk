@@ -182,6 +182,10 @@ function connectOpts(config: LelantosConfig): Record<string, any> {
 
 export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
   name: 'lelantos',
+  sizes: (_config, _profile, _options) => ({
+    status: 'requires-build',
+    reason: 'Lelantos (E2B-compatible) fixes CPU/RAM when a template is built; build a template at this shape and pass it as templateId.',
+  }),
   methods: {
     instances: {
       create: async (config: LelantosConfig, options?: CreateInstanceOptions) => {

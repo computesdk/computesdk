@@ -484,6 +484,21 @@ export const runloop = defineProvider<
   Snapshot
 >({
   name: "runloop",
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Runloop blueprint/snapshot boot does not apply resource overrides; drop it to request a standard size.' };
+    }
+    return {
+      status: 'supported',
+      nativeOptions: {
+        launch_parameters: {
+          resource_size: 'CUSTOM_SIZE',
+          custom_cpu_cores: profile.vcpus,
+          custom_memory_gb: profile.memoryMiB / 1024,
+        },
+      },
+    };
+  },
   methods: {
     instances: {
       create: async (config: RunloopConfig, options?: CreateInstanceOptions) => {

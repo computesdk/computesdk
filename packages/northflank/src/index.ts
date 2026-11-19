@@ -163,6 +163,17 @@ function withCommandOptions(command: string, options?: RunCommandOptions): strin
 
 const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, NorthflankConfig>({
   name: PROVIDER,
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Northflank snapshot/template boot keeps its own plan; drop it to request a standard size.' };
+    }
+    // northflank.com/pricing deployment plans (vCPU/GB).
+    const plans = {
+      xs: 'nf-compute-100-1', sm: 'nf-compute-100-2', md: 'nf-compute-200-4',
+      lg: 'nf-compute-400', xl: 'nf-compute-800-16', '2xl': 'nf-compute-1600-32',
+    } as const;
+    return { status: 'supported', nativeOptions: { deploymentPlan: plans[profile.sizeClass] } };
+  },
   methods: {
     instances: {
       create: async (config: NorthflankConfig, options?: CreateInstanceOptions) => {

@@ -46,6 +46,10 @@ export interface HopxConfig {
  */
 export const hopx = defineProvider<HopxSandbox, HopxConfig>({
   name: 'hopx',
+  sizes: (_config, _profile, _options) => ({
+    status: 'requires-build',
+    reason: 'HopX fixes CPU/RAM per template; build a template at this shape and pass it as templateId.',
+  }),
   methods: {
     instances: {
       /**

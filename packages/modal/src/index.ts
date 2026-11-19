@@ -164,6 +164,13 @@ async function resolveSandboxPath(
 
 const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
   name: 'modal',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Modal snapshot/template boot does not apply CPU/RAM overrides; drop it to request a standard size.' };
+    }
+    // Modal's `cpu` counts physical cores and each core is 2 vCPUs.
+    return { status: 'supported', nativeOptions: { cpu: profile.vcpus / 2, memoryMiB: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: async (config: ModalInternalConfig, options?: CreateInstanceOptions) => {

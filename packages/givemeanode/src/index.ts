@@ -144,6 +144,20 @@ const provider = defineProvider<
   GivemeanodeSnapshot
 >({
   name: 'givemeanode',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A givemeanode snapshot/template boot does not apply resource overrides; drop it to request a standard size.' };
+    }
+    // Presets are sandbox-sm (1 vCPU/2 GiB), sandbox-md (4/8), sandbox-lg (8/32),
+    // sandbox-xl (16/64) — only the standard shapes that match a preset exactly.
+    if (profile.vcpus === 1 && profile.memoryMiB === 2048) {
+      return { status: 'supported', nativeOptions: { vcpus: 1, memory: 2048 } };
+    }
+    if (profile.vcpus === 4 && profile.memoryMiB === 8192) {
+      return { status: 'supported', nativeOptions: { vcpus: 4, memory: 8192 } };
+    }
+    return { status: 'unavailable', reason: `givemeanode sizes are the sandbox-sm/md/lg/xl presets (1 vCPU/2 GiB, 4/8, 8/32, 16/64); ${profile.sizeClass} (${profile.vcpus} vCPU/${profile.memoryMiB} MiB) matches none exactly.` };
+  },
   methods: {
     instances: {
       create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {

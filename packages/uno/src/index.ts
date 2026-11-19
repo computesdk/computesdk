@@ -156,6 +156,16 @@ function parseSize(stdout: string, what: string): number {
 
 export const uno = defineProvider<UnoSandbox, ConfigWithClient>({
   name: 'uno',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId || options?.image) {
+      return { status: 'unsupported', reason: 'An Uno snapshot/template boot does not apply CPU/RAM overrides; drop it to request a standard size.' };
+    }
+    // Uno boxes top out around 2 vCPU — the two smallest standard shapes fit.
+    if (profile.sizeClass !== 'sm' && profile.sizeClass !== 'md') {
+      return { status: 'unavailable', reason: 'Uno boxes are limited to about 2 vCPU; only sm and md standard sizes can be provisioned.' };
+    }
+    return { status: 'supported', nativeOptions: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {
