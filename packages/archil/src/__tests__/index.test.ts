@@ -543,6 +543,25 @@ describe('archil persistent mode', () => {
     expect(posts.some((u) => u.includes('/api/sandboxes/sbx_123/resume'))).toBe(true);
   });
 
+  it('resolves relative file paths from / for reads and writes, as mkdir does', async () => {
+    global.fetch = adaptFetchMock(vmFetchMock() as typeof fetch);
+    const provider = archil({ apiKey: 'key_test', region: 'aws-us-east-1', execution: 'persistent' });
+    const sandbox = await provider.sandbox.create();
+    const { files } = (sandbox.getInstance() as indexExports.ArchilSandbox).vm!;
+    const upload = vi.spyOn(files, 'uploadFile').mockResolvedValue(undefined as never);
+    const download = vi.spyOn(files, 'downloadFile').mockImplementation((async (
+      _path: string,
+      onChunk: (chunk: Uint8Array) => void,
+    ) => {
+      onChunk(new TextEncoder().encode('probe'));
+    }) as never);
+
+    await sandbox.filesystem.writeFile('bench/fs-archil/.probe', 'probe');
+    await expect(sandbox.filesystem.readFile('bench/fs-archil/.probe')).resolves.toBe('probe');
+    expect(upload).toHaveBeenCalledWith(expect.anything(), '/bench/fs-archil/.probe');
+    expect(download).toHaveBeenCalledWith('/bench/fs-archil/.probe', expect.any(Function));
+  });
+
   it('exposes native pause/resume on the instance with declared capabilities', async () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
