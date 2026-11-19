@@ -566,7 +566,7 @@ export interface Instance {
   getInfo(): Promise<InstanceInfo>;
 
   /** Get URL for accessing the instance on a specific port */
-  getUrl(options: { port: number; protocol?: string }): Promise<string>;
+  getUrl(options: { port: number; protocol?: string; public?: boolean; label?: string }): Promise<string>;
 
   /** Destroy the instance and clean up resources */
   destroy(): Promise<void>;

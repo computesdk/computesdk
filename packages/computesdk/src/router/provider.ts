@@ -484,16 +484,29 @@ export const platform = defineProvider<PlatformInstance, PlatformConfig>({
         return toInfo(res.sandbox, inst.createTimeout);
       },
 
-      getUrl: async (inst: PlatformInstance, options: { port: number; protocol?: string }): Promise<string> => {
+      getUrl: async (inst: PlatformInstance, options: { port: number; protocol?: string; public?: boolean; label?: string }): Promise<string> => {
         try {
-          const res = await request(
-            () =>
-              inst.client.get<{ url: string }>(`${SANDBOXES}/${inst.id}/urls`, {
-                port: String(options.port),
-                ...(options.protocol !== undefined ? { protocol: options.protocol } : {}),
-              }),
-            true,
-          );
+          // `public: true` creates a permanent unauthenticated port URL
+          // (provider-side feature, e.g. Agent37 public ports); the default
+          // path stays the provider's ephemeral signed URL.
+          const res = options.public
+            ? await request(
+                () =>
+                  inst.client.post<{ url: string }>(`${SANDBOXES}/${inst.id}/urls`, {
+                    port: options.port,
+                    ...(options.protocol !== undefined ? { protocol: options.protocol } : {}),
+                    ...(options.label !== undefined ? { label: options.label } : {}),
+                  }),
+                true,
+              )
+            : await request(
+                () =>
+                  inst.client.get<{ url: string }>(`${SANDBOXES}/${inst.id}/urls`, {
+                    port: String(options.port),
+                    ...(options.protocol !== undefined ? { protocol: options.protocol } : {}),
+                  }),
+                true,
+              );
           return res.url;
         } catch (error) {
           if (error instanceof PlatformApiError && error.status === 501) {
