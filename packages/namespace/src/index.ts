@@ -185,32 +185,62 @@ function snapshotAttachedInstance(snap: WireSnapshotRecord): string | undefined 
   return snap.attachedInstanceId || snap.attached_instance_id || undefined;
 }
 
-async function listPersistentVolumes(token: string): Promise<WireVolume[]> {
-  const volumes: WireVolume[] = [];
+/**
+ * Page cursor from a Namespace list response. Connect JSON encodes the proto
+ * field with its lowerCamelCase name (`paginationCursor`); the proto name
+ * (`pagination_cursor`) is accepted too, matching the other dual-case reads
+ * here. Reading only the snake_case name silently dropped the cursor and
+ * truncated every paged listing to its first page.
+ */
+function paginationCursor(response: any): string | undefined {
+  return response?.paginationCursor || response?.pagination_cursor || undefined;
+}
+
+/**
+ * Collects every page of a Namespace list endpoint. `body` builds the request
+ * for a cursor and `select` reads the page's items. A repeated cursor ends the
+ * loop, so a server that echoes the same page can never spin forever.
+ */
+async function listAllPages<T>(
+  token: string,
+  endpoint: string,
+  body: (cursor: string | undefined) => Record<string, unknown>,
+  select: (response: any) => T[],
+  limit?: number,
+): Promise<T[]> {
+  const items: T[] = [];
+  const seen = new Set<string>();
   let cursor: string | undefined;
-  do {
-    const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
+  for (;;) {
+    const response = await fetchNamespace(token, endpoint, {
       method: 'POST',
-      body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
+      body: JSON.stringify(body(cursor)),
     });
-    volumes.push(...(response.volumes || []));
-    cursor = response.pagination_cursor || undefined;
-  } while (cursor);
-  return volumes;
+    items.push(...select(response));
+    if (limit !== undefined && items.length >= limit) return items;
+    const next = paginationCursor(response);
+    if (!next || seen.has(next)) return items;
+    seen.add(next);
+    cursor = next;
+  }
+}
+
+async function listPersistentVolumes(token: string): Promise<WireVolume[]> {
+  return listAllPages<WireVolume>(
+    token,
+    STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES,
+    (cursor) => (cursor ? { pagination_cursor: cursor } : {}),
+    (response) => response.volumes || [],
+  );
 }
 
 async function listVolumeSnapshotRecords(token: string, tag?: string): Promise<WireSnapshotRecord[]> {
-  const records: WireSnapshotRecord[] = [];
-  let cursor: string | undefined;
-  do {
-    const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS, {
-      method: 'POST',
-      body: JSON.stringify({ ...(tag && { tag }), ...(cursor && { pagination_cursor: cursor }) })
-    });
-    records.push(...(response.snapshots || []));
-    cursor = response.pagination_cursor || undefined;
-  } while (cursor);
-  return records;
+  return listAllPages<WireSnapshotRecord>(
+    token,
+    STORAGE_SERVICE.LIST_PERSISTENT_VOLUME_SNAPSHOTS,
+    (cursor) => ({ ...(tag && { tag }), ...(cursor && { pagination_cursor: cursor }) }),
+    (response) => response.snapshots || [],
+  );
 }
 
 /**
@@ -879,12 +909,15 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         const { token } = await getAndValidateCredentials(config);
 
         try {
-          const responseData = await fetchNamespace(token, API_ENDPOINTS.LIST_INSTANCES, {
-            method: 'POST',
-            body: JSON.stringify({})
-          });
-
-          const instances = responseData?.instances || [];
+          // ListInstances answers one page per call; follow `paginationCursor`
+          // so a workspace with more instances than a page is not silently
+          // truncated to the first page.
+          const instances = await listAllPages<any>(
+            token,
+            API_ENDPOINTS.LIST_INSTANCES,
+            (cursor) => (cursor ? { pagination_cursor: cursor } : {}),
+            (response) => response.instances || [],
+          );
 
           return instances
             .filter(
@@ -1204,16 +1237,14 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
       },
       list: async (config: NamespaceConfig, options) => {
         const { token } = await getAndValidateCredentials(config);
-        const out: any[] = [];
-        let cursor: string | undefined;
-        do {
-          const response = await fetchNamespace(token, STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES, {
-            method: 'POST',
-            body: JSON.stringify(cursor ? { pagination_cursor: cursor } : {})
-          });
-          for (const v of response.volumes || []) out.push({ id: v.tag, name: v.tag, native: v });
-          cursor = response.pagination_cursor || undefined;
-        } while (cursor && (!options?.limit || out.length < options.limit));
+        const volumes = await listAllPages<WireVolume>(
+          token,
+          STORAGE_SERVICE.LIST_PERSISTENT_VOLUMES,
+          (cursor) => (cursor ? { pagination_cursor: cursor } : {}),
+          (response) => response.volumes || [],
+          options?.limit,
+        );
+        const out = volumes.map((v) => ({ id: v.tag, name: v.tag, native: v }));
         return options?.limit ? out.slice(0, options.limit) : out;
       },
       delete: async (config: NamespaceConfig, tag: string) => {
