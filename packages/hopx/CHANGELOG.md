@@ -1,5 +1,11 @@
 # @computesdk/hopx
 
+## 0.2.52
+
+### Patch Changes
+
+- 95826a8: Add standard `sizeClass` resolvers: boat (`type` presets for md–2xl), northflank (`deploymentPlan` for xs–2xl), neevcloud and microsandbox (exact CPU/memory for every tier). hopx, kosa8 and lelantos take a `sizeTemplates` config with one template per size and report `unconfigured` for sizes without one.
+
 ## 0.2.51
 
 ### Patch Changes

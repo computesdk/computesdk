@@ -1,5 +1,16 @@
 # @computesdk/workbench
 
+## 33.0.43
+
+### Patch Changes
+
+- Updated dependencies [95826a8]
+  - @computesdk/boat@1.0.7
+  - @computesdk/northflank@1.1.28
+  - @computesdk/microsandbox@0.1.33
+  - @computesdk/hopx@0.2.52
+  - @computesdk/lelantos@0.2.27
+
 ## 33.0.42
 
 ### Patch Changes
