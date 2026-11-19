@@ -126,10 +126,18 @@ export interface BoatProvider extends Provider<BoatSandbox, BoatTemplate, BoatSn
 
 const createBoatProvider = defineProvider<BoatSandbox, BoatConfig, BoatTemplate, BoatSnapshot>({
   name: 'boat',
-  sizes: (_config, _profile, _options) => ({
-    status: 'unknown',
-    reason: 'Boat sizes are machine types (small/default/large/xlarge); their vCPU/RAM specs are not verified against the standard shapes yet.',
-  }),
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Boat fork/snapshot inherits its source machine type; drop it to request a standard size.' };
+    }
+    // docs.boat.dev/machines: small 2/4, default 4/8, large 8/16, xlarge 16/32 (vCPU/GB; xlarge needs the $100 plan).
+    const types = { md: 'small', lg: 'default', xl: 'large', '2xl': 'xlarge' } as const;
+    const type = types[profile.sizeClass as keyof typeof types];
+    if (!type) {
+      return { status: 'unavailable', reason: `Boat machine types are small (2/4), default (4/8), large (8/16) and xlarge (16/32); ${profile.sizeClass} matches none.` };
+    }
+    return { status: 'supported', nativeOptions: { type } };
+  },
   methods: {
     instances: {
       create: async (config, options) => {

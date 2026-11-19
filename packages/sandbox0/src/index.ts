@@ -413,10 +413,17 @@ async function createSandbox(config: Sandbox0Config, options?: CreateInstanceOpt
 
 const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
   name: 'sandbox0',
-  sizes: (_config, _profile, _options) => ({
-    status: 'unknown',
-    reason: 'Sandbox0 claims only take a memory limit; how many vCPUs each memory size gets is not verified yet, so there is no exact standard mapping.',
-  }),
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Sandbox0 snapshot/template boot keeps its captured shape; drop it to request a standard size.' };
+    }
+    // sandbox0.ai/docs: CPU is platform-derived from memory; sandbox0.ai/pricing
+    // lists 4 GiB as 2 vCPU, i.e. 1 vCPU per 2 GiB.
+    if (profile.memoryMiB !== profile.vcpus * 2048) {
+      return { status: 'unavailable', reason: `Sandbox0 derives 1 vCPU per 2 GiB of memory; ${profile.sizeClass} (${profile.vcpus} vCPU/${profile.memoryMiB} MiB) is not that ratio.` };
+    }
+    return { status: 'supported', nativeOptions: { memory: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: createSandbox,
