@@ -1,5 +1,14 @@
 # @computesdk/lightning
 
+## 1.0.26
+
+### Patch Changes
+
+- f9ecbb2: Map standard sizes to Lightning instance types: `xs` → `cpu-1`, `md` → `cpu-2`, `lg` → `cpu-4`, `xl` → `cpu-8`, `2xl` → `cpu-16` (resolved with the listed RAM and default disk). `sm` and `3xl` are `unsupported`. A per-create `instanceType` now overrides `config.instanceType` instead of being dropped.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.25
 
 ### Patch Changes

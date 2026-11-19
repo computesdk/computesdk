@@ -1,5 +1,14 @@
 # @computesdk/daytona
 
+## 1.7.58
+
+### Patch Changes
+
+- 056bbef: Support `sizeClass` on Daytona: `xs`, `sm`, `md` and `lg` boot an image with the exact standard CPU/RAM (plus the platform disk for `sm`–`lg`); `xl` and larger are refused above Daytona's 4 vCPU / 8 GiB sandbox limit. Add the `sizeImage` config option.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.7.57
 
 ### Patch Changes

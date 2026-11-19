@@ -1,5 +1,14 @@
 # @computesdk/isorun
 
+## 0.1.27
+
+### Patch Changes
+
+- 3c24249: Add a standard `sizeClass` resolver: `xs`, `md`, `lg` and `xl` map to Isorun's listed 1/1, 2/4, 4/8 and 8/16 GiB shapes (md–xl with 16/32/64 GiB disk); `sm`, `2xl` and `3xl` are `unsupported`, and `snapshotId` with `sizeClass` is refused.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.1.26
 
 ### Patch Changes

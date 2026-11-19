@@ -1,5 +1,14 @@
 # @computesdk/uno
 
+## 0.1.10
+
+### Patch Changes
+
+- 6deb534: Uno: `create({ sizeClass })` maps every standard size (`xs`–`3xl`) to its exact vCPU/RAM, with the platform's 10/20/40/80 GiB disk on `sm`–`xl`; refuses native CPU/RAM/disk fields and `snapshotId` alongside it.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.1.9
 
 ### Patch Changes

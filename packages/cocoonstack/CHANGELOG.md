@@ -1,5 +1,13 @@
 # @computesdk/cocoonstack
 
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.5
 
 ### Patch Changes

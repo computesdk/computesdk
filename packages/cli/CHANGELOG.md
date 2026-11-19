@@ -1,5 +1,13 @@
 # @computesdk/cli
 
+## 2.6.18
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/platform@0.2.10
+
 ## 2.6.17
 
 ### Patch Changes

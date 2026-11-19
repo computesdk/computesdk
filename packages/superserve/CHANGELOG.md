@@ -1,5 +1,14 @@
 # @computesdk/superserve
 
+## 0.2.27
+
+### Patch Changes
+
+- 5ba717c: Add a `sizeClass` resolver: `xs`–`2xl` boot per-size templates (`md` is the built-in `superserve/base`, the others `csdk-node22-<vcpus>cpu-<GiB>gb` team templates, overridable with `sizeTemplates`). `3xl` is `unsupported` (Superserve lists at most 16 vCPU / 64 GiB). Native `vcpu`/`memoryMib`/`diskMib` with `sizeClass` is a conflict; a missing size template fails with setup guidance.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.2.26
 
 ### Patch Changes

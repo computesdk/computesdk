@@ -1,5 +1,14 @@
 # @computesdk/cloudflare
 
+## 2.1.19
+
+### Patch Changes
+
+- 9f8807b: Map standard sizes `xs` through `lg` to exact Cloudflare custom instance types (`vcpu`/`memoryMib`/`diskMb`); `xl` and larger are `unsupported` past the 4 vCPU / 12 GiB per-instance limit.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 2.1.18
 
 ### Patch Changes

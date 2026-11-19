@@ -1,5 +1,13 @@
 # @computesdk/createos-sandbox
 
+## 0.1.33
+
+### Patch Changes
+
+- 5bc6201: Add standard `sizeClass` support: xs–xl map to the smallest listed CreateOS shape that meets each profile (with the platform's disk sizes); 2xl/3xl, `shape`/`cpus`/`memoryMb` conflicts and sized snapshot restores are refused before any API call.
+- Updated dependencies [eaec2cd]
+  - @computesdk/provider@2.1.28
+
 ## 0.1.32
 
 ### Patch Changes

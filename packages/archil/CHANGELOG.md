@@ -1,5 +1,15 @@
 # @computesdk/archil
 
+## 0.4.36
+
+### Patch Changes
+
+- eaec2cd: Add the `3xl` standard size (32 vCPU / 64 GiB). Size mappings can now record the provider's listed shape in `resolved` (including `diskMiB`). vCPU picks the size: a shape needs at least the size's vCPU and fewer than the next size's. Memory is a floor with a 10% tolerance (`INSTANCE_SIZE_MEMORY_TOLERANCE`): extra RAM is allowed, and RAM below the size needs `belowStandard` with the provider limit and is recorded as `memoryShortfallMiB`. Archil `3xl` is now supported (32 vCPU / 64 GiB); Namespace maps `xs` to its 1x2 minimum shape and `3xl` to 32x64.
+- ea30b6e: Archil `sizeClass` now maps `xs` (1 vCPU / 1 GiB), `2xl` (16 vCPU / 32 GiB) and `3xl` (32 vCPU / 64 GiB) in addition to `sm`–`xl`, using exact `vcpus`/`memoryMiB`. `3xl` maps to 32 vCPU / 64 GiB, Archil's maximum.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.4.35
 
 ### Patch Changes

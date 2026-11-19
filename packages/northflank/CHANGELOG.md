@@ -1,5 +1,13 @@
 # @computesdk/northflank
 
+## 1.1.27
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.1.26
 
 ### Patch Changes

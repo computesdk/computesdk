@@ -1,5 +1,13 @@
 # @computesdk/opencomputer
 
+## 1.0.28
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.0.27
 
 ### Patch Changes

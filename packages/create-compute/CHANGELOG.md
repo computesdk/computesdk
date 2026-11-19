@@ -1,5 +1,12 @@
 # create-compute
 
+## 0.2.33
+
+### Patch Changes
+
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+
 ## 0.2.32
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/render",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Render provider for ComputeSDK - isolated Render Sandboxes with streaming command execution, file transfer and snapshots",
   "author": "ComputeSDK",
   "license": "MIT",

@@ -1,5 +1,14 @@
 # @computesdk/vercel
 
+## 1.7.60
+
+### Patch Changes
+
+- 7ab94b8: Add a standard-size resolver: every `sizeClass` maps to `resources.vcpus` (`xs` and `sm` 1, then 2/4/8/16/32; 2048 MiB RAM per vCPU, 64 GiB disk, 32 GiB on a deprecated `runtime`), and combining `sizeClass` with native `resources` is a conflict.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 1.7.59
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @computesdk/mosaic
 
+## 0.1.29
+
+### Patch Changes
+
+- 81b4289: Map standard sizes for Mosaic: `sm`-`2xl` boot their exact `vcpu`/`memory_mb` shape (`xl`/`2xl` on template `base`), `xs` boots the 1 vCPU / 1 GiB environment `csdk-node22-1cpu-1gb` (override with `sizeTemplates`), and `3xl` is unsupported.
+- Updated dependencies [eaec2cd]
+  - computesdk@4.1.22
+  - @computesdk/provider@2.1.28
+
 ## 0.1.28
 
 ### Patch Changes
