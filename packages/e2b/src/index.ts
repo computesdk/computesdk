@@ -134,11 +134,15 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
 
           const createOpts: Record<string, any> = {
             apiKey, timeoutMs: timeout, envs, metadata, ...providerOptions,
-            // Unified mounts → e2b's [{name, path}] wire shape.
+            // Unified mounts → e2b's `{ [mountPath]: volumeName }` record. The
+            // SDK turns each entry into the `{name, path}` wire shape itself, so
+            // passing an array here would mount every volume at path "0"/"1"/…
             ...(unifiedVolumes && {
-              volumeMounts: unifiedVolumes.map((m: any) => ({
-                name: resolveVolumeRef(m.volume).name ?? resolveVolumeRef(m.volume).id,
-                path: m.mountPath,
+              volumeMounts: Object.fromEntries(unifiedVolumes.map((m: any) => {
+                const ref = resolveVolumeRef(m.volume);
+                // The wire wants the volume name; fall back to the id when only
+                // that is known (a string ref yields the same value for both).
+                return [m.mountPath, ref.name ?? ref.id];
               })),
             }),
           };
