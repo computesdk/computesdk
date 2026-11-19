@@ -190,6 +190,10 @@ async function runForeground(sandbox: SpritesSandbox, command: string, options?:
 
 export const sprites = defineProvider<SpritesSandbox, SpritesConfig>({
   name: 'sprites',
+  sizes: (_config, _profile, _options) => ({
+    status: 'unsupported',
+    reason: 'Sprites does not expose per-create CPU/memory options; the sprite\'s size is fixed by the account\'s plan.',
+  }),
   methods: {
     instances: {
       create: async (config: SpritesConfig, options?: CreateInstanceOptions) => {

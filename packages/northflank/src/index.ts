@@ -163,6 +163,10 @@ function withCommandOptions(command: string, options?: RunCommandOptions): strin
 
 const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, NorthflankConfig>({
   name: PROVIDER,
+  sizes: (_config, _profile, _options) => ({
+    status: 'unsupported',
+    reason: 'The Northflank adapter does not expose per-create CPU/memory options; resources come from the backing job\'s plan.',
+  }),
   methods: {
     instances: {
       create: async (config: NorthflankConfig, options?: CreateInstanceOptions) => {

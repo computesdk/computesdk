@@ -80,6 +80,10 @@ const SNAPSHOT_TIMEOUT_S = 900;
  */
 export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
+  sizes: (_config, _profile, _options) => ({
+    status: 'unsupported',
+    reason: 'A Daytona workspace\'s resources come from its snapshot/template; the adapter does not expose per-create CPU/memory options.',
+  }),
   methods: {
     instances: {
       create: async (config: DaytonaConfig, options?: CreateInstanceOptions) => {

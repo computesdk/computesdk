@@ -377,6 +377,13 @@ async function withFilesRetry<T>(operation: () => Promise<T>): Promise<T> {
 
 export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
   name: 'railway',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Railway snapshot/template boot does not apply resource overrides; drop it to request a standard size.' };
+    }
+    // Railway's `memoryGB` is decimal GB, so convert the MiB profile exactly.
+    return { status: 'supported', nativeOptions: { resources: { cpu: profile.vcpus, memoryGB: (profile.memoryMiB * 1048576) / 1e9 } } };
+  },
   methods: {
     instances: {
       create: async (config: RailwayConfig, options?: CreateInstanceOptions) => {

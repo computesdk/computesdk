@@ -132,6 +132,10 @@ async function readFileNative(sandbox: UpstashSandboxInstance, path: string): Pr
  */
 export const upstash = defineProvider<UpstashSandboxInstance, UpstashConfig>({
   name: 'upstash',
+  sizes: (_config, _profile, _options) => ({
+    status: 'unsupported',
+    reason: 'Upstash Box does not expose per-create CPU/memory options; every sandbox shares the box\'s provisioned shape.',
+  }),
   methods: {
     instances: {
       // Collection operations (map to compute.sandbox.*)

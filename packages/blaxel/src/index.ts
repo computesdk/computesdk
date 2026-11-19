@@ -131,6 +131,10 @@ function withBlaxelInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): 
  */
 export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	name: 'blaxel',
+	sizes: (_config, _profile, _options) => ({
+		status: 'unsupported',
+		reason: 'Blaxel sandboxes only expose a memory limit at create; there is no vCPU control, so a standard vCPU/RAM shape cannot be guaranteed.',
+	}),
 	methods: {
 		instances: {
 			// Collection operations (map to compute.sandbox.*)

@@ -126,6 +126,10 @@ async function execCommand(sandbox: VercelSandbox, command: string, options?: Ru
 
 export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
+  sizes: (_config, _profile, _options) => ({
+    status: 'unsupported',
+    reason: 'Vercel sandboxes let you pick vCPUs but not memory, so a standard vCPU/RAM shape cannot be guaranteed.',
+  }),
   methods: {
     instances: {
       create: async (config: VercelConfig, options?: CreateInstanceOptions) => {

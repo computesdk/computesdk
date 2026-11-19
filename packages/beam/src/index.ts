@@ -284,6 +284,10 @@ async function readLargeText(sandbox: SandboxInstance, path: string, resolveLink
 
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
+  sizes: (_config, _profile, _options) => ({
+    status: 'unsupported',
+    reason: 'The Beam adapter does not expose per-create CPU/memory options; a container\'s resources come from its image/deployment config.',
+  }),
   methods: {
     instances: {
       create: async (config: BeamConfig, options?: CreateInstanceOptions) =>

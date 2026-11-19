@@ -516,6 +516,10 @@ const notAvailable = (what: string) =>
 
 const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
   name: 'kosa8',
+  sizes: (_config, _profile, _options) => ({
+    status: 'unsupported',
+    reason: 'A kosa8 sandbox\'s size comes from its template; the API rejects per-create CPU/memory options.',
+  }),
   methods: {
     instances: {
       create: async (config: Kosa8Config, options?: CreateInstanceOptions) => {

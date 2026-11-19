@@ -224,6 +224,19 @@ async function runToCompletion(
 
 export const codesandbox = defineProvider<CodesandboxSandbox, CodesandboxConfig, any, any>({
   name: 'codesandbox',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A CodeSandbox template/snapshot fixes its VM tier; drop it to request a standard size.' };
+    }
+    // VMTier presets Pico(1 vCPU/2 GiB), Nano(2/4), Micro(4/8), Small(8/16),
+    // Medium(16/32) — xs (1/1) has no preset and there is no 32+ vCPU standard.
+    const tiers = { sm: 'Pico', md: 'Nano', lg: 'Micro', xl: 'Small', '2xl': 'Medium' } as const;
+    const tier = tiers[profile.sizeClass as keyof typeof tiers];
+    if (!tier) {
+      return { status: 'unavailable', reason: `CodeSandbox VM tiers are Pico/Nano/Micro/Small/Medium/Large/XLarge; ${profile.sizeClass} (${profile.vcpus} vCPU/${profile.memoryMiB} MiB) matches none.` };
+    }
+    return { status: 'supported', nativeOptions: { vmTier: tier } };
+  },
   methods: {
     instances: {
       create: async (config: CodesandboxConfig, options?: CreateInstanceOptions) => {

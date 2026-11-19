@@ -35,6 +35,7 @@ import {
   generateSandboxName,
   getClient,
   getSandboxData,
+  MAX_CPU,
   isNotFound,
   isUnroutableId,
   mapStatus,
@@ -83,6 +84,18 @@ export async function deleteSandbox(client: BuddyApiClient, sandboxId: string): 
 
 export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapshot>({
   name: PROVIDER,
+
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId) {
+      return { status: 'unsupported', reason: 'A Buddy snapshot restore does not apply resource overrides; drop it to request a standard size.' };
+    }
+    // Buddy resource presets are exactly N vCPU with 2N GB RAM (max 12 vCPU), so
+    // only the standard shapes whose memory is 2x their vCPUs can be honored.
+    if (profile.memoryMiB !== profile.vcpus * 2048 || profile.vcpus > MAX_CPU) {
+      return { status: 'unsupported', reason: `Buddy offers N vCPU with 2N GB RAM (max ${MAX_CPU} vCPU); ${profile.sizeClass} (${profile.vcpus} vCPU/${profile.memoryMiB} MiB) is not a Buddy preset.` };
+    }
+    return { status: 'supported', nativeOptions: { resources: `${profile.vcpus}x${profile.vcpus * 2}` } };
+  },
 
   methods: {
     instances: {

@@ -413,6 +413,10 @@ async function createSandbox(config: Sandbox0Config, options?: CreateInstanceOpt
 
 const _provider = defineProvider<Sandbox0Sandbox, Sandbox0Config>({
   name: 'sandbox0',
+  sizes: (_config, _profile, _options) => ({
+    status: 'unsupported',
+    reason: 'Sandbox0 only exposes a memory limit at claim time; there is no vCPU control, so a standard vCPU/RAM shape cannot be guaranteed.',
+  }),
   methods: {
     instances: {
       create: createSandbox,

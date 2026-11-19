@@ -105,6 +105,12 @@ export interface IsorunSnapshot {
 
 export const isorun = defineProvider<Sandbox, ConfigWithClient, never, IsorunSnapshot>({
   name: 'isorun',
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId || options?.image) {
+      return { status: 'unsupported', reason: 'An Isorun snapshot/template boot does not apply vcpus/memMiB overrides; drop it to request a standard size.' };
+    }
+    return { status: 'supported', nativeOptions: { vcpus: profile.vcpus, memMiB: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {

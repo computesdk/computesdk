@@ -840,6 +840,12 @@ const _microsandbox = defineProvider<
   MicrosandboxSnapshot
 >({
   name: PROVIDER,
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId || options?.templateId || options?.image) {
+      return { status: 'unsupported', reason: 'A microsandbox snapshot/image boot does not apply CPU/RAM overrides; drop it to request a standard size.' };
+    }
+    return { status: 'supported', nativeOptions: { cpus: profile.vcpus, memoryMib: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: async (config, options) => withBackend(selectBackend(config), async (sdk) => {
