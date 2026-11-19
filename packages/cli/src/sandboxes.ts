@@ -464,7 +464,7 @@ function addCreateFlags(c: Command): Command {
     .option('--managed', 'use only ComputeSDK managed accounts for this create')
     // Pre-router: walk exactly these BYOK providers. --provider + --byok covers it.
     .addOption(new Option('--order <providers>').hideHelp())
-    .option('--size <size>', 'platform size: small (1 vCPU/2 GiB), medium, large, xlarge, 2xlarge (16/32 GiB), 3xlarge (32/128 GiB); default medium')
+    .option('--size <size>', 'platform size: small (1 vCPU/2 GiB), medium, large, xlarge, 2xlarge (16/32 GiB), 3xlarge (32/64 GiB); default medium')
     .option('--label <label>', 'label for the sandbox')
     .option('--image <image>', 'container image to boot')
     .option('--snapshot-id <id>', 'provider snapshot to resume')
@@ -872,7 +872,7 @@ function registerSandboxOperations(cmd: Command): void {
     const command = cmd
       .command(name, { hidden: name === 'quote' })
       .description('Show where a sandbox create would land, how it is billed, and the price — creates nothing')
-      .option('--size <size>', 'platform size: small, medium (default), large, xlarge, 2xlarge (16/32 GiB), 3xlarge (32/128 GiB)')
+      .option('--size <size>', 'platform size: small, medium (default), large, xlarge, 2xlarge (16/32 GiB), 3xlarge (32/64 GiB)')
       .option('--provider <names>', 'only these providers, through your router (e.g. daytona)')
       .option('--byok', 'only your own keys')
       .option('--managed', 'only ComputeSDK managed accounts')
