@@ -85,17 +85,23 @@ interface VercelConfig {
   timeout?: number;
   /** Ports to expose */
   ports?: number[];
+  /** Optional-daemond SSE port (defaults to 38989); false disables port exposure, not runtime selection */
+  daemonSsePort?: number | false;
 }
 ```
 
 ## Features
 
-- ✅ **Command Execution** - Run shell commands in sandbox (Node.js 22, Python 3.13 available)
-- ✅ **Filesystem Operations** - Full file system access via shell commands
-- ✅ **Long-running Tasks** - Up to 45 minutes execution time
+- ✅ **Command Execution** - Run shell commands in the sandbox. The default `vercel/sandbox/universal` image ships Node.js 24 and Python 3.14; `runtime: 'node'` maps to Vercel's `node24` runtime and `runtime: 'python'` to `python3.13`
+- ✅ **Filesystem Operations** - Native `sandbox.fs` access (read/write/mkdir/readdir/exists/remove)
+- ✅ **Live Output** - `runCommand` streams stdout/stderr through Vercel's native log stream
+- ✅ **Sandbox Management** - `getById` reconnects to a sandbox by name, and `list` returns running/pending sandboxes plus paused persistent ones
+- ✅ **Pause / Resume** - `pause()` stops a persistent sandbox (auto-snapshotting its rootfs); `resume()` starts a fresh session with the filesystem restored
+- ✅ **Snapshots** - Capture the whole rootfs (no memory) and boot new sandboxes from a snapshot
+- ✅ **Volumes** - Mount Vercel Drives as read-write or read-only snapshot mounts
+- ✅ **Long-running Tasks** - Configurable per-session timeout (default 5 minutes; see Vercel's runtime limits for the per-plan maximum)
 - ✅ **Global Infrastructure** - Runs on Vercel's global network
-- ❌ **Interactive Terminals** - Not supported by Vercel Sandbox
-- ❌ **Sandbox Reconnection** - Sandboxes are ephemeral (single-use)
+- ❌ **Interactive Terminals** - ComputeSDK does not expose a PTY for this provider
 
 ## API Reference
 
@@ -157,14 +163,14 @@ await sandbox.filesystem.remove('/tmp/hello.py');
 const info = await sandbox.getInfo();
 console.log(info.id, info.provider, info.status);
 
-// Get existing sandbox
+// Get existing sandbox by name
 const existing = await compute.instances.getById('sandbox-id');
 
-// Destroy sandbox
-await compute.instances.destroy('sandbox-id');
+// List sandboxes (running/pending, plus paused persistent sandboxes)
+const sandboxes = await compute.instances.list();
 
-// Note: Vercel doesn't support listing all sandboxes
-// Each sandbox is ephemeral and single-use
+// Destroy sandbox (also removes the sandbox's automatic snapshots)
+await compute.instances.destroy('sandbox-id');
 ```
 
 ### Persistence
@@ -173,6 +179,34 @@ Sandboxes are created with `persistent: false` by default — a persistent sandb
 
 ```typescript
 const sandbox = await compute.instances.create({ persistent: true });
+```
+
+Pause stops a persistent sandbox (snapshotting its rootfs) and resume starts a fresh session with the filesystem restored. Processes and memory do not survive a pause:
+
+```typescript
+await sandbox.pause();   // stops and auto-snapshots the persistent sandbox
+await sandbox.resume();  // fresh session, filesystem restored
+```
+
+### Snapshots
+
+`snapshot.create` captures the sandbox's whole rootfs (no memory) and stops the source; the source sandbox still exists and must be destroyed separately. Boot a new sandbox from a snapshot with `{ snapshotId }`:
+
+```typescript
+const snapshot = await compute.snapshot.create(sandbox.instanceId);
+const restored = await compute.instances.create({ snapshotId: snapshot.id });
+await compute.snapshot.delete(snapshot.id);
+```
+
+### Volumes
+
+Vercel Drives are exposed through the unified volume surface. Mount a drive at create time as read-write or as a read-only snapshot:
+
+```typescript
+const volume = await compute.volume.create({ name: 'shared-data' });
+const sandbox = await compute.instances.create({
+  volumes: [{ volume, mountPath: '/data', readOnly: false }],
+});
 ```
 
 ## Error Handling
@@ -442,20 +476,19 @@ await sandbox.destroy();
 ## Best Practices
 
 1. **Authentication**: Use OIDC token method when possible for simpler setup
-2. **Resource Management**: Destroy sandboxes when done (they're ephemeral anyway)
+2. **Resource Management**: Destroy sandboxes when done; `destroy()` also removes the sandbox's automatic snapshots
 3. **Error Handling**: Use try-catch blocks for robust error handling
-4. **Timeouts**: Set appropriate timeouts for long-running tasks (up to 45 minutes)
+4. **Timeouts**: Set an explicit `timeout` for long-running tasks (default 5 minutes)
 5. **File Organization**: Use the filesystem API to organize project files
 6. **Package Installation**: Install packages at runtime as needed
 
 ## Limitations
 
-- **Ephemeral Sandboxes**: Each sandbox is single-use and cannot be reconnected to
-- **No Sandbox Listing**: Vercel doesn't support listing all sandboxes
-- **No Interactive Terminals**: Terminal operations are not supported
-- **Memory Limits**: Subject to Vercel sandbox memory constraints (2048 MB per vCPU)
-- **Execution Time**: Maximum 45 minutes execution time
-- **Network Access**: Limited outbound network access
+- **Non-persistent by default**: ComputeSDK creates Vercel sandboxes with `persistent: false` to avoid automatic snapshot-storage charges; pass `persistent: true` (or `ephemeral: false`) to reconnect, pause, resume, or snapshot
+- **No Interactive Terminals**: ComputeSDK does not expose a PTY for this provider
+- **Memory Limits**: Vercel provisions 2048 MB of memory per vCPU (no separate memory control at create time)
+- **Execution Time**: Default session timeout is 5 minutes; the per-session maximum is 45 minutes on Hobby and 24 hours on Pro/Enterprise
+- **Network Access**: Outbound network access follows Vercel's default network policy
 
 ## Support
 
