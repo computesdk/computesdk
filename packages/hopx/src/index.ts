@@ -47,8 +47,8 @@ export interface HopxConfig {
 export const hopx = defineProvider<HopxSandbox, HopxConfig>({
   name: 'hopx',
   sizes: (_config, _profile, _options) => ({
-    status: 'unsupported',
-    reason: 'A HopX sandbox\'s size comes from its template; the API does not accept per-create CPU/memory options.',
+    status: 'requires-build',
+    reason: 'HopX fixes CPU/RAM per template; build a template at this shape and pass it as templateId.',
   }),
   methods: {
     instances: {

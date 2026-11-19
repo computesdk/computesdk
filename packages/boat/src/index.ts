@@ -127,8 +127,8 @@ export interface BoatProvider extends Provider<BoatSandbox, BoatTemplate, BoatSn
 const createBoatProvider = defineProvider<BoatSandbox, BoatConfig, BoatTemplate, BoatSnapshot>({
   name: 'boat',
   sizes: (_config, _profile, _options) => ({
-    status: 'unsupported',
-    reason: 'Boat rejects per-create CPU/memory options; a sandbox\'s size comes from the snapshot/template it boots from.',
+    status: 'unknown',
+    reason: 'Boat sizes are machine types (small/default/large/xlarge); their vCPU/RAM specs are not verified against the standard shapes yet.',
   }),
   methods: {
     instances: {

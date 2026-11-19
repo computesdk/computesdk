@@ -183,8 +183,8 @@ function connectOpts(config: LelantosConfig): Record<string, any> {
 export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
   name: 'lelantos',
   sizes: (_config, _profile, _options) => ({
-    status: 'unsupported',
-    reason: 'A Lelantos (E2B-compatible) sandbox\'s size is fixed by its template; build a template at the desired size to control it.',
+    status: 'requires-build',
+    reason: 'Lelantos (E2B-compatible) fixes CPU/RAM when a template is built; build a template at this shape and pass it as templateId.',
   }),
   methods: {
     instances: {

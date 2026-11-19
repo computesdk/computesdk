@@ -235,8 +235,8 @@ function toSnapshot(snap: LightningSnapshotData): LightningSnapshot {
 export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({
   name: 'lightning',
   sizes: (_config, _profile, _options) => ({
-    status: 'unsupported',
-    reason: 'Lightning instance types (cpu-1, cpu-2, ...) are opaque presets whose memory is not a documented standard shape.',
+    status: 'unknown',
+    reason: 'Lightning sizes are instance types (cpu-1 ... cpu-16); their memory per type is not verified against the standard shapes yet.',
   }),
   methods: {
     instances: {

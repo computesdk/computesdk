@@ -25,4 +25,4 @@
 "@computesdk/vercel": patch
 ---
 
-Add `sizes` resolvers to more sandbox providers so `create({ sizeClass })` either provisions the standard shape or fails loudly instead of silently mis-sizing. Providers with real create-time CPU/RAM knobs now map every standard class (neevcloud, isorun, microsandbox, modal, railway, runloop) or the subset they can deliver (uno, buddy, givemeanode, codesandbox via VMTier, tensorlake). Providers whose size is fixed by a template/plan or that expose only one dimension declare `unsupported` (blaxel, boat, daytona, hopx, kosa8, lelantos, lightning, northflank, sandbox0, sprites, upstash, vercel, beam).
+Add `sizes` resolvers to more sandbox providers so `create({ sizeClass })` provisions the standard shape through each provider's native knob or reports why it can't. Full or partial native mappings: neevcloud, isorun, microsandbox, modal, railway, runloop, daytona, beam, vercel, upstash, uno, buddy, givemeanode, codesandbox, tensorlake. Template-sized providers (kosa8, lelantos, hopx) report `requires-build`; providers whose preset specs are not yet verified (blaxel, sandbox0, boat, lightning, northflank, sprites) report `unknown`.
