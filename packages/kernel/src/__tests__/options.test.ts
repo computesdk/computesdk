@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sdk = vi.hoisted(() => ({
   create: vi.fn(async () => ({ session_id: 'session-id', cdp_ws_url: 'wss://kernel.example' })),
+  listProxies: vi.fn(async (): Promise<{ id: string; name: string; type: string }[]> => []),
+  createProxy: vi.fn(async () => ({ id: 'new-proxy' })),
 }));
 
 vi.mock('@onkernel/sdk', () => ({
@@ -9,15 +11,22 @@ vi.mock('@onkernel/sdk', () => ({
     browsers = {
       create: sdk.create,
     };
+    proxies = {
+      list: sdk.listProxies,
+      create: sdk.createProxy,
+    };
   },
 }));
 
 import { kernel } from '../index';
 
 describe('kernel option mapping', () => {
-  it('preserves explicit stealth false and warns for unsupported proxies', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const provider = kernel({ apiKey: 'test' });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('preserves explicit stealth false and keeps default egress for proxies false', async () => {
+    const provider = kernel({ apiKey: 'test-false' });
 
     await provider.session.create({
       stealth: false,
@@ -29,7 +38,87 @@ describe('kernel option mapping', () => {
       stealth: false,
       viewport: { width: 1920, height: 1080 },
     });
-    expect(warn).toHaveBeenCalledWith("[@computesdk/kernel] 'proxies' is ignored: Kernel create-browser supports only a provider proxy_id, which CreateBrowserSessionOptions cannot express.");
+    expect(sdk.listProxies).not.toHaveBeenCalled();
+  });
+
+  it('maps proxies true to a US residential proxy, created once and reused', async () => {
+    const provider = kernel({ apiKey: 'test-true' });
+
+    await provider.session.create({ stealth: true, proxies: true });
+    await provider.session.create({ stealth: true, proxies: true });
+
+    expect(sdk.createProxy).toHaveBeenCalledTimes(1);
+    expect(sdk.createProxy).toHaveBeenCalledWith({
+      type: 'residential',
+      name: 'computesdk-residential-us',
+      config: { country: 'US' },
+    });
+    expect(sdk.create).toHaveBeenNthCalledWith(2, { stealth: true, proxy_id: 'new-proxy' });
+  });
+
+  it('reuses an existing proxy with the same name and type', async () => {
+    sdk.listProxies.mockResolvedValueOnce([
+      { id: 'isp-proxy', name: 'computesdk-residential-us', type: 'isp' },
+      { id: 'resi-proxy', name: 'computesdk-residential-us', type: 'residential' },
+    ]);
+    const provider = kernel({ apiKey: 'test-existing' });
+
+    await provider.session.create({ stealth: true, proxies: true });
+
+    expect(sdk.createProxy).not.toHaveBeenCalled();
+    expect(sdk.create).toHaveBeenCalledWith({ stealth: true, proxy_id: 'resi-proxy' });
+  });
+
+  it('maps a typed proxy config with its country', async () => {
+    const provider = kernel({ apiKey: 'test-typed' });
+
+    await provider.session.create({ proxies: [{ type: 'isp', geolocation: { country: 'de' } }] });
+
+    expect(sdk.createProxy).toHaveBeenCalledWith({
+      type: 'isp',
+      name: 'computesdk-isp-de',
+      config: { country: 'DE' },
+    });
+  });
+
+  it('keeps residential state and city in the proxy it attaches', async () => {
+    const provider = kernel({ apiKey: 'test-city' });
+
+    await provider.session.create({
+      proxies: [{ type: 'residential', geolocation: { country: 'us', state: 'CA', city: 'Los Angeles' } }],
+    });
+
+    expect(sdk.createProxy).toHaveBeenCalledWith({
+      type: 'residential',
+      name: 'computesdk-residential-us-ca-los_angeles',
+      config: { country: 'US', state: 'CA', city: 'los_angeles' },
+    });
+  });
+
+  it('does not attach a domain-scoped proxy to the whole session', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const provider = kernel({ apiKey: 'test-domain' });
+
+    await provider.session.create({
+      stealth: true,
+      proxies: [{ type: 'residential', domainPattern: '.*example\\.com' }],
+    });
+
+    expect(sdk.listProxies).not.toHaveBeenCalled();
+    expect(sdk.create).toHaveBeenCalledWith({ stealth: true });
+    expect(warn).toHaveBeenCalledWith("[@computesdk/kernel] 'proxies.domainPattern' is ignored: Kernel attaches a proxy to the whole session, so a domain-scoped proxy is not attached.");
+    warn.mockRestore();
+  });
+
+  it('falls back to default egress when the proxy cannot be resolved', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    sdk.listProxies.mockRejectedValueOnce(new Error('boom'));
+    const provider = kernel({ apiKey: 'test-fallback' });
+
+    await provider.session.create({ stealth: true, proxies: true });
+
+    expect(sdk.create).toHaveBeenCalledWith({ stealth: true });
+    expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 
