@@ -129,12 +129,13 @@ const BOAT_SIZE_TYPES: Partial<Record<string, string>> = { md: 'small', lg: 'def
 
 const createBoatProvider = defineProvider<BoatSandbox, BoatConfig, BoatTemplate, BoatSnapshot>({
   name: 'boat',
-  sizes: (_config, profile, options) => {
+  sizes: (config, profile, options) => {
     if ((options as { type?: unknown } | undefined)?.type !== undefined) {
       throw new InstanceSizeError('conflict', 'cannot combine sizeClass with the native Boat type');
     }
-    if (options?.snapshotId !== undefined || options?.templateId !== undefined) {
-      return { status: 'unsupported', reason: 'A Boat fork or template keeps its source machine type; drop snapshotId/templateId to create a standard size.' };
+    const from = options?.snapshotId ?? options?.templateId ?? (options as { from?: unknown } | undefined)?.from ?? config.createOptions?.from;
+    if (from !== undefined) {
+      return { status: 'unsupported', reason: 'A Boat fork or template keeps its source machine type; drop snapshotId/templateId/from (including createOptions.from) to create a standard size.' };
     }
     const type = BOAT_SIZE_TYPES[profile.sizeClass];
     if (!type) {

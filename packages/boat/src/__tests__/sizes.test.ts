@@ -22,5 +22,7 @@ describe('boat standard sizes', () => {
 
   it('refuses a sized request that would keep a source shape', () => {
     expect(make({ apiKey: 'k' }).sizes!.resolve('md', { snapshotId: 's' } as any).status).toBe('unsupported');
+    expect(make({ apiKey: 'k' }).sizes!.resolve('md', { from: 's' } as any).status).toBe('unsupported');
+    expect(make({ apiKey: 'k', createOptions: { from: 's' } } as any).sizes!.resolve('md').status).toBe('unsupported');
   });
 });
