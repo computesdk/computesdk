@@ -962,10 +962,11 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
 
       filesystem: {
         readFile: async (sandbox, path, runCommand) => {
+          const diskPath = mapFilesystemPath(sandbox, path);
           if (sandbox.vm) {
             const chunks: Buffer[] = [];
             try {
-              await sandbox.vm.files.downloadFile(path, (chunk) => {
+              await sandbox.vm.files.downloadFile(diskPath, (chunk) => {
                 chunks.push(Buffer.from(chunk));
               });
             } catch (error) {
@@ -977,7 +978,6 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             }
             return Buffer.concat(chunks).toString('utf8');
           }
-          const diskPath = mapFilesystemPath(sandbox, path);
           const sizeResult = await runCommand(
             sandbox,
             `wc -c < ${shellEscape(diskPath)}`,
@@ -1043,11 +1043,12 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
         },
 
         writeFile: async (sandbox, path, content, runCommand) => {
+          const diskPath = mapFilesystemPath(sandbox, path);
           if (sandbox.vm) {
             try {
               await sandbox.vm.files.uploadFile(
                 Buffer.from(content, 'utf8'),
-                path,
+                diskPath,
               );
             } catch (error) {
               throw new Error(
@@ -1058,7 +1059,6 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
             }
             return;
           }
-          const diskPath = mapFilesystemPath(sandbox, path);
           const parent = posix.dirname(diskPath);
           const encoded = Buffer.from(content, 'utf8').toString('base64');
           const tempPath = `${diskPath}.computesdk-write-${randomUUID()}`;
