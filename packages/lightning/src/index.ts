@@ -10,12 +10,33 @@
  * is (re)applied from the provider config before every collection operation.
  */
 
-import { defineProvider, createConfigGate, createConfigStamp } from '@computesdk/provider';
+import { defineProvider, createConfigGate, createConfigStamp, InstanceSizeError } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions, InstanceSizeClass } from '@computesdk/provider';
 
 /** Default instance type used when none is supplied via config. */
 const DEFAULT_INSTANCE_TYPE = 'cpu-1';
+
+/**
+ * Lightning's listed CPU instance types (docs: platform/build/sandbox#instance-types) and their
+ * default writable disk (SDK `CreateSandboxParams.storageGb`). RAM and disk are listed in GB,
+ * read as GiB. Each standard size takes the smallest type whose vCPU and RAM put it in that size.
+ */
+export const LIGHTNING_SIZE_INSTANCE_TYPES: Readonly<Partial<Record<InstanceSizeClass, {
+  readonly instanceType: string; readonly vcpus: number; readonly memoryMiB: number; readonly diskMiB?: number;
+}>>> = Object.freeze({
+  // cpu-1's default disk is listed only as "≈5 GB", so no exact diskMiB is declared.
+  xs: Object.freeze({ instanceType: 'cpu-1', vcpus: 1, memoryMiB: 1024 }),
+  md: Object.freeze({ instanceType: 'cpu-2', vcpus: 2, memoryMiB: 8192, diskMiB: 10240 }),
+  lg: Object.freeze({ instanceType: 'cpu-4', vcpus: 4, memoryMiB: 16384, diskMiB: 40960 }),
+  xl: Object.freeze({ instanceType: 'cpu-8', vcpus: 8, memoryMiB: 32768, diskMiB: 61440 }),
+  '2xl': Object.freeze({ instanceType: 'cpu-16', vcpus: 16, memoryMiB: 65536, diskMiB: 81920 }),
+});
+
+const UNSUPPORTED_SIZE_REASONS: Partial<Record<InstanceSizeClass, string>> = {
+  sm: 'Lightning has no 1-vCPU instance type with 2 GiB RAM: cpu-1 has 1 GB, and cpu-2 (2 vCPU / 8 GB) is the md size.',
+  '3xl': 'Lightning\'s largest instance type is cpu-16 (16 vCPU / 64 GB); it has no 32-vCPU type.',
+};
 
 /** Minimal view of the `@lightningai/sdk` `FileStat` we rely on. */
 interface LightningFileStat {
@@ -234,6 +255,26 @@ function toSnapshot(snap: LightningSnapshotData): LightningSnapshot {
 
 export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>({
   name: 'lightning',
+  sizes: (_config, profile, options) => {
+    if (options?.instanceType !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with the native Lightning instanceType');
+    }
+    const storageGb = options?.storageGb;
+    if (storageGb !== undefined && (typeof storageGb !== 'number' || !Number.isSafeInteger(storageGb) || storageGb < 0)) {
+      throw new InstanceSizeError('invalid', 'storageGb must be a non-negative integer number of GB');
+    }
+    const shape = LIGHTNING_SIZE_INSTANCE_TYPES[profile.sizeClass];
+    if (!shape) {
+      return { status: 'unsupported', reason: UNSUPPORTED_SIZE_REASONS[profile.sizeClass] ?? `Lightning has no instance type for ${profile.sizeClass}.` };
+    }
+    // A storageGb override replaces the instance type's default disk; 0 inherits it.
+    const diskMiB = storageGb ? storageGb * 1024 : shape.diskMiB;
+    return {
+      status: 'supported',
+      nativeOptions: { instanceType: shape.instanceType },
+      resolved: { vcpus: shape.vcpus, memoryMiB: shape.memoryMiB, ...(diskMiB === undefined ? {} : { diskMiB }) },
+    };
+  },
   methods: {
     instances: {
       create: async (config: LightningConfig, options?: CreateInstanceOptions) => {
@@ -251,9 +292,10 @@ export const lightning = defineProvider<LightningNativeSandbox, LightningConfig>
           ...providerOptions
         } = options || {};
 
+        // A per-create instanceType (including one from sizeClass) wins over the config default.
         const params: Record<string, unknown> = {
           ...providerOptions,
-          instanceType: config.instanceType ?? DEFAULT_INSTANCE_TYPE,
+          instanceType: providerOptions.instanceType ?? config.instanceType ?? DEFAULT_INSTANCE_TYPE,
         };
 
         if (name) params.name = name;

@@ -84,6 +84,28 @@ interface TensorlakeConfig {
 }
 ```
 
+### Standard sizes
+
+`create({ sizeClass })` sets Tensorlake's native `cpus` / `memoryMb`, plus a 10240 MiB (10 GiB) root disk via `diskMb`. Tensorlake caps sandbox RAM at 16000 MB, so `xl` boots 8 vCPU / 16000 MB. That is 384 MiB under the standard 16384 MiB, within the 10% memory tolerance; `sandbox.sizing.belowStandard` says why and `sandbox.sizing.memoryShortfallMiB` is `384`:
+
+| `sizeClass` | `cpus` | `memoryMb` | `diskMb` |
+| --- | ---: | ---: | ---: |
+| `xs` | 1 | 1024 | 10240 |
+| `sm` | 1 | 2048 | 10240 |
+| `md` | 2 | 4096 | 10240 |
+| `lg` | 4 | 8192 | 10240 |
+| `xl` | 8 | 16000 | 10240 |
+
+- `2xl` (16 vCPU / 32 GiB) and `3xl` (32 vCPU / 64 GiB) are `unsupported`: the 16000 MB RAM cap is far more than 10% below their memory.
+- A size above your plan's quota fails at create with Tensorlake's limit error; it never falls back to the default 1 vCPU / 1 GiB.
+- `sizeClass` with `snapshotId` is `unsupported`: a memory snapshot restore keeps the snapshot's CPU and memory.
+- Combining `sizeClass` with `cpus`, `memoryMb`, `diskMb`, or `ephemeralDiskMb` throws `InstanceSizeError` with code `conflict`.
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' });
+console.log(sandbox.sizing?.resolved); // { vcpus: 2, memoryMiB: 4096, diskMiB: 10240 }
+```
+
 ### Sandbox Images
 
 Tensorlake supports custom container images. The default is `ubuntu-minimal`:

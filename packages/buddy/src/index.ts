@@ -16,6 +16,7 @@
 import { defineProvider } from '@computesdk/provider';
 import type {
   CreateInstanceOptions,
+  InstanceSizeClass,
   ListSnapshotsOptions,
   ListTemplatesOptions,
   InstanceInfo,
@@ -50,6 +51,7 @@ import {
   type BuddyConfig,
   type BuddyEndpoint,
   type BuddyPortInput,
+  type BuddyResources,
   type BuddySandboxHandle,
   type ResolvedBuddyConfig,
 } from './utils.js';
@@ -81,8 +83,42 @@ export async function deleteSandbox(client: BuddyApiClient, sandboxId: string): 
   }
 }
 
+/** Buddy gives every sandbox a 50 GB disk; it is not configurable. */
+export const BUDDY_DISK_MIB = 50 * 1024;
+
+/**
+ * Smallest `resources` preset (`{vCPU}x{RAM GB}`, 1x2 through 12x24) whose vCPU
+ * puts it in each standard size. `xs` takes 1x2 (extra RAM); 12x24 has too few
+ * vCPU for `2xl`.
+ */
+export const BUDDY_SIZE_PRESETS: Readonly<Partial<Record<InstanceSizeClass, BuddyResources>>> = Object.freeze({
+  xs: '1x2',
+  sm: '1x2',
+  md: '2x4',
+  lg: '4x8',
+  xl: '8x16',
+});
+
 export const buddy = defineProvider<BuddySandboxHandle, BuddyConfig, any, Snapshot>({
   name: PROVIDER,
+
+  // The framework rejects `sizeClass` combined with `resources`, `cpu`, `cpus`,
+  // `vcpus`, `memory`, `memoryMb`, `memoryMiB` or `memMiB` before this runs.
+  sizes: (_config, profile) => {
+    const preset = BUDDY_SIZE_PRESETS[profile.sizeClass];
+    if (!preset) {
+      return {
+        status: 'unsupported',
+        reason: `Buddy's largest preset is 12x24 (12 vCPU / 24 GB RAM), below ${profile.sizeClass} (${profile.vcpus} vCPU / ${profile.memoryMiB} MiB).`,
+      };
+    }
+    const [vcpus, memoryGb] = preset.split('x').map(Number);
+    return {
+      status: 'supported',
+      nativeOptions: { resources: preset },
+      resolved: { vcpus, memoryMiB: memoryGb * 1024, diskMiB: BUDDY_DISK_MIB },
+    };
+  },
 
   methods: {
     instances: {

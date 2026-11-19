@@ -1,9 +1,27 @@
+import type { CreateInstanceOptions } from '@computesdk/provider';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { namespace } from '../index';
 
-const profiles = [['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192], ['xl', 8, 16384]] as const;
+// Sizing could pick the wrong class, CPU, RAM, disk, or platform; silently boot
+// defaults for an unsupported class; drop a field when sending a normal,
+// image-based, or volume-restore create; or accept a competing native CPU/RAM
+// selector. Discovery could also require credentials or disagree with create.
+const profiles = [
+  ['sm', 1, 2048, 40960],
+  ['md', 2, 4096, 49152],
+  ['lg', 4, 8192, 65536],
+  ['xl', 8, 16384, 98304],
+  ['2xl', 16, 32768, 163840],
+  ['3xl', 32, 65536, 294912],
+] as const;
+
 function mockFetch() {
-  const fetch = vi.fn(async () => ({ ok: true, json: async () => ({ metadata: { instanceId: 'new' }, extendedMetadata: { commandServiceEndpoint: 'https://cmd.invalid' } }) }));
+  const fetch = vi.fn(async (url: string, _init: RequestInit) => ({
+    ok: true,
+    json: async () => url.endsWith('/DescribePersistentVolume')
+      ? { volume: { sizeMb: 2048, site: 'iad3-a.nscluster.cloud' } }
+      : { metadata: { instanceId: 'new' }, extendedMetadata: { commandServiceEndpoint: 'https://cmd.invalid' } },
+  }));
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }
@@ -13,21 +31,48 @@ describe('Namespace standard size mapping (mock-only)', () => {
   it('discovers sizes purely without credentials, files, or API calls', () => {
     const fetch = mockFetch();
     const sizes = namespace({ tokenFile: '/must-not-read' }).sizes;
-    expect(sizes.list().filter(p => p.status === 'supported').map(p => p.requested.sizeClass)).toEqual(['sm', 'md', 'lg', 'xl']);
-    expect(sizes.resolve('xs').status).toBe('unknown'); expect(sizes.resolve('2xl').status).toBe('unknown');
+    expect(sizes.list().filter(p => p.status === 'supported').map(p => p.requested.sizeClass))
+      .toEqual(['xs', ...profiles.map(([sizeClass]) => sizeClass)]);
     expect(fetch).not.toHaveBeenCalled();
   });
-  it.each(profiles)('maps %s to exact native request and overrides only config defaults', async (sizeClass, cpu, memory) => {
+  it.each(profiles)('maps %s to the published shape and overrides only config defaults', async (sizeClass, cpu, memory, diskMiB) => {
     const fetch = mockFetch();
     const provider = namespace({ token: 'test', virtualCpu: 99, memoryMegabytes: 99999 });
     const options = { sizeClass, instanceOptions: { workload_permissions: [{ action: 'read' }], shape: { os: 'linux' } } };
+    const shape = { os: 'linux', machine_arch: 'amd64', virtual_cpu: cpu, memory_megabytes: memory };
+    const resolved = { vcpus: cpu, memoryMiB: memory, diskMiB };
+    const resolution = provider.sizes.resolve(sizeClass, options);
+    expect(resolution).toMatchObject({ status: 'supported', resolved });
+    expect(resolution).toHaveProperty('nativeOptions', { instanceOptions: { shape } });
     const result = await provider.instances.create(options);
-    const body = JSON.parse((fetch.mock.calls as any[][])[0][1].body);
-    expect(body.shape).toEqual({ os: 'linux', machine_arch: 'amd64', virtual_cpu: cpu, memory_megabytes: memory });
+    const body = JSON.parse(String(fetch.mock.calls[0][1].body));
+    expect(body.shape).toEqual(shape);
     expect(body.workload_permissions).toEqual([{ action: 'read' }]);
     expect(body).not.toHaveProperty('sizeClass');
-    expect(result.sizing).toMatchObject({ requested: { sizeClass, vcpus: cpu, memoryMiB: memory }, resolved: { vcpus: cpu, memoryMiB: memory }, provenance: 'adapter-declared' });
+    expect(result.sizing).toEqual({ requested: { sizeClass, vcpus: cpu, memoryMiB: memory }, resolved, provenance: 'adapter-declared' });
     expect(options.instanceOptions.shape).toEqual({ os: 'linux' });
+  });
+  it('forwards the mapped shape with a custom image and a restored volume', async () => {
+    const fetch = mockFetch();
+    const provider = namespace({ token: 'test' });
+    await provider.sandbox.create({ sizeClass: '3xl', image: 'example.invalid/custom:1', snapshotId: 'data/vol_1' });
+    const create = fetch.mock.calls.find(([url]) => url.endsWith('/CreateInstance'));
+    expect(create).toBeDefined();
+    expect(JSON.parse(String(create![1].body))).toMatchObject({
+      shape: { os: 'linux', machine_arch: 'amd64', virtual_cpu: 32, memory_megabytes: 65536 },
+      containers: [{ image_ref: 'example.invalid/custom:1' }],
+      placement: ['cell:iad3-a'],
+      volumes: [{ from_snapshot_id: 'vol_1', tag: 'data', size_mb: 2048 }],
+    });
+  });
+  it('boots xs on the 1x2 minimum shape and records the extra RAM', async () => {
+    const fetch = mockFetch();
+    const provider = namespace({ token: 'test' });
+    const resolved = { vcpus: 1, memoryMiB: 2048, diskMiB: 40960 };
+    expect(provider.sizes.resolve('xs')).toMatchObject({ status: 'supported', resolved });
+    const result = await provider.instances.create({ sizeClass: 'xs' });
+    expect(JSON.parse(String(fetch.mock.calls[0][1].body)).shape).toMatchObject({ virtual_cpu: 1, memory_megabytes: 2048 });
+    expect(result.sizing).toEqual({ requested: { sizeClass: 'xs', vcpus: 1, memoryMiB: 1024 }, resolved, provenance: 'adapter-declared' });
   });
   it.each([
     { sizeClass: 'sm', instanceOptions: { shape: { virtual_cpu: 1 } } },
@@ -35,10 +80,17 @@ describe('Namespace standard size mapping (mock-only)', () => {
     { sizeClass: 'sm', instanceOptions: { shape: { virtualCpu: 1 } } },
     { sizeClass: 'sm', instanceOptions: { shape: { memoryMegabytes: 2048 } } },
     { sizeClass: 'sm', virtualCpu: 1 }, { sizeClass: 'sm', memoryMegabytes: 2048 },
-    { sizeClass: 'sm', size: 'native' }, { sizeClass: 'wrong' }, { sizeClass: 'xs' },
-  ])('rejects invalid, conflicting or unknown request without API call: %j', async options => {
+    { sizeClass: 'sm', virtual_cpu: 1 }, { sizeClass: 'sm', memory_megabytes: 2048 },
+    { sizeClass: 'sm', size: 'native' },
+  ] as const)('rejects a conflicting request without API call: %j', async options => {
     const fetch = mockFetch();
-    await expect(namespace({ token: 'test' }).instances.create(options as any)).rejects.toMatchObject({ fallback: false });
+    await expect(namespace({ token: 'test' }).instances.create(options)).rejects.toMatchObject({ code: 'conflict', fallback: false });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('rejects an invalid size class before create', async () => {
+    const fetch = mockFetch();
+    const options = { sizeClass: 'wrong' } as unknown as CreateInstanceOptions;
+    await expect(namespace({}).instances.create(options)).rejects.toMatchObject({ code: 'invalid', fallback: false });
     expect(fetch).not.toHaveBeenCalled();
   });
   it('uses the validated enumerable platform override in both resolution and the native request', async () => {
@@ -51,7 +103,7 @@ describe('Namespace standard size mapping (mock-only)', () => {
       } } },
     });
     await provider.instances.create(options);
-    expect(JSON.parse((fetch.mock.calls as any[][])[0][1].body).shape).toEqual({
+    expect(JSON.parse(String(fetch.mock.calls[0][1].body)).shape).toEqual({
       virtual_cpu: 1, memory_megabytes: 2048, os: 'linux', machine_arch: 'amd64',
     });
   });
@@ -61,21 +113,32 @@ describe('Namespace standard size mapping (mock-only)', () => {
     const create = namespace(config).instances.create({ sizeClass: 'sm' });
     config.os = 'macos'; config.machineArch = 'arm64';
     await create;
-    expect(JSON.parse((fetch.mock.calls as any[][])[0][1].body).shape).toMatchObject({ os: 'linux', machine_arch: 'amd64' });
+    expect(JSON.parse(String(fetch.mock.calls[0][1].body)).shape).toMatchObject({ os: 'linux', machine_arch: 'amd64' });
   });
   it.each([null, [], 'invalid', 7])('rejects malformed native shape %j before credentials/API', async shape => {
     const fetch = mockFetch();
     await expect(namespace({ tokenFile: '/must-not-read' }).instances.create({ sizeClass: 'sm', instanceOptions: { shape } })).rejects.toMatchObject({ code: 'invalid' });
     expect(fetch).not.toHaveBeenCalled();
   });
-  it('does not claim Linux profiles for macOS or unverified architectures', async () => {
+  it('rejects non-Linux container creates and leaves ambiguous Linux ARM64 shapes unknown', async () => {
     const fetch = mockFetch();
-    for (const provider of [namespace({ os: 'macos' }), namespace({ machineArch: 'arm64' })]) {
-      expect(provider.sizes.resolve('sm').status).toBe('unknown');
-      await expect(provider.instances.create({ sizeClass: 'sm' })).rejects.toMatchObject({ code: 'unknown' });
+    for (const os of ['macos', 'windows']) {
+      const provider = namespace({ os });
+      expect(provider.sizes.resolve('sm').status).toBe('unsupported');
+      await expect(provider.instances.create({ sizeClass: 'sm' })).rejects.toMatchObject({ code: 'unsupported' });
     }
-    const provider = namespace({ token: 'test' });
-    await expect(provider.instances.create({ sizeClass: 'sm', instanceOptions: { shape: { os: 'macos' } } })).rejects.toMatchObject({ code: 'unknown' });
+    const arm = namespace({ machineArch: 'arm64' });
+    expect(arm.sizes.resolve('sm').status).toBe('unknown');
+    await expect(arm.instances.create({ sizeClass: 'sm' })).rejects.toMatchObject({ code: 'unknown' });
+    await expect(namespace({}).instances.create({ sizeClass: 'sm', instanceOptions: { shape: { os: 'macos' } } }))
+      .rejects.toMatchObject({ code: 'unsupported' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('rejects unlisted Linux architectures', async () => {
+    const fetch = mockFetch();
+    const provider = namespace({ machineArch: 'riscv64' });
+    expect(provider.sizes.resolve('sm').status).toBe('unsupported');
+    await expect(provider.instances.create({ sizeClass: 'sm' })).rejects.toMatchObject({ code: 'unsupported' });
     expect(fetch).not.toHaveBeenCalled();
   });
   it.each([
@@ -88,20 +151,21 @@ describe('Namespace standard size mapping (mock-only)', () => {
     ['numeric os', { instanceOptions: { shape: { os: 1 } } }],
     ['null architecture', { instanceOptions: { shape: { machine_arch: null } } }],
     ['undefined architecture', { instanceOptions: { shape: { machine_arch: undefined } } }],
+    ['camelCase architecture', { instanceOptions: { shape: { machineArch: 'amd64' } } }],
   ])('rejects %s before a platform context can diverge from its native request', async (_name, context) => {
     const fetch = mockFetch();
     const provider = namespace({ token: 'test' });
     // Preserve the original descriptor forms; spreading the test context would hide the bug.
-    const options = Object.defineProperty(context, 'sizeClass', { value: 'sm', enumerable: true });
-    await expect(provider.instances.create(options as any)).rejects.toMatchObject({ code: 'invalid' });
-    expect(() => provider.sizes.resolve('sm', options as any)).toThrowError(/sizeClass/);
-    expect(() => provider.sizes.list(options as any)).toThrowError(/sizeClass/);
+    const options: CreateInstanceOptions = Object.defineProperty(context, 'sizeClass', { value: 'sm', enumerable: true });
+    await expect(provider.instances.create(options)).rejects.toMatchObject({ code: 'invalid' });
+    expect(() => provider.sizes.resolve('sm', options)).toThrowError(/sizeClass/);
+    expect(() => provider.sizes.list(options)).toThrowError(/sizeClass/);
     expect(fetch).not.toHaveBeenCalled();
   });
   it('preserves legacy per-create native shape and native size fields', async () => {
     const fetch = mockFetch();
     const result = await namespace({ token: 'test' }).instances.create({ size: 'native', instanceOptions: { shape: { virtual_cpu: 3, memory_megabytes: 3333 } } });
-    expect(JSON.parse((fetch.mock.calls as any[][])[0][1].body).shape).toMatchObject({ virtual_cpu: 3, memory_megabytes: 3333 });
+    expect(JSON.parse(String(fetch.mock.calls[0][1].body)).shape).toMatchObject({ virtual_cpu: 3, memory_megabytes: 3333 });
     expect(result.sizing).toBeUndefined();
   });
   it('preserves native sentinels operationally without promoting secrets into sizing/catalog/errors', async () => {
@@ -114,7 +178,7 @@ describe('Namespace standard size mapping (mock-only)', () => {
       containerOptions: { custom_auth: secret },
     };
     const result = await provider.instances.create(options);
-    const body = JSON.parse((fetch.mock.calls as any[][])[0][1].body);
+    const body = JSON.parse(String(fetch.mock.calls[0][1].body));
     expect(body.authorization).toBe(secret);
     expect(body.custom).toEqual({ token: secret });
     expect(body.containers[0].environment).toEqual({ TOKEN: secret });

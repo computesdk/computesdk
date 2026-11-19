@@ -97,7 +97,7 @@ interface LightningConfig {
 
 | Method       | Supported | Notes                                                                                                               |
 | ------------ | --------- | ------------------------------------------------------------------------------------------------------------------- |
-| `create`     | ✅         | Honors `instanceType`, `runtime`, `ports`, `spot`, `persistent`, `timeout`; boot from a `snapshotId`.               |
+| `create`     | ✅         | Honors `instanceType` (per create or config), `runtime`, `ports`, `spot`, `persistent`, `timeout`, `sizeClass`; boot from a `snapshotId`. |
 | `getById`    | ✅         | Reconnects by id.                                                                                                   |
 | `list`       | ✅         |                                                                                                                     |
 | `destroy`    | ✅         |                                                                                                                     |
@@ -106,6 +106,24 @@ interface LightningConfig {
 | `getUrl`     | ✅         | Returns the public HTTPS URL for a port; the port must be declared via `ports` at create time, otherwise it throws. |
 | `filesystem` | ✅         | `readFile`, `writeFile`, `mkdir`, `readdir`, `exists`, `remove`.                                                    |
 | `snapshot`   | ✅         | `compute.snapshot.create` / `list` / `delete`, and restore via `snapshotId` on create.                              |
+
+## Standard sizes
+
+`create({ sizeClass })` picks a Lightning CPU instance type (sent as `instanceType`, which overrides `config.instanceType`). Shapes are Lightning's [listed instance types](https://lightning.ai/docs/platform/build/sandbox#instance-types); RAM and disk are listed in GB and read as GiB. Default disk comes from the SDK's `storageGb` docs.
+
+| `sizeClass` | Instance type | Resolved shape (vCPU / RAM / disk) |
+| --- | --- | --- |
+| `xs` | `cpu-1` | 1 / 1 GiB / ≈5 GB (not declared) |
+| `sm` | — | `unsupported`: no 1-vCPU type with 2 GiB; `cpu-2` is `md` |
+| `md` | `cpu-2` | 2 / 8 GiB / 10 GiB |
+| `lg` | `cpu-4` | 4 / 16 GiB / 40 GiB |
+| `xl` | `cpu-8` | 8 / 32 GiB / 60 GiB |
+| `2xl` | `cpu-16` | 16 / 64 GiB / 80 GiB |
+| `3xl` | — | `unsupported`: the largest type is `cpu-16` |
+
+* `sizeClass` with a native `instanceType` (or any generic CPU/memory field) rejects with `InstanceSizeError('conflict')`.
+* `storageGb` stays usable: it is forwarded and reported as `resolved.diskMiB`.
+* Restoring with `snapshotId`/`templateId` keeps the mapped instance type.
 
 ### Notes
 

@@ -73,3 +73,19 @@ interface RunloopConfig {
   timeout?: number;
 }
 ```
+
+## Standard sizes
+
+`instances.create({ sizeClass: 'md' })` sets CPU, memory, and disk using Runloop's `CUSTOM_SIZE` launch parameters. The same fields are sent when creating a Devbox from a blueprint or disk snapshot.
+
+| `sizeClass` | vCPU | Memory (MiB) | Disk (MiB) |
+| --- | ---: | ---: | ---: |
+| `sm` | 1 | 2048 | 4096 |
+| `md` | 2 | 4096 | 8192 |
+| `lg` | 4 | 8192 | 16384 |
+| `xl` | 8 | 16384 | 16384 |
+| `2xl` | 16 | 32768 | 16384 |
+
+`xs` boots a custom 1 vCPU / 2 GiB Devbox, since custom sizes need at least 2 GiB per vCPU (vCPU picks the size; the extra RAM is recorded in `sizing.resolved`). `3xl` exceeds Runloop's custom limits of 16 vCPUs and 64 GiB of RAM. [Runloop sizing guide](https://docs.runloop.ai/docs/devboxes/configuration/sizes)
+
+Omit `sizeClass` when supplying native `launch_parameters`.

@@ -15,7 +15,7 @@ import {
   SandboxFileNotFoundError,
   SandboxNotFoundError,
 } from 'railway';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { InstanceSizeError, defineProvider, escapeShellArg } from '@computesdk/provider';
 
 import type { CommandResult, RunCommandOptions, InstanceInfo } from '@computesdk/provider';
 import type { CreateInstanceOptions, FileEntry, Snapshot } from 'computesdk';
@@ -58,6 +58,20 @@ function validateResources(resources: Record<string, unknown>): RailwayResources
     validated[key] = value;
   }
   return validated;
+}
+
+/**
+ * Railway's largest listed per-sandbox size (Pro: 24 vCPU / 24 GB). Older Pro
+ * limits (32 vCPU / 32 GB) are legacy; Enterprise maxima are set per agreement
+ * and not listed.
+ * https://docs.railway.com/sandboxes#sandbox-size
+ */
+const MAX_VCPUS = 24;
+const MAX_MEMORY_GB = 24;
+
+/** MiB to the decimal GB `resources.memoryGB` takes. */
+function mibToDecimalGB(mib: number): number {
+  return (mib * 1024 * 1024) / 1e9;
 }
 
 /** Options accepted by the Railway SDK's create/connect/list calls. */
@@ -377,6 +391,21 @@ async function withFilesRetry<T>(operation: () => Promise<T>): Promise<T> {
 
 export const railway = defineProvider<RailwaySandbox, RailwayConfig>({
   name: 'railway',
+  // `resources` takes arbitrary vCPU / decimal-GB values on fresh and checkpoint
+  // creates alike, up to the plan maximum, so each size maps to its exact profile.
+  sizes: (_config, profile, options) => {
+    if (options?.resources !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Railway resources');
+    }
+    const memoryGB = mibToDecimalGB(profile.memoryMiB);
+    if (profile.vcpus > MAX_VCPUS || memoryGB > MAX_MEMORY_GB) {
+      return {
+        status: 'unsupported',
+        reason: `Railway's largest listed sandbox size is ${MAX_VCPUS} vCPU / ${MAX_MEMORY_GB} GB (Pro), below ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB.`,
+      };
+    }
+    return { status: 'supported', nativeOptions: { resources: { cpu: profile.vcpus, memoryGB } } };
+  },
   methods: {
     instances: {
       create: async (config: RailwayConfig, options?: CreateInstanceOptions) => {

@@ -14,7 +14,8 @@
  *   await sandbox.destroy();
  */
 
-import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from "@computesdk/provider";
+import { defineProvider, escapeShellArg, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from "@computesdk/provider";
+import type { InstanceSizeResolver } from "@computesdk/provider";
 import type { RunCommandOptions, CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry } from "computesdk";
 import {
   LuxorSandbox,
@@ -318,6 +319,49 @@ function basename(path: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Standard sizes
+// ---------------------------------------------------------------------------
+
+/**
+ * Luxor takes arbitrary per-create `cpuCores` (1-128) and even `memoryMb`
+ * (128-524288), so every standard size maps to its exact profile. Starter
+ * caps machines at 4 cores / 8 GB and Team at 16 / 64 GB; Enterprise lists
+ * larger machines. The root disk mirrors the benchmarks platform's presets.
+ */
+const SIZE_DISK_GB: Partial<Record<string, number>> = { sm: 5, md: 10, lg: 20, xl: 40 };
+
+const luxorSizes: InstanceSizeResolver<LuxorConfig> = (config, profile, options) => {
+  const native = options as Record<string, unknown> | undefined;
+  for (const field of ["cpuCores", "memoryMb"]) {
+    if (native?.[field] !== undefined) {
+      throw new InstanceSizeError("conflict", `cannot combine sizeClass with ${field}`);
+    }
+  }
+  if (options?.snapshotId) {
+    return {
+      status: "unknown",
+      reason: "A Luxor snapshot restore resumes its source VM's memory; Luxor does not document restoring it at a different CPU/RAM size.",
+    };
+  }
+  const { vcpus, memoryMiB } = profile;
+  const callerDisk = native?.diskSizeGb;
+  if (callerDisk !== undefined && (typeof callerDisk !== "number" || !Number.isSafeInteger(callerDisk) || callerDisk <= 0)) {
+    throw new InstanceSizeError("invalid", "diskSizeGb must be a positive integer number of GiB");
+  }
+  const sizeDisk = SIZE_DISK_GB[profile.sizeClass];
+  const disk = (callerDisk as number | undefined) ?? sizeDisk ?? config.diskSizeGb;
+  return {
+    status: "supported",
+    nativeOptions: {
+      cpuCores: vcpus,
+      memoryMb: memoryMiB,
+      ...(callerDisk === undefined && sizeDisk !== undefined ? { diskSizeGb: sizeDisk } : {}),
+    },
+    ...(disk === undefined ? {} : { resolved: { vcpus, memoryMiB, diskMiB: disk * 1024 } }),
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
@@ -325,6 +369,7 @@ const luxorProvider = defineProvider<Session, LuxorConfig>({
   // Keep the provider id stable: benchmark history, platform credentials, and
   // routing keys still use "tenki" for the same Luxor service.
   name: "tenki",
+  sizes: luxorSizes,
   methods: {
     instances: {
       create: async (config, options) => {

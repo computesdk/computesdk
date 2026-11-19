@@ -98,6 +98,30 @@ Explicit native per-create `ttl`/`hardTtl` take precedence over `timeout`, which
 otherwise takes precedence over the configured defaults. Command timeouts remain
 separate and use milliseconds.
 
+## Standard sizes
+
+Use `compute.instances.create({ sizeClass: 'md' })` to request a
+[standard size](../reference/sizes.md).
+Sandbox0 accepts a [claim-time memory override](https://sandbox0.ai/docs/sandbox#sandbox-resources)
+and derives CPU from memory. The mappings follow its
+[public Cloud allocation](https://sandbox0.ai/pricing) of 1 vCPU per 2 GiB.
+
+| Class | vCPU | Memory (MiB) |
+| --- | ---: | ---: |
+| `sm` | 1 | 2048 |
+| `md` | 2 | 4096 |
+| `lg` | 4 | 8192 |
+| `xl` | 8 | 16384 |
+
+`xs` claims 2 GiB: 1 GiB would get only 0.5 vCPU, and vCPU picks the size, so
+`sizing.resolved` reports 1 vCPU / 2048 MiB. `2xl` and `3xl` exceed the documented 16 GiB limit; Sandbox0 lists no
+larger public shape.
+
+Sizing works with `templateId` and `snapshotId` because each claim sets memory
+independently of the source filesystem. A standard size overrides configured
+default memory, but cannot be combined with a per-create `memory` or other native
+CPU/RAM selector. Sandbox0 does not set disk size at claim time.
+
 ## Supported Operations
 
 | Method | Supported | Notes |

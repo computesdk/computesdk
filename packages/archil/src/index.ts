@@ -33,6 +33,9 @@ import type {
 } from 'computesdk';
 
 const ARCHIL_MOUNT_ROOT = '/mnt/archil';
+// Persistent sandbox limits: vcpu_count 1-32, mem_size_mib 256-65536 (integers).
+const ARCHIL_MAX_VCPUS = 32;
+const ARCHIL_MAX_MEMORY_MIB = 65_536;
 const ARCHIL_MAX_EXEC_COMMAND_BYTES = 102_400;
 // Base64 expands the file data and adds line wrapping. Keep the raw chunk
 // comfortably below Archil's roughly 4 MiB response cap.
@@ -649,8 +652,11 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
     if (resolveSizingExecution(config, options) !== 'persistent') {
       return { status: 'unavailable', reason: 'Archil exec containers do not expose VM sizing. Drop execution: "exec" (persistent VMs are the default) or set ephemeral: false.' };
     }
-    if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl') {
-      return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
+    if (profile.vcpus > ARCHIL_MAX_VCPUS || profile.memoryMiB > ARCHIL_MAX_MEMORY_MIB) {
+      return {
+        status: 'unsupported',
+        reason: `Archil sandboxes allow at most ${ARCHIL_MAX_VCPUS} vCPU and ${ARCHIL_MAX_MEMORY_MIB} MiB (64 GiB) of memory; ${profile.sizeClass} needs ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB.`,
+      };
     }
     return { status: 'supported', nativeOptions: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB } };
   },

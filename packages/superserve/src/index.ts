@@ -7,12 +7,13 @@
 import { randomUUID } from 'node:crypto';
 import {
   AuthenticationError,
+  NotFoundError,
   Sandbox as SuperserveSandbox,
   Snapshot as SuperserveSnapshot,
   Template as SuperserveTemplate,
 } from '@superserve/sdk';
 import type { SnapshotInfo, TemplateCreateOptions, TemplateInfo } from '@superserve/sdk';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError, INSTANCE_SIZE_PROFILES } from '@computesdk/provider';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 
@@ -21,6 +22,7 @@ import type {
   CreateInstanceOptions,
   CreateTemplateOptions,
   FileEntry,
+  InstanceSizeClass,
   RunCommandOptions,
   InstanceInfo,
 } from '@computesdk/provider';
@@ -32,6 +34,44 @@ export interface SuperserveConfig {
   baseUrl?: string;
   /** Default auto-pause timeout in milliseconds. */
   timeout?: number;
+  /** Template to boot per standard `sizeClass`; defaults to {@link SUPERSERVE_SIZE_TEMPLATES}. */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
+}
+
+/**
+ * Superserve fixes vCPU, memory and disk when a template is built, so each
+ * standard size boots its own template. `superserve/base` (2 vCPU / 4 GiB /
+ * 8 GiB disk) is built in to every team; the others are team templates
+ * built by `scripts/provider-setup.mjs superserve`. The largest listed plan
+ * (Pro) caps a sandbox at 16 vCPU / 64 GiB, so `3xl` has no default.
+ */
+export const SUPERSERVE_SIZE_TEMPLATES: Readonly<Partial<Record<InstanceSizeClass, string>>> = Object.freeze({
+  xs: 'csdk-node22-1cpu-1gb',
+  sm: 'csdk-node22-1cpu-2gb',
+  md: 'superserve/base',
+  lg: 'csdk-node22-4cpu-8gb',
+  xl: 'csdk-node22-8cpu-16gb',
+  '2xl': 'csdk-node22-16cpu-32gb',
+});
+
+/** Disk the built-in templates fix; team templates take theirs from the build. */
+const BUILT_IN_TEMPLATE_DISK_MIB: Readonly<Record<string, number>> = Object.freeze({ 'superserve/base': 8192 });
+
+/** Native selectors that pick or size the VM; `Sandbox.create` drops the sizing ones silently. */
+const SOURCE_OPTIONS = ['templateId', 'snapshotId', 'sandboxId', 'fromTemplate', 'fromSnapshot'] as const;
+const NATIVE_SIZE_OPTIONS = ['vcpu', 'vcpuCount', 'memoryMib', 'memoryMaxMib', 'diskMib'] as const;
+
+function sizeTemplateOf(config: SuperserveConfig, sizeClass: InstanceSizeClass): string | undefined {
+  const name = config.sizeTemplates?.[sizeClass] ?? SUPERSERVE_SIZE_TEMPLATES[sizeClass];
+  return typeof name === 'string' && name.trim() ? name : undefined;
+}
+
+/** A create that failed because a standard-size template was never built on this team. */
+function missingSizeTemplate(config: SuperserveConfig, templateId: unknown, error: unknown): string | undefined {
+  if (typeof templateId !== 'string' || !(error instanceof NotFoundError)) return undefined;
+  const sizeClass = (Object.keys(INSTANCE_SIZE_PROFILES) as InstanceSizeClass[]).find(c => sizeTemplateOf(config, c) === templateId);
+  if (!sizeClass) return undefined;
+  return `Superserve size template '${templateId}' (sizeClass ${sizeClass}) is not built on this Superserve team; run \`node scripts/provider-setup.mjs superserve\` (provider-setup.yml) or point \`sizeTemplates.${sizeClass}\` at an existing template`;
 }
 
 function resolveApiKey(config: SuperserveConfig): string {
@@ -188,6 +228,30 @@ function toTemplate(info: TemplateInfo) {
 
 export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
   name: 'superserve',
+  sizes: (config, profile, options) => {
+    const opts = options as Record<string, unknown> | undefined;
+    const nativeSize = NATIVE_SIZE_OPTIONS.find(key => opts?.[key] !== undefined);
+    if (nativeSize) {
+      throw new InstanceSizeError('conflict', `cannot combine sizeClass with native Superserve ${nativeSize}; Superserve sizes sandboxes by template`);
+    }
+    const source = SOURCE_OPTIONS.find(key => opts?.[key] !== undefined);
+    if (source) {
+      return { status: 'unsupported', reason: `A Superserve template or snapshot fixes CPU and memory; drop ${source} to boot the standard size template.` };
+    }
+    const templateId = sizeTemplateOf(config, profile.sizeClass);
+    if (!templateId) {
+      return {
+        status: 'unsupported',
+        reason: `Superserve lists at most 16 vCPU / 64 GiB per sandbox (Pro plan); ${profile.sizeClass} needs ${profile.vcpus} vCPU / ${profile.memoryMiB / 1024} GiB. Set sizeTemplates.${profile.sizeClass} to a custom-size template to use it.`,
+      };
+    }
+    const diskMiB = BUILT_IN_TEMPLATE_DISK_MIB[templateId];
+    return {
+      status: 'supported',
+      nativeOptions: { templateId },
+      ...(diskMiB === undefined ? {} : { resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB } }),
+    };
+  },
   methods: {
     instances: {
       create: async (config: SuperserveConfig, options?: CreateInstanceOptions) => {
@@ -223,6 +287,8 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
           });
           return { instance: sandbox, instanceId: sandbox.id };
         } catch (error) {
+          const notBuilt = missingSizeTemplate(config, templateId, error);
+          if (notBuilt) throw Object.assign(new Error(notBuilt), { status: 404, cause: error });
           rethrowFriendly(error, 'Failed to create Superserve sandbox');
         }
       },

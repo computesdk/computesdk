@@ -3,7 +3,8 @@
  */
 
 import { Sandbox as VercelSandbox, Snapshot as VercelSnapshot, Drive as VercelDrive } from '@vercel/sandbox';
-import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
+import type { InstanceSizeResolver } from '@computesdk/provider';
 import { Writable } from 'node:stream';
 
 export type { VercelSandbox, VercelSnapshot };
@@ -124,8 +125,35 @@ async function execCommand(sandbox: VercelSandbox, command: string, options?: Ru
   }
 }
 
+// Vercel Sandbox sizing (vercel.com/docs/sandbox/pricing#resource-limits):
+// `resources.vcpus` is 1 or an even number from 2 to 32 (Enterprise max),
+// with 2048 MB RAM per vCPU, so every shape is N vCPU / N*2048 MiB. Disk is a
+// fixed 64 GB, or 32 GB for sandboxes on a (deprecated) `runtime`.
+const VERCEL_MAX_VCPUS = 32;
+const VERCEL_MEMORY_MIB_PER_VCPU = 2048;
+const VERCEL_DISK_MIB = 64 * 1024;
+const VERCEL_RUNTIME_DISK_MIB = 32 * 1024;
+
+const resolveVercelSize: InstanceSizeResolver<VercelConfig> = (_config, profile, options) => {
+  const native = options as Record<string, unknown> | undefined;
+  if (native?.resources !== undefined) {
+    throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Vercel resources');
+  }
+  // vCPU picks the class; RAM follows at 2048 MiB per vCPU, so xs boots 1 vCPU / 2048 MiB (extra RAM).
+  const vcpus = profile.vcpus;
+  const allowed = vcpus === 1 || (vcpus % 2 === 0 && vcpus <= VERCEL_MAX_VCPUS);
+  const memoryMiB = vcpus * VERCEL_MEMORY_MIB_PER_VCPU;
+  if (!allowed || memoryMiB < profile.memoryMiB) {
+    const max = VERCEL_MAX_VCPUS * VERCEL_MEMORY_MIB_PER_VCPU;
+    return { status: 'unsupported', reason: `Vercel Sandbox takes 1 or an even 2-${VERCEL_MAX_VCPUS} vCPU at 2048 MiB per vCPU (max ${VERCEL_MAX_VCPUS} vCPU / ${max} MiB); it has no ${profile.sizeClass} shape (${profile.vcpus} vCPU / ${profile.memoryMiB} MiB).` };
+  }
+  const diskMiB = native?.runtime !== undefined ? VERCEL_RUNTIME_DISK_MIB : VERCEL_DISK_MIB;
+  return { status: 'supported', nativeOptions: { resources: { vcpus } }, resolved: { vcpus, memoryMiB, diskMiB } };
+};
+
 export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
+  sizes: resolveVercelSize,
   methods: {
     instances: {
       create: async (config: VercelConfig, options?: CreateInstanceOptions) => {

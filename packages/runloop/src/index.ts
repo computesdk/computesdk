@@ -6,7 +6,7 @@
  */
 
 import { RunloopSDK, type Runloop } from "@runloop/api-client";
-import { defineProvider } from "@computesdk/provider";
+import { defineProvider, InstanceSizeError } from "@computesdk/provider";
 import { posix as posixPath } from "node:path";
 import type {
   CommandResult,
@@ -474,6 +474,18 @@ export interface CreateBlueprintTemplateOptions {
   keepAliveTimeSeconds?: number;
 }
 
+// Match the platform size presets and use Runloop's default custom disk for 2xl.
+const STANDARD_DISK_GIB = { xs: 4, sm: 4, md: 8, lg: 16, xl: 16, "2xl": 16 } as const;
+/** Runloop custom sizes need at least 2 GiB of RAM per vCPU. */
+const MIN_MEMORY_MIB_PER_VCPU = 2048;
+
+const NATIVE_SIZE_FIELDS = [
+  "resource_size_request",
+  "custom_cpu_cores",
+  "custom_gb_memory",
+  "custom_disk_size",
+] as const;
+
 /**
  * Create a Runloop provider instance using the factory pattern
  */
@@ -484,6 +496,35 @@ export const runloop = defineProvider<
   Snapshot
 >({
   name: "runloop",
+  sizes: (_config, { sizeClass, vcpus, memoryMiB }, options) => {
+    // Core rejects launch_parameters; the create path also forwards top-level options.
+    const conflict = NATIVE_SIZE_FIELDS.find((field) => options?.[field] !== undefined);
+    if (conflict) {
+      throw new InstanceSizeError("conflict", `cannot combine sizeClass with Runloop ${conflict}`);
+    }
+    if (sizeClass === "3xl") {
+      return {
+        status: "unsupported",
+        reason: "Runloop custom sizes are capped at 16 vCPUs and 64 GiB RAM.",
+      };
+    }
+
+    const diskGiB = STANDARD_DISK_GIB[sizeClass];
+    // vCPU picks the class; xs takes 1 vCPU / 2 GiB, the smallest custom size with a whole vCPU.
+    const sizedMemoryMiB = Math.max(memoryMiB, vcpus * MIN_MEMORY_MIB_PER_VCPU);
+    const launch_parameters = {
+      resource_size_request: "CUSTOM_SIZE",
+      custom_cpu_cores: vcpus,
+      custom_gb_memory: sizedMemoryMiB / 1024,
+      custom_disk_size: diskGiB,
+    } satisfies NonNullable<Runloop.DevboxCreateParams["launch_parameters"]>;
+
+    return {
+      status: "supported",
+      resolved: { vcpus, memoryMiB: sizedMemoryMiB, diskMiB: diskGiB * 1024 },
+      nativeOptions: { launch_parameters },
+    };
+  },
   methods: {
     instances: {
       create: async (config: RunloopConfig, options?: CreateInstanceOptions) => {

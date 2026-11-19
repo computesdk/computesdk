@@ -1,5 +1,5 @@
 /** Standard request targets, not measurements or guarantees of account/region availability. */
-export type InstanceSizeClass = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+export type InstanceSizeClass = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
 
 export interface InstanceSizeProfile {
   readonly sizeClass: InstanceSizeClass;
@@ -14,21 +14,65 @@ export const INSTANCE_SIZE_PROFILES: Readonly<Record<InstanceSizeClass, Instance
   lg: Object.freeze({ sizeClass: 'lg', vcpus: 4, memoryMiB: 8192 }),
   xl: Object.freeze({ sizeClass: 'xl', vcpus: 8, memoryMiB: 16384 }),
   '2xl': Object.freeze({ sizeClass: '2xl', vcpus: 16, memoryMiB: 32768 }),
+  '3xl': Object.freeze({ sizeClass: '3xl', vcpus: 32, memoryMiB: 65536 }),
 });
+
+/**
+ * How far below a class's memory a shape's RAM may fall and still be that class.
+ * vCPU picks the class; memory is a floor with this tolerance, and any shortfall is recorded.
+ */
+export const INSTANCE_SIZE_MEMORY_TOLERANCE = 0.1;
+
+/** The least RAM (MiB) a shape needs to count as `profile`'s class. */
+export function instanceSizeMemoryFloorMiB(profile: InstanceSizeProfile): number {
+  return Math.ceil(profile.memoryMiB * (1 - INSTANCE_SIZE_MEMORY_TOLERANCE));
+}
+
+/** The vCPU count of the next class up, which a shape for `profile` must stay below; undefined for the top class. */
+export function nextInstanceSizeVcpus(profile: InstanceSizeProfile): number | undefined {
+  const above = Object.values(INSTANCE_SIZE_PROFILES).map(p => p.vcpus).filter(v => v > profile.vcpus);
+  return above.length ? Math.min(...above) : undefined;
+}
 
 export type InstanceSizeStatus = 'supported' | 'unconfigured' | 'unavailable' | 'requires-build' | 'unknown' | 'unsupported';
 export type InstanceSizeErrorCode = Exclude<InstanceSizeStatus, 'supported'> | 'invalid' | 'conflict';
 export type InstanceSizeNativeValue = string | number | boolean | null | readonly InstanceSizeNativeValue[] | { readonly [key: string]: InstanceSizeNativeValue };
 export type InstanceSizeNativeOptions = Readonly<Record<string, InstanceSizeNativeValue>>;
 
-/** The adapter declares an exact request mapping; these are NOT observed resources. */
+/** The provider's listed shape for a standard size; see {@link isValidInstanceSizeShape} for what qualifies. */
+export interface InstanceSizeResources {
+  readonly vcpus: number;
+  readonly memoryMiB: number;
+  readonly diskMiB?: number;
+}
+
+/** The adapter declares the provider's listed shape for the request; these are NOT observed resources. */
 export interface InstanceSizeMetadata {
   readonly requested: InstanceSizeProfile;
-  readonly resolved: {
-    readonly vcpus: number;
-    readonly memoryMiB: number;
-  };
+  readonly resolved: InstanceSizeResources;
+  /** Why the shape's RAM is below the profile, within the memory tolerance (e.g. a 16000 MB RAM cap). */
+  readonly belowStandard?: string;
+  /** How many MiB the shape's RAM is below the profile; set only when it is. */
+  readonly memoryShortfallMiB?: number;
   readonly provenance: 'adapter-declared';
+}
+
+/**
+ * Whether `resolved` is a valid shape for `profile`'s class. vCPU picks the class: at least the
+ * profile's vCPU and below the next class's. RAM is a floor: at least the profile's memory less
+ * {@link INSTANCE_SIZE_MEMORY_TOLERANCE}, and a shape below the profile's memory needs `belowStandard`
+ * saying why. RAM above the profile is fine. All values are positive integers.
+ */
+export function isValidInstanceSizeShape(profile: InstanceSizeProfile, resolved: unknown, belowStandard?: unknown): resolved is InstanceSizeResources {
+  if (resolved === null || typeof resolved !== 'object') return false;
+  const { vcpus, memoryMiB, diskMiB } = resolved as Record<string, unknown>;
+  const positive = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+  if (!positive(vcpus) || !positive(memoryMiB) || (diskMiB !== undefined && !positive(diskMiB))) return false;
+  const next = nextInstanceSizeVcpus(profile);
+  if (vcpus < profile.vcpus || (next !== undefined && vcpus >= next)) return false;
+  if (memoryMiB < instanceSizeMemoryFloorMiB(profile)) return false;
+  if (memoryMiB >= profile.memoryMiB) return belowStandard === undefined;
+  return typeof belowStandard === 'string' && belowStandard.trim() !== '';
 }
 
 export type InstanceSizeResolution =
@@ -131,7 +175,7 @@ export function assertInstanceSizeSupported(
   }
   if (resolution.provenance !== 'adapter-declared' || resolution.requested?.sizeClass !== profile.sizeClass ||
       resolution.requested?.vcpus !== profile.vcpus || resolution.requested?.memoryMiB !== profile.memoryMiB ||
-      resolution.resolved?.vcpus !== profile.vcpus || resolution.resolved?.memoryMiB !== profile.memoryMiB) {
-    throw new InstanceSizeError('unknown', 'provider did not declare an exact standard sizing request');
+      !isValidInstanceSizeShape(profile, resolution.resolved, resolution.belowStandard)) {
+    throw new InstanceSizeError('unknown', 'provider did not declare a valid standard sizing shape');
   }
 }

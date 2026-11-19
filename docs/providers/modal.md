@@ -69,6 +69,34 @@ console.log(result.stdout); // "Hello from Modal!"
 await sandbox.destroy();
 ```
 
+### Standard sizes
+
+`sizeClass` requests an exact CPU/RAM shape. Modal's `cpu` counts physical
+cores (1 core = 2 vCPUs), so each size sets half its vCPUs as cores, and sets
+the request and the limit to the same value so the Sandbox does not burst past
+the size:
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' });
+```
+
+| `sizeClass` | `cpu` / `cpuLimit` (cores) | `memoryMiB` / `memoryLimitMiB` |
+| --- | ---: | ---: |
+| `xs` | 0.5 | 1024 |
+| `sm` | 0.5 | 2048 |
+| `md` | 1 | 4096 |
+| `lg` | 2 | 8192 |
+| `xl` | 4 | 16384 |
+| `2xl` | 8 | 32768 |
+| `3xl` | 16 | 65536 |
+
+Sandbox disk cannot be resized: the VM runtime's root filesystem is a fixed
+512 GiB, reported as `resolved.diskMiB: 524288`. Sizes apply to the default
+image, `templateId`, and `snapshotId` creates. `sizeClass` cannot be combined
+with `cpu`, `cpuLimit`, `memory`, `memoryMiB`, or `memoryLimitMiB`, and a
+`experimentalOptions.vm_sidecar_memory_reserve_mib` reserve is `unsupported`
+because it boots the main VM below the size.
+
 ### Configuration Options
 
 ```typescript

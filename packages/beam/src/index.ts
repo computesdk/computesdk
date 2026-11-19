@@ -7,7 +7,8 @@
  */
 
 import beamClient, { Sandbox, SandboxInstance, beamOpts, Image, Volume as BeamVolume } from '@beamcloud/beam-js';
-import { defineProvider, escapeShellArg, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import type { InstanceSizeProfile, InstanceSizeSupport } from '@computesdk/provider';
 import type {
   CommandResult,
   InstanceInfo,
@@ -282,8 +283,39 @@ async function readLargeText(sandbox: SandboxInstance, path: string, resolveLink
   }
 }
 
+/** Beam's Shared CPU tier caps a workload at 8 vCPU / 16 GiB (docs.beam.cloud pricing-and-billing). */
+const SHARED_TIER_MAX_VCPUS = 8;
+const SHARED_TIER_MAX_MEMORY_MIB = 16384;
+
+function isSet(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0);
+}
+
+/**
+ * Beam sandboxes take arbitrary `cpu` (cores; beam-js accepts 0.1–64) and
+ * `memory` (MiB) on the default Performance tier, so each standard size maps
+ * to its exact profile.
+ */
+function resolveBeamSize(_config: BeamConfig, profile: InstanceSizeProfile, options?: CreateInstanceOptions): InstanceSizeSupport {
+  const native = (options ?? {}) as Record<string, unknown>;
+  if (native.cpu !== undefined || native.memory !== undefined) {
+    throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Beam cpu/memory fields');
+  }
+  if (native.snapshotId || native.sandboxId) {
+    return { status: 'unsupported', reason: 'A Beam snapshot restore or sandbox attach keeps the source resources; standard sizes apply to new sandboxes only.' };
+  }
+  if (isSet(native.gpu) || isSet(native.gpuCount) || isSet(native.pool)) {
+    return { status: 'unknown', reason: 'Beam does not list CPU/RAM limits for GPU or compute-pool placement.' };
+  }
+  if (native.cpuTier === 'shared' && (profile.vcpus > SHARED_TIER_MAX_VCPUS || profile.memoryMiB > SHARED_TIER_MAX_MEMORY_MIB)) {
+    return { status: 'unsupported', reason: `Beam's Shared CPU tier is limited to ${SHARED_TIER_MAX_VCPUS} vCPU / ${SHARED_TIER_MAX_MEMORY_MIB} MiB.` };
+  }
+  return { status: 'supported', nativeOptions: { cpu: profile.vcpus, memory: profile.memoryMiB } };
+}
+
 export const beam = defineProvider<SandboxInstance, BeamConfig>({
   name: 'beam',
+  sizes: resolveBeamSize,
   methods: {
     instances: {
       create: async (config: BeamConfig, options?: CreateInstanceOptions) =>

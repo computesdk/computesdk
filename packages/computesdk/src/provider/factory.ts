@@ -1154,7 +1154,13 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
       if (resolution.status !== 'supported') {
         throw new InstanceSizeError(resolution.status, resolution.reason, resolution);
       }
-      sizing = Object.freeze({ requested: resolution.requested, resolved: resolution.resolved, provenance: resolution.provenance });
+      sizing = Object.freeze({
+        requested: resolution.requested, resolved: resolution.resolved, provenance: resolution.provenance,
+        ...(resolution.belowStandard === undefined ? {} : {
+          belowStandard: resolution.belowStandard,
+          ...(resolution.memoryShortfallMiB === undefined ? {} : { memoryShortfallMiB: resolution.memoryShortfallMiB }),
+        }),
+      });
       const { sizeClass: _sizeClass, ...legacyOptions } = options;
       options = applyInstanceSizePatch(legacyOptions, resolution.nativeOptions);
       // sizeClass is SDK-only, even if a custom resolver accidentally includes it.

@@ -1,8 +1,11 @@
 import { performance } from 'node:perf_hooks';
-import { defineProvider, escapeShellArg, startShellProcess } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, startShellProcess, InstanceSizeError } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
+  InstanceSizeClass,
+  InstanceSizeProfile,
+  InstanceSizeSupport,
   CreateSnapshotOptions,
   CreateTemplateOptions,
   FileEntry,
@@ -62,7 +65,24 @@ export interface MosaicConfig {
   networkEnabled?: boolean;
   /** How long a preview URL from getUrl stays valid. */
   previewExpiresInSeconds?: number;
+  /** Environment to boot per standard `sizeClass`; defaults to {@link MOSAIC_SIZE_TEMPLATES}. */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
 }
+
+/**
+ * Standard sizes with no stock create shape, served by an environment built
+ * at that shape (`POST /v1/environments` takes 1-16 vCPU, 512-32768 MiB).
+ */
+export const MOSAIC_SIZE_TEMPLATES: Readonly<Partial<Record<InstanceSizeClass, string>>> = Object.freeze({
+  xs: 'csdk-node22-1cpu-1gb',
+});
+
+/** The stock template that also serves the 8 and 16 vCPU create shapes. */
+const LARGE_SHAPE_TEMPLATE = 'base';
+/** Self-serve create shapes (vCPU, MiB); 8 and 16 vCPU only on `base`. */
+const CREATE_SHAPES = [[1, 2048], [2, 4096], [4, 8192], [8, 16384], [16, 32768]] as const;
+/** Largest create or environment shape Mosaic lists. */
+const MAX_SHAPE = { vcpus: 16, memoryMiB: 32768 } as const;
 
 export interface MosaicSandbox {
   id: string;
@@ -225,6 +245,7 @@ function resolvedConfig(config: MosaicConfig): Required<MosaicConfig> {
     maxConcurrentRequests: config.maxConcurrentRequests ?? DEFAULT_MAX_CONCURRENT_REQUESTS,
     networkEnabled: config.networkEnabled ?? true,
     previewExpiresInSeconds: config.previewExpiresInSeconds ?? 3600,
+    sizeTemplates: config.sizeTemplates ?? {},
   };
 }
 
@@ -464,8 +485,62 @@ async function shell(
   return result.stdout;
 }
 
+function sizeTemplateOf(config: MosaicConfig, sizeClass: InstanceSizeClass): string | undefined {
+  const name = config.sizeTemplates?.[sizeClass] ?? MOSAIC_SIZE_TEMPLATES[sizeClass];
+  return typeof name === 'string' && name.trim() !== '' ? name : undefined;
+}
+
+/**
+ * Stock templates serve 1/2048, 2/4096 and 4/8192; `base` also serves 8/16384
+ * and 16/32768. A snapshot or environment restores at its captured shape.
+ */
+function resolveSize(config: MosaicConfig, profile: InstanceSizeProfile, options?: CreateInstanceOptions): InstanceSizeSupport {
+  for (const field of ['vcpu', 'memory_mb', 'memoryMB']) {
+    if ((options as Record<string, unknown> | undefined)?.[field] !== undefined) {
+      throw new InstanceSizeError('conflict', `cannot combine sizeClass with native Mosaic ${field}`);
+    }
+  }
+  if (profile.vcpus > MAX_SHAPE.vcpus || profile.memoryMiB > MAX_SHAPE.memoryMiB) {
+    return { status: 'unsupported', reason: `Mosaic's largest shape is ${MAX_SHAPE.vcpus} vCPU / ${MAX_SHAPE.memoryMiB} MiB, below ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB.` };
+  }
+  const restore = options?.snapshotId || options?.image ||
+    (options?.templateId && !isStockTemplate(options.templateId) ? options.templateId : undefined);
+  if (restore) {
+    return { status: 'unsupported', reason: 'A Mosaic snapshot or environment restores at the shape it was captured at and cannot be resized; drop snapshotId/image/templateId to boot a standard size.' };
+  }
+  const shape = { vcpus: profile.vcpus, memoryMb: profile.memoryMiB };
+  const sizeTemplate = sizeTemplateOf(config, profile.sizeClass);
+  if (sizeTemplate) {
+    if (options?.templateId) {
+      return { status: 'unsupported', reason: `Mosaic stock templates have no ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB shape; drop templateId to boot the '${sizeTemplate}' size environment.` };
+    }
+    return { status: 'supported', nativeOptions: { templateId: sizeTemplate, ...shape } };
+  }
+  if (!CREATE_SHAPES.some(([vcpus, memoryMiB]) => vcpus === profile.vcpus && memoryMiB === profile.memoryMiB)) {
+    return { status: 'unsupported', reason: `Mosaic has no ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB create shape (its smallest is 1 vCPU / 2048 MiB); set sizeTemplates.${profile.sizeClass} to an environment built at that shape.` };
+  }
+  const largeShape = profile.vcpus > 4;
+  const runtimeTemplate = options?.runtime === 'python' || options?.runtime === 'node';
+  if (options?.templateId) {
+    if (largeShape && options.templateId !== LARGE_SHAPE_TEMPLATE) {
+      return { status: 'unsupported', reason: `Mosaic template '${options.templateId}' serves only 1, 2 and 4 vCPU; use templateId '${LARGE_SHAPE_TEMPLATE}' for ${profile.vcpus} vCPU.` };
+    }
+    return { status: 'supported', nativeOptions: shape };
+  }
+  if (!runtimeTemplate && config.template !== undefined && config.template !== '' && !isStockTemplate(config.template)) {
+    return { status: 'unsupported', reason: `The configured Mosaic environment '${config.template}' restores at the shape it was captured at; pass a stock templateId to boot a standard size.` };
+  }
+  if (!largeShape) return { status: 'supported', nativeOptions: shape };
+  // `base` carries Node 22 and Python 3.11, so it also satisfies a runtime request.
+  if (runtimeTemplate || !config.template || config.template === LARGE_SHAPE_TEMPLATE) {
+    return { status: 'supported', nativeOptions: { templateId: LARGE_SHAPE_TEMPLATE, ...shape } };
+  }
+  return { status: 'unsupported', reason: `The configured Mosaic template '${config.template}' serves only 1, 2 and 4 vCPU; configure template '${LARGE_SHAPE_TEMPLATE}' or pass templateId '${LARGE_SHAPE_TEMPLATE}' for ${profile.vcpus} vCPU.` };
+}
+
 export const mosaic = defineProvider<MosaicSandbox, MosaicConfig, MosaicSnapshot, MosaicSnapshot>({
   name: PROVIDER,
+  sizes: resolveSize,
   methods: {
     instances: {
       create: async (config, options) => {

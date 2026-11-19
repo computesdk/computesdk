@@ -86,6 +86,39 @@ await sandbox.destroy()
 | `execRetries` | `number` | `1` | Retries for an undelivered command. |
 | `timeout` | `number` | `120000` | Per-request timeout in milliseconds. |
 
+## Standard sizes
+
+`sizeClass` picks one of givemeanode's listed instance types
+([Sizes](https://givemeanode.com/docs#sandbox-sizes)) through the native
+`size` field. Each class takes the smallest type that meets both its vCPU and
+RAM; `sandbox.sizing.resolved` reports the type's real shape.
+
+| `sizeClass` | givemeanode `size` | Resolved shape |
+|---|---|---|
+| `sm` | `sandbox-sm` | 1 vCPU / 2 GiB |
+| `lg` | `sandbox-md` | 4 vCPU / 8 GiB |
+| `xl` | `sandbox-lg` | 8 vCPU / 32 GiB |
+| `2xl` | `sandbox-xl` | 16 vCPU / 64 GiB |
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'xl' })
+console.log(sandbox.sizing.resolved) // { vcpus: 8, memoryMiB: 32768 }
+```
+
+- `xs` boots `sandbox-sm` like `sm` (vCPU picks the size; the extra RAM is
+  recorded in `sizing.resolved`).
+- `md` and `3xl` are `unsupported`: there is no 2 vCPU type, and nothing
+  above 16 vCPU.
+- A container `image` is baked at the class size; a curated `image` or
+  `templateId` (`sbx-min`) is created at it.
+- `snapshotId`, or a `templateId` starting with `env-`, is `unsupported`: a
+  fork inherits the size its snapshot was baked with.
+- `sizeClass` cannot be combined with `size`, `ramGib`, `ram_gib`, `cpus`,
+  `vcpus`, `resources` or a memory field (`InstanceSizeError('conflict')`).
+  A `ramGib` in the provider config is ignored for a sized create.
+- Your account's `sandbox_vcpus` limit starts at 4, so `xl` and `2xl` need a
+  limit raise from givemeanode.
+
 ## Container images
 
 Pass any container image by digest:

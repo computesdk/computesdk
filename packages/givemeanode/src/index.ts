@@ -15,13 +15,15 @@
  * @see https://givemeanode.com/docs
  */
 
-import { defineProvider } from '@computesdk/provider'
+import { defineProvider, InstanceSizeError } from '@computesdk/provider'
 import type {
   CommandResult,
   CreateInstanceOptions,
   FileEntry,
   RunCommandOptions,
   InstanceInfo,
+  InstanceSizeClass,
+  InstanceSizeResources,
 } from '@computesdk/provider'
 
 import { GmnClient, type GmnClientOptions } from './client.js'
@@ -126,6 +128,26 @@ function asGmnEgress(value: unknown): 'open' | 'none' | undefined {
 
 type ConfigWithClient = GivemeanodeConfig & { __client?: GmnClient }
 
+/**
+ * Standard sizes on givemeanode's listed instance types (docs: "Sizes").
+ * vCPU picks the class and each class takes the smallest type in it (extra RAM
+ * is recorded), so xs and sm share sandbox-sm. The door has no per-sandbox CPU
+ * field, so classes with no type of their own (md: no 2 vCPU type; 3xl:
+ * nothing past 16 vCPU / 64 GiB) are refused.
+ */
+export const GIVEMEANODE_SIZE_TYPES: Readonly<Partial<Record<InstanceSizeClass, { size: string; resolved: InstanceSizeResources }>>> = Object.freeze({
+  xs: { size: 'sandbox-sm', resolved: { vcpus: 1, memoryMiB: 2048 } },
+  sm: { size: 'sandbox-sm', resolved: { vcpus: 1, memoryMiB: 2048 } },
+  lg: { size: 'sandbox-md', resolved: { vcpus: 4, memoryMiB: 8192 } },
+  xl: { size: 'sandbox-lg', resolved: { vcpus: 8, memoryMiB: 32768 } },
+  '2xl': { size: 'sandbox-xl', resolved: { vcpus: 16, memoryMiB: 65536 } },
+})
+
+const UNSIZED_REASONS: Readonly<Partial<Record<InstanceSizeClass, string>>> = {
+  md: 'givemeanode has no 2 vCPU type; sandbox-sm is 1 vCPU / 2 GiB and sandbox-md (4 vCPU / 8 GiB) is the lg size.',
+  '3xl': 'givemeanode tops out at sandbox-xl (16 vCPU / 64 GiB, the 64 GiB platform RAM cap); there is no 32 vCPU type.',
+}
+
 function getClient(config: ConfigWithClient): GmnClient {
   if (!config.__client) config.__client = new GmnClient(config)
   return config.__client
@@ -144,6 +166,26 @@ const provider = defineProvider<
   GivemeanodeSnapshot
 >({
   name: 'givemeanode',
+  sizes: (_config, profile, options) => {
+    const native = options as (CreateInstanceOptions & { ramGib?: unknown; ram_gib?: unknown }) | undefined
+    if (native?.ramGib !== undefined || native?.ram_gib !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native givemeanode ramGib/ram_gib')
+    }
+    // A fork inherits the size its snapshot was baked with; the door takes no size on a fork.
+    const templateId = typeof options?.templateId === 'string' ? options.templateId : undefined
+    if (options?.snapshotId !== undefined || templateId?.startsWith('env-')) {
+      return {
+        status: 'unsupported',
+        reason: 'A givemeanode snapshot fixes its size at the bake and every fork inherits it; drop snapshotId (or the env- templateId) to boot a standard size.',
+      }
+    }
+    const type = GIVEMEANODE_SIZE_TYPES[profile.sizeClass]
+    if (!type) {
+      return { status: 'unsupported', reason: UNSIZED_REASONS[profile.sizeClass] ?? `givemeanode has no type for ${profile.sizeClass}.` }
+    }
+    const exact = type.resolved.vcpus === profile.vcpus && type.resolved.memoryMiB === profile.memoryMiB
+    return { status: 'supported', nativeOptions: { size: type.size }, ...(exact ? {} : { resolved: type.resolved }) }
+  },
   methods: {
     instances: {
       create: async (config: ConfigWithClient, options?: CreateInstanceOptions) => {

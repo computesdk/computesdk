@@ -1,13 +1,23 @@
 import type { CreateInstanceOptions } from '../types/universal-instance';
 import {
-  INSTANCE_SIZE_PROFILES, InstanceSizeError, getInstanceSizeProfile, hasInstanceSizeRequest, validateInstanceSizeOptions,
-  type InstanceSizeManager, type InstanceSizeNativeOptions,
+  INSTANCE_SIZE_PROFILES, InstanceSizeError, getInstanceSizeProfile, hasInstanceSizeRequest, isValidInstanceSizeShape,
+  validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeNativeOptions, type InstanceSizeResources,
   type InstanceSizeProfile, type InstanceSizeResolution, type InstanceSizeStatus,
 } from '../sizes';
 
-/** Exact, non-secret resource-only native patch; never copy caller passthrough bodies. */
+/**
+ * Exact, non-secret resource-only native patch; never copy caller passthrough bodies.
+ * `resolved` is the provider's listed shape when it differs from the profile (more RAM, or disk).
+ * vCPU picks the class; RAM may sit up to 10% below the profile only with `belowStandard`
+ * explaining the provider limit (see `isValidInstanceSizeShape`).
+ */
 export type InstanceSizeSupport =
-  | { readonly status: 'supported'; readonly nativeOptions: InstanceSizeNativeOptions }
+  | {
+    readonly status: 'supported';
+    readonly nativeOptions: InstanceSizeNativeOptions;
+    readonly resolved?: InstanceSizeResources;
+    readonly belowStandard?: string;
+  }
   | { readonly status: Exclude<InstanceSizeStatus, 'supported'>; readonly reason: string };
 
 /** Provider-owned, synchronous and side-effect-free: no credentials validation, API calls or builds. */
@@ -103,9 +113,21 @@ export function createInstanceSizeManager<TConfig>(config: TConfig, resolver?: I
       if (Object.prototype.hasOwnProperty.call(patch, 'sizeClass')) throw new InstanceSizeError('conflict', 'resolver cannot emit SDK-only sizeClass as a native option');
     }
     const base = { requested: profile, provenance: 'adapter-declared' as const };
-    const resolution: InstanceSizeResolution = support.status === 'supported'
-      ? { ...base, status: 'supported', resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB }, nativeOptions: support.nativeOptions }
-      : { ...base, status: support.status, reason: support.reason };
+    let resolution: InstanceSizeResolution;
+    if (support.status === 'supported') {
+      const resolved = support.resolved ?? { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB };
+      if (!isValidInstanceSizeShape(profile, resolved, support.belowStandard)) {
+        throw new InstanceSizeError('invalid', `adapter declared an invalid ${profile.sizeClass} shape; vCPU must be in the class and RAM at most 10% below it, with belowStandard when below`);
+      }
+      resolution = {
+        ...base, status: 'supported', resolved, nativeOptions: support.nativeOptions,
+        ...(support.belowStandard === undefined ? {} : {
+          belowStandard: support.belowStandard, memoryShortfallMiB: profile.memoryMiB - resolved.memoryMiB,
+        }),
+      };
+    } else {
+      resolution = { ...base, status: support.status, reason: support.reason };
+    }
     return immutableCopy(resolution);
   };
   return Object.freeze({

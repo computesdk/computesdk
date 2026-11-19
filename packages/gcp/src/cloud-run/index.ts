@@ -514,7 +514,7 @@ export const cloudRun = defineProvider<CloudRunSandbox, CloudRunConfig, any, Clo
     if (create?.vcpus !== undefined || create?.memoryMiB !== undefined) {
       throw new InstanceSizeError('conflict', 'cannot combine sizeClass with vcpus/memoryMiB')
     }
-    if (profile.sizeClass === '2xl') {
+    if (profile.sizeClass === '2xl' || profile.sizeClass === '3xl') {
       return { status: 'unsupported', reason: 'Cloud Run instances top out at 8 vCPU, and sandboxes share their gateway instance\'s CPU and memory.' }
     }
     if (!sizeGateway(config, profile.sizeClass)) return { status: 'unconfigured', reason: unconfiguredSizeReason(profile.sizeClass) }

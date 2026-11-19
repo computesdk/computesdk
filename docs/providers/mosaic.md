@@ -25,9 +25,27 @@ layout:
 
 Mosaic provides Firecracker-based sandbox environments with command execution, a workspace filesystem, preview URLs, snapshots, and environments built from container images.
 
-## Account sizes and lifecycle
+## Standard sizes
 
-Use native `vcpu`/`memoryMb` for the smaller create shapes. The 8-vCPU/16-GiB shape boots the account environment `csdk-node22-8cpu-16gb` via `templateId`, built by [Provider Setup](../../ADD-PROVIDER.md#provider-setup). This adapter has no standard `sizeClass` mapping (`unknown`); see [Sandbox sizes](../reference/sizes.md).
+`sizeClass` boots an exact CPU/RAM shape, sent as `vcpu`/`memory_mb` on create:
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'xl' })
+```
+
+| `sizeClass` | Shape | How |
+| --- | --- | --- |
+| `xs` | 1 vCPU / 1 GiB | Environment `csdk-node22-1cpu-1gb` (built by [Provider Setup](../../ADD-PROVIDER.md#provider-setup)) |
+| `sm` | 1 vCPU / 2 GiB | Configured stock template |
+| `md` | 2 vCPU / 4 GiB | Configured stock template |
+| `lg` | 4 vCPU / 8 GiB | Configured stock template |
+| `xl` | 8 vCPU / 16 GiB | Template `base` |
+| `2xl` | 16 vCPU / 32 GiB | Template `base` |
+| `3xl` | — | `unsupported`: Mosaic's largest shape is 16 vCPU / 32 GiB |
+
+Mosaic's create shapes are 1/2, 2/4, 4/8, 8/16 and 16/32 vCPU/GiB; every stock template serves 1, 2 and 4 vCPU, and only `base` serves 8 and 16. `xs` has no create shape, so it boots an environment built at 1 vCPU / 1024 MiB (environments take 1-16 vCPU and 512-32768 MiB); override its name with `sizeTemplates`. A `sizeClass` is refused (`unsupported`) with `snapshotId`, `image` or an environment `templateId` (they restore at their captured shape), with a stock `templateId` other than `base` for `xl`/`2xl`, and with any `templateId` for `xs`. Combining it with native `vcpus`/`vcpu`/`memoryMb`/`memory_mb` is a `conflict`. See [Sandbox sizes](../reference/sizes.md).
+
+## Account sizes and lifecycle
 
 `pause()`/`resume()` preserve memory and processes. Snapshots declare whole-rootfs and memory preservation with the source kept; restore with `snapshotId`.
 
@@ -71,7 +89,7 @@ await sandbox.destroy();
 
 ## Configuration options
 
-The provider accepts `baseUrl`, `apiKey`, `template`, `memoryMb`, `vcpu`, `requestTimeoutMs`, `networkEnabled`, and `previewExpiresInSeconds`. If `baseUrl` or `apiKey` is omitted, the provider reads `MOSAIC_API_URL` or `MOSAIC_API_TOKEN`. Sandboxes have outbound network access unless `networkEnabled` is set to `false`.
+The provider accepts `baseUrl`, `apiKey`, `template`, `memoryMb`, `vcpu`, `requestTimeoutMs`, `networkEnabled`, `previewExpiresInSeconds`, and `sizeTemplates` (environment per `sizeClass`; defaults to `MOSAIC_SIZE_TEMPLATES`). If `baseUrl` or `apiKey` is omitted, the provider reads `MOSAIC_API_URL` or `MOSAIC_API_TOKEN`. Sandboxes have outbound network access unless `networkEnabled` is set to `false`.
 
 ## Templates, snapshots, and images
 

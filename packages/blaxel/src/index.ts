@@ -8,9 +8,9 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { SANDBOX_API_IMAGE, SANDBOX_API_PATH, SandboxInstance, Snapshot, VolumeInstance, deleteImage, deleteImageTag, getImage, initialize, listImages, settings } from '@blaxel/core';
 import type { Image as BlaxelImage } from '@blaxel/core';
-import { defineProvider, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions, CreateTemplateOptions, ListTemplatesOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, InstanceSizeClass, FileEntry, RunCommandOptions, CreateSnapshotOptions, ListSnapshotsOptions, CreateTemplateOptions, ListTemplatesOptions } from '@computesdk/provider';
 
 /**
  * Blaxel rejects sandboxes with a ttl under 5 minutes
@@ -127,10 +127,42 @@ function withBlaxelInstance<T>(sandbox: SandboxInstance, fn: () => Promise<T>): 
 }
 
 /**
+ * Standard sizes as Blaxel `memory` (MB). Blaxel takes no CPU field: the API
+ * reference allocates cores = memory / 2048. vCPU picks the class, so xs takes
+ * the first 1-core shape (2048 MB, extra RAM); 1024 MB would be only 0.5 core.
+ */
+export const BLAXEL_SIZE_MEMORY: Readonly<Partial<Record<InstanceSizeClass, number>>> = Object.freeze({
+	xs: 2048,
+	sm: 2048,
+	md: 4096,
+	lg: 8192,
+});
+
+const BLAXEL_UNMAPPED_SIZES: Readonly<Partial<Record<InstanceSizeClass, { status: 'unsupported' | 'unknown'; reason: string }>>> = Object.freeze({
+	...Object.fromEntries((['xl', '2xl', '3xl'] as const).map(sizeClass => [sizeClass, {
+		status: 'unknown' as const,
+		reason: 'Blaxel documents conflicting CPU for 16 GB and up (API reference: memory / 2048 cores; Sandboxes overview: 16 GB = 6 cores), so this size is not verified.',
+	}])),
+});
+
+/**
  * Create a Blaxel provider instance using the factory pattern
  */
 export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	name: 'blaxel',
+	sizes: (_config, profile, options) => {
+		if ((options as { memory?: unknown } | undefined)?.memory !== undefined) {
+			throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Blaxel memory');
+		}
+		if (options?.snapshotId !== undefined || options?.sandboxId !== undefined) {
+			return { status: 'unsupported', reason: 'A Blaxel snapshot fork or existing sandbox keeps its own memory; drop snapshotId/sandboxId to create a sized sandbox.' };
+		}
+		const memory = BLAXEL_SIZE_MEMORY[profile.sizeClass];
+		if (memory === undefined) {
+			return BLAXEL_UNMAPPED_SIZES[profile.sizeClass] ?? { status: 'unknown', reason: 'No verified Blaxel memory for this standard size.' };
+		}
+		return { status: 'supported', nativeOptions: { memory }, resolved: { vcpus: memory / 2048, memoryMiB: memory } };
+	},
 	methods: {
 		instances: {
 			// Collection operations (map to compute.sandbox.*)

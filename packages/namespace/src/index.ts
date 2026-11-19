@@ -84,8 +84,10 @@ function plainObject(value: unknown): Record<string, unknown> {
 
 /** The image is chosen by `image`; a passthrough selector would conflict. */
 function withoutImageSelector(fields: Record<string, unknown>): Record<string, unknown> {
-  const { image_ref: _imageRef, known_image_id: _knownImageId, ...rest } = fields;
-  return rest;
+  const container = { ...fields };
+  delete container.image_ref;
+  delete container.known_image_id;
+  return container;
 }
 
 /**
@@ -637,6 +639,21 @@ async function streamNamespaceCommand(sandbox: NamespaceSandbox, command: WireCo
   return { stdout, stderr, exitCode, durationMs: Date.now() - startTime };
 }
 
+// Published Linux machine shapes. Namespace derives ephemeral disk from the
+// CPU/RAM shape, so disk is reported as metadata and never sent in the request.
+// The minimum shape is 1x2, so xs boots 1 vCPU / 2 GiB (vCPU picks the class).
+// https://namespace.so/docs/architecture/compute/machine-shapes
+const LINUX_MIN_MEMORY_MIB = 2048;
+const LINUX_DISK_GIB = {
+  xs: 40,
+  sm: 40,
+  md: 48,
+  lg: 64,
+  xl: 96,
+  '2xl': 160,
+  '3xl': 288,
+};
+
 /**
  * Namespace provider
  *
@@ -658,6 +675,9 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
         options?.virtual_cpu !== undefined || options?.memory_megabytes !== undefined) {
       throw new InstanceSizeError('conflict', 'cannot combine sizeClass with instanceOptions.shape CPU/memory');
     }
+    if (Object.getOwnPropertyDescriptor(shape, 'machineArch')) {
+      throw new InstanceSizeError('invalid', 'use instanceOptions.shape.machine_arch to select the Namespace architecture with sizeClass');
+    }
     for (const field of ['os', 'machine_arch']) {
       const descriptor = Object.getOwnPropertyDescriptor(shape, field);
       if (descriptor && typeof descriptor.value !== 'string') {
@@ -666,15 +686,22 @@ export const namespace = defineProvider<NamespaceSandbox, NamespaceConfig>({
     }
     const os = shape.os ?? config.os ?? 'linux';
     const arch = shape.machine_arch ?? config.machineArch ?? 'amd64';
-    if (os !== 'linux' || arch !== 'amd64' || shape.machineArch !== undefined) {
-      return { status: 'unknown', reason: 'Standard shapes are verified only for Namespace Linux amd64, not this OS/architecture.' };
+    if (os !== 'linux') {
+      return { status: 'unsupported', reason: 'The Namespace adapter starts a container, which requires a Linux instance.' };
     }
-    if (profile.sizeClass === 'xs' || profile.sizeClass === '2xl') {
-      return { status: 'unknown', reason: 'This adapter has not verified this standard shape.' };
+    if (arch === 'arm64') {
+      return { status: 'unknown', reason: 'Namespace lists different shapes and disks for Linux on Ampere and Apple Silicon. The ARM64 architecture alone does not identify which machine family will be used.' };
     }
-    return { status: 'supported', nativeOptions: {
-      instanceOptions: { shape: { virtual_cpu: profile.vcpus, memory_megabytes: profile.memoryMiB, os: 'linux', machine_arch: 'amd64' } },
-    } };
+    if (arch !== 'amd64') {
+      return { status: 'unsupported', reason: 'Namespace lists Linux machines for AMD64 and ARM64.' };
+    }
+    const vcpus = profile.vcpus;
+    const memoryMiB = Math.max(profile.memoryMiB, LINUX_MIN_MEMORY_MIB);
+    return {
+      status: 'supported',
+      nativeOptions: { instanceOptions: { shape: { virtual_cpu: vcpus, memory_megabytes: memoryMiB, os, machine_arch: arch } } },
+      resolved: { vcpus, memoryMiB, diskMiB: LINUX_DISK_GIB[profile.sizeClass] * 1024 },
+    };
   },
 
   methods: {

@@ -108,6 +108,23 @@ await compute.instances.create({
 });
 ```
 
+### Standard sizes
+
+`sizeClass` picks one of Buddy's `resources` presets (`{vCPU}x{RAM in GB}`, `1x2` through `12x24`, always 2 GB per vCPU). Each standard size gets the smallest preset that meets it. Disk is always 50 GB.
+
+```typescript
+const sandbox = await compute.instances.create({ sizeClass: 'md' });
+```
+
+| `sizeClass` | `resources` | Resolved shape |
+| --- | --- | --- |
+| `sm` | `1x2` | 1 vCPU / 2048 MiB / 51200 MiB disk |
+| `md` | `2x4` | 2 vCPU / 4096 MiB / 51200 MiB disk |
+| `lg` | `4x8` | 4 vCPU / 8192 MiB / 51200 MiB disk |
+| `xl` | `8x16` | 8 vCPU / 16384 MiB / 51200 MiB disk |
+
+`xs` uses `1x2` like `sm` (vCPU picks the size; the extra RAM is recorded in `sizing.resolved`), and `2xl`/`3xl` are `unsupported` (the largest preset, `12x24`, is below 16 vCPU / 32 GiB). The preset also applies when booting from `snapshotId` or `templateId`, and overrides the config `resources` default. `sizeClass` cannot be combined with `resources`, `cpu`, `cpus`, `vcpus`, `memory`, `memoryMb`, `memoryMiB` or `memMiB`.
+
 ## Commands
 
 ```typescript
