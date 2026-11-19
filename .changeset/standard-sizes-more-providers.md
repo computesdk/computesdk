@@ -25,4 +25,4 @@
 "@computesdk/vercel": patch
 ---
 
-Add `sizes` resolvers to more sandbox providers so `create({ sizeClass })` provisions the standard shape through each provider's native knob or reports why it can't. Full or partial native mappings: neevcloud, isorun, microsandbox, modal, railway, runloop, daytona, beam, vercel, upstash, uno, buddy, givemeanode, codesandbox, tensorlake. Template-sized providers (kosa8, lelantos, hopx) report `requires-build`; providers whose preset specs are not yet verified (blaxel, sandbox0, boat, lightning, northflank, sprites) report `unknown`.
+Add `sizes` resolvers to more sandbox providers so `create({ sizeClass })` provisions the standard shape through each provider's native knob or reports why it can't. Full or partial native mappings: neevcloud, isorun, microsandbox, modal, railway, runloop, daytona, beam, vercel, upstash, blaxel, boat, northflank, lightning, sandbox0, uno, buddy, givemeanode, codesandbox, tensorlake. Template-sized providers (kosa8, lelantos, hopx) report `requires-build`, and sprites reports `unknown`.
