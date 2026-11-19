@@ -18,6 +18,7 @@ import type {
   InstanceInfo,
   CreateInstanceOptions,
   FileEntry,
+  InstanceSizeClass,
   RunCommandOptions
 } from 'computesdk';
 
@@ -25,6 +26,8 @@ import type {
  * HopX-specific configuration options
  */
 export interface HopxConfig {
+  /** Template to boot per standard `sizeClass`. The template fixes CPU and memory, so build one per size. */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
   /** HopX API key - if not provided, will fallback to HOPX_API_KEY environment variable */
   apiKey?: string;
   /** Execution timeout in milliseconds */
@@ -46,6 +49,16 @@ export interface HopxConfig {
  */
 export const hopx = defineProvider<HopxSandbox, HopxConfig>({
   name: 'hopx',
+  sizes: (config, profile, options) => {
+    if (options?.templateId !== undefined || options?.snapshotId !== undefined) {
+      return { status: 'unsupported', reason: 'A HopX template or snapshot fixes CPU and memory; drop templateId/snapshotId to boot the standard size template.' };
+    }
+    const templateId = config.sizeTemplates?.[profile.sizeClass];
+    if (typeof templateId !== 'string' || !templateId.trim()) {
+      return { status: 'unconfigured', reason: `HopX fixes CPU and memory per template; build one at ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB and set sizeTemplates.${profile.sizeClass}.` };
+    }
+    return { status: 'supported', nativeOptions: { templateId } };
+  },
   methods: {
     instances: {
       /**
