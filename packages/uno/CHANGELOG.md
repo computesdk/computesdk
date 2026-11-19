@@ -1,5 +1,13 @@
 # @computesdk/uno
 
+## 0.1.9
+
+### Patch Changes
+
+- Updated dependencies [ce6d638]
+  - computesdk@4.1.21
+  - @computesdk/provider@2.1.27
+
 ## 0.1.8
 
 ### Patch Changes

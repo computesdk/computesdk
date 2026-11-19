@@ -1,5 +1,13 @@
 # @computesdk/neevcloud
 
+## 1.0.24
+
+### Patch Changes
+
+- Updated dependencies [ce6d638]
+  - computesdk@4.1.21
+  - @computesdk/provider@2.1.27
+
 ## 1.0.23
 
 ### Patch Changes
