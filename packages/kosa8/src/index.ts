@@ -24,11 +24,14 @@ import type {
   CreateInstanceOptions,
   CreateSnapshotOptions,
   InstanceInfo,
+  InstanceSizeClass,
   RunCommandOptions,
   SnapshotCapabilities,
 } from '@computesdk/provider';
 
 export interface Kosa8Config {
+  /** Template to boot per standard `sizeClass`. The template fixes CPU and memory, so build one per size. */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
   /** kosa8 Cloud API key - if not provided, will fallback to KOSA8_API_KEY environment variable */
   apiKey?: string;
   /** API base URL - if not provided, will fallback to KOSA8_API_URL, then https://api.kosa8.com */
@@ -516,6 +519,16 @@ const notAvailable = (what: string) =>
 
 const provider = defineProvider<Kosa8Sandbox, Kosa8Config>({
   name: 'kosa8',
+  sizes: (config, profile, options) => {
+    if (options?.templateId !== undefined || options?.snapshotId !== undefined) {
+      return { status: 'unsupported', reason: 'A kosa8 template or snapshot fixes CPU and memory; drop templateId/snapshotId to boot the standard size template.' };
+    }
+    const templateId = config.sizeTemplates?.[profile.sizeClass];
+    if (typeof templateId !== 'string' || !templateId.trim()) {
+      return { status: 'unconfigured', reason: `kosa8 fixes CPU and memory per template; build one at ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB and set sizeTemplates.${profile.sizeClass}.` };
+    }
+    return { status: 'supported', nativeOptions: { templateId } };
+  },
   methods: {
     instances: {
       create: async (config: Kosa8Config, options?: CreateInstanceOptions) => {

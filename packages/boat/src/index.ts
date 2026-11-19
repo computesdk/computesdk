@@ -1,6 +1,6 @@
 import { BoatApi, Configuration, ResponseError } from '@boatdev/sdk';
 import type { CreateSandboxRequest, InitOverrideFunction, RequestOpts, Sandbox } from '@boatdev/sdk';
-import { defineProvider, escapeShellArg } from '@computesdk/provider';
+import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
 import type { Provider, ProviderSnapshotManager, ProviderTemplateManager, CreateTemplateOptions } from '@computesdk/provider';
 import { checked, run } from './commands';
 import { readBoatFile, writeBoatFile } from './files';
@@ -124,8 +124,24 @@ export interface BoatProvider extends Provider<BoatSandbox, BoatTemplate, BoatSn
   template: ProviderTemplateManager<BoatTemplate, BoatCreateTemplateOptions>;
 }
 
+/** docs.boat.dev/machines: vCPU / GB per machine type. xlarge needs Boat's $100/month plan. */
+const BOAT_SIZE_TYPES: Partial<Record<string, string>> = { md: 'small', lg: 'default', xl: 'large', '2xl': 'xlarge' };
+
 const createBoatProvider = defineProvider<BoatSandbox, BoatConfig, BoatTemplate, BoatSnapshot>({
   name: 'boat',
+  sizes: (_config, profile, options) => {
+    if ((options as { type?: unknown } | undefined)?.type !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with the native Boat type');
+    }
+    if (options?.snapshotId !== undefined || options?.templateId !== undefined) {
+      return { status: 'unsupported', reason: 'A Boat fork or template keeps its source machine type; drop snapshotId/templateId to create a standard size.' };
+    }
+    const type = BOAT_SIZE_TYPES[profile.sizeClass];
+    if (!type) {
+      return { status: 'unsupported', reason: `Boat machine types are small (2/4), default (4/8), large (8/16) and xlarge (16/32 GB); ${profile.sizeClass} matches none.` };
+    }
+    return { status: 'supported', nativeOptions: { type } };
+  },
   methods: {
     instances: {
       create: async (config, options) => {

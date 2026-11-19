@@ -161,8 +161,24 @@ function withCommandOptions(command: string, options?: RunCommandOptions): strin
   return full;
 }
 
+/** northflank.com/pricing deployment plans, by vCPU / GB. */
+const NORTHFLANK_SIZE_PLANS: Record<string, string> = {
+  xs: 'nf-compute-100-1', sm: 'nf-compute-100-2', md: 'nf-compute-200-4',
+  lg: 'nf-compute-400', xl: 'nf-compute-800-16', '2xl': 'nf-compute-1600-32',
+};
+
 const createNorthflankProvider = defineProvider<NorthflankSandboxHandle, NorthflankConfig>({
   name: PROVIDER,
+  sizes: (_config, profile, options) => {
+    if (options?.snapshotId !== undefined || options?.templateId !== undefined) {
+      return { status: 'unsupported', reason: 'A Northflank snapshot or template keeps its own plan; drop snapshotId/templateId to create a standard size.' };
+    }
+    const plan = NORTHFLANK_SIZE_PLANS[profile.sizeClass];
+    if (!plan) {
+      return { status: 'unsupported', reason: `Northflank's largest listed plan is nf-compute-1600-32 (16 vCPU / 32 GB), below ${profile.sizeClass}.` };
+    }
+    return { status: 'supported', nativeOptions: { deploymentPlan: plan } };
+  },
   methods: {
     instances: {
       create: async (config: NorthflankConfig, options?: CreateInstanceOptions) => {

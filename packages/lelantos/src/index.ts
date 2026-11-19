@@ -21,7 +21,7 @@
 import { Sandbox as E2BSandbox, CommandExitError } from 'e2b';
 import { defineProvider, escapeShellArg } from '@computesdk/provider';
 
-import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, RunCommandOptions } from '@computesdk/provider';
+import type { CommandResult, InstanceInfo, CreateInstanceOptions, FileEntry, InstanceSizeClass, RunCommandOptions } from '@computesdk/provider';
 
 type E2BExecutionResult = { stdout?: string; stderr?: string; exitCode?: number };
 
@@ -99,6 +99,8 @@ type E2BSandboxStatics = typeof E2BSandbox & {
 };
 
 export interface LelantosConfig {
+  /** Template to boot per standard `sizeClass`. The template fixes CPU and memory, so build one per size. */
+  sizeTemplates?: Partial<Record<InstanceSizeClass, string>>;
   /**
    * Lelantos API key. Accepts the `lel_…` form OR the `e2b_…` form of a
    * lelantos key (a native `lel_<hex>` key is transparently presented to the
@@ -182,6 +184,16 @@ function connectOpts(config: LelantosConfig): Record<string, any> {
 
 export const lelantos = defineProvider<E2BSandbox, LelantosConfig>({
   name: 'lelantos',
+  sizes: (config, profile, options) => {
+    if (options?.templateId !== undefined || options?.snapshotId !== undefined) {
+      return { status: 'unsupported', reason: 'A Lelantos template or snapshot fixes CPU and memory; drop templateId/snapshotId to boot the standard size template.' };
+    }
+    const templateId = config.sizeTemplates?.[profile.sizeClass];
+    if (typeof templateId !== 'string' || !templateId.trim()) {
+      return { status: 'unconfigured', reason: `Lelantos fixes CPU and memory per template; build one at ${profile.vcpus} vCPU / ${profile.memoryMiB} MiB and set sizeTemplates.${profile.sizeClass}.` };
+    }
+    return { status: 'supported', nativeOptions: { templateId } };
+  },
   methods: {
     instances: {
       create: async (config: LelantosConfig, options?: CreateInstanceOptions) => {

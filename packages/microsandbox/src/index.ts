@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix as posixPath } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { defineProvider, resolveVolumeRef, createConfigGate, isUnifiedVolumeMounts, withVolumeSettle } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, createConfigGate, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
 import type {
   CommandResult,
   CreateInstanceOptions,
@@ -840,6 +840,15 @@ const _microsandbox = defineProvider<
   MicrosandboxSnapshot
 >({
   name: PROVIDER,
+  sizes: (_config, profile, options) => {
+    if ((options as { memoryMib?: unknown } | undefined)?.memoryMib !== undefined) {
+      throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native microsandbox memoryMib');
+    }
+    if (options?.snapshotId !== undefined) {
+      return { status: 'unsupported', reason: 'A microsandbox snapshot restore keeps its captured shape; drop snapshotId to create a standard size.' };
+    }
+    return { status: 'supported', nativeOptions: { cpus: profile.vcpus, memoryMiB: profile.memoryMiB } };
+  },
   methods: {
     instances: {
       create: async (config, options) => withBackend(selectBackend(config), async (sdk) => {
