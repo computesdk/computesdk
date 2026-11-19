@@ -132,13 +132,21 @@ function mapStatus(status: SessionResponse['status'] | undefined): BrowserSessio
 }
 
 /**
+ * Notte closes a session after `idle_timeout_minutes` without activity
+ * (default 3, maximum 30) and after `max_duration_minutes` in total (default
+ * 15). The API rejects an idle timeout longer than the max duration.
+ */
+const NOTTE_MAX_IDLE_TIMEOUT_MINUTES = 30;
+const NOTTE_DEFAULT_MAX_DURATION_MINUTES = 15;
+
+/**
  * Map ComputeSDK session options to Notte's ApiSessionStartRequest body.
  *
  * Mapped: `viewport`, `timeout` (sec → max_duration_minutes),
+ * `keepAlive` (→ idle_timeout_minutes, see below),
  * `proxies` (boolean toggles Notte's default pool; `ProxyConfig[]` mapped per
  * `mapProxyConfig`), `profileId`. Unmapped (no Notte equivalent yet):
- * `stealth`, `keepAlive`, `recording`, `logging`, `userMetadata`,
- * `extensionIds`, `region`.
+ * `stealth`, `recording`, `logging`, `userMetadata`, `extensionIds`, `region`.
  */
 function mapSessionOptions(options?: CreateBrowserSessionOptions): ApiSessionStartRequest {
   const body: ApiSessionStartRequest = {};
@@ -154,6 +162,18 @@ function mapSessionOptions(options?: CreateBrowserSessionOptions): ApiSessionSta
   // Timeout — ComputeSDK uses seconds, Notte uses minutes (round up to >=1)
   if (options.timeout !== undefined) {
     body.max_duration_minutes = Math.max(1, Math.ceil(options.timeout / 60));
+  }
+
+  // Keep-alive — Notte has no keep-alive flag; a disconnected session stays
+  // open until its idle timeout (default 3 min) elapses. `keepAlive: true`
+  // raises the idle timeout to the session's max duration, capped at Notte's
+  // 30-minute limit, so the session outlives the client for as long as it is
+  // allowed to run.
+  if (options.keepAlive === true) {
+    body.idle_timeout_minutes = Math.min(
+      NOTTE_MAX_IDLE_TIMEOUT_MINUTES,
+      body.max_duration_minutes ?? NOTTE_DEFAULT_MAX_DURATION_MINUTES,
+    );
   }
 
   if (options.stealth !== undefined) {

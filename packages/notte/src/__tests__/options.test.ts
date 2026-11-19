@@ -42,4 +42,21 @@ describe('notte option mapping', () => {
 
     warn.mockRestore();
   });
+
+  it('maps keepAlive to an idle timeout bounded by the max duration', async () => {
+    const provider = notte({ apiKey: 'test' });
+    const lastBody = (body: Record<string, unknown>) => expect.objectContaining({ body });
+
+    await provider.session.create({ keepAlive: true });
+    expect(sdk.sessionStart).toHaveBeenLastCalledWith(lastBody({ idle_timeout_minutes: 15 }));
+
+    await provider.session.create({ keepAlive: true, timeout: 120 });
+    expect(sdk.sessionStart).toHaveBeenLastCalledWith(lastBody({ max_duration_minutes: 2, idle_timeout_minutes: 2 }));
+
+    await provider.session.create({ keepAlive: true, timeout: 3600 });
+    expect(sdk.sessionStart).toHaveBeenLastCalledWith(lastBody({ max_duration_minutes: 60, idle_timeout_minutes: 30 }));
+
+    await provider.session.create({ keepAlive: false });
+    expect(sdk.sessionStart).toHaveBeenLastCalledWith(lastBody({}));
+  });
 });
