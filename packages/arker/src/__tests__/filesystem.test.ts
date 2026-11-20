@@ -18,7 +18,7 @@ async function fixture(streamMissing = false) {
   const run = vi.fn(async (_command: string) => ({ stdout: '/home/user/project\n', stderr: '', exitCode: 0, state: 'completed' }));
   const vm = { id: 'vm-transfer', baseUrl: 'https://example.arker.ai/api', sync, run, _client: { _request: request } };
   vi.spyOn(Arker.prototype, 'fork').mockResolvedValue(vm as unknown as VM);
-  const box = await arker({ apiKey: 'ark_test' }).instances.create();
+  const box = await arker({ apiKey: 'ark_test', keepAwake: false }).instances.create();
   return { box, sync, request, run };
 }
 
