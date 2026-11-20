@@ -17,15 +17,7 @@ runProviderTestSuite({
 
 it('sends the selected agent mode on create and preserves the server default', async () => {
   const requests: Record<string, unknown>[] = [];
-  const ready = (id: string) => JSON.stringify({
-    id, status: 'running', filesystemIncarnationReadiness: 'ready', filesystemIncarnationId: id,
-  });
   const server = createServer(async (req, res) => {
-    const id = /^\/v1\/sandboxes\/(sandbox-\d+)$/.exec((req.url ?? '').split('?')[0])?.[1];
-    if (req.method === 'GET' && id) {
-      res.writeHead(200, { 'Content-Type': 'application/json' }).end(ready(id));
-      return;
-    }
     if (req.method !== 'POST' || req.url !== '/v1/sandboxes') {
       res.writeHead(404).end();
       return;
@@ -33,8 +25,8 @@ it('sends the selected agent mode on create and preserves the server default', a
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     requests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-    res.writeHead(201, { 'Content-Type': 'application/json' });
-    res.end(ready(`sandbox-${requests.length}`));
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ code: 'VALIDATION_ERROR', message: 'Test receiver recorded the create request.' }));
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -42,10 +34,11 @@ it('sends the selected agent mode on create and preserves the server default', a
     const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const defaults = tangle({ apiKey: 'test-only', baseUrl });
     const commands = tangle({ apiKey: 'test-only', baseUrl, agent: false });
-    await defaults.instances.create({});
-    await defaults.instances.create({ agent: false });
-    await commands.instances.create({});
-    await commands.instances.create({ agent: true });
+    const refusal = { status: 400, code: 'VALIDATION_ERROR' };
+    await expect(defaults.instances.create({})).rejects.toMatchObject(refusal);
+    await expect(defaults.instances.create({ agent: false })).rejects.toMatchObject(refusal);
+    await expect(commands.instances.create({})).rejects.toMatchObject(refusal);
+    await expect(commands.instances.create({ agent: true })).rejects.toMatchObject(refusal);
     await expect(defaults.instances.create({ agent: 'false' })).rejects.toThrow(/agent must be a boolean/);
     expect(requests).toHaveLength(4);
     expect(requests[0]).not.toHaveProperty('agent');
