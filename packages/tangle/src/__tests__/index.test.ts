@@ -17,7 +17,15 @@ runProviderTestSuite({
 
 it('sends the selected agent mode on create and preserves the server default', async () => {
   const requests: Record<string, unknown>[] = [];
+  const ready = (id: string) => JSON.stringify({
+    id, status: 'running', filesystemIncarnationReadiness: 'ready', filesystemIncarnationId: id,
+  });
   const server = createServer(async (req, res) => {
+    const id = /^\/v1\/sandboxes\/(sandbox-\d+)$/.exec((req.url ?? '').split('?')[0])?.[1];
+    if (req.method === 'GET' && id) {
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end(ready(id));
+      return;
+    }
     if (req.method !== 'POST' || req.url !== '/v1/sandboxes') {
       res.writeHead(404).end();
       return;
@@ -26,7 +34,7 @@ it('sends the selected agent mode on create and preserves the server default', a
     for await (const chunk of req) chunks.push(chunk);
     requests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
     res.writeHead(201, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ id: `sandbox-${requests.length}`, status: 'running', filesystemIncarnationReadiness: 'ready' }));
+    res.end(ready(`sandbox-${requests.length}`));
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
