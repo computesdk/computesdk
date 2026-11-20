@@ -462,6 +462,8 @@ function addCreateFlags(c: Command): Command {
     .option('--provider <names>', 'place only on these providers, through your router (its BYOK mode and order), e.g. daytona or daytona,e2b')
     .option('--byok', 'use only your own keys for this create')
     .option('--managed', 'use only ComputeSDK managed accounts for this create')
+    .option('--strategy <strategy>', 'order managed accounts for this create: computesdk (recommended), cheapest, or custom (your saved order)')
+    .option('--ignore <names>', 'never place on these providers for this create, e.g. e2b or e2b,modal')
     // Pre-router: walk exactly these BYOK providers. --provider + --byok covers it.
     .addOption(new Option('--order <providers>').hideHelp())
     .option('--size <size>', 'platform size: small (1 vCPU/2 GiB), medium, large, xlarge, 2xlarge (16/32 GiB), 3xlarge (32/64 GiB); default medium')
@@ -480,17 +482,39 @@ function addCreateFlags(c: Command): Command {
 }
 
 interface CreateFlagOpts {
-  order?: string; provider?: string; byok?: boolean; managed?: boolean; label?: string; image?: string; snapshotId?: string;
+  order?: string; provider?: string; byok?: boolean; managed?: boolean; strategy?: string; ignore?: string; label?: string; image?: string; snapshotId?: string;
   size?: string; cpus?: string; memoryMb?: string; diskMb?: string; timeoutMs?: string;
   maxPrice?: string; maxPricePer?: string; market?: boolean; orderType?: string;
   secret?: string[];
 }
 
 /** `--provider daytona,e2b` → ['daytona', 'e2b']; empty is a usage error. */
-function providerNames(value: string): string[] {
+function providerNames(value: string, flag = '--provider'): string[] {
   const names = value.split(',').map((name) => name.trim()).filter(Boolean);
-  if (names.length === 0) throw new Error(`--provider "${value}" names no providers.`);
+  if (names.length === 0) throw new Error(`${flag} "${value}" names no providers.`);
   return names;
+}
+
+const STRATEGIES = ['computesdk', 'cheapest', 'custom'] as const;
+
+/** `--strategy` and `--ignore`: one-off router overrides, checked before any request. */
+function routerOverrides(opts: { strategy?: string; ignore?: string; order?: string }): { strategy?: string; ignore?: string[] } {
+  const out: { strategy?: string; ignore?: string[] } = {};
+  if (opts.strategy !== undefined) {
+    if (!(STRATEGIES as readonly string[]).includes(opts.strategy)) {
+      throw new Error(`--strategy must be one of ${STRATEGIES.join(', ')}`);
+    }
+    out.strategy = opts.strategy;
+  }
+  if (opts.ignore !== undefined) out.ignore = providerNames(opts.ignore, '--ignore');
+  if (opts.order && (out.strategy || out.ignore)) throw new Error('--strategy/--ignore apply to your router; --order skips it.');
+  return out;
+}
+
+/** The quote's query form of `routerOverrides`. */
+function overrideParams(opts: { strategy?: string; ignore?: string; order?: string }): Record<string, string | undefined> {
+  const { strategy, ignore } = routerOverrides(opts);
+  return { strategy, ignore: ignore?.join(',') };
 }
 
 /** `--byok` → the router's BYOK mode "only"; `--managed` → "off"; neither → the router's own. */
@@ -515,6 +539,7 @@ function buildCreateBody(opts: CreateFlagOpts): Record<string, unknown> {
     if (opts.order) throw new Error('--byok/--managed apply to your router; --order skips it.');
     body.byok = mode;
   }
+  Object.assign(body, routerOverrides(opts));
   if (opts.order) body.providerOrder = opts.order.split(',').map((s) => s.trim());
   if (opts.size) body.size = opts.size;
   if (opts.label) body.label = opts.label;
@@ -747,6 +772,7 @@ async function previewPlacement(c: Awaited<ReturnType<typeof client>>, opts: Cre
     timeoutMs: opts.timeoutMs,
     only: opts.provider === undefined ? undefined : providerNames(opts.provider).join(','),
     byok: mode,
+    ...overrideParams(opts),
   };
   let quote: SandboxQuoteWire;
   try {
@@ -876,6 +902,8 @@ function registerSandboxOperations(cmd: Command): void {
       .option('--provider <names>', 'only these providers, through your router (e.g. daytona)')
       .option('--byok', 'only your own keys')
       .option('--managed', 'only ComputeSDK managed accounts')
+      .option('--strategy <strategy>', 'order managed accounts: computesdk (recommended), cheapest, or custom (your saved order)')
+      .option('--ignore <names>', 'never these providers (e.g. e2b)')
       .option('--cpus <n>', 'CPU cores (raw resources instead of --size)')
       .option('--memory-mb <n>', 'memory in MB')
       .option('--disk-mb <n>', 'ephemeral disk in MB')
@@ -888,7 +916,7 @@ function registerSandboxOperations(cmd: Command): void {
       .option('--api-key <key>').option('--base-url <url>').option('--allow-untrusted-host')
       .option('--json', 'print the raw response');
     command.action(async (opts: CommonOpts & {
-      size?: string; provider?: string; byok?: boolean; managed?: boolean; cpus?: string; memoryMb?: string; diskMb?: string;
+      size?: string; provider?: string; byok?: boolean; managed?: boolean; strategy?: string; ignore?: string; cpus?: string; memoryMb?: string; diskMb?: string;
       region?: string; timeoutMs?: string; orderType?: string; market?: boolean;
       maxPrice?: string; maxPricePer?: string;
     }) => {
@@ -898,6 +926,7 @@ function registerSandboxOperations(cmd: Command): void {
           size: opts.size,
           only: opts.provider === undefined ? undefined : providerNames(opts.provider).join(','),
           byok: accountMode(opts),
+          ...overrideParams(opts),
           cpus: opts.cpus,
           memoryMb: opts.memoryMb,
           ephemeralDiskMb: opts.diskMb,
