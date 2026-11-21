@@ -11,7 +11,7 @@ import type { Command } from 'commander';
 import pc from 'picocolors';
 import { output, client, fail, parseInputs, secretValueClient, usageErrorOutput, type CommonOpts } from './actions.js';
 import { confirmWrite } from './confirm.js';
-import { safeTerm } from './term.js';
+import { safeTerm, safeTermText } from './term.js';
 
 // Wire shapes: benchmarks-platform lib/api/v1-contract/ai-router.ts.
 
@@ -418,7 +418,7 @@ export function registerAiRouterCommands(program: Command): void {
         ...(opts.maxTokens ? { max_tokens: Number(opts.maxTokens) } : {}),
         ...(Object.keys(routingConstraints).length > 0 ? { ai_router: routingConstraints } : {}),
       });
-      output(opts, reply, (r) => console.log(safeTerm(chatText(r))));
+      output(opts, reply, (r) => console.log(safeTermText(chatText(r))));
     } catch (e) {
       fail(e, opts);
     }
