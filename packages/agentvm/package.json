@@ -1,0 +1,9 @@
+{
+  "name":"@computesdk/agentvm", "version":"0.1.0", "description":"AgentVM billable dedicated compute provider for ComputeSDK", "license":"MIT",
+  "main":"./dist/index.js", "module":"./dist/index.mjs", "types":"./dist/index.d.ts",
+  "exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.mjs","require":"./dist/index.js"}},
+  "files":["dist"],"scripts":{"build":"tsup","test":"vitest run","typecheck":"tsc --noEmit","lint":"eslint src"},
+  "dependencies":{"@computesdk/provider":"workspace:*","computesdk":"workspace:*"},
+  "devDependencies":{"typescript":"^5.0.0","tsup":"^8.0.0","vitest":"^3.0.0","@types/node":"^20.0.0"},
+  "repository":{"type":"git","url":"https://github.com/computesdk/computesdk.git","directory":"packages/agentvm"}
+}
