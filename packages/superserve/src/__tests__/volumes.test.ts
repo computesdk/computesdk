@@ -80,9 +80,10 @@ describe('Superserve volumes through the published native SDK', () => {
     expect(await provider.volume!.list({ limit: 2 })).toHaveLength(1);
     expect(calls[2].url).toBe(baseUrl + '/volumes?limit=2');
 
+    respond(volume);
     respond(null, 204);
     await provider.volume!.delete(volumeId);
-    expect(calls[3]).toMatchObject({ url: baseUrl + '/volumes/' + volumeId, method: 'DELETE', apiKey });
+    expect(calls[4]).toMatchObject({ url: baseUrl + '/volumes/' + volumeId, method: 'DELETE', apiKey });
   });
 
   it('returns null only for missing volumes and propagates authorization and deletion failures', async () => {
@@ -93,6 +94,7 @@ describe('Superserve volumes through the published native SDK', () => {
     await expect(provider.volume!.get('forbidden')).rejects.toThrow('Access denied');
     respond({ error: { code: 'forbidden', message: 'Access denied' } }, 403);
     await expect(provider.volume!.list()).rejects.toThrow('Access denied');
+    respond(volume);
     respond({ error: { code: 'volume_attached', message: 'Volume is attached' } }, 409);
     await expect(provider.volume!.delete(volumeId)).rejects.toThrow('Volume is attached');
     respond({ error: { code: 'volume_not_found' } }, 404);
@@ -102,8 +104,8 @@ describe('Superserve volumes through the published native SDK', () => {
   it('waits only for closing leases after a volume-delete conflict', async () => {
     vi.useFakeTimers();
     const provider = superserve({ apiKey, baseUrl });
-    respond({ error: { code: 'volume_conflict', message: 'Volume operation conflicts with the current resource state.' } }, 409);
     respond(volume);
+    respond({ error: { code: 'volume_conflict', message: 'Volume operation conflicts with the current resource state.' } }, 409);
     respond([attachment({ status: 'revoking' })]);
     respond(null, 204);
     const deleted = expect(provider.volume!.delete(volumeId)).resolves.toBeUndefined();
@@ -112,10 +114,54 @@ describe('Superserve volumes through the published native SDK', () => {
     expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(2);
   });
 
+  it('pins deletion to the original UUID when its name is reused between retries', async () => {
+    vi.useFakeTimers();
+    const replacementId = '00000000-0000-4000-8000-000000000004';
+    let nameReused = false;
+    let firstDelete = true;
+    let replacementDeleted = false;
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, options: RequestInit = {}) => {
+      const url = String(input);
+      const method = options.method || 'GET';
+      calls.push({ url, method, apiKey: new Headers(options.headers).get('X-API-Key'), body: undefined });
+      if (method === 'GET' && url === baseUrl + '/volumes/test-volume') {
+        return new Response(JSON.stringify(nameReused ? { ...volume, id: replacementId } : volume));
+      }
+      if (method === 'DELETE' && firstDelete) {
+        firstDelete = false;
+        return new Response(JSON.stringify({ error: { code: 'volume_conflict' } }), { status: 409 });
+      }
+      if (method === 'GET' && url === baseUrl + '/volumes/' + volumeId + '/attachments') {
+        const closing = new Response(JSON.stringify([attachment({ status: 'revoking' })]));
+        nameReused = true; // Another caller deletes the original and creates the same name.
+        return closing;
+      }
+      if (method === 'DELETE' && url === baseUrl + '/volumes/' + volumeId) {
+        return new Response(JSON.stringify({ error: { code: 'volume_not_found' } }), { status: 404 });
+      }
+      if (method === 'DELETE' && (url.endsWith('/test-volume') || url.endsWith('/' + replacementId))) {
+        replacementDeleted = true;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error('Unexpected test request');
+    }));
+    const deleted = expect(superserve({ apiKey, baseUrl }).volume!.delete('test-volume')).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(3_000);
+    await deleted;
+    expect(nameReused).toBe(true);
+    expect(replacementDeleted).toBe(false);
+    expect(calls.filter((call) => call.method === 'DELETE').map((call) => call.url)).toEqual([
+      baseUrl + '/volumes/' + volumeId,
+      baseUrl + '/volumes/' + volumeId,
+    ]);
+    expect(calls.filter((call) => call.method === 'GET' && call.url.endsWith('/test-volume'))).toHaveLength(1);
+    expect(calls.every((call) => call.apiKey === apiKey)).toBe(true);
+  });
+
   it('does not retry a volume-delete conflict while an active mount remains', async () => {
     const provider = superserve({ apiKey, baseUrl });
-    respond({ error: { code: 'volume_conflict', message: 'Volume operation conflicts with the current resource state.' } }, 409);
     respond(volume);
+    respond({ error: { code: 'volume_conflict', message: 'Volume operation conflicts with the current resource state.' } }, 409);
     respond([attachment()]);
     await expect(provider.volume!.delete(volumeId)).rejects.toThrow('conflicts');
     expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(1);

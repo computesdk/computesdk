@@ -156,21 +156,29 @@ function toVolume(info: VolumeInfo): Volume {
 }
 
 async function deleteVolume(connection: ResolvedConfig, idOrName: string): Promise<void> {
+  let volume: SuperserveVolume;
+  try {
+    volume = await SuperserveVolume.connect(idOrName, connection);
+  } catch (error) {
+    if (error instanceof NotFoundError) return;
+    throw error;
+  }
+  // Names can be reused while closing leases settle. Resolve once so retries
+  // and attachment checks stay bound to the original volume.
   const deadline = Date.now() + 120_000;
   for (;;) {
     try {
-      await SuperserveVolume.deleteById(idOrName, connection);
+      await SuperserveVolume.deleteById(volume.id, connection);
       return;
     } catch (error) {
       if (!(error instanceof ConflictError) || error.code !== 'volume_conflict') throw error;
-      let volume: SuperserveVolume;
+      let attachments;
       try {
-        volume = await SuperserveVolume.connect(idOrName, connection);
+        attachments = await volume.listAttachments();
       } catch (lookupError) {
         if (lookupError instanceof NotFoundError) return;
         throw lookupError;
       }
-      const attachments = await volume.listAttachments();
       const closing = attachments.filter((attachment) => attachment.status !== 'revoked');
       // A destroyed sandbox can leave a closing lease briefly. Never wait on
       // an active mount, or turn another kind of conflict into successful cleanup.
