@@ -7,12 +7,22 @@
 import { randomUUID } from 'node:crypto';
 import {
   AuthenticationError,
+  ConflictError,
   NotFoundError,
   Sandbox as SuperserveSandbox,
   Snapshot as SuperserveSnapshot,
   Template as SuperserveTemplate,
+  Volume as SuperserveVolume,
+  resolveConfig,
 } from '@superserve/sdk';
-import type { SnapshotInfo, TemplateCreateOptions, TemplateInfo } from '@superserve/sdk';
+import type {
+  ResolvedConfig,
+  SnapshotInfo,
+  TemplateCreateOptions,
+  TemplateInfo,
+  VolumeCreateOptions,
+  VolumeInfo,
+} from '@superserve/sdk';
 import { defineProvider, escapeShellArg, InstanceSizeError, INSTANCE_SIZE_PROFILES } from '@computesdk/provider';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -21,10 +31,12 @@ import type {
   CommandResult,
   CreateInstanceOptions,
   CreateTemplateOptions,
+  CreateVolumeOptions,
   FileEntry,
   InstanceSizeClass,
   RunCommandOptions,
   InstanceInfo,
+  Volume,
 } from '@computesdk/provider';
 
 export interface SuperserveConfig {
@@ -106,6 +118,69 @@ const FALLBACK_WORKDIR = '/';
 /** Cached `pwd` probes: relative filesystem paths resolve against the cwd a
  *  `runCommand` exec would use, so `writeFile('a.txt')` and `cat a.txt` agree. */
 const workdirs = new WeakMap<SuperserveSandbox, Promise<string>>();
+const volumeConnections = new WeakMap<SuperserveSandbox, ResolvedConfig>();
+
+function volumeReference(volume: string | Volume): string {
+  const reference = typeof volume === 'string' ? volume : volume?.id || volume?.name;
+  if (typeof reference !== 'string' || !reference.trim()) {
+    throw new Error('A Superserve volume reference must contain an id or name.');
+  }
+  return reference;
+}
+
+function volumeConnection(sandbox: SuperserveSandbox): ResolvedConfig {
+  const connection = volumeConnections.get(sandbox);
+  if (!connection) throw new Error('The Superserve sandbox has no captured volume connection.');
+  return connection;
+}
+
+function sameSandboxId(left: string, right: string): boolean {
+  const pattern = /^(?:sb-([A-Za-z0-9]+)-)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  const a = pattern.exec(left);
+  const b = pattern.exec(right);
+  if (!a || !b) return left === right;
+  return a[2].toLowerCase() === b[2].toLowerCase() &&
+    (a[1] === undefined || b[1] === undefined || a[1] === b[1]);
+}
+
+function toVolume(info: VolumeInfo): Volume {
+  return {
+    id: info.id,
+    name: info.name,
+    sizeBytes: info.capacityBytes,
+    usedBytes: info.usedBytes,
+    region: info.region,
+    status: info.status,
+    createdAt: info.createdAt,
+  };
+}
+
+async function deleteVolume(connection: ResolvedConfig, idOrName: string): Promise<void> {
+  const deadline = Date.now() + 120_000;
+  for (;;) {
+    try {
+      await SuperserveVolume.deleteById(idOrName, connection);
+      return;
+    } catch (error) {
+      if (!(error instanceof ConflictError) || error.code !== 'volume_conflict') throw error;
+      let volume: SuperserveVolume;
+      try {
+        volume = await SuperserveVolume.connect(idOrName, connection);
+      } catch (lookupError) {
+        if (lookupError instanceof NotFoundError) return;
+        throw lookupError;
+      }
+      const attachments = await volume.listAttachments();
+      const closing = attachments.filter((attachment) => attachment.status !== 'revoked');
+      // A destroyed sandbox can leave a closing lease briefly. Never wait on
+      // an active mount, or turn another kind of conflict into successful cleanup.
+      if (!closing.length || closing.some((attachment) =>
+        attachment.status !== 'detaching' && attachment.status !== 'revoking') ||
+        Date.now() >= deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+    }
+  }
+}
 
 function workdirOf(sandbox: SuperserveSandbox, runCommand: CommandRunner): Promise<string> {
   let probe = workdirs.get(sandbox);
@@ -216,6 +291,8 @@ function toSnapshot(info: SnapshotInfo) {
 /** Superserve sizes sandboxes at the template: vCPU, memory and disk are set
  *  here and every sandbox created from it inherits them. */
 export type SuperserveTemplateCreateOptions = CreateTemplateOptions & Partial<Omit<TemplateCreateOptions, 'apiKey' | 'baseUrl' | 'name'>>;
+export type SuperserveVolumeCreateOptions = CreateVolumeOptions &
+  Pick<VolumeCreateOptions, 'idempotencyKey' | 'timeoutMs' | 'signal'>;
 
 function toTemplate(info: TemplateInfo) {
   return {
@@ -265,6 +342,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
           metadata,
           templateId,
           snapshotId,
+          volumes,
           namespace: _namespace,
           directory: _directory,
           ...providerOptions
@@ -274,7 +352,7 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         const timeoutSeconds = ttMs !== undefined ? Math.max(1, Math.ceil(ttMs / 1000)) : undefined;
 
         try {
-          const sandbox = await SuperserveSandbox.create({
+          const createOptions = {
             apiKey,
             baseUrl,
             name: name ?? generateSandboxName(),
@@ -284,7 +362,18 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
             ...(metadata ? { metadata: metadata as Record<string, string> } : {}),
             ...(envs ? { envVars: envs } : {}),
             ...providerOptions,
-          });
+            ...(volumes !== undefined ? {
+              volumes: volumes.map((mount) => ({
+                ...mount,
+                volume: mount.volume instanceof SuperserveVolume
+                  ? mount.volume
+                  : volumeReference(mount.volume),
+              })),
+            } : {}),
+          };
+          const connection = resolveConfig(createOptions);
+          const sandbox = await SuperserveSandbox.create(createOptions);
+          volumeConnections.set(sandbox, connection);
           return { instance: sandbox, instanceId: sandbox.id };
         } catch (error) {
           const notBuilt = missingSizeTemplate(config, templateId, error);
@@ -297,7 +386,9 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         try {
-          const sandbox = await SuperserveSandbox.connect(sandboxId, { apiKey, baseUrl });
+          const connection = resolveConfig({ apiKey, baseUrl });
+          const sandbox = await SuperserveSandbox.connect(sandboxId, connection);
+          volumeConnections.set(sandbox, connection);
           return { instance: sandbox, instanceId: sandbox.id };
         } catch {
           return null;
@@ -308,10 +399,14 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         try {
-          const infos = await SuperserveSandbox.list({ apiKey, baseUrl });
+          const connection = resolveConfig({ apiKey, baseUrl });
+          const infos = await SuperserveSandbox.list(connection);
           // No per-item connect() — that would POST /activate and resume paused sandboxes.
-          return infos.map((info) => ({ instance: info as unknown as SuperserveSandbox, instanceId: info.id,
-          }));
+          return infos.map((info) => {
+            const instance = info as unknown as SuperserveSandbox;
+            volumeConnections.set(instance, connection);
+            return { instance, instanceId: info.id };
+          });
         } catch {
           return [];
         }
@@ -326,6 +421,24 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
 
       runCommand,
       streamCommand: runCommand,
+
+      attachVolume: async (sandbox, volume, mountPath) => {
+        const native = await SuperserveVolume.connect(volumeReference(volume), volumeConnection(sandbox));
+        await native.attach(sandbox.id, { mountPath });
+      },
+
+      detachVolume: async (sandbox, volume, mountPath) => {
+        const native = await SuperserveVolume.connect(volumeReference(volume), volumeConnection(sandbox));
+        const attachments = (await native.listAttachments()).filter((attachment) =>
+          attachment.volumeId === native.id &&
+          sameSandboxId(attachment.sandboxId, sandbox.id) &&
+          attachment.status !== 'revoked' &&
+          (mountPath === undefined || attachment.mountPath === mountPath));
+        if (attachments.length > 1) {
+          throw new Error('Multiple matching Superserve attachments; provide their mount path to detach one.');
+        }
+        if (attachments[0]) await native.detach(attachments[0].id);
+      },
 
       getInfo: async (sandbox: SuperserveSandbox): Promise<InstanceInfo> => {
         const info = await sandbox.getInfo();
@@ -471,6 +584,39 @@ export const superserve = defineProvider<SuperserveSandbox, SuperserveConfig>({
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         await SuperserveSnapshot.deleteById(snapshotId, { apiKey, baseUrl });
+      },
+    },
+
+    volume: {
+      create: async (config: SuperserveConfig, options: SuperserveVolumeCreateOptions) => {
+        const connection = resolveConfig({ apiKey: resolveApiKey(config), baseUrl: resolveBaseUrl(config) });
+        const volume = await SuperserveVolume.create({
+          ...connection,
+          name: options.name,
+          ...(options.sizeBytes !== undefined ? { capacityBytes: options.sizeBytes } : {}),
+          idempotencyKey: options.idempotencyKey,
+          timeoutMs: options.timeoutMs,
+          signal: options.signal,
+        });
+        return toVolume(volume);
+      },
+      get: async (config: SuperserveConfig, idOrName: string) => {
+        const connection = resolveConfig({ apiKey: resolveApiKey(config), baseUrl: resolveBaseUrl(config) });
+        try {
+          return toVolume(await SuperserveVolume.connect(idOrName, connection));
+        } catch (error) {
+          if (error instanceof NotFoundError) return null;
+          throw error;
+        }
+      },
+      list: async (config: SuperserveConfig, options?: { limit?: number }) => {
+        const connection = resolveConfig({ apiKey: resolveApiKey(config), baseUrl: resolveBaseUrl(config) });
+        const volumes = await SuperserveVolume.list({ ...connection, limit: options?.limit });
+        return volumes.map(toVolume);
+      },
+      delete: async (config: SuperserveConfig, idOrName: string) => {
+        const connection = resolveConfig({ apiKey: resolveApiKey(config), baseUrl: resolveBaseUrl(config) });
+        await deleteVolume(connection, idOrName);
       },
     },
 

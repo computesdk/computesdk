@@ -61,7 +61,8 @@ class FakeSandbox {
   };
 }
 
-vi.mock('@superserve/sdk', () => ({
+vi.mock('@superserve/sdk', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@superserve/sdk')>(),
   AuthenticationError: class extends Error {},
   Sandbox: class {
     static create = async (options: Record<string, unknown>) => {
