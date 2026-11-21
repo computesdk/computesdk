@@ -1,6 +1,6 @@
 # ComputeSDK Router — development notes
 
-The user-facing description is `README.md` (Claude's directory uses it as the listing). This file is for maintainers.
+Maintainer notes for `plugins/computesdk-router/` (kept outside the plugin folder so the directory scan does not ship them). The user-facing description is that folder's `README.md` (Claude's directory uses it as the listing). This file is for maintainers.
 
 A developer tool for running code in any sandbox provider, routing each
 sandbox and CI job across providers. This directory is the **plugin package**,

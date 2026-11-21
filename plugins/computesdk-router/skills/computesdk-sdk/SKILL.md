@@ -17,7 +17,7 @@ org API key or a `compute login` session:
 import { compute } from 'computesdk';
 import { platform } from '@computesdk/platform';
 
-// Reads the org API key from COMPUTE_API_KEY (or a `compute login` session).
+// Uses the org API key from the environment, or a `compute login` session.
 compute.setConfig({ provider: platform({}) });
 
 // Creates are idempotent — the SDK mints an idempotency key per call
@@ -34,8 +34,10 @@ const entries = await sandbox.filesystem.readdir('/tmp');
 await sandbox.destroy();
 ```
 
-Auth precedence: `apiKey` > `COMPUTE_API_KEY` > `BENCHMARKS_PLATFORM_API_KEY`
-> a `compute login` session (needs `@benchsdk/cli` installed). Hosted
+Authentication: an `apiKey` passed in config wins; otherwise the package uses
+the org API key from the environment (the same one the `compute` CLI uses), then
+a `compute login` session (needs `@benchsdk/cli` installed). The package README
+names the variables. Hosted
 sandboxes place on the org's provider order — the org's own provider keys, or
 ComputeSDK's managed accounts billed from prepaid credit; see the package README
 for `size` and the error codes (`insufficient_credits`, …) on `err.code`.
@@ -48,7 +50,7 @@ for `size` and the error codes (`insufficient_credits`, …) on `err.code`.
 import { compute } from 'computesdk';
 import { e2b } from '@computesdk/e2b';
 
-// Reads the provider key from its environment variable (E2B_API_KEY here).
+// Uses the provider's key from its documented environment variable.
 compute.setConfig({ provider: e2b({}) });
 
 const sandbox = await compute.sandbox.create();
@@ -65,8 +67,7 @@ Other providers swap in the same way (`@computesdk/modal`,
 
 ## Rules for generated code
 
-- Read keys from the environment (`COMPUTE_API_KEY` — the same env var the
-  `compute` CLI uses — provider env vars) —
+- Read keys from the environment (the variables each package's README names) —
   never write a key, token, or secret into generated source.
 - Always destroy sandboxes — `DELETE /sandboxes/{id}` or `sandbox.destroy()`,
   in try/finally for real programs.
