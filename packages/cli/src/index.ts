@@ -8,6 +8,7 @@
  *   compute logout                       # clear stored credentials
  *   compute providers                    # SDK provider credentials in this environment
  *   compute byok …                       # the org's BYOK provider keys and custom rates
+ *   compute ai-router …                  # AI router: gateway keys, routing, models, quotes, chat
  *   compute org …                        # active org, members, invitations
  *   compute invitations …                # your own invitations (show/accept/decline)
  *   compute actions …                    # Actions API
@@ -29,6 +30,7 @@ import { dirname, join } from 'path';
 import { getProviderStatus } from './providers.js';
 import { registerActionsCommands } from './actions.js';
 import { registerByokCommands } from './byok.js';
+import { registerAiRouterCommands } from './ai-router.js';
 import { registerMarketCommands } from './market.js';
 import { registerCreditsCommands } from './credits.js';
 import { inheritParentOptions } from './option-inheritance.js';
@@ -337,6 +339,12 @@ registerSyncCommand(program);
 // durable configs whose sessions run inside routed sandboxes. Same auth.
 
 registerAgentsCommands(program);
+
+// ─── ai-router ───────────────────────────────────────────────────────────────
+// `compute ai-router` (alias `air`) drives /api/v1/ai-router — the AI router
+// (dashboard: Agents → Inference). Same auth (src/ai-router.ts).
+
+registerAiRouterCommands(program);
 
 // ─── bench ───────────────────────────────────────────────────────────────────
 // `compute bench` is the benchmarks-platform CLI (@benchsdk/runner's `bench`

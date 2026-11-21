@@ -3403,6 +3403,415 @@
         "--help"
       ],
       "summary": "Stop a session and release its sandbox"
+    },
+    {
+      "path": [
+        "ai-router"
+      ],
+      "aliases": [
+        [
+          "air"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--help"
+      ],
+      "summary": "The AI router (Agents → Inference): OpenAI-compatible chat routed to the cheapest gateway using your gateway keys"
+    },
+    {
+      "path": [
+        "ai-router",
+        "routing"
+      ],
+      "aliases": [
+        [
+          "air",
+          "routing"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "The AI router's settings: strategy, BYOK mode, gateway order, attempts (owner/admin)"
+    },
+    {
+      "path": [
+        "ai-router",
+        "routing",
+        "show"
+      ],
+      "aliases": [
+        [
+          "air",
+          "routing",
+          "show"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Print the AI router's settings"
+    },
+    {
+      "path": [
+        "ai-router",
+        "routing",
+        "set"
+      ],
+      "aliases": [
+        [
+          "air",
+          "routing",
+          "set"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--strategy",
+        "--byok-mode",
+        "--gateway-order",
+        "--max-attempts",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Change the AI router settings; only the flags given change (owner/admin)"
+    },
+    {
+      "path": [
+        "ai-router",
+        "gateways"
+      ],
+      "aliases": [
+        [
+          "ai-router",
+          "gw"
+        ],
+        [
+          "air",
+          "gateways"
+        ],
+        [
+          "air",
+          "gw"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Gateways the router can send to and your keys for them (owner/admin)"
+    },
+    {
+      "path": [
+        "ai-router",
+        "gateways",
+        "list"
+      ],
+      "aliases": [
+        [
+          "ai-router",
+          "gateways",
+          "ls"
+        ],
+        [
+          "ai-router",
+          "gw",
+          "list"
+        ],
+        [
+          "ai-router",
+          "gw",
+          "ls"
+        ],
+        [
+          "air",
+          "gateways",
+          "list"
+        ],
+        [
+          "air",
+          "gateways",
+          "ls"
+        ],
+        [
+          "air",
+          "gw",
+          "list"
+        ],
+        [
+          "air",
+          "gw",
+          "ls"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Every gateway, its credential names and your key status"
+    },
+    {
+      "path": [
+        "ai-router",
+        "gateways",
+        "configure"
+      ],
+      "aliases": [
+        [
+          "ai-router",
+          "gw",
+          "configure"
+        ],
+        [
+          "air",
+          "gateways",
+          "configure"
+        ],
+        [
+          "air",
+          "gw",
+          "configure"
+        ]
+      ],
+      "args": [
+        "<gateway>"
+      ],
+      "flags": [
+        "--key",
+        "--field",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Save your key for a gateway; it's verified by fetching the gateway's model catalog (owner/admin)"
+    },
+    {
+      "path": [
+        "ai-router",
+        "gateways",
+        "verify"
+      ],
+      "aliases": [
+        [
+          "ai-router",
+          "gw",
+          "verify"
+        ],
+        [
+          "air",
+          "gateways",
+          "verify"
+        ],
+        [
+          "air",
+          "gw",
+          "verify"
+        ]
+      ],
+      "args": [
+        "<gateway>"
+      ],
+      "flags": [
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Re-check your stored key and refresh the gateway's cached model catalog (owner/admin)"
+    },
+    {
+      "path": [
+        "ai-router",
+        "gateways",
+        "remove"
+      ],
+      "aliases": [
+        [
+          "ai-router",
+          "gateways",
+          "rm"
+        ],
+        [
+          "ai-router",
+          "gw",
+          "remove"
+        ],
+        [
+          "ai-router",
+          "gw",
+          "rm"
+        ],
+        [
+          "air",
+          "gateways",
+          "remove"
+        ],
+        [
+          "air",
+          "gateways",
+          "rm"
+        ],
+        [
+          "air",
+          "gw",
+          "remove"
+        ],
+        [
+          "air",
+          "gw",
+          "rm"
+        ]
+      ],
+      "args": [
+        "<gateway>"
+      ],
+      "flags": [
+        "--yes",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Delete your stored key for a gateway; the router stops sending to it (owner/admin)"
+    },
+    {
+      "path": [
+        "ai-router",
+        "models"
+      ],
+      "aliases": [
+        [
+          "air",
+          "models"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--search",
+        "--free",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Models your connected gateways offer, each gateway's price per 1M input/output tokens, cheapest first"
+    },
+    {
+      "path": [
+        "ai-router",
+        "quote"
+      ],
+      "aliases": [
+        [
+          "air",
+          "quote"
+        ]
+      ],
+      "args": [
+        "<model>"
+      ],
+      "flags": [
+        "--input-tokens",
+        "--output-tokens",
+        "--free",
+        "--strategy",
+        "--gateway",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Where a request for a model would go, in the order the router would try, with estimated cost"
+    },
+    {
+      "path": [
+        "ai-router",
+        "requests"
+      ],
+      "aliases": [
+        [
+          "air",
+          "requests"
+        ]
+      ],
+      "args": [],
+      "flags": [
+        "--limit",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Recent routed requests, newest first: gateway, attempts, tokens and cost (no content)"
+    },
+    {
+      "path": [
+        "ai-router",
+        "chat"
+      ],
+      "aliases": [
+        [
+          "air",
+          "chat"
+        ]
+      ],
+      "args": [
+        "<model>",
+        "<prompt...>"
+      ],
+      "flags": [
+        "--system",
+        "--max-tokens",
+        "--free",
+        "--gateway",
+        "--api-key",
+        "--base-url",
+        "--org",
+        "--allow-untrusted-host",
+        "--json",
+        "--help"
+      ],
+      "summary": "Send one Chat Completions request through the router and print the reply"
     }
   ],
   "passthrough": {
