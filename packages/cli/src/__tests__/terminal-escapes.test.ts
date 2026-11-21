@@ -7,6 +7,7 @@ import { printCosts } from '../sandbox-billing.js';
 import { formatBranchRow } from '../actions-repos.js';
 import { formatByokDetail, formatByokRow, formatByokVerify, type ByokProvider } from '../byok.js';
 import { formatDayCursor, formatRunDays } from '../actions-runs.js';
+import { formatAiRouterSettings, formatGatewayRow, formatModelRow, formatQuote, formatRequestRow } from '../ai-router.js';
 import { conclusionLabel } from '../term.js';
 import { fail } from '../actions.js';
 import { ActionsApiError } from '../actions-client.js';
@@ -70,6 +71,19 @@ describe('API fields never reach the terminal with control sequences', () => {
     const text = [formatRunDays([{ day: EVIL, count: 2 }]), formatDayCursor({ startedAt: EVIL, id: EVIL }), conclusionLabel(EVIL)].join('\n');
     expect(text).toContain('x');
     expect(hasControl(text)).toBe(false);
+  });
+
+  it('ai-router: settings, gateways, models, quotes and requests', () => {
+    const e = EVIL as never;
+    console.log(formatAiRouterSettings({ strategy: e, byokMode: e, gatewayOrder: [EVIL], maxAttempts: e }));
+    const key = { status: 'error', keyHint: EVIL, statusDetail: EVIL, modelCount: e, lastVerifiedAt: EVIL, updatedAt: EVIL };
+    console.log(formatGatewayRow({ id: EVIL, name: EVIL, credentials: [{ name: EVIL, required: true }], key } as never));
+    console.log(formatModelRow({ id: EVIL, name: EVIL, offers: [{ gateway: EVIL, free: false, inputPerMTok: 1, outputPerMTok: 2 }] } as never));
+    const candidate = { gateway: EVIL, account: EVIL, free: false, price: { inputPerMTok: 1, outputPerMTok: 2 }, estimatedCostUsd: 0.5 };
+    console.log(formatQuote({ model: EVIL, tokens: { inputTokens: e, outputTokens: e }, candidates: [candidate] } as never));
+    console.log(formatRequestRow({ createdAt: EVIL, model: EVIL, gateway: EVIL, status: 'failed', errorKind: EVIL, attempts: [], inputTokens: e, outputTokens: e, costUsd: null, estimatedCostUsd: null } as never));
+    expect(out).toContain('x');
+    expect(hasControl(out)).toBe(false);
   });
 
   it('error messages, which can quote the server, keep their lines but lose control sequences', () => {

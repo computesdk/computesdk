@@ -118,15 +118,15 @@ function keyStatus(key: AiRouterKey | null): string {
   if (!key) return pc.gray('no key');
   const status =
     key.status === 'connected' ? pc.green('connected') : key.status === 'error' ? pc.red('error') : pc.yellow('unverified');
-  return `${status} ${pc.dim(safeTerm(key.keyHint ?? ''))} ${pc.dim(`${key.modelCount} models`)}`;
+  return `${status} ${pc.dim(safeTerm(key.keyHint ?? ''))} ${pc.dim(`${safeTerm(String(key.modelCount))} models`)}`;
 }
 
 export function formatAiRouterSettings(s: AiRouterSettings): string {
   return [
-    `strategy       ${s.strategy}`,
-    `byok mode      ${s.byokMode}`,
+    `strategy       ${safeTerm(s.strategy)}`,
+    `byok mode      ${safeTerm(s.byokMode)}`,
     `gateway order  ${s.gatewayOrder.length > 0 ? s.gatewayOrder.map(safeTerm).join(', ') : pc.dim('none (alphabetical)')}`,
-    `max attempts   ${s.maxAttempts}`,
+    `max attempts   ${safeTerm(String(s.maxAttempts))}`,
   ].join('\n');
 }
 
@@ -151,18 +151,18 @@ export function formatModelRow(m: AiRouterModel): string {
 }
 
 export function formatQuote(q: AiRouterQuote): string {
-  const lines = [`${pc.white(safeTerm(q.model))}  ${pc.dim(`~${q.tokens.inputTokens} in / ${q.tokens.outputTokens} out tokens`)}`];
+  const lines = [`${pc.white(safeTerm(q.model))}  ${pc.dim(`~${safeTerm(String(q.tokens.inputTokens))} in / ${safeTerm(String(q.tokens.outputTokens))} out tokens`)}`];
   if (q.candidates.length === 0) lines.push(pc.yellow('  no connected gateway offers this model'));
   q.candidates.forEach((c, i) => {
     const price = c.free ? pc.green('free') : `${formatPerMTok(c.price.inputPerMTok)}/${formatPerMTok(c.price.outputPerMTok)} per 1M`;
-    lines.push(`  ${i + 1}. ${safeTerm(c.gateway)} ${pc.dim(`(${c.account})`)}  ${price}  est ${formatUsd(c.estimatedCostUsd)}`);
+    lines.push(`  ${i + 1}. ${safeTerm(c.gateway)} ${pc.dim(`(${safeTerm(c.account)})`)}  ${price}  est ${formatUsd(c.estimatedCostUsd)}`);
   });
   return lines.join('\n');
 }
 
 export function formatRequestRow(r: AiRouterRequest): string {
   const status = r.status === 'succeeded' ? pc.green('ok') : pc.red(safeTerm(r.errorKind ?? 'failed'));
-  const tokens = r.inputTokens === null && r.outputTokens === null ? '—' : `${r.inputTokens ?? 0}/${r.outputTokens ?? 0}`;
+  const tokens = r.inputTokens === null && r.outputTokens === null ? '—' : safeTerm(`${r.inputTokens ?? 0}/${r.outputTokens ?? 0}`);
   const tries = r.attempts.length > 1 ? pc.dim(` ${r.attempts.length} attempts`) : '';
   return `${pc.dim(safeTerm(r.createdAt))}  ${safeTerm(r.model)}  ${safeTerm(r.gateway ?? '—')}${tries}  ${status}  ${tokens}  ${formatUsd(r.costUsd ?? r.estimatedCostUsd)}`;
 }
