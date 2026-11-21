@@ -2812,8 +2812,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@superserve/sdk':
-        specifier: ^0.12.0
-        version: 0.12.0
+        specifier: ^0.13.0
+        version: 0.13.0
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -6003,8 +6003,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@superserve/sdk@0.12.0':
-    resolution: {integrity: sha512-9XkatOvRdWcZFJK+bYiRqVmJ8JoCLviuurd32tW0+j4enrNXGDNWiDI0UbQR8PgeX4U8plFuPXsAFkW2P/Ydkg==}
+  '@superserve/sdk@0.13.0':
+    resolution: {integrity: sha512-6yiLyK64py5hhLOscg5JPvnQDdpPTwqCQTGokqihBcKOyTaeZ/MP2G43GHhps2Bx1z4pY+epoaWuTQQf52QNYQ==}
 
   '@tangle-network/agent-core@1.0.4':
     resolution: {integrity: sha512-rdZFr2b19oc0FMqqqNPnU3AIT2d5g9qtN1rYmmg85WxzmjBrTRT4G9zursoijwwsoQ3UJXhAPa7JBuhQ/DFFrw==}
@@ -13819,7 +13819,7 @@ snapshots:
   '@superradcompany/microsandbox-win32-x64-msvc@0.7.13':
     optional: true
 
-  '@superserve/sdk@0.12.0': {}
+  '@superserve/sdk@0.13.0': {}
 
   '@tangle-network/agent-core@1.0.4':
     dependencies:
