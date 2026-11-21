@@ -48,7 +48,6 @@ installed or run on your computer, and no API key is stored in the plugin.
 - `actions` — CI runs, logs, dispatch, cancel and re-run.
 - `providers` — provider key status and rates.
 - `benchmarks` — read benchmark results and reliability.
-- `computesdk-sdk` — writing code that uses the ComputeSDK SDK.
 
 ## Links
 

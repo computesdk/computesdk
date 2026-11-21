@@ -31,7 +31,7 @@ client-side.
 - `skills/providers/` — BYOK provider keys, status and rates (no key values
   ever pass through chat).
 - `skills/benchmarks/` — read-only benchmark results and reliability.
-- `skills/computesdk-sdk/` — guidance for generating SDK code.
+- SDK code-generation guidance is not part of this plugin: it described reading an API key from the environment, which the Claude directory holds as a credential read (MCP_FORWARDS_CREDENTIAL_ENV). It lives in the sandbox-skills repo instead.
 - `assets/` — `icon.png` (64px composer icon), `logo.png` and `logo-dark.png`
   (320px). Final art; no screenshots (the plugin ships no UI).
 
@@ -95,7 +95,7 @@ for the server (`type: "http"`, Claude's name for streamable HTTP). The
 `skills/*/SKILL.md` files load unchanged as plugin skills, prefixed with
 the plugin name: `/computesdk-router:sandboxes`,
 `/computesdk-router:actions`, `/computesdk-router:providers`,
-`/computesdk-router:benchmarks`, `/computesdk-router:computesdk-sdk`.
+`/computesdk-router:benchmarks`.
 
 Auth is the same platform OAuth flow ChatGPT uses: on first MCP use
 Claude follows the RFC 9728 challenge, registers itself via DCR, and opens

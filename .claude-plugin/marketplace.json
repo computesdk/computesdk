@@ -9,7 +9,7 @@
       "name": "computesdk-router",
       "source": "./plugins/computesdk-router",
       "description": "Run code in cloud sandboxes across providers, drive your Actions CI, manage provider keys and read benchmark results.",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "category": "development"
     }
   ],
