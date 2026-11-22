@@ -63,10 +63,11 @@ Settings changes, provider keys and repo controls also need you to be an org own
 **Sandboxes**
 
 - See what you can run on and what each size costs (`sandboxes_get_options`), and price one create (`get_quote`).
-- Create a sandbox (`create_sandbox`), on the router's choice or a provider you name, on your own keys or ComputeSDK's managed accounts.
+- Create a sandbox (`create_sandbox`), on the router's choice or a provider you name, on your own keys or ComputeSDK's managed accounts. For one create or quote, `strategy` picks the router's order (`computesdk`, `cheapest` or your saved `custom` order), `only` limits it to some providers and `ignore` skips some.
 - Run commands (`run_command`), start long-running processes (`start_process`, `process_status`, `wait_process`, `kill_process`, `write_process_stdin`), and work with files (`write_file`, `read_file`, `make_directory`, `remove_path`).
 - Get a public preview URL for a port a server listens on (`sandbox_url`).
 - List, inspect and destroy sandboxes (`list_sandboxes`, `get_sandbox`, `destroy_sandbox`), and see spend (`sandboxes_get_costs`).
+- `list_sandboxes` shows the sandboxes you created through the assistant; owners and admins can pass `scope: "org"` for the whole org. A private AgentBox is visible only to the person who created it, even to owners and admins.
 
 **Actions (CI)**, for repos connected through the ComputeSDK GitHub App:
 
@@ -101,7 +102,7 @@ Assistants connected with OAuth see 75 tools. Each one is a **read** (looks thin
 | `write_file` | Sensitive write | `sandboxes:write` | Write a file at an absolute path. Overwrites files. |
 | `make_directory` | Write | `sandboxes:write` | Create a directory (parents included) at an absolute path. |
 | `remove_path` | Sensitive write | `sandboxes:write` | Remove a file or directory tree at an absolute path. Irreversible delete. |
-| `sandbox_url` | Sensitive write | `sandboxes:read` | Resolve the provider's public URL for a port on the sandbox. Makes a sandbox port reachable from the public internet. |
+| `sandbox_url` | Sensitive write | `sandboxes:read` + `sandboxes:write` | Resolve the provider's public URL for a port on the sandbox. Makes a sandbox port reachable from the public internet. |
 | `list_processes` | Read | `sandboxes:read` | List the sandbox's tracked processes. |
 | `process_status` | Read | `sandboxes:read` | Get a daemon process's current status by jobId. |
 | `start_process` | Sensitive write | `sandboxes:write` | Start a detached daemon process inside the sandbox. Starts arbitrary long-running code. |
