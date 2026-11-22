@@ -1,0 +1,16 @@
+{
+  "name": "computesdk",
+  "owner": {
+    "name": "ComputeSDK"
+  },
+  "metadata": {
+    "description": "ComputeSDK plugins for Cursor: cloud sandboxes, CI and benchmarks."
+  },
+  "plugins": [
+    {
+      "name": "computesdk-router",
+      "source": "plugins/computesdk-router",
+      "description": "Run code in cloud sandboxes across providers, drive your Actions CI, manage provider keys and read benchmark results."
+    }
+  ]
+}

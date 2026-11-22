@@ -1,0 +1,21 @@
+{
+  "name": "computesdk-router",
+  "displayName": "ComputeSDK Router",
+  "version": "0.2.3",
+  "description": "Run code in cloud sandboxes across providers, manage CI workflows, check provider key status, and read benchmark results.",
+  "author": {
+    "name": "ComputeSDK"
+  },
+  "homepage": "https://www.computesdk.com",
+  "repository": "https://github.com/computesdk/computesdk",
+  "license": "MIT",
+  "keywords": [
+    "sandbox",
+    "code-execution",
+    "compute",
+    "ci",
+    "benchmarks"
+  ],
+  "logo": "assets/logo.png",
+  "mcpServers": "./.mcp.json"
+}
