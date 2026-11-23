@@ -64,6 +64,8 @@ export interface RunCloudConfig {
   idlePauseSeconds?: number;
   /** Default sandbox lifetime in milliseconds. Set 0 to disable. */
   timeout?: number;
+  /** Destroy at the lifetime deadline instead of keeping a resumable sandbox. */
+  onTimeout?: 'destroy';
   /** Default region. */
   region?: string;
   /** Default organization ID. */
@@ -388,6 +390,7 @@ function createOptions(
       { allowZero: true },
     ),
     timeoutSeconds: resolveTimeoutSeconds(config, options),
+    onTimeout: resolveTimeoutPolicy(config, options),
     region: options?.region ?? config.region,
     name: options?.name,
     orgId: optionalString('orgId', providerOptions?.orgId ?? config.orgId),
@@ -396,6 +399,22 @@ function createOptions(
       providerOptions?.idempotencyKey,
     ) ?? generatedIdempotencyKey(),
   };
+}
+
+function resolveTimeoutPolicy(
+  config: RunCloudConfig,
+  options?: CreateInstanceOptions,
+): 'destroy' | undefined {
+  const policy =
+    (options as Record<string, unknown> | undefined)?.onTimeout ?? config.onTimeout;
+  if (policy === undefined) return undefined;
+  if (policy !== 'destroy') {
+    throw new Error('Run Cloud onTimeout must be "destroy" when provided.');
+  }
+  if (resolveTimeoutSeconds(config, options) === 0) {
+    throw new Error('Run Cloud onTimeout: "destroy" requires a positive timeout.');
+  }
+  return policy;
 }
 
 function snapshotRestoreOptions(
@@ -434,6 +453,8 @@ function snapshotRestoreOptions(
     );
   }
 
+  const onTimeout = resolveTimeoutPolicy(config, options);
+  const timeoutSeconds = resolveTimeoutSeconds(config, options);
   return {
     restore: {
       name: options.name,
@@ -441,8 +462,9 @@ function snapshotRestoreOptions(
       cpu: optionalNumber('cpu', options.cpu ?? config.cpu),
       memory: optionalNumber('memory', options.memory ?? config.memory),
       disk: optionalNumber('disk', providerOptions.disk ?? config.disk),
+      ...(onTimeout === undefined ? {} : { onTimeout, timeoutSeconds }),
     },
-    timeoutSeconds: resolveTimeoutSeconds(config, options),
+    timeoutSeconds,
   };
 }
 

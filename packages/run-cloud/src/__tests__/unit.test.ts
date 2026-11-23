@@ -202,6 +202,7 @@ describe('run-cloud provider', () => {
       disk: 40,
       idlePauseSeconds: 0,
       timeoutSeconds: 600,
+      onTimeout: undefined,
       region: 'fsn1',
       name: 'compute-test',
       orgId: 'org_call',
@@ -263,6 +264,7 @@ describe('run-cloud provider', () => {
       disk: undefined,
       idlePauseSeconds: undefined,
       timeoutSeconds: undefined,
+      onTimeout: undefined,
       region: undefined,
       name: undefined,
       orgId: undefined,
@@ -297,6 +299,57 @@ describe('run-cloud provider', () => {
     expect(setTimeoutMock).toHaveBeenCalledWith('sbx_restored', 300);
     expect(createMock).not.toHaveBeenCalled();
     expect(sandbox.sandboxId).toBe('sbx_restored');
+  });
+
+  it('keeps resumable expiry as the default when a timeout is requested', async () => {
+    await runCloud({ apiKey: 'rc_test' }).sandbox.create({ timeout: 20_000 });
+
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutSeconds: 20, onTimeout: undefined }),
+    );
+  });
+
+  it('allows hard expiry per sandbox without changing other creates', async () => {
+    const provider = runCloud({ apiKey: 'rc_test' });
+    await provider.sandbox.create({ timeout: 20_000, onTimeout: 'destroy' });
+    await provider.sandbox.create({ timeout: 20_000 });
+
+    expect(createMock.mock.calls.map(([options]) => options.onTimeout)).toEqual([
+      'destroy',
+      undefined,
+    ]);
+  });
+
+  it('forwards a factory hard-expiry policy for creates and restores', async () => {
+    const provider = runCloud({
+      apiKey: 'rc_test',
+      timeout: 20_000,
+      onTimeout: 'destroy',
+    });
+    await provider.sandbox.create();
+    await provider.sandbox.create({ snapshotId: 'snap_123' });
+
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutSeconds: 20, onTimeout: 'destroy' }),
+    );
+    expect(restoreSnapshotMock).toHaveBeenCalledWith(
+      'snap_123',
+      expect.objectContaining({ timeoutSeconds: 20, onTimeout: 'destroy' }),
+    );
+  });
+
+  it('rejects invalid hard-expiry policies and disabled deadlines before provisioning', async () => {
+    const provider = runCloud({ apiKey: 'rc_test' });
+    for (const snapshotId of [undefined, 'snap_123']) {
+      await expect(
+        provider.sandbox.create({ snapshotId, timeout: 0, onTimeout: 'destroy' }),
+      ).rejects.toThrow('requires a positive timeout');
+      await expect(
+        provider.sandbox.create({ snapshotId, timeout: 20_000, onTimeout: 'pause' }),
+      ).rejects.toThrow('onTimeout must be "destroy"');
+    }
+    expect(createMock).not.toHaveBeenCalled();
+    expect(restoreSnapshotMock).not.toHaveBeenCalled();
   });
 
   it('rejects options that Run Cloud cannot apply to snapshot restores', async () => {

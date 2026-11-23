@@ -74,6 +74,7 @@ interface RunCloudConfig {
   disk?: number;
   idlePauseSeconds?: number;
   timeout?: number;
+  onTimeout?: 'destroy';
   region?: string;
   orgId?: string;
   commandTimeout?: number;
@@ -85,15 +86,20 @@ interface RunCloudConfig {
 - `memory` is measured in MiB.
 - `disk` is the writable disk quota in GiB.
 - `timeout` and `commandTimeout` are milliseconds.
+- Expiry keeps a sandbox resumable by default. Set `onTimeout: 'destroy'`
+  on the factory or on a create/restore call for a hard lifetime limit, such
+  as a CI job. It requires a positive timeout; `timeout: 0` disables expiry.
+  Idle-paused sandboxes continue to resume normally before the deadline.
 - `tunnelTtlSeconds` controls public port URL lifetime and defaults to one hour.
 - `idlePauseSeconds` is seconds; set it to `0` to disable automatic pause.
 - `templateId` and `image` both select a registered Run Cloud OCI image.
 - `snapshotId` restores a previously created Run Cloud snapshot.
 - Fresh creates accept per-create `cpu`, `memory`, `disk`, `idlePauseSeconds`,
-  `timeoutSeconds`, `region`, `name`, `orgId`, and `idempotencyKey` overrides.
+  `timeoutSeconds`, `onTimeout`, `region`, `name`, `orgId`, and `idempotencyKey`
+  overrides.
 - Snapshot restores accept `cpu`, `memory`, `disk`, `timeoutSeconds`, `region`,
-  and `name` overrides. Options the restore API cannot apply are rejected
-  instead of being silently ignored.
+  `onTimeout`, and `name` overrides. Options the restore API cannot apply are
+  rejected instead of being silently ignored.
 
 Run Cloud does not currently support persistent sandbox-level `envs`. Pass command-scoped variables with:
 
