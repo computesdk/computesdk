@@ -22,6 +22,7 @@ import {
   Image,
   NotFoundError,
   Sailbox,
+  SailboxCheckpoint,
   resolveConfig,
   type ExecOptions,
   type ImageSpec,
@@ -35,8 +36,19 @@ export interface SailConfig {
   apiKey?: string;
   /** App that owns created Sailboxes. Falls back to `SAIL_APP`, then `computesdk`. */
   app?: string;
-  /** Image used by created Sailboxes. Defaults to Sail's ARM64 Devbox builtin. */
+  /** Image used by created Sailboxes. Defaults to Sail's AMD64 Devbox builtin. Only AMD64 images are supported. */
   image?: ImageSpec | Image;
+}
+
+/** Validate without copying the image: Sail associates registry credentials with it. */
+async function requireAMD64Image(image: ImageSpec | Image, client: Client): Promise<void> {
+  const spec = image instanceof Image ? await image.toSpec(client) : image;
+  // Builtin and Dockerfile images default to AMD64. Registry images without an
+  // architecture can resolve to ARM, so require an explicit constraint there.
+  const architecture = spec.architecture ?? (spec.ociRef ? undefined : 'amd64');
+  if (architecture !== 'amd64') {
+    throw new Error('The Sail provider only creates AMD64 sandboxes. Set the image architecture to amd64; ARM64 images are not supported.');
+  }
 }
 
 const PROVIDER = 'sail';
@@ -461,6 +473,12 @@ export const sail = defineProvider<Sailbox, SailConfig>({
         const { client } = resolve(config);
         const name = options?.name ?? `csdk-${crypto.randomUUID().slice(0, 8)}`;
         if (options?.snapshotId) {
+          const checkpoint = await SailboxCheckpoint.get(options.snapshotId, { client });
+          const source = await Sailbox.get(checkpoint.sailboxId, { client });
+          if (source.architecture !== 'amd64') {
+            throw new Error('The Sail provider only restores AMD64 snapshots; the source architecture must be amd64.');
+          }
+          if (options.signal?.aborted) throw abortError(options.signal);
           const restore = Sailbox.fromCheckpoint({
             checkpointId: options.snapshotId,
             maxLifetimeSeconds: lifetimeSeconds(options.timeout),
@@ -470,6 +488,13 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           const sandbox = await createWithAbortCleanup(restore, options.signal, client);
           return { instance: sandbox, instanceId: sandbox.sailboxId };
         }
+        const image = options?.image !== undefined
+          ? Image.fromRegistry(options.image, { architecture: 'amd64' })
+          : config.image ?? Image.devbox('amd64');
+        if (options?.image === undefined && config.image !== undefined) {
+          await requireAMD64Image(image, client);
+        }
+        if (options?.signal?.aborted) throw abortError(options.signal);
         const app = await resolveApp(config);
         if (options?.signal?.aborted) throw abortError(options.signal);
 
@@ -481,9 +506,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           app,
           name,
           client,
-          image: options?.image !== undefined
-            ? Image.fromRegistry(options.image)
-            : config.image ?? Image.devbox('arm64'),
+          image,
           ...(options?.size === undefined ? {} : { size: options.size as SailboxSize }),
           ...(options?.vcpuCount === undefined ? {} : { vcpuCount: options.vcpuCount }),
           ...(options?.memoryGib === undefined ? {} : { memoryLimitGib: options.memoryGib }),
