@@ -119,9 +119,13 @@ installs apps from the Cursor Marketplace, so one Cursor listing covers both.
 - The root `plugin.json` follows the Agent Plugins schema, which allows no
   `logo` field; the logo lives only in the Cursor manifest.
 
-Local test: symlink the folder into `~/.cursor/plugins/local/`, or run
-`agent --plugin-dir ./plugins/computesdk-router` (Cursor CLI), and sign in
-to Cursor. The server shows as `plugin-computesdk-router-computesdk`.
+Local test: symlink the folder into `~/.cursor/plugins/local/` and sign in
+to Cursor, or add this repo as a marketplace with the Cursor CLI
+(`agent plugin marketplace add computesdk/computesdk`) and install the
+plugin. `agent --plugin-dir ./plugins/computesdk-router` loads the skills
+but not the MCP server: the CLI reads MCP servers only from `mcp.json`
+files, so for a CLI test add the server to `.cursor/mcp.json` and run
+`agent mcp enable computesdk`.
 
 Auth is the same platform OAuth flow. Cursor registers by DCR as a public
 client with two redirect URIs: `https://www.cursor.com/agents/mcp/oauth/callback`
