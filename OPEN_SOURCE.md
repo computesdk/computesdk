@@ -61,6 +61,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Sail** | `SAIL_API_KEY` | Cost-effective Firecracker microVM sandboxes for long-horizon agents. |
 | **sandbox-cli** | `SANDBOX_ENDPOINT`, `SANDBOX_TOKEN` | MicroVM sandboxes with their own kernel, one API on a Mac, a self-hosted Linux machine or the cloud |
 | **Sandbox0** | `SANDBOX0_TOKEN` | Fast persistent sandboxes with native filesystem access |
+| **Styne** | `STYNE_API_KEY` | MicroVM sandboxes with streaming commands, memory snapshots, templates and volumes |
 | **Superserve** | `SUPERSERVE_API_KEY` | Firecracker microVM sandboxes |
 | **Tangle Sandbox** | `TANGLE_API_KEY`, `TANGLE_SANDBOX_BASE_URL` (optional) | Isolated Linux sandboxes with command execution and filesystem access |
 | **Tensorlake** | `TENSORLAKE_API_KEY` | Stateful MicroVM sandboxes |
@@ -289,6 +290,7 @@ npm install @computesdk/runtime          # Runtime provider
 npm install @computesdk/sail             # Sail provider
 npm install @computesdk/sandbox-cli      # sandbox-cli provider
 npm install @computesdk/sandbox0         # Sandbox0 provider
+npm install @computesdk/styne            # Styne provider
 npm install @computesdk/superserve       # Superserve provider
 npm install @computesdk/tangle           # Tangle Sandbox provider
 npm install @computesdk/tensorlake       # Tensorlake provider
@@ -342,6 +344,7 @@ See individual provider READMEs for details:
 - **[@computesdk/runloop](./packages/runloop)** - Code execution, automation
 - **[@computesdk/runtime](./packages/runtime)** - Firecracker microVM sandboxes for AI agents, with native command streaming, private preview URLs and snapshots
 - **[@computesdk/sandbox0](./packages/sandbox0)** - Fast persistent sandboxes with native filesystem access
+- **[@computesdk/styne](./packages/styne)** - MicroVM sandboxes with streaming commands, memory snapshots, templates and volumes
 - **[@computesdk/superserve](./packages/superserve)** - Firecracker microVM sandboxes
 - **[@computesdk/tangle](./packages/tangle)** - Isolated Linux sandboxes with command execution and filesystem access
 - **[@computesdk/tensorlake](./packages/tensorlake)** - Stateful MicroVM sandboxes for agentic applications, with snapshot support
