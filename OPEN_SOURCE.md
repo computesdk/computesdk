@@ -41,6 +41,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **EC2 Firecrab** | `EC2_FIRECRAB_MICRO_NETWORK_ID` (+ `EC2_FIRECRAB_API_URL`, `EC2_FIRECRAB_TEMPLATE`, `EC2_FIRECRAB_SSH_PROXY_COMMAND`) | Self-hosted Firecracker microVMs on EC2 |
 | **Freestyle** | `FREESTYLE_API_KEY` | Full Linux VMs for long-running agent tasks, with snapshots and persistence |
 | **GravixLayer** | `GRAVIXLAYER_API_KEY` | Cloud runtimes with filesystem, port publishing, and snapshots |
+| **Groundbox** | `GROUNDBOX_API_KEY` | Firecracker VM sandboxes with command streaming, files, preview URLs, pause and resume, snapshots, templates and volumes |
 | **HopX** | `HOPX_API_KEY` | Fast ephemeral sandboxes |
 | **Isorun** | `ISORUN_API_KEY` | Code execution with snapshot support |
 | **kosa8** | `KOSA8_API_KEY` | Sandboxes that each run in their own microVM with its own kernel, per-second billing, sleep and wake |
@@ -271,6 +272,7 @@ npm install @computesdk/ec2-firecrab     # Firecracker microVMs on self-hosted E
 npm install @computesdk/freestyle        # Freestyle provider
 npm install @computesdk/givemeanode      # givemeanode provider
 npm install @computesdk/gravixlayer      # GravixLayer provider
+npm install @computesdk/groundbox        # Groundbox provider
 npm install @computesdk/hopx             # HopX provider
 npm install @computesdk/isorun           # Isorun provider
 npm install @computesdk/kosa8            # kosa8 microVM sandboxes
@@ -327,6 +329,7 @@ See individual provider READMEs for details:
 - **[@computesdk/e2b](./packages/e2b)** - Data science, Python/Node.js, terminals
 - **[@computesdk/freestyle](./packages/freestyle)** - Full Linux VMs for long-running agent tasks, with snapshots and persistence
 - **[@computesdk/givemeanode](./packages/givemeanode)** - Very fast microVM sandboxes, from any container image
+- **[@computesdk/groundbox](./packages/groundbox)** - Firecracker VM sandboxes with command streaming, files, preview URLs, pause and resume, snapshots, templates and volumes
 - **[@computesdk/hopx](./packages/hopx)** - Fast ephemeral sandboxes
 - **[@computesdk/isorun](./packages/isorun)** - Code execution with snapshot support
 - **[@computesdk/kosa8](./packages/kosa8)** - Sandboxes that each run in their own microVM with its own kernel, with sleep and wake
