@@ -49,21 +49,35 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      # Version Packages auto-merges only when every pending changeset came from
-      # the compatible provider SDK bump; any human-written changeset keeps
-      # the release manual.
+      # Version Packages auto-merges only when every pending changeset is a
+      # patch-only changeset that came, in every commit touching it, from a
+      # merged same-repo PR on the compatible bump branch. Filenames alone are
+      # not trusted; anything else keeps the release manual.
       - name: Check for bump-only changesets
         id: pending
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -eu
           shopt -s nullglob
-          files=(.changeset/*.md)
           bump_only=false
-          for f in "${files[@]}"; do
+          for f in .changeset/*.md; do
             [ "$(basename "$f")" = README.md ] && continue
+            bump_only=true
             case "$(basename "$f")" in
-              provider-sdk-compatible-bump-*) bump_only=true ;;
-              *) bump_only=false; break ;;
+              provider-sdk-compatible-bump-*) ;;
+              *) echo "$f: not a bump changeset"; bump_only=false; break ;;
             esac
+            if awk '/^---$/{n++; next} n==1' "$f" | grep -qvE ":[[:space:]]*patch[[:space:]]*$"; then
+              echo "$f: non-patch bump"; bump_only=false; break
+            fi
+            for sha in $(git log --format=%H -- "$f"); do
+              head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" \
+                --jq 'map(select(.merged_at != null and .head.repo.full_name == env.GITHUB_REPOSITORY)) | .[0].head.ref // ""') || head=""
+              if [ "$head" != chore/provider-sdk-bump ]; then
+                echo "$f: commit $sha not from chore/provider-sdk-bump"; bump_only=false; break 2
+              fi
+            done
           done
           echo "bump_only=$bump_only" >> "$GITHUB_OUTPUT"
 
