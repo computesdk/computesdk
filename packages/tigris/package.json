@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/tigris",
   "version": "1.1.35",
-  "description": "Tigris storage provider for ComputeSDK - S3-compatible object storage",
+  "description": "Tigris adapter for ComputeSDK. Work with S3-compatible object storage.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -45,7 +45,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/tigris-storage"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/tigris#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

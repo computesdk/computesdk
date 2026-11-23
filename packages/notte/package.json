@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/notte",
   "version": "0.3.30",
-  "description": "Notte browser provider for ComputeSDK - cloud browser sessions powered by Notte",
+  "description": "Notte browser adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Notte Labs",
   "license": "MIT",
   "type": "module",
@@ -48,7 +48,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/notte"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/notte#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

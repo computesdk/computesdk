@@ -96,3 +96,7 @@ await sandbox.destroy();
 You can also pass a raw OpenComputer checkpoint ID to `compute.instances.create({ snapshotId })` when you only need to fork from it.
 
 Snapshots default to OpenComputer `disk_only` checkpoints with `promoteToFull: true`. Override with `metadata: { kind: 'full' }` or `metadata: { promoteToFull: false }` when needed.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

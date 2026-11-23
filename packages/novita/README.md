@@ -243,3 +243,7 @@ NOVITA_RUN_INTEGRATION=1 pnpm --filter @computesdk/novita test:integration
 Rebuild `@computesdk/test-utils` after updating this checkout so the Novita CRUD
 registration is available. Without the key or the opt-in flag, the integration
 suite runs the shared contract in mock mode and skips live CRUD.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

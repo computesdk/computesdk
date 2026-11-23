@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/northflank",
   "version": "1.1.28",
-  "description": "Northflank provider for ComputeSDK - Deploy and manage compute workloads on Northflank's container platform",
+  "description": "Northflank sandbox adapter for ComputeSDK. Run sandbox workloads on Northflank's container platform.",
   "author": "Simo Aleksandrov <simo@northflank.com>",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -50,7 +50,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/northflank"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/northflank#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

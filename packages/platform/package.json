@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/platform",
   "version": "0.2.10",
-  "description": "Hosted ComputeSDK platform provider - sandboxes on your org's providers or the compute market, with market placement, credits, quotes and one bill",
+  "description": "Compatibility exports for ComputeSDK Sandbox Router, including sandbox placement, quotes, and credits.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -45,7 +45,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/platform"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://www.computesdk.com/sandbox-router",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/upstash",
   "version": "0.3.36",
-  "description": "Upstash Box provider for ComputeSDK - cloud sandboxes with code execution, filesystem access, and AI agent support",
+  "description": "Upstash Box adapter for ComputeSDK. Run commands and work with files in cloud sandboxes.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -49,7 +49,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/upstash"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/upstash#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

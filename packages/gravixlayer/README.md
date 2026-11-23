@@ -54,3 +54,7 @@ Snapshots require a `name` on `snapshot.create` and default to `hot`
 `metadata: { kind: 'cold' }` for a filesystem-only snapshot. Template builds need
 `fromImage` or `dockerfile` on `template.create`; select an existing template
 with `templateId` when creating a sandbox.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

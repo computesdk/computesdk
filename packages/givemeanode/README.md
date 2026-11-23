@@ -321,3 +321,7 @@ a refreshed expiry - so there is no reason to cache one.
   the first sandbox from a new one is slow. See "Container images".
 - **Regional endpoints are not interchangeable.** Set `baseUrl` to the one
   nearest your workload.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/tenki",
   "version": "0.1.28",
-  "description": "Luxor provider for ComputeSDK - microVM sandboxes with native filesystem, preview URLs, snapshots, and SSH",
+  "description": "Luxor sandbox adapter for ComputeSDK. Run code in microVMs with snapshots, preview URLs, and SSH.",
   "author": "Luxor <support@luxor.ai>",
   "license": "MIT",
   "main": "./dist/index.js",

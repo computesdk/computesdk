@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/sandbox-cli",
   "version": "0.1.6",
-  "description": "sandbox-cli provider for ComputeSDK - microVM sandboxes with their own kernel, behind one API on a Mac, a self-hosted Linux machine or the cloud",
+  "description": "sandbox-cli adapter for ComputeSDK. Run microVM sandboxes on a Mac, self-hosted Linux, or in the cloud.",
   "author": "",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -56,7 +56,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/sandbox-cli"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/sandbox-cli#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

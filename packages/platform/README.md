@@ -28,3 +28,7 @@ Explicit provider configuration, custom endpoints and defaults remain available.
 For `computesdk@4.1.18` and earlier, continue using the separate adapter package until you upgrade to a release containing the built-in router.
 
 [SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start) · [Authentication](https://docs.computesdk.com/start-here/authentication) · [SDK reference and compatibility](https://docs.computesdk.com/typescript-sdk/reference) · [Routing](https://docs.computesdk.com/guides/routing)
+
+---
+
+[Sandbox Router](https://www.computesdk.com/sandbox-router) · [SDK quickstart](https://docs.computesdk.com/interfaces/sdk/sdk-quick-start)

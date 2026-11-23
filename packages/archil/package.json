@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/archil",
   "version": "0.4.37",
-  "description": "Archil provider for ComputeSDK - exec commands against an Archil disk",
+  "description": "Archil sandbox adapter for ComputeSDK. Run commands in persistent Linux VMs or use disk-backed exec mode.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -55,7 +55,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/archil"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/archil#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

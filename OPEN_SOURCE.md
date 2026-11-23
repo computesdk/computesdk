@@ -6,7 +6,7 @@ Direct adapter availability does not imply hosted platform availability.
 
 ## Features
 
-- 🧪 **Open benchmark harness** - Run reproducible workloads across providers and publish independent benchmarks ([ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks))
+- 🧪 **Public benchmarks** - Compare sandbox providers and explore the workloads, results, and methodology ([ComputeSDK Benchmarks](https://www.computesdk.com/benchmarks))
 - 🔄 **Multi-provider support** - E2B, Modal, Daytona, Vercel, and more
 - 📁 **Filesystem operations** - Read, write, create directories across providers
 - 🖥️ **Command execution** - Run shell commands in sandboxes
@@ -423,4 +423,3 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 [computesdk.com](https://computesdk.com)
 
 </div>
-

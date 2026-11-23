@@ -152,3 +152,7 @@ pnpm run test:integration:docker
 - Linux and macOS only (Unix socket)
 - Local process model
 - Runtime state under `/tmp/.computesdk`
+
+---
+
+[ComputeSDK documentation](https://docs.computesdk.com) · [Source and contributing](https://github.com/computesdk/computesdk/blob/main/OPEN_SOURCE.md)

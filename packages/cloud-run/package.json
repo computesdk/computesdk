@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/cloud-run",
   "version": "0.1.34",
-  "description": "Deprecated: use @computesdk/gcp/cloud-run. Thin re-export of the Google Cloud Run Sandboxes provider for ComputeSDK.",
+  "description": "Deprecated Google Cloud Run Sandboxes adapter for ComputeSDK. Use @computesdk/gcp/cloud-run.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -58,7 +58,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/cloud-run"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/cloud-run#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

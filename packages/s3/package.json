@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/s3",
   "version": "1.2.29",
-  "description": "AWS S3 storage provider for ComputeSDK - object storage with S3-compatible API",
+  "description": "Amazon S3 adapter for ComputeSDK. Work with object storage through an S3-compatible API.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -45,7 +45,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/aws-storage"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/s3#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

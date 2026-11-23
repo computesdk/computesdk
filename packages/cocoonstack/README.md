@@ -102,3 +102,7 @@ A claim is served from the node's warm pool for `(template, net, size)`; a reque
 - Tokens travel as bearer headers: use an `https://` endpoint outside a private network. Nothing connects until the first call; `preconnect: true` opens the HTTP/2 session when the factory runs instead, so the first sandbox call skips DNS and the TLS handshake.
 - A node in a cluster may answer a claim with a redirect to a peer; this provider refuses it. Point `baseUrl` at a node that serves the pool.
 - Snapshots and templates are managed through sandboxd's own API (checkpoints, promote) and are not exposed here.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

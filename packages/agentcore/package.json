@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/agentcore",
   "version": "0.1.28",
-  "description": "Deprecated: use @computesdk/aws/agentcore. Thin re-export of the AWS Bedrock AgentCore Code Interpreter provider for ComputeSDK.",
+  "description": "Deprecated AWS Bedrock AgentCore adapter for ComputeSDK. Use @computesdk/aws/agentcore.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -58,7 +58,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/agentcore"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/agentcore#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

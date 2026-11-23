@@ -45,3 +45,7 @@ saves.
 `envs`. `sandbox.getInstance()` returns the `withruntime` sandbox for anything
 else Runtime offers: processes, terminals, previews, network rules, desktop
 and more.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

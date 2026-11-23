@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/browserless",
   "version": "0.1.10",
-  "description": "Browserless browser provider for ComputeSDK - cloud browser sessions via Browserless",
+  "description": "Browserless adapter for ComputeSDK. Connect to managed Chromium sessions over CDP.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",

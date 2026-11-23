@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/miosa",
   "version": "1.2.13",
-  "description": "MIOSA provider for ComputeSDK - hardware-isolated Firecracker microVM sandboxes with snapshots, persistent graduation, and white-label infrastructure",
+  "description": "MIOSA sandbox adapter for ComputeSDK. Run code in Firecracker microVMs with snapshots.",
   "author": "MIOSA",
   "license": "MIT",
   "main": "./dist/index.js",

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/codesandbox",
   "version": "1.5.76",
-  "description": "CodeSandbox provider for ComputeSDK - fast browser-compatible sandboxes with npm and Python support",
+  "description": "CodeSandbox adapter for ComputeSDK. Run code and work with files in cloud development sandboxes.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -49,7 +49,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/codesandbox"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/codesandbox#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

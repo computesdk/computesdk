@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/sprites",
   "version": "0.1.40",
-  "description": "Sprites provider for ComputeSDK - cloud sandboxes powered by Sprites",
+  "description": "Sprites sandbox adapter for ComputeSDK. Run commands and work with files in Sprites cloud sandboxes.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -45,7 +45,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/sprites"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/sprites#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

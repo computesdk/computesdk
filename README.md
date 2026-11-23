@@ -1,33 +1,39 @@
-[![rgstr](https://rgstr.org/registry/computesdk/badge.svg?proof=rgstr_nm3kilaba5cfkkxo2lkh)](https://rgstr.org/registry/computesdk)
-[![rgstr](https://rgstr.org/registry/@computesdk/cli/badge.svg?proof=rgstr_un7pznm3kwv3xsaokzu4)](https://rgstr.org/registry/@computesdk/cli)
-
 <div align="center">
-  <img src="https://logos.computesdk.com/api/svg/computesdk/bounded/logo-light?v=ff5c23fc46" alt="ComputeSDK" width="300" />
+  <a href="https://www.computesdk.com/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.computesdk.com/share/computesdk-logo-dark.svg">
+      <img src="https://www.computesdk.com/share/computesdk-logo-light.svg" alt="ComputeSDK" width="300">
+    </picture>
+  </a>
 </div>
 
-<div align="center">
-  <strong>One router for sandboxes and Actions.</strong>
-</div>
+<h1 align="center">One router for sandboxes and actions.</h1>
+
+<p align="center">Run agent code and GitHub workflows across sandbox providers. We handle the compute.</p>
+
+<p align="center">
+  <a href="https://www.computesdk.com/sandbox-router">Sandbox Router</a> ·
+  <a href="https://www.computesdk.com/actions">Actions</a> ·
+  <a href="https://www.computesdk.com/benchmarks">Public benchmarks</a> ·
+  <a href="https://docs.computesdk.com">Docs</a>
+</p>
 
 <div align="center">
 
 [![npm version](https://badge.fury.io/js/computesdk.svg)](https://badge.fury.io/js/computesdk)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Documentation](https://img.shields.io/badge/docs-computesdk.com-blue)](https://docs.computesdk.com)
+[![rgstr](https://rgstr.org/registry/computesdk/badge.svg?proof=rgstr_nm3kilaba5cfkkxo2lkh)](https://rgstr.org/registry/computesdk)
+[![rgstr](https://rgstr.org/registry/@computesdk/cli/badge.svg?proof=rgstr_un7pznm3kwv3xsaokzu4)](https://rgstr.org/registry/@computesdk/cli)
 
 </div>
 
 ---
 
-## ComputeSDK
+## One router. Two ways to run.
 
-ComputeSDK is one router for sandboxes and Actions. Run agent code and GitHub workflows across compute providers through one integration. Let ComputeSDK route, choose a provider, or set a fallback order. Use the **CLI** from your terminal and the **TypeScript SDK** from your application or agent.
-
-- **Run commands and work with files** in cloud sandboxes from your terminal or TypeScript application.
-- **Sync local projects** to a sandbox for remote development and execution.
-- **Route compute centrally** using managed compute, your organization's provider keys, or both.
-- **Manage your organization** through one dashboard for credentials, credits and sandbox activity.
+- **Sandbox Router** runs generated code, tests, and scripts in isolated sandboxes. Use the `compute` CLI, TypeScript SDK, or API. Let ComputeSDK choose a provider, select one yourself, or set a fallback order. Use managed compute or bring your own provider keys.
+- **ComputeSDK Actions** runs supported GitHub workflows on the same router. Follow logs, download artifacts, and rerun failed jobs.
 
 [Open the dashboard](https://platform.computesdk.com) · [Read the docs](https://docs.computesdk.com)
 

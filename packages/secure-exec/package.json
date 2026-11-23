@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/secure-exec",
   "version": "0.1.35",
-  "description": "Secure execution provider for ComputeSDK - isolated sandbox environments using secure-exec",
+  "description": "Local secure-exec adapter for ComputeSDK. Run JavaScript with a V8 runtime and an in-memory filesystem.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -50,7 +50,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/secure-exec"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/secure-exec#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/workbench",
   "version": "33.0.43",
-  "description": "Interactive REPL for testing ComputeSDK sandbox operations",
+  "description": "Interactive REPL for trying ComputeSDK sandbox commands and filesystem operations.",
   "author": "Garrison",
   "license": "MIT",
   "type": "module",
@@ -47,7 +47,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/workbench"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/workbench#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

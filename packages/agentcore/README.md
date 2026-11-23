@@ -17,3 +17,7 @@ import { agentcore } from '@computesdk/agentcore' // still works, but deprecated
 ```
 
 See the [`@computesdk/aws` README](../aws/README.md#agentcore) for authentication, configuration, and usage.
+
+---
+
+[ComputeSDK Sandbox Router](https://www.computesdk.com/sandbox-router)

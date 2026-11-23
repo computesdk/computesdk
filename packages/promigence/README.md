@@ -160,3 +160,7 @@ Read the [Promigence documentation](https://www.promigence.ai/docs) and the [err
 ## License
 
 MIT
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

@@ -162,3 +162,7 @@ needs no credentials. Successful standardized creates expose frozen
 `instance.sizing` request metadata, not observed CPU/RAM. Local mock coverage uses
 the installed `disk` SDK; it does not certify separately locked consumer versions
 or published artifacts. Legacy creates without `sizeClass` remain unchanged.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

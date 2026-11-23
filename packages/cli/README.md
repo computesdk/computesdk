@@ -1,8 +1,15 @@
-# @computesdk/cli
+<a href="https://www.computesdk.com/">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.computesdk.com/share/computesdk-logo-dark.svg">
+    <img src="https://www.computesdk.com/share/computesdk-logo-light.svg" alt="ComputeSDK" width="240">
+  </picture>
+</a>
 
-The `compute` CLI for ComputeSDK — sandboxes, Actions and automation.
+# ComputeSDK CLI
 
-Start with the [CLI quickstart](https://docs.computesdk.com/start-here/quick-start), [project sync](https://docs.computesdk.com/cli/project-sync), or [Platform SDK quickstart](https://docs.computesdk.com/start-here/sdk-quick-start).
+Run agent code and GitHub workflows from your terminal. With [Sandbox Router](https://www.computesdk.com/sandbox-router), create sandboxes, sync projects, and run commands across providers. With [ComputeSDK Actions](https://www.computesdk.com/actions), dispatch supported GitHub workflows, follow logs, and rerun jobs.
+
+[CLI quickstart](https://docs.computesdk.com/interfaces/quick-start) · [Project sync](https://docs.computesdk.com/cli/project-sync) · [Actions docs](https://docs.computesdk.com/platform/actions)
 
 ## Install
 

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/collimate",
   "version": "0.1.25",
-  "description": "Collimate provider for ComputeSDK",
+  "description": "Collimate sandbox adapter for ComputeSDK. Run code in Collimate sandboxes.",
   "author": "Collimate <hello@collimate.ai>",
   "license": "MIT",
   "main": "./dist/index.js",

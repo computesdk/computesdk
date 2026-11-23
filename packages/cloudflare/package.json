@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/cloudflare",
   "version": "2.1.19",
-  "description": "Cloudflare provider for ComputeSDK - edge code execution using Cloudflare Workers and Durable Objects",
+  "description": "Cloudflare sandbox adapter for ComputeSDK. Run code in Cloudflare Containers through Workers and Durable Objects.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -53,7 +53,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/cloudflare"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/cloudflare#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

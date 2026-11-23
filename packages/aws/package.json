@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/aws",
   "version": "1.0.17",
-  "description": "AWS providers for ComputeSDK. @computesdk/aws/ec2: on-demand or Spot EC2 instances, commands over SSM Run Command. @computesdk/aws/agentcore: Bedrock AgentCore Code Interpreter sessions",
+  "description": "AWS sandbox adapters for ComputeSDK. Run code on Amazon EC2 or in Bedrock AgentCore Code Interpreter.",
   "author": "Garrison",
   "license": "MIT",
   "exports": {
@@ -79,7 +79,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/aws"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/aws#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

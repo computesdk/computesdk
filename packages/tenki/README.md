@@ -105,3 +105,7 @@ await compute.instances.create({ cpuCores: 4, memoryMb: 8192 });
 ## License
 
 MIT
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

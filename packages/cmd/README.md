@@ -210,3 +210,7 @@ esc('path with "quotes"')  // 'path with \\"quotes\\"'
 ## License
 
 MIT
+
+---
+
+[ComputeSDK documentation](https://docs.computesdk.com) · [Source and contributing](https://github.com/computesdk/computesdk/blob/main/OPEN_SOURCE.md)

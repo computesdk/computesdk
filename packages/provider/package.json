@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/provider",
   "version": "2.1.28",
-  "description": "Provider framework for ComputeSDK - define custom sandbox providers",
+  "description": "Build custom sandbox, browser, and storage adapters with the ComputeSDK provider framework.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -39,9 +39,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/computesdk/computesdk.git"
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/provider"
   },
-  "homepage": "https://www.computesdk.com/",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/provider#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

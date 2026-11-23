@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/anchorbrowser",
   "version": "0.2.30",
-  "description": "Anchor Browser provider for ComputeSDK - cloud browser sessions with stealth mode, proxies, profiles, and session recording",
+  "description": "Anchor Browser adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Garrison",
   "license": "MIT",
   "type": "module",
@@ -51,7 +51,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/anchorbrowser"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/anchorbrowser#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

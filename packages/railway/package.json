@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/railway",
   "version": "2.0.26",
-  "description": "Railway Sandboxes provider for ComputeSDK - run commands in Railway-hosted sandboxes",
+  "description": "Railway sandbox adapter for ComputeSDK. Run commands in ephemeral Railway Sandboxes.",
   "author": "ComputeSDK",
   "license": "MIT",
   "engines": {
@@ -49,7 +49,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/railway"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/railway#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

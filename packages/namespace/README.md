@@ -95,3 +95,7 @@ Standard platform context must use enumerable own data properties; present
 patch explicitly carries the verified Linux/amd64 platform into the native
 request, so a factory default cannot diverge from the declared mapping. Legacy
 creates without `sizeClass` retain their original descriptor behavior.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

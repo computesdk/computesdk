@@ -636,3 +636,7 @@ The normal mock suite also runs `legacy-size-types.test.ts`, which invokes the
 already installed TypeScript compiler on this fixture offline (`--noEmit`); the
 fixture's type-only example calls are never executed. No install/network step is
 needed, so a structural legacy regression fails ordinary `pnpm test` too.
+
+---
+
+[ComputeSDK documentation](https://docs.computesdk.com) · [Source and contributing](https://github.com/computesdk/computesdk/blob/main/OPEN_SOURCE.md)

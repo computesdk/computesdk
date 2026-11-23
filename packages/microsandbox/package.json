@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/microsandbox",
   "version": "0.1.33",
-  "description": "Microsandbox provider for ComputeSDK with local and cloud microVM backends",
+  "description": "Microsandbox adapter for ComputeSDK. Run code in microVM sandboxes on local or cloud backends.",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

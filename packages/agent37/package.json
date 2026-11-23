@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/agent37",
   "version": "0.1.11",
-  "description": "Agent37 provider for ComputeSDK - Linux sandboxes and dedicated-core VMs for AI agents, with public URLs for any port",
+  "description": "Agent37 sandbox adapter for ComputeSDK. Run code in persistent Linux sandboxes with per-port preview URLs.",
   "author": "Agent37",
   "license": "MIT",
   "main": "./dist/index.js",

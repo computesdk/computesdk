@@ -31,3 +31,7 @@ await t.session.destroy(session.sessionId);
 extra round trip. Sessions are non-stealth with direct egress by default.
 
 Get an API key at [tilion.dev](https://tilion.dev). Beta — reach out if you need one provisioned for testing.
+
+---
+
+[Browser providers](https://www.computesdk.com/providers/browsers) · [Public benchmarks](https://www.computesdk.com/benchmarks)

@@ -43,3 +43,7 @@ only — on the shared fleet those calls surface the HTTP error.
 
 SECURITY: `connectUrl` embeds the API token as a query param — treat it as a
 secret (don't log or persist).
+
+---
+
+[Browser providers](https://www.computesdk.com/providers/browsers) · [Public benchmarks](https://www.computesdk.com/benchmarks)

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/beam",
   "version": "0.3.32",
-  "description": "Beam provider for ComputeSDK - containerized sandbox environments with process management and filesystem access",
+  "description": "Beam sandbox adapter for ComputeSDK. Run processes in cloud containers, work with files, and restore snapshots.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -59,7 +59,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/beam"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/beam#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

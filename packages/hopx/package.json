@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/hopx",
   "version": "0.2.52",
-  "description": "HopX provider for ComputeSDK - cloud sandboxes with full Linux environments, filesystem access, and microVM isolation",
+  "description": "HopX sandbox adapter for ComputeSDK. Run code and work with files in isolated Linux sandboxes.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -59,7 +59,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/hopx"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/hopx#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

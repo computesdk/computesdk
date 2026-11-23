@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/boat",
   "version": "1.0.7",
-  "description": "Boat provider for ComputeSDK - Ubuntu cloud sandboxes with streaming, named snapshots, signed file transfers, and preview URLs",
+  "description": "Boat sandbox adapter for ComputeSDK. Run commands in Ubuntu sandboxes with snapshots, file transfers, and preview URLs.",
   "author": "Dao Hoang Son",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -51,7 +51,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/boat"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/boat#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

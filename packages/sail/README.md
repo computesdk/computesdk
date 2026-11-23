@@ -139,3 +139,7 @@ that ComputeSDK's separate private benchmark suites have been run.
 
 Use `sandbox.getInstance()` for Sail-specific to-disk sleep, fork, SSH,
 listener allowlist, and credential-injection APIs.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

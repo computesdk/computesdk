@@ -54,3 +54,7 @@ Kubeconfig loading precedence:
 
 - Sandboxes are labeled with `computesdk.io/managed=true`.
 - `getUrl` is template-based in this MVP. Set `urlTemplate` (for example via your gateway/ingress pattern) to return a routable URL.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

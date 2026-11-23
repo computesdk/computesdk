@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/buddy",
   "version": "1.0.28",
-  "description": "Buddy provider for ComputeSDK - Persistent Ubuntu sandboxes for agents, booting in milliseconds, with preview URLs and snapshots",
+  "description": "Buddy sandbox adapter for ComputeSDK. Run code in Ubuntu microVMs with snapshots and preview URLs.",
   "author": "Lucas Czulak",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -50,7 +50,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/buddy"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/buddy#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

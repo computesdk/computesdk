@@ -1,7 +1,7 @@
 {
   "name": "daemond",
   "version": "0.1.9",
-  "description": "Seed launcher script for idempotent local command daemons",
+  "description": "Small launcher for running repeatable commands through a local daemon in a sandbox.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "dist/index.js",
@@ -53,7 +53,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/daemond"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/daemond#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

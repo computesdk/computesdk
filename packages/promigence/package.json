@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/promigence",
   "version": "1.0.16",
-  "description": "Promigence provider for ComputeSDK - production-grade sandboxes for AI agents, with filesystem and streaming output",
+  "description": "Promigence sandbox adapter for ComputeSDK. Run agent code with streaming command output and filesystem access.",
   "author": "Promigence AI, Inc. <support@promigence.ai>",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -61,7 +61,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/promigence"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/promigence#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

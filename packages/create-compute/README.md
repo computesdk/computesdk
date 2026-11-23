@@ -134,3 +134,7 @@ node packages/create-compute/dist/index.js
 # Or with pnpm
 pnpm --filter create-compute start
 ```
+
+---
+
+[ComputeSDK documentation](https://docs.computesdk.com) · [Source and contributing](https://github.com/computesdk/computesdk/blob/main/OPEN_SOURCE.md)

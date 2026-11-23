@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/brezel",
   "version": "0.1.22",
-  "description": "Brezel provider for ComputeSDK — self-hosted Firecracker sandboxes for autonomous agents",
+  "description": "Brezel sandbox adapter for ComputeSDK. Run agent code in self-hosted Firecracker microVMs.",
   "author": "InferCrane <support@infercrane.com>",
   "license": "MIT",
   "engines": {
@@ -44,7 +44,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/brezel"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/brezel#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },
