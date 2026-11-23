@@ -49,6 +49,24 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      # Version Packages auto-merges only when every pending changeset came from
+      # the compatible provider SDK bump; any human-written changeset keeps
+      # the release manual.
+      - name: Check for bump-only changesets
+        id: pending
+        run: |
+          shopt -s nullglob
+          files=(.changeset/*.md)
+          bump_only=false
+          for f in "${files[@]}"; do
+            [ "$(basename "$f")" = README.md ] && continue
+            case "$(basename "$f")" in
+              provider-sdk-compatible-bump-*) bump_only=true ;;
+              *) bump_only=false; break ;;
+            esac
+          done
+          echo "bump_only=$bump_only" >> "$GITHUB_OUTPUT"
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
@@ -67,3 +85,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Uses a PAT: a merge made with GITHUB_TOKEN would not trigger this
+      # workflow again, so nothing would be published.
+      - name: Auto-merge Version Packages
+        if: steps.changesets.outputs.pullRequestNumber
+        env:
+          GH_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.RELEASE_TOKEN }}
+          PR: ${{ steps.changesets.outputs.pullRequestNumber }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "No CHANGESET_TOKEN or RELEASE_TOKEN; leaving Version Packages for manual merge."
+          elif [ '${{ steps.pending.outputs.bump_only }}' = true ]; then
+            gh pr merge --auto --squash "$PR"
+          else
+            gh pr merge --disable-auto "$PR" || true
+          fi
