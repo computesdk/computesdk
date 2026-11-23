@@ -1,7 +1,8 @@
 {
   "name": "computesdk",
   "owner": {
-    "name": "ComputeSDK"
+    "name": "ComputeSDK",
+    "email": "david@computesdk.com"
   },
   "metadata": {
     "description": "ComputeSDK plugins for Cursor: cloud sandboxes, CI and benchmarks."
