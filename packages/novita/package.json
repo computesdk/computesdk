@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/novita",
   "version": "0.0.23",
-  "description": "Novita Sandbox provider for ComputeSDK - cloud sandboxes with native streaming, filesystem access, and snapshots",
+  "description": "Novita sandbox adapter for ComputeSDK. Stream commands, work with files, and manage snapshots.",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -50,7 +50,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/novita"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/novita#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/k8s",
   "version": "0.2.28",
-  "description": "Kubernetes provider for ComputeSDK - run sandboxes as pods",
+  "description": "Kubernetes sandbox adapter for ComputeSDK. Run sandbox workloads as pods in your cluster.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -45,7 +45,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/k8s"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/k8s#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

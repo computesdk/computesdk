@@ -670,3 +670,7 @@ Feel free to reach out if you have any questions — we're here to help!
 ## License
 
 MIT 
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

@@ -73,3 +73,7 @@ See the [@computesdk/s3](../s3/README.md) documentation for full API details.
 ## License
 
 MIT
+
+---
+
+[Storage providers](https://www.computesdk.com/providers/storage) · [Public benchmarks](https://www.computesdk.com/benchmarks)

@@ -45,3 +45,7 @@ the Brezel operator before application or benchmark traffic uses it.
 Create-time environment variables and arbitrary images are intentionally not
 accepted. Use command-level `env` values and a prequalified Brezel environment
 revision instead.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

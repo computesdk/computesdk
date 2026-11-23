@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/render",
   "version": "1.0.4",
-  "description": "Render provider for ComputeSDK - isolated Render Sandboxes with streaming command execution, file transfer and snapshots",
+  "description": "Render sandbox adapter for ComputeSDK. Stream commands, transfer files, and manage snapshots.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",

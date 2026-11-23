@@ -108,3 +108,7 @@ never loosen it, and one it cannot honour is refused rather than weakened.
   public URL; use `sandbox-cli tunnel`.
 - Commands run through `sh -c` as the sandbox user, starting in
   `/sandbox/home`.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

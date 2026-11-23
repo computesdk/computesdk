@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/neevcloud",
   "version": "1.0.26",
-  "description": "NeevCloud provider for ComputeSDK - secure cloud sandboxes with command execution, filesystem access, and preview URLs",
+  "description": "NeevCloud sandbox adapter for ComputeSDK. Run commands, work with files, and open preview URLs.",
   "author": "NeevCloud",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -57,7 +57,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/neevcloud"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/neevcloud#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

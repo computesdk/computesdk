@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/tensorlake",
   "version": "0.1.40",
-  "description": "Tensorlake provider for ComputeSDK - stateful MicroVM sandboxes for agentic applications and LLM-generated code execution",
+  "description": "Tensorlake sandbox adapter for ComputeSDK. Run agent code in stateful microVM sandboxes.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -58,7 +58,7 @@
     "url": "git+https://github.com/computesdk/computesdk.git",
     "directory": "packages/tensorlake"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/tensorlake#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

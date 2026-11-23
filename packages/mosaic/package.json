@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/mosaic",
   "version": "0.1.29",
-  "description": "Mosaic provider for ComputeSDK - Firecracker-based sandbox environments",
+  "description": "Mosaic sandbox adapter for ComputeSDK. Run code in Firecracker-based sandboxes.",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

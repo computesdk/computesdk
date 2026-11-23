@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/freestyle",
   "version": "0.2.26",
-  "description": "Freestyle provider for ComputeSDK - full Linux VMs for long-running agent tasks, with instant startup and cheap snapshotting",
+  "description": "Freestyle sandbox adapter for ComputeSDK. Run long-lived agent tasks in Linux VMs with snapshots.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -50,7 +50,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/freestyle"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/freestyle#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

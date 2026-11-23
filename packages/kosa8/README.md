@@ -125,3 +125,7 @@ SVG logos for results pages and docs are in [`assets/`](./assets):
 | `kosa8-logo-light.svg` | Mark and wordmark, for light backgrounds |
 | `kosa8-logo-dark.svg` | Mark and wordmark, for dark backgrounds |
 | `kosa8-mark.svg` | Square mark alone (icons, tables) |
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

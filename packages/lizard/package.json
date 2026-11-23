@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/lizard",
   "version": "1.0.15",
-  "description": "ComputeSDK provider for Lizard Sandboxes",
+  "description": "Lizard sandbox adapter for ComputeSDK. Run code in Lizard Sandboxes.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -54,7 +54,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/lizard"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/lizard#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/kernel",
   "version": "0.2.34",
-  "description": "Kernel browser provider for ComputeSDK - cloud browser sessions powered by Kernel",
+  "description": "Kernel browser adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Garrison",
   "license": "MIT",
   "type": "module",
@@ -46,7 +46,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/kernel"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/kernel#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

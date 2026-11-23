@@ -77,3 +77,7 @@ See [Freestyle resizing](https://www.freestyle.sh/docs/vms/lifecycle#resize).
 ## License
 
 MIT
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

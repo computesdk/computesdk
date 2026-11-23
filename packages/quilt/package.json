@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/quilt",
   "version": "1.0.26",
-  "description": "Quilt provider for ComputeSDK - tenant-scoped Linux sandboxes with exec, published services, and snapshots",
+  "description": "Quilt sandbox adapter for ComputeSDK. Run commands in tenant-scoped Linux sandboxes with published services and snapshots.",
   "author": "ComputeSDK",
   "license": "MIT",
   "engines": {
@@ -48,7 +48,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/quilt"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/quilt#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

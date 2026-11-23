@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/docker",
   "version": "1.2.74",
-  "description": "Docker provider for ComputeSDK - local containerized sandboxes for development and testing",
+  "description": "Docker sandbox adapter for ComputeSDK. Run code in local containers for development and testing.",
   "author": "IberAI",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -50,7 +50,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/docker"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/docker#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

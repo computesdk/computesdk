@@ -100,3 +100,7 @@ Other options are refused before anything is created: `timeout`, `image`, templa
 - Each instance has its own network, so instances cannot reach each other by name.
 - A command that times out is stopped. It is never run a second time.
 - When the outcome of a command is unknown, the call fails instead of returning a guess.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

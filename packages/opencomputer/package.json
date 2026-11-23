@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/opencomputer",
   "version": "1.0.28",
-  "description": "OpenComputer provider for ComputeSDK - persistent cloud VMs with checkpoints, preview URLs, command execution, and filesystem access",
+  "description": "OpenComputer sandbox adapter for ComputeSDK. Run code in persistent VMs with checkpoints and preview URLs.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -57,7 +57,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/opencomputer"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/opencomputer#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

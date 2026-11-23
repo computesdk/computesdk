@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/just-bash",
   "version": "0.4.39",
-  "description": "just-bash provider for ComputeSDK - local sandboxed bash execution with virtual filesystem",
+  "description": "Local just-bash adapter for ComputeSDK. Run Bash commands against a virtual filesystem.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -62,7 +62,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/just-bash"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/just-bash#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

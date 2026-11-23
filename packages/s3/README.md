@@ -124,3 +124,7 @@ export AWS_REGION=us-east-1  # optional, defaults to us-east-1
 ## License
 
 MIT
+
+---
+
+[Storage providers](https://www.computesdk.com/providers/storage) · [Public benchmarks](https://www.computesdk.com/benchmarks)

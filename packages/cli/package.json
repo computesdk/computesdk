@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/cli",
   "version": "2.6.19",
-  "description": "ComputeSDK CLI - Cloud-native workspace management",
+  "description": "Run agent code and GitHub workflows across sandbox providers from your terminal with the ComputeSDK CLI.",
   "author": "ComputeSDK",
   "license": "MIT",
   "type": "module",
@@ -40,9 +40,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/computesdk/computesdk.git"
+    "url": "https://github.com/computesdk/computesdk.git",
+    "directory": "packages/cli"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://www.computesdk.com/sandbox-router",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

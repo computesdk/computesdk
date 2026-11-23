@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/gravixlayer",
   "version": "1.0.23",
-  "description": "GravixLayer provider for ComputeSDK — cloud runtimes with a native filesystem, live command streaming, and snapshots",
+  "description": "GravixLayer sandbox adapter for ComputeSDK. Run commands, work with files, publish ports, and manage snapshots.",
   "author": "Gravix Layer",
   "license": "MIT",
   "engines": {
@@ -42,7 +42,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/gravixlayer"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/gravixlayer#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

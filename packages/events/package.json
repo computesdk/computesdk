@@ -2,7 +2,7 @@
   "name": "@computesdk/events",
   "version": "1.1.1",
   "type": "module",
-  "description": "Events SDK for ComputeSDK - store, retrieve, and subscribe to sandbox events",
+  "description": "ComputeSDK events client. Store, retrieve, and subscribe to sandbox events.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.cjs",
@@ -45,7 +45,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/events"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/events#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

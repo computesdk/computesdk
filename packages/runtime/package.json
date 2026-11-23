@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/runtime",
   "version": "0.1.20",
-  "description": "Runtime provider for ComputeSDK — Firecracker microVM sandboxes for AI agents",
+  "description": "Runtime sandbox adapter for ComputeSDK. Run agent code in Firecracker microVMs.",
   "author": "Runtime <support@withruntime.com>",
   "license": "MIT",
   "engines": {
@@ -45,7 +45,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/runtime"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/runtime#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/test-utils",
   "version": "2.0.6",
-  "description": "Testing utilities and helpers for ComputeSDK provider development and integration tests",
+  "description": "Vitest suites and helpers for testing ComputeSDK sandbox, browser, and storage adapters.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -48,7 +48,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/test-utils"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/test-utils#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

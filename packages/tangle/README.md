@@ -63,3 +63,7 @@ pnpm --filter @computesdk/tangle test
 ```
 
 Without `TANGLE_API_KEY` the suite runs against ComputeSDK's mock sandbox. With it, every test creates and destroys a real sandbox.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

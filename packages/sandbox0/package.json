@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/sandbox0",
   "version": "1.0.29",
-  "description": "Sandbox0 provider for ComputeSDK - fast persistent sandboxes with command execution and native filesystem access",
+  "description": "Sandbox0 adapter for ComputeSDK. Run commands and work with files in persistent sandboxes.",
   "author": "Sandbox0 Team",
   "license": "MIT",
   "main": "./dist/index.js",

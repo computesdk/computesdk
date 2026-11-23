@@ -209,3 +209,7 @@ The handle's `fs` and `client` call the API directly, without the provider's fir
 ## License
 
 MIT
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

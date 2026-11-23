@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/isorun",
   "version": "0.1.27",
-  "description": "Isorun provider for ComputeSDK — isolated Linux VM sandboxes for running untrusted and AI-generated code",
+  "description": "Isorun sandbox adapter for ComputeSDK. Run agent code in isolated Linux VMs.",
   "author": "Isorun <hello@isorun.ai>",
   "license": "MIT",
   "engines": {
@@ -47,7 +47,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/isorun"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/isorun#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

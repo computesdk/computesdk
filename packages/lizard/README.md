@@ -147,3 +147,6 @@ Unit tests exercise this provider with a mocked Lizard SDK. The shared suite use
 its own mock unless `LIZARD_LIVE_TESTS=1`. Live tests create and destroy temporary
 sandboxes using the configured project and may incur usage charges.
 
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

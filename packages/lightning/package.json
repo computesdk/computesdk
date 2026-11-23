@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/lightning",
   "version": "1.0.26",
-  "description": "Lightning AI provider for ComputeSDK - cloud sandboxes for code execution, command running, and filesystem access",
+  "description": "Lightning AI sandbox adapter for ComputeSDK. Run commands and work with files in cloud sandboxes.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -57,7 +57,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/lightning"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/lightning#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

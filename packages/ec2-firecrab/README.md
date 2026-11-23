@@ -68,3 +68,7 @@ await provider.instances.destroy(sandbox.instanceId);
 - **No snapshots, pause/resume, or `background` mode** — current firecrab builds don't expose these endpoints.
 - **`destroy` is slow (~30s)** — `stop` is a graceful ACPI shutdown with no force flag; `DELETE` on a running VM returns `409`.
 - **firecrab's API is unauthenticated loopback by design** — you own the transport (SSM/SSH tunnel).
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

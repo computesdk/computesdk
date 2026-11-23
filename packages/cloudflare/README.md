@@ -216,3 +216,7 @@ if (result.exitCode !== 0) {
 ## License
 
 MIT
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

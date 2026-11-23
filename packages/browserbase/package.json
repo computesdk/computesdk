@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/browserbase",
   "version": "0.3.34",
-  "description": "Browserbase browser provider for ComputeSDK - cloud browser sessions with stealth mode, proxies, and session replay",
+  "description": "Browserbase adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Garrison",
   "license": "MIT",
   "type": "module",
@@ -51,7 +51,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/browserbase"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/browserbase#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

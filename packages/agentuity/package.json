@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/agentuity",
   "version": "0.0.36",
-  "description": "Agentuity provider for ComputeSDK - isolated cloud sandboxes with native filesystem, snapshot/checkpoint support, and flexible runtimes",
+  "description": "Agentuity sandbox adapter for ComputeSDK. Run code, work with files, and manage snapshots and checkpoints.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -48,7 +48,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/agentuity"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/agentuity#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

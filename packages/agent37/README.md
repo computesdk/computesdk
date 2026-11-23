@@ -92,3 +92,7 @@ interface Agent37Config {
 
 - [Agent37 API docs](https://www.agent37.com/docs)
 - [Pricing](https://www.agent37.com/pricing)
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)

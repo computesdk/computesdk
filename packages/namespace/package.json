@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/namespace",
   "version": "1.6.47",
-  "description": "Namespace provider for ComputeSDK - cloud-native sandboxes with optional GPU support",
+  "description": "Namespace sandbox adapter for ComputeSDK. Run code in cloud sandboxes with optional GPU support.",
   "author": "ComputeSDK Team",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -47,7 +47,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/namespace"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/namespace#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

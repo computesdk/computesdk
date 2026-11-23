@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/blaxel",
   "version": "1.6.48",
-  "description": "Blaxel provider for ComputeSDK - lightweight cloud sandboxes for code execution",
+  "description": "Blaxel sandbox adapter for ComputeSDK. Run code in isolated cloud sandboxes.",
   "author": "ComputeSDK",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -47,7 +47,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/blaxel"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/blaxel#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

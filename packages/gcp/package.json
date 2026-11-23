@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/gcp",
   "version": "0.1.18",
-  "description": "Google Cloud providers for ComputeSDK (Cloud Run Sandboxes)",
+  "description": "Google Cloud sandbox adapters for ComputeSDK, including Cloud Run Sandboxes.",
   "author": "Garrison",
   "license": "MIT",
   "bin": {
@@ -66,7 +66,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/gcp"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/gcp#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   }

@@ -2,7 +2,7 @@
   "name": "@computesdk/cmd",
   "version": "0.4.1",
   "type": "module",
-  "description": "Type-safe shell command builders for ComputeSDK sandboxes",
+  "description": "Type-safe shell command builders for running commands in ComputeSDK sandboxes.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.cjs",
@@ -44,7 +44,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/cmd"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/cmd#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

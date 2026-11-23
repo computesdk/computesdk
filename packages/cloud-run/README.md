@@ -21,3 +21,7 @@ import { cloudRun } from '@computesdk/cloud-run' // still works, but deprecated
 `npx @computesdk/cloud-run` still runs the gateway setup by delegating to `@computesdk/gcp`.
 
 See the [`@computesdk/gcp` README](../gcp/README.md) for configuration and usage.
+
+---
+
+[ComputeSDK Sandbox Router](https://www.computesdk.com/sandbox-router)

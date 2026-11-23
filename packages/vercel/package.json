@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/vercel",
   "version": "1.7.60",
-  "description": "Vercel Sandbox provider for ComputeSDK - serverless code execution for Python and Node.js on Vercel's edge network",
+  "description": "Vercel Sandbox adapter for ComputeSDK. Run code in isolated cloud sandboxes for Node.js and Python.",
   "author": "Garrison",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -47,7 +47,7 @@
     "url": "https://github.com/computesdk/computesdk.git",
     "directory": "packages/vercel"
   },
-  "homepage": "https://www.computesdk.com",
+  "homepage": "https://github.com/computesdk/computesdk/tree/main/packages/vercel#readme",
   "bugs": {
     "url": "https://github.com/computesdk/computesdk/issues"
   },

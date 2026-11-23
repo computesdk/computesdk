@@ -104,3 +104,7 @@ interface RenderConfig {
 - `runCommand`'s `timeout` stops the command inside the sandbox with the `timeout` utility and reports exit code 124.
 - Suspended sandboxes are reported by `getInfo()` as `stopped`; Render resumes them automatically on the next command.
 - Sandboxes and snapshots in groups other than the configured one are not listed.
+
+---
+
+[Sandbox providers](https://www.computesdk.com/providers/sandboxes) · [Sandbox Router](https://www.computesdk.com/sandbox-router)
