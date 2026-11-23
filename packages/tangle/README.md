@@ -17,10 +17,13 @@ npm install @computesdk/tangle
 | `apiKey` | `TANGLE_API_KEY` | required |
 | `baseUrl` | `TANGLE_SANDBOX_BASE_URL` | `https://sandbox.tangle.tools` |
 | `image` | | server default image |
+| `agent` | | server default |
 | `cpu`, `memory` (MB), `disk` (GB) | | server default shape |
 | `timeout` (ms) | | server default lifetime |
 
 Per-create `image`, `templateId` (a saved Tangle template), `cpu`, `memory`, `disk`, `timeout`, `name`, `envs`, `metadata`, `ephemeral` and `idempotencyKey` override the defaults. `ephemeral: true` gives the sandbox a scratch home directory whose contents are lost when it restarts.
+
+For command and filesystem workloads, use `tangle({ agent: false })` or pass `{ agent: false }` to an individual `instances.create()`. This skips managed agent startup and model credentials. Use `agent: true` on a create that needs the managed agent or startup scripts. The per-create value takes precedence.
 
 ## Usage
 

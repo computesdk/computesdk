@@ -24,6 +24,8 @@ export interface TangleConfig {
   baseUrl?: string;
   /** Default environment ID or OCI image reference, e.g. `node:22`. */
   image?: string;
+  /** Set false for command and file workloads that do not need a managed agent. */
+  agent?: boolean;
   /** Default CPU cores. */
   cpu?: number;
   /** Default memory in MB. */
@@ -59,11 +61,16 @@ function createOptions(config: TangleConfig, options: CreateInstanceOptions): Cr
   const memoryMB = options.memory ?? config.memory;
   const diskGB = options.disk ?? config.disk;
   const timeout = options.timeout ?? config.timeout;
+  const agent: unknown = options.agent === undefined ? config.agent : options.agent;
+  if (agent !== undefined && typeof agent !== 'boolean') {
+    throw new TypeError('Tangle agent must be a boolean.');
+  }
   // Always keyed, so a create whose outcome is unknown can be joined. The default name comes from the
   // key, so a create sent again with the same key carries the same body.
   const idempotencyKey = typeof options.idempotencyKey === 'string' ? options.idempotencyKey : randomUUID();
   return {
     name: options.name ?? `computesdk-${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 8)}`,
+    ...(agent !== undefined ? { agent } : {}),
     ...(environment !== undefined ? { environment } : {}),
     ...(options.templateId !== undefined ? { templateId: options.templateId } : {}),
     ...(cpuCores !== undefined || memoryMB !== undefined || diskGB !== undefined
