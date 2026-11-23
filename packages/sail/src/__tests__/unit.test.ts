@@ -4,8 +4,6 @@ const h = vi.hoisted(() => {
   class NotFoundError extends Error {}
   const state = {
     appMissing: false,
-    architecture: 'amd64' as string | undefined,
-    checkpointGate: undefined as Promise<void> | undefined,
     createGate: undefined as Promise<void> | undefined,
     createArgs: [] as Array<Record<string, unknown>>,
     existsResult: true,
@@ -36,7 +34,6 @@ vi.mock('@sailresearch/sdk', () => {
     const box = {
       sailboxId: id,
       status,
-      architecture: h.state.architecture,
       createdAt: new Date('2020-01-02T03:04:05Z'),
       expiresAt: h.state.expiresAt,
       client: {},
@@ -73,20 +70,10 @@ vi.mock('@sailresearch/sdk', () => {
     return h.state.lastBox;
   };
 
-  class Image {
-    constructor(private spec: Record<string, unknown>) {}
-    toSpec = vi.fn(async () => this.spec);
-    static devbox = vi.fn((architecture: string) => ({ base: 'devbox', architecture }));
-    static fromRegistry = vi.fn((ref: string, options?: { architecture?: string }) => ({ base: ref, ...options }));
-    static debian = vi.fn((architecture: string) => new Image({ base: 'debian', architecture }));
-  }
   return {
-    Image,
-    SailboxCheckpoint: {
-      get: vi.fn(async () => {
-        await h.state.checkpointGate;
-        return { sailboxId: 'sb_source' };
-      }),
+    Image: {
+      devbox: vi.fn(() => ({ base: 'devbox' })),
+      fromRegistry: vi.fn((ref: string) => ({ base: ref })),
     },
     NotFoundError: h.NotFoundError,
     resolveConfig: vi.fn(() => ({
@@ -155,8 +142,6 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 
 beforeEach(async () => {
   h.state.appMissing = false;
-  h.state.architecture = 'amd64';
-  h.state.checkpointGate = undefined;
   h.state.createGate = undefined;
   h.state.createArgs = [];
   h.state.existsResult = true;
@@ -261,59 +246,6 @@ describe('sail provider', () => {
     expect(h.state.createArgs[0].image).toBe(image);
     expect(h.state.createArgs[0]).not.toHaveProperty('size');
     expect(h.state.createArgs[0].maxLifetimeSeconds).toBeUndefined();
-  });
-
-  it.each(['arm64', undefined])('rejects registry specs without an AMD64 constraint (%s)', async (architecture) => {
-    const image: import('@sailresearch/sdk').ImageSpec = { ociRef: 'node:22', architecture: architecture as 'arm64' | undefined };
-    await expect(sail({ apiKey: 'key', image }).sandbox.create()).rejects.toThrow(/AMD64/);
-    expect(h.state.createArgs).toHaveLength(0);
-  });
-
-  it('rejects an ARM Image builder before creating a box', async () => {
-    const sdk = await import('@sailresearch/sdk');
-    await expect(sail({ apiKey: 'key', image: sdk.Image.debian('arm64') }).sandbox.create()).rejects.toThrow(/AMD64/);
-    expect(sdk.Sailbox.create).not.toHaveBeenCalled();
-  });
-
-  it('preserves the original AMD64 Image builder and its credentials', async () => {
-    const sdk = await import('@sailresearch/sdk');
-    const image = sdk.Image.debian('amd64');
-    await sail({ apiKey: 'key', image }).sandbox.create();
-    expect(h.state.createArgs[0].image).toBe(image);
-  });
-
-  it('preserves an explicitly AMD64 registry spec', async () => {
-    const image: import('@sailresearch/sdk').ImageSpec = { ociRef: 'node:22', architecture: 'amd64' };
-    await sail({ apiKey: 'key', image }).sandbox.create();
-    expect(h.state.createArgs[0].image).toBe(image);
-  });
-
-  it.each(['arm64', undefined])('rejects snapshot restores with source architecture %s', async (architecture) => {
-    const sdk = await import('@sailresearch/sdk');
-    h.state.architecture = architecture;
-    await expect(provider().sandbox.create({ snapshotId: 'ckpt_1' })).rejects.toThrow(/AMD64/);
-    expect(sdk.Sailbox.fromCheckpoint).not.toHaveBeenCalled();
-  });
-
-  it('does not restore a snapshot when the source cannot be read', async () => {
-    const sdk = await import('@sailresearch/sdk');
-    h.state.notFoundOnGet = true;
-    await expect(provider().sandbox.create({ snapshotId: 'ckpt_1' })).rejects.toThrow(/missing/);
-    expect(sdk.Sailbox.fromCheckpoint).not.toHaveBeenCalled();
-  });
-
-  it('does not restore after cancellation during the architecture check', async () => {
-    const sdk = await import('@sailresearch/sdk');
-    const gate = deferred();
-    h.state.checkpointGate = gate.promise;
-    const controller = new AbortController();
-    const creation = provider().sandbox.create({ snapshotId: 'ckpt_1', signal: controller.signal });
-    const rejected = expect(creation).rejects.toThrow();
-    await vi.waitFor(() => expect(sdk.SailboxCheckpoint.get).toHaveBeenCalled());
-    controller.abort();
-    gate.resolve();
-    await rejected;
-    expect(sdk.Sailbox.fromCheckpoint).not.toHaveBeenCalled();
   });
 
   it.each([0, -1, NaN, Infinity, 4_294_967_295_001])('rejects invalid lifetime %s before creating a box', async (timeout) => {

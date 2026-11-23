@@ -35,10 +35,8 @@ interface SailConfig {
 - `app` owns the created Sailboxes and falls back to `SAIL_APP`, then
   `computesdk`. It is created on first use when missing.
 - `image` defaults to Sail's AMD64 Devbox builtin, which includes Node.js and
-  Bun. Pass another Sail image when the workload needs a different runtime.
-  Only AMD64 images are supported. Configured registry
-  images must explicitly set `architecture: 'amd64'`; per-create OCI image
-  strings automatically request AMD64. ARM-only registry images fail to build.
+  Bun. Pass another Sail image when the workload needs a different runtime or
+  architecture. Per-create OCI image strings request AMD64.
 - Creates inherit Sail's image resource limits (8 vCPUs, 64 GiB memory limit,
   and 256 GiB disk limit by default). Explicit `size: 's' | 'm' | 'l'` and
   `memoryGib` options override those limits for that create; omitted options
@@ -46,11 +44,6 @@ interface SailConfig {
   `sail({ image: Image.devbox('amd64').numCpus(4).memoryLimitGib(32) })`,
   importing `Image` from `@sailresearch/sdk`. These are resource limits;
   Sail bills actual CPU and memory consumption.
-
-Snapshot restores also require an AMD64 source Sailbox. Existing ARM64 boxes
-remain accessible for management and termination, but their snapshots cannot
-create new boxes through this provider. If the source's architecture cannot be
-read, the restore fails before creating a box.
 
 ## Usage
 
