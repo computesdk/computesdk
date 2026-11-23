@@ -105,6 +105,34 @@ already allows for public clients; hosted Claude surfaces (claude.ai,
 Cowork) register `https://claude.ai/api/mcp/auth_callback`, which is in
 the platform's default DCR redirect allowlist.
 
+## Cursor and Grok Bot
+
+The same directory is also a Cursor Plugin. Grok Bot runs on Cursor and
+installs apps from the Cursor Marketplace, so one Cursor listing covers both.
+
+- `.cursor-plugin/plugin.json` — Cursor manifest (name, version, `logo`
+  → `assets/logo.png`). `mcpServers` points at `./.mcp.json`
+  (`type: "http"`), the form Cursor's own plugins use.
+- `/.cursor-plugin/marketplace.json` at the repo root lists this plugin
+  with `source: "plugins/computesdk-router"`; Cursor requires it for a
+  plugin that is not at the repo root.
+- The root `plugin.json` follows the Agent Plugins schema, which allows no
+  `logo` field; the logo lives only in the Cursor manifest.
+
+Local test: symlink the folder into `~/.cursor/plugins/local/`, or run
+`agent --plugin-dir ./plugins/computesdk-router` (Cursor CLI), and sign in
+to Cursor. The server shows as `plugin-computesdk-router-computesdk`.
+
+Auth is the same platform OAuth flow. Cursor registers by DCR as a public
+client with two redirect URIs: `https://www.cursor.com/agents/mcp/oauth/callback`
+(web, Cursor Agents; in the platform's DCR allowlist) and
+`http://localhost:8787/callback` (desktop; loopback is allowed for public
+clients).
+
+Publish: submit `https://github.com/computesdk/computesdk` at
+https://cursor.com/marketplace/publish. Cursor reviews every listing and
+every update by hand, so bump the version in all manifests on each change.
+
 ## Publishing
 
 - **Workspace**: publish the plugin to your ChatGPT workspace from the
