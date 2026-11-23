@@ -2957,8 +2957,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@tangle-network/sandbox':
-        specifier: 1.0.264
-        version: 1.0.264
+        specifier: 1.0.501
+        version: 1.0.501
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -6130,14 +6130,14 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@tangle-network/agent-interface@5.10.24':
-    resolution: {integrity: sha512-1qdrwxkoBwc3CKBoS5mR7Dn3iAlbashIDM/eyiaRaIQbnQSmM4PXdLNGbUv/4rtSr9TmnDl1I0tly3w6CDq5mg==}
+  '@tangle-network/agent-interface@5.10.28':
+    resolution: {integrity: sha512-uAMJSi1JnK5DylDZ6GQS1qILNct7p3bEYe7v/t67/VQtwyGQoeH/SGLkilpt5MUefKoA18t2yNSjf5/sPVM1LA==}
 
   '@tangle-network/agent-trace-contract@2.2.2':
     resolution: {integrity: sha512-46CGFTHw1E+Fvykjdf3tS0ysQugv+DdM9TptHjALVeFzO+Z4Baiw6XWJLYiP3fx/UEk3QCIiITD1qoPi8XfgkA==}
 
-  '@tangle-network/sandbox@1.0.264':
-    resolution: {integrity: sha512-apuRQxPnm5igWxyBwpxo+DYPukAV1l2z75EoI+ez+vVC1VlTvKNbJBtxk+mKnDvqpbFPAid7cNjujPCEv/xQUA==}
+  '@tangle-network/sandbox@1.0.501':
+    resolution: {integrity: sha512-PBDGDZfVDb4OxbKyaFBzEsxJObbAegeH6U4kgHX9bs6HfcONLbe8I1liKAHq8sUWpWOzBjMLXiSodLZBuKNpoQ==}
     peerDependencies:
       '@mastra/core': ^1.36.0
       '@modelcontextprotocol/sdk': ^1.30.0
@@ -6619,6 +6619,14 @@ packages:
   b4a@1.6.7:
     resolution: {integrity: sha512-OnAYlL5b7LEkALw87fUVafQw5rVR9RjwGd4KUwNQ6DrrNmaVaUCgLipfVlzrPQ4tWOR9P0IXGNOx50jYCCdSJg==}
 
+  b4a@1.9.0:
+    resolution: {integrity: sha512-dpfcF9fDNR6++cthXR67iyhgqWy9CBouAvIWhIntzBG6cvK/cnIPiZQjBwi/ZqjjBEDGfoNDtmB0kTjroOJ3pQ==}
+    peerDependencies:
+      react-native-b4a: '*'
+    peerDependenciesMeta:
+      react-native-b4a:
+        optional: true
+
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
 
@@ -6644,6 +6652,15 @@ packages:
   bare-fs@4.7.1:
     resolution: {integrity: sha512-WDRsyVN52eAx/lBamKD6uyw8H4228h/x0sGGGegOamM2cd7Pag88GfMQalobXI+HaEUxpCkbKQUDOQqt9wawRw==}
     engines: {bare: '>=1.16.0'}
+    peerDependencies:
+      bare-buffer: '*'
+    peerDependenciesMeta:
+      bare-buffer:
+        optional: true
+
+  bare-fs@4.8.5:
+    resolution: {integrity: sha512-5gborbd4IEFpnyqAiwD0tl6sH9fvPvIaK2hdM8DXU+xAMxSB7B3D3D04CD21k4T5C6u5Oxw3iajkBQhNLxINKg==}
+    engines: {bare: '>=1.28.0'}
     peerDependencies:
       bare-buffer: '*'
     peerDependenciesMeta:
@@ -9565,6 +9582,9 @@ packages:
   streamx@2.25.0:
     resolution: {integrity: sha512-0nQuG6jf1w+wddNEEXCF4nTg3LtufWINB5eFEN+5TNZW7KWJp6x87+JFL43vaAUPyCfH1wID+mNVyW6OHtFamg==}
 
+  streamx@2.28.1:
+    resolution: {integrity: sha512-zEzXb0s5Cds7tqMH6rhZ05lcJydCWiQPEwiNngVqzsxCc962vLY4Uw+mW7od8kDH258k2Uz/JrOkdIAAhSh9VA==}
+
   string-argv@0.3.2:
     resolution: {integrity: sha512-aqD2Q0144Z+/RqG52NeHEkZauTAUWJO8c6yTftGJKO3Tja5tUgIfmIl6kExvhtxSDP7fXB6DvzkfMpCd/F3G+Q==}
     engines: {node: '>=0.6.19'}
@@ -9676,8 +9696,8 @@ packages:
   tar-stream@3.1.7:
     resolution: {integrity: sha512-qJj60CXt7IU1Ffyc3NJMjh6EkuCFej46zUqJ4J7pqYlThyd9bO0XBTmcOIhSzZJVWfsLks0+nle/j538YAW9RQ==}
 
-  tar-stream@3.2.1:
-    resolution: {integrity: sha512-nqsEO8zLZJvrOMdEwkA0QdCLFbetHMn95Zqu4fKwX+hkaTWJPZZOrxx/PwtxoK0MMGQmBQNRW3CPs8IFYQz4cQ==}
+  tar-stream@3.2.2:
+    resolution: {integrity: sha512-+8NeqHRjQWH9nYlwo2gamAMImZCVzI4UoEgDpWorBt9OEfppiZn+uSkskzQKPWIZyji/C8fpWO7u69G0DX0tbg==}
 
   tar@6.2.1:
     resolution: {integrity: sha512-DZ4yORTwrbTj/7MZYq2w+/ZFdI6OZ/f9SFHR+71gIVUZhOQPHzVCLpvRnPgyaMpfWxxk/4ONva3GQSyNIKRv6A==}
@@ -9955,6 +9975,10 @@ packages:
   undici@7.29.1:
     resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
     engines: {node: '>=20.18.1'}
+
+  undici@8.12.3:
+    resolution: {integrity: sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw==}
+    engines: {node: '>=22.19.0'}
 
   undici@8.12.4:
     resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
@@ -13956,11 +13980,11 @@ snapshots:
 
   '@tangle-network/agent-core@1.0.4':
     dependencies:
-      '@tangle-network/agent-interface': 5.10.24
+      '@tangle-network/agent-interface': 5.10.28
       '@tangle-network/agent-trace-contract': 2.2.2
       zod: 4.6.7
 
-  '@tangle-network/agent-interface@5.10.24':
+  '@tangle-network/agent-interface@5.10.28':
     dependencies:
       '@noble/hashes': 2.4.0
       spdx-expression-parse: 5.0.0
@@ -13968,16 +13992,19 @@ snapshots:
 
   '@tangle-network/agent-trace-contract@2.2.2': {}
 
-  '@tangle-network/sandbox@1.0.264':
+  '@tangle-network/sandbox@1.0.501':
     dependencies:
       '@tangle-network/agent-core': 1.0.4
-      '@tangle-network/agent-interface': 5.10.24
+      '@tangle-network/agent-interface': 5.10.28
       '@tangle-network/agent-trace-contract': 2.2.2
-      tar-stream: 3.2.1
+      tar-stream: 3.2.2
       zod: 4.6.7
+    optionalDependencies:
+      undici: 8.12.3
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
+      - react-native-b4a
 
   '@tensorlakeai/native-darwin-arm64@0.5.158':
     optional: true
@@ -14652,6 +14679,8 @@ snapshots:
 
   b4a@1.6.7: {}
 
+  b4a@1.9.0: {}
+
   balanced-match@1.0.2: {}
 
   balanced-match@4.0.3: {}
@@ -14659,7 +14688,8 @@ snapshots:
   balanced-match@4.0.4:
     optional: true
 
-  bare-events@2.6.0: {}
+  bare-events@2.6.0:
+    optional: true
 
   bare-events@2.8.2: {}
 
@@ -14668,6 +14698,17 @@ snapshots:
       bare-events: 2.6.0
       bare-path: 3.0.0
       bare-stream: 2.13.1(bare-events@2.6.0)
+      bare-url: 2.4.3
+      fast-fifo: 1.3.2
+    transitivePeerDependencies:
+      - bare-abort-controller
+    optional: true
+
+  bare-fs@4.8.5:
+    dependencies:
+      bare-events: 2.8.2
+      bare-path: 3.0.0
+      bare-stream: 2.13.1(bare-events@2.8.2)
       bare-url: 2.4.3
       fast-fifo: 1.3.2
     transitivePeerDependencies:
@@ -14685,6 +14726,14 @@ snapshots:
       teex: 1.0.1
     optionalDependencies:
       bare-events: 2.6.0
+    optional: true
+
+  bare-stream@2.13.1(bare-events@2.8.2):
+    dependencies:
+      streamx: 2.25.0
+      teex: 1.0.1
+    optionalDependencies:
+      bare-events: 2.8.2
 
   bare-url@2.4.3:
     dependencies:
@@ -18055,6 +18104,14 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
 
+  streamx@2.28.1:
+    dependencies:
+      events-universal: 1.0.1
+      fast-fifo: 1.3.2
+      text-decoder: 1.2.3
+    transitivePeerDependencies:
+      - bare-abort-controller
+
   string-argv@0.3.2: {}
 
   string-width@4.2.3:
@@ -18182,15 +18239,16 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
 
-  tar-stream@3.2.1:
+  tar-stream@3.2.2:
     dependencies:
-      b4a: 1.6.7
-      bare-fs: 4.7.1
+      b4a: 1.9.0
+      bare-fs: 4.8.5
       fast-fifo: 1.3.2
-      streamx: 2.25.0
+      streamx: 2.28.1
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
+      - react-native-b4a
 
   tar@6.2.1:
     dependencies:
@@ -18486,6 +18544,9 @@ snapshots:
   undici@7.29.0: {}
 
   undici@7.29.1: {}
+
+  undici@8.12.3:
+    optional: true
 
   undici@8.12.4: {}
 
