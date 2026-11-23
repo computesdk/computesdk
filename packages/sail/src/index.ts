@@ -35,7 +35,7 @@ export interface SailConfig {
   apiKey?: string;
   /** App that owns created Sailboxes. Falls back to `SAIL_APP`, then `computesdk`. */
   app?: string;
-  /** Image used by created Sailboxes. Defaults to Sail's ARM64 Devbox builtin. */
+  /** Image used by created Sailboxes. Defaults to Sail's AMD64 Devbox builtin. */
   image?: ImageSpec | Image;
 }
 
@@ -482,8 +482,8 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           name,
           client,
           image: options?.image !== undefined
-            ? Image.fromRegistry(options.image)
-            : config.image ?? Image.devbox('arm64'),
+            ? Image.fromRegistry(options.image, { architecture: 'amd64' })
+            : config.image ?? Image.devbox('amd64'),
           ...(options?.size === undefined ? {} : { size: options.size as SailboxSize }),
           ...(options?.vcpuCount === undefined ? {} : { vcpuCount: options.vcpuCount }),
           ...(options?.memoryGib === undefined ? {} : { memoryLimitGib: options.memoryGib }),

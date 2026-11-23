@@ -188,7 +188,7 @@ describe('sail provider', () => {
     expect(h.state.createArgs[1]).not.toHaveProperty('memoryLimitGib');
     expect(String(h.state.createArgs[1].name)).toMatch(/^csdk-/);
     expect(sdk.Image.devbox).toHaveBeenCalledTimes(2);
-    expect(sdk.Image.devbox).toHaveBeenCalledWith('arm64');
+    expect(sdk.Image.devbox).toHaveBeenCalledWith('amd64');
   });
 
   it('retries a failed app lookup', async () => {
@@ -235,7 +235,7 @@ describe('sail provider', () => {
   it('imports a create-time OCI image and passes lifetime and environment to Sail', async () => {
     const sdk = await import('@sailresearch/sdk');
     await provider().sandbox.create({ image: 'node:22', envs: { MODE: 'test' }, timeout: 30_001 });
-    expect(sdk.Image.fromRegistry).toHaveBeenCalledWith('node:22');
+    expect(sdk.Image.fromRegistry).toHaveBeenCalledWith('node:22', { architecture: 'amd64' });
     expect(sdk.Image.devbox).not.toHaveBeenCalled();
     expect(h.state.createArgs[0]).toMatchObject({ image: { base: 'node:22' }, env: { MODE: 'test' }, maxLifetimeSeconds: 31 });
   });
