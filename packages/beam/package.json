@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/beam",
-  "version": "0.3.32",
+  "version": "0.3.33",
   "description": "Beam sandbox adapter for ComputeSDK. Run processes in cloud containers, work with files, and restore snapshots.",
   "author": "ComputeSDK",
   "license": "MIT",

@@ -1,0 +1,13 @@
+# @computesdk/outcrawl
+
+## 0.1.0
+
+### Minor Changes
+
+- 74f4eb3: Add `@computesdk/outcrawl`, a browser provider for Outcrawl (CDP browser sessions).
+
+### Patch Changes
+
+- Updated dependencies [0f42396]
+  - computesdk@4.1.23
+  - @computesdk/provider@2.1.29

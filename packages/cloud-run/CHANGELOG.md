@@ -1,5 +1,13 @@
 # @computesdk/cloud-run
 
+## 0.1.35
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- Updated dependencies [0f42396]
+  - @computesdk/gcp@0.1.19
+
 ## 0.1.34
 
 ### Patch Changes

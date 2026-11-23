@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/lightning",
-  "version": "1.0.26",
+  "version": "1.0.27",
   "description": "Lightning AI sandbox adapter for ComputeSDK. Run commands and work with files in cloud sandboxes.",
   "author": "ComputeSDK",
   "license": "MIT",

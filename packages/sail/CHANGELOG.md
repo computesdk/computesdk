@@ -1,5 +1,15 @@
 # @computesdk/sail
 
+## 1.0.28
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- ec5262a: Default Sail sandboxes to the AMD64 Devbox and request AMD64 for per-create OCI image imports. Custom Sail images and snapshot restores continue to use Sail's architecture validation.
+- Updated dependencies [0f42396]
+  - computesdk@4.1.23
+  - @computesdk/provider@2.1.29
+
 ## 1.0.27
 
 ### Patch Changes

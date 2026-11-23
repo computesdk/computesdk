@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/cloudflare",
-  "version": "2.1.19",
+  "version": "2.1.20",
   "description": "Cloudflare sandbox adapter for ComputeSDK. Run code in Cloudflare Containers through Workers and Durable Objects.",
   "author": "Garrison",
   "license": "MIT",

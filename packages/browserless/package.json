@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/browserless",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Browserless adapter for ComputeSDK. Connect to managed Chromium sessions over CDP.",
   "license": "MIT",
   "type": "module",

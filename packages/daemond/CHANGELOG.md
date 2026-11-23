@@ -1,5 +1,11 @@
 # daemond
 
+## 0.1.10
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+
 ## 0.1.9
 
 ### Patch Changes

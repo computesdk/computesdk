@@ -1,6 +1,6 @@
 {
   "name": "daemond",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Small launcher for running repeatable commands through a local daemon in a sandbox.",
   "author": "ComputeSDK",
   "license": "MIT",

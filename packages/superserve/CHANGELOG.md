@@ -1,5 +1,15 @@
 # @computesdk/superserve
 
+## 0.2.28
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- d429c66: Add persistent volume management and create-time or runtime mounts through Superserve SDK 0.13.0.
+- Updated dependencies [0f42396]
+  - computesdk@4.1.23
+  - @computesdk/provider@2.1.29
+
 ## 0.2.27
 
 ### Patch Changes

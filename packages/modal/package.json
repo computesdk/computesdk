@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/modal",
-  "version": "1.9.35",
+  "version": "1.9.36",
   "description": "Modal sandbox adapter for ComputeSDK. Run code in Modal sandboxes with optional GPU support.",
   "author": "Garrison",
   "license": "MIT",

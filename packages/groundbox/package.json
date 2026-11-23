@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/groundbox",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Groundbox provider for ComputeSDK - Firecracker VM sandboxes with streaming commands, files, preview URLs, pause and resume, snapshots, templates and volumes",
   "author": "Groundbox",
   "license": "MIT",

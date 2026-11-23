@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/browserbase",
-  "version": "0.3.34",
+  "version": "0.3.35",
   "description": "Browserbase adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Garrison",
   "license": "MIT",

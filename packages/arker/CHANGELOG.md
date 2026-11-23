@@ -1,5 +1,17 @@
 # @computesdk/arker
 
+## 0.1.30
+
+### Patch Changes
+
+- 402a87c: Commands that run at the same time on an Arker sandbox now run concurrently instead of one after another: a command that starts while another is still running gets an Arker session of its own. Commands run one after another still share one shell, so a `cd` carries into the next.
+- 402a87c: `create({ image })` boots the given OCI image from a public registry instead of ignoring it, and Arker gets volumes: `volume.create/get/list/delete` on Arker filesystems, create-time `volumes`, and `attachVolume`/`detachVolume` on a running sandbox.
+- 402a87c: Keep an Arker sandbox running between commands, as other providers do, so background processes keep running: for its `timeout` (5 minutes when unset, no limit at `0`) or until it is destroyed. The sandbox is billed as running while it is held, and then pauses between commands again; `getInfo().timeout` reports the window instead of `0`. `keepAwake: false` keeps the previous behaviour.
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- Updated dependencies [0f42396]
+  - computesdk@4.1.23
+  - @computesdk/provider@2.1.29
+
 ## 0.1.29
 
 ### Patch Changes

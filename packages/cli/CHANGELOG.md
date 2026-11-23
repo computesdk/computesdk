@@ -1,5 +1,14 @@
 # @computesdk/cli
 
+## 2.6.20
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- Updated dependencies [0f42396]
+  - computesdk@4.1.23
+  - @computesdk/platform@0.2.11
+
 ## 2.6.19
 
 ### Patch Changes

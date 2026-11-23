@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/tensorlake",
-  "version": "0.1.40",
+  "version": "0.1.41",
   "description": "Tensorlake sandbox adapter for ComputeSDK. Run agent code in stateful microVM sandboxes.",
   "author": "Garrison",
   "license": "MIT",

@@ -1,5 +1,11 @@
 # @computesdk/cmd
 
+## 0.4.2
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+
 ## 0.4.1
 
 ### Patch Changes

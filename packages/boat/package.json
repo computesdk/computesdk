@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/boat",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Boat sandbox adapter for ComputeSDK. Run commands in Ubuntu sandboxes with snapshots, file transfers, and preview URLs.",
   "author": "Dao Hoang Son",
   "license": "MIT",

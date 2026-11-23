@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/leap0",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "Leap0 sandbox adapter for ComputeSDK. Run code in cloud sandboxes for agents.",
   "author": "ComputeSDK",
   "license": "MIT",

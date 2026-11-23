@@ -1,5 +1,13 @@
 # @computesdk/tigris
 
+## 1.1.36
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- Updated dependencies [0f42396]
+  - @computesdk/provider@2.1.29
+
 ## 1.1.35
 
 ### Patch Changes

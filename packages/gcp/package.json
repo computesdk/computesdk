@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/gcp",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "Google Cloud sandbox adapters for ComputeSDK, including Cloud Run Sandboxes.",
   "author": "Garrison",
   "license": "MIT",

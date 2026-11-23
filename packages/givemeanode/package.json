@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/givemeanode",
-  "version": "1.2.22",
+  "version": "1.2.23",
   "description": "givemeanode sandbox adapter for ComputeSDK. Run code in microVMs provisioned from regional warm pools.",
   "author": "givemeanode",
   "license": "MIT",

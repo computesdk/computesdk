@@ -1,5 +1,13 @@
 # @computesdk/createos-sandbox
 
+## 0.1.34
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- Updated dependencies [0f42396]
+  - @computesdk/provider@2.1.29
+
 ## 0.1.33
 
 ### Patch Changes

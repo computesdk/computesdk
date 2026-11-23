@@ -1,5 +1,14 @@
 # computesdk
 
+## 4.1.23
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- Updated dependencies [0f42396]
+  - @computesdk/cmd@0.4.2
+  - daemond@0.1.10
+
 ## 4.1.22
 
 ### Patch Changes

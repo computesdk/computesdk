@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/kernel",
-  "version": "0.2.34",
+  "version": "0.2.35",
   "description": "Kernel browser adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Garrison",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/archil",
-  "version": "0.4.37",
+  "version": "0.4.38",
   "description": "Archil sandbox adapter for ComputeSDK. Run commands in persistent Linux VMs or use disk-backed exec mode.",
   "author": "ComputeSDK",
   "license": "MIT",
