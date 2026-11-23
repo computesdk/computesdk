@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/collimate",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "Collimate sandbox adapter for ComputeSDK. Run code in Collimate sandboxes.",
   "author": "Collimate <hello@collimate.ai>",
   "license": "MIT",

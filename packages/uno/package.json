@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/uno",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Uno sandbox adapter for ComputeSDK. Run agent code and builds in Firecracker Linux microVMs.",
   "author": "Uno",
   "license": "MIT",

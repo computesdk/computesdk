@@ -1,5 +1,11 @@
 # @computesdk/test-utils
 
+## 2.0.7
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+
 ## 2.0.6
 
 ### Patch Changes

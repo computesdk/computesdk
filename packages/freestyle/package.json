@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/freestyle",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "description": "Freestyle sandbox adapter for ComputeSDK. Run long-lived agent tasks in Linux VMs with snapshots.",
   "author": "Garrison",
   "license": "MIT",

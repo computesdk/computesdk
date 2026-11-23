@@ -1,5 +1,11 @@
 # @computesdk/events
 
+## 1.1.2
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+
 ## 1.1.1
 
 ### Patch Changes

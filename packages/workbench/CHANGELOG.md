@@ -1,5 +1,43 @@
 # @computesdk/workbench
 
+## 33.0.44
+
+### Patch Changes
+
+- 0f42396: Refresh package descriptions and READMEs with current ComputeSDK branding, provider links, and setup instructions.
+- Updated dependencies [0f42396]
+  - @computesdk/agentuity@0.0.37
+  - @computesdk/beam@0.3.33
+  - @computesdk/blaxel@1.6.49
+  - @computesdk/boat@1.0.8
+  - @computesdk/cloud-run@0.1.35
+  - @computesdk/cloudflare@2.1.20
+  - @computesdk/cmd@0.4.2
+  - @computesdk/codesandbox@1.5.77
+  - @computesdk/collimate@0.1.26
+  - computesdk@4.1.23
+  - @computesdk/daytona@1.7.59
+  - @computesdk/e2b@1.7.78
+  - @computesdk/freestyle@0.2.27
+  - @computesdk/gcp@0.1.19
+  - @computesdk/hopx@0.2.53
+  - @computesdk/isorun@0.1.28
+  - @computesdk/just-bash@0.4.40
+  - @computesdk/k8s@0.2.29
+  - @computesdk/lelantos@0.2.28
+  - @computesdk/microsandbox@0.1.34
+  - @computesdk/modal@1.9.36
+  - @computesdk/namespace@1.6.48
+  - @computesdk/northflank@1.1.29
+  - @computesdk/novita@0.0.24
+  - @computesdk/provider@2.1.29
+  - @computesdk/runloop@1.3.81
+  - @computesdk/secure-exec@0.1.36
+  - @computesdk/sprites@0.1.41
+  - @computesdk/tenki@0.1.29
+  - @computesdk/upstash@0.3.37
+  - @computesdk/vercel@1.7.61
+
 ## 33.0.43
 
 ### Patch Changes

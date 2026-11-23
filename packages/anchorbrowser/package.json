@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/anchorbrowser",
-  "version": "0.2.30",
+  "version": "0.2.31",
   "description": "Anchor Browser adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Garrison",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/provider",
-  "version": "2.1.28",
+  "version": "2.1.29",
   "description": "Build custom sandbox, browser, and storage adapters with the ComputeSDK provider framework.",
   "author": "Garrison",
   "license": "MIT",

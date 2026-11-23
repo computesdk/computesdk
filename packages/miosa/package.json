@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/miosa",
-  "version": "1.2.13",
+  "version": "1.2.14",
   "description": "MIOSA sandbox adapter for ComputeSDK. Run code in Firecracker microVMs with snapshots.",
   "author": "MIOSA",
   "license": "MIT",

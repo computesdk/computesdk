@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/notte",
-  "version": "0.3.30",
+  "version": "0.3.31",
   "description": "Notte browser adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Notte Labs",
   "license": "MIT",

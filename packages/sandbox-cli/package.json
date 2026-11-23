@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/sandbox-cli",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "sandbox-cli adapter for ComputeSDK. Run microVM sandboxes on a Mac, self-hosted Linux, or in the cloud.",
   "author": "",
   "license": "MIT",

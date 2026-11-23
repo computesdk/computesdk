@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/arker",
-  "version": "0.1.29",
+  "version": "0.1.30",
   "description": "Arker sandbox adapter for ComputeSDK. Run code in Linux VMs forked from golden images with persistent filesystems.",
   "author": "Arker",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/buddy",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "description": "Buddy sandbox adapter for ComputeSDK. Run code in Ubuntu microVMs with snapshots and preview URLs.",
   "author": "Lucas Czulak",
   "license": "MIT",

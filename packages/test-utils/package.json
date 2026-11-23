@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/test-utils",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "Vitest suites and helpers for testing ComputeSDK sandbox, browser, and storage adapters.",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "create-compute",
-  "version": "0.2.33",
+  "version": "0.2.34",
   "description": "Start an interactive ComputeSDK workbench to run commands and try sandbox operations from your terminal.",
   "author": "Garrison",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/brezel",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "Brezel sandbox adapter for ComputeSDK. Run agent code in self-hosted Firecracker microVMs.",
   "author": "InferCrane <support@infercrane.com>",
   "license": "MIT",

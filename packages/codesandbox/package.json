@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/codesandbox",
-  "version": "1.5.76",
+  "version": "1.5.77",
   "description": "CodeSandbox adapter for ComputeSDK. Run code and work with files in cloud development sandboxes.",
   "author": "Garrison",
   "license": "MIT",
