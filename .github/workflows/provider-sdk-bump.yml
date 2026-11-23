@@ -41,16 +41,28 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
+      # Maintainers push migration fixes to the open breaking PR; regenerating
+      # the branch would erase them, so wait until it is merged or closed.
+      - name: Check for an open breaking PR
+        id: open
+        if: matrix.scope == 'breaking'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: echo "count=$(gh pr list --head '${{ matrix.branch }}' --state open --json number --jq length)" >> "$GITHUB_OUTPUT"
+
       - name: Bump provider SDK specifiers
+        if: steps.open.outputs.count == '' || steps.open.outputs.count == '0'
         env:
           BUMP_SCOPE: ${{ matrix.scope }}
           BUMP_REPORT: ${{ runner.temp }}/bump.md
         run: node scripts/bump-provider-sdks.mjs
 
       - name: Update lockfile
+        if: steps.open.outputs.count == '' || steps.open.outputs.count == '0'
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
       - name: Open PR
+        if: steps.open.outputs.count == '' || steps.open.outputs.count == '0'
         id: cpr
         uses: peter-evans/create-pull-request@v7
         with:
