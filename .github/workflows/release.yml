@@ -67,6 +67,16 @@ jobs:
           done
           echo "bump_only=$bump_only" >> "$GITHUB_OUTPUT"
 
+      # Revoke before changesets/action pushes non-bump changes, so an earlier
+      # auto-merge can't land them before the step below runs.
+      - name: Disable auto-merge on Version Packages
+        if: steps.pending.outputs.bump_only != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          pr=$(gh pr list --head changeset-release/main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then gh pr merge --disable-auto "$pr" || true; fi
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
@@ -89,15 +99,13 @@ jobs:
       # Uses a PAT: a merge made with GITHUB_TOKEN would not trigger this
       # workflow again, so nothing would be published.
       - name: Auto-merge Version Packages
-        if: steps.changesets.outputs.pullRequestNumber
+        if: steps.changesets.outputs.pullRequestNumber && steps.pending.outputs.bump_only == 'true'
         env:
           GH_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.RELEASE_TOKEN }}
           PR: ${{ steps.changesets.outputs.pullRequestNumber }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "No CHANGESET_TOKEN or RELEASE_TOKEN; leaving Version Packages for manual merge."
-          elif [ '${{ steps.pending.outputs.bump_only }}' = true ]; then
-            gh pr merge --auto --squash "$PR"
           else
-            gh pr merge --disable-auto "$PR" || true
+            gh pr merge --auto --squash "$PR"
           fi
