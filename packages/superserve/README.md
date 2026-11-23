@@ -68,9 +68,35 @@ superserve({
 | Snapshots (create, list, delete, boot from snapshot) | ✅ |
 | Preview URLs (`getUrl`) | ✅ |
 | Pause / resume (memory, processes and files preserved) | ✅ `instance.pause()` / `instance.resume()` |
+| Persistent volumes (create / get / list / delete, mount / detach) | ✅ Requires volume-enabled account and prepared template |
 | Template build (`template.create`) | ❌ Use `@superserve/sdk` `Template.create` |
 
 ## API Reference
+
+### Persistent volumes
+
+Volume mounts require a template with the Superserve volume runtime installed
+at build time and volumes enabled for the account.
+
+```typescript
+const volume = await provider.volume!.create({
+  name: 'project-data',
+  sizeBytes: 1024 ** 3,
+});
+const sandbox = await provider.instances.create({
+  templateId: 'my-volume-runtime',
+  volumes: [{ volume, mountPath: '/mnt/data' }],
+});
+
+await sandbox.detachVolume!(volume, '/mnt/data');
+await sandbox.destroy();
+await provider.volume!.delete(volume.id!);
+```
+
+Volumes can also be mounted on a running instance with
+`await sandbox.attachVolume!(volume, '/mnt/data')`. References accept an ID,
+name, or handle returned by `provider.volume`. Supply the mount path when
+detaching a volume with more than one mount on the instance.
 
 ### `sandbox.create(options?)`
 
