@@ -9,7 +9,7 @@ const goldens = { xs: 'ubuntu-coding', sm: 'ubuntu-coding', md: 'ubuntu-coding',
 function mockFork(impl?: () => Promise<VM>) {
   return vi.spyOn(Arker.prototype, 'fork').mockImplementation(impl ?? (async () => ({ id: 'vm-new' }) as VM));
 }
-const config = { apiKey: 'ark_test', platforms: ['graviton4'] };
+const config = { apiKey: 'ark_test', platforms: ['graviton4'], keepAwake: false };
 
 describe('Arker standard size mapping (mock)', () => {
   afterEach(() => { vi.restoreAllMocks(); });
