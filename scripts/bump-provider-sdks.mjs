@@ -12,7 +12,8 @@
  *
  * BUMP_SCOPE selects which bumps to apply, so they can ship through separate PRs:
  *   compatible (default) — latest stays caret-compatible with the current version
- *                          (same major, or same minor/patch on 0.x)
+ *                          (same major, or same minor/patch on 0.x) and keeps
+ *                          the same `engines.node` requirement
  *   breaking             — latest crosses that boundary and needs a human review
  *
  * Writes a markdown report to $BUMP_REPORT (default: stdout only).
@@ -27,15 +28,19 @@ if (SCOPE !== 'compatible' && SCOPE !== 'breaking') throw new Error(`Unknown BUM
 const SPEC = /^([\^~]?)(\d+\.\d+\.\d+(?:-[\w.]+)?)$/;
 
 const cache = new Map();
-async function latestVersion(name) {
-  if (!cache.has(name)) {
-    cache.set(name, (async () => {
-      const res = await fetch(`https://registry.npmjs.org/${name.replace('/', '%2F')}/latest`, { signal: AbortSignal.timeout(15_000) });
-      if (!res.ok) throw new Error(`npm registry ${res.status} for ${name}`);
-      return (await res.json()).version;
+async function manifest(name, version) {
+  const key = `${name}@${version}`;
+  if (!cache.has(key)) {
+    cache.set(key, (async () => {
+      const res = await fetch(
+        `https://registry.npmjs.org/${name.replace('/', '%2F')}/${version}`,
+        { signal: AbortSignal.timeout(15_000) },
+      );
+      if (!res.ok) throw new Error(`npm registry ${res.status} for ${key}`);
+      return res.json();
     })());
   }
-  return cache.get(name);
+  return cache.get(key);
 }
 
 function compare(a, b) {
@@ -75,9 +80,11 @@ for (const dir of readdirSync('packages').sort()) {
     const match = SPEC.exec(spec);
     if (!match || SKIP.has(name)) continue;
     const [, prefix, current] = match;
-    const latest = await latestVersion(name);
+    const { version: latest, engines } = await manifest(name, 'latest');
     if (compare(latest, current) <= 0) continue;
-    if (isCompatible(current, latest) !== (SCOPE === 'compatible')) continue;
+    const compatible = isCompatible(current, latest) &&
+      engines?.node === (await manifest(name, current)).engines?.node;
+    if (compatible !== (SCOPE === 'compatible')) continue;
     deps[name] = `${prefix}${latest}`;
     changes.push({ pkg: pkg.name, name, from: spec, to: deps[name] });
     changed = true;
@@ -91,11 +98,11 @@ for (const dir of readdirSync('packages').sort()) {
 }
 
 if (bumpedPackages.length) {
-  const date = new Date().toISOString().slice(0, 10);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const frontmatter = bumpedPackages.map(name => `"${name}": patch`).join('\n');
   const lines = changes.map(c => `- ${c.pkg}: \`${c.name}\` ${c.from} -> ${c.to}`).join('\n');
   writeFileSync(
-    join('.changeset', `provider-sdk-${SCOPE}-bump-${date}.md`),
+    join('.changeset', `provider-sdk-${SCOPE}-bump-${stamp}.md`),
     `---\n${frontmatter}\n---\n\nBump provider SDKs to their latest npm releases:\n\n${lines}\n`,
   );
 }
