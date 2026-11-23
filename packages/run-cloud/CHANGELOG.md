@@ -1,5 +1,13 @@
 # @computesdk/run-cloud
 
+## 1.0.22
+
+### Patch Changes
+
+- d5931cf: Restore the Run Cloud provider and support an explicit `onTimeout: 'destroy'`
+  policy for create and snapshot restore. Update the native SDK dependency so
+  hard deadlines destroy the sandbox while default expiry remains resumable.
+
 ## 1.0.21
 
 ### Patch Changes
