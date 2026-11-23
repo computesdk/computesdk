@@ -48,7 +48,7 @@ jobs:
         if: matrix.scope == 'breaking'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-        run: echo "count=$(gh pr list --head '${{ matrix.branch }}' --state open --json number --jq length)" >> "$GITHUB_OUTPUT"
+        run: echo "count=$(gh pr list --head '${{ matrix.branch }}' --state open --json isCrossRepository --jq 'map(select(.isCrossRepository | not)) | length')" >> "$GITHUB_OUTPUT"
 
       - name: Bump provider SDK specifiers
         if: steps.open.outputs.count == '' || steps.open.outputs.count == '0'
