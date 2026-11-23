@@ -49,6 +49,48 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      # Version Packages auto-merges only when every pending changeset is a
+      # patch-only changeset that came, in every commit touching it, from a
+      # merged same-repo PR on the compatible bump branch. Filenames alone are
+      # not trusted; anything else keeps the release manual.
+      - name: Check for bump-only changesets
+        id: pending
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          shopt -s nullglob
+          bump_only=false
+          for f in .changeset/*.md; do
+            [ "$(basename "$f")" = README.md ] && continue
+            bump_only=true
+            case "$(basename "$f")" in
+              provider-sdk-compatible-bump-*) ;;
+              *) echo "$f: not a bump changeset"; bump_only=false; break ;;
+            esac
+            if awk '/^---$/{n++; next} n==1' "$f" | grep -qvE ":[[:space:]]*patch[[:space:]]*$"; then
+              echo "$f: non-patch bump"; bump_only=false; break
+            fi
+            for sha in $(git log --format=%H -- "$f"); do
+              head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" \
+                --jq 'map(select(.merged_at != null and .head.repo.full_name == env.GITHUB_REPOSITORY)) | .[0].head.ref // ""') || head=""
+              if [ "$head" != chore/provider-sdk-bump ]; then
+                echo "$f: commit $sha not from chore/provider-sdk-bump"; bump_only=false; break 2
+              fi
+            done
+          done
+          echo "bump_only=$bump_only" >> "$GITHUB_OUTPUT"
+
+      # Revoke before changesets/action pushes non-bump changes, so an earlier
+      # auto-merge can't land them before the step below runs.
+      - name: Disable auto-merge on Version Packages
+        if: steps.pending.outputs.bump_only != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          pr=$(gh pr list --head changeset-release/main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then gh pr merge --disable-auto "$pr" || true; fi
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
@@ -67,3 +109,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Uses a PAT: a merge made with GITHUB_TOKEN would not trigger this
+      # workflow again, so nothing would be published.
+      - name: Auto-merge Version Packages
+        if: steps.changesets.outputs.pullRequestNumber && steps.pending.outputs.bump_only == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CHANGESET_TOKEN || secrets.RELEASE_TOKEN }}
+          PR: ${{ steps.changesets.outputs.pullRequestNumber }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "No CHANGESET_TOKEN or RELEASE_TOKEN; leaving Version Packages for manual merge."
+          else
+            gh pr merge --auto --squash "$PR"
+          fi
