@@ -1,0 +1,81 @@
+name: Provider SDK bump
+
+# Daily: bumps each adapter's upstream provider SDK to its latest npm release.
+# Caret-compatible bumps open a PR that auto-merges once required checks pass;
+# breaking bumps (new major, or new minor on 0.x) open a draft PR for review.
+# Each PR carries patch changesets, so merging it queues the adapters for the
+# next "Version Packages" release.
+on:
+  schedule:
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    name: Bump ${{ matrix.scope }} provider SDKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scope: compatible
+            branch: chore/provider-sdk-bump
+            title: 'chore(deps): bump provider SDKs to latest compatible releases'
+            draft: false
+            auto_merge: true
+          - scope: breaking
+            branch: chore/provider-sdk-breaking-bump
+            title: 'chore(deps): bump provider SDKs to latest breaking releases'
+            draft: true
+            auto_merge: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      # Maintainers push migration fixes to the open breaking PR; regenerating
+      # the branch would erase them, so wait until it is merged or closed.
+      - name: Check for an open breaking PR
+        id: open
+        if: matrix.scope == 'breaking'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: echo "count=$(gh pr list --head '${{ matrix.branch }}' --state open --json isCrossRepository --jq 'map(select(.isCrossRepository | not)) | length')" >> "$GITHUB_OUTPUT"
+
+      - name: Bump provider SDK specifiers
+        if: steps.open.outputs.count == '' || steps.open.outputs.count == '0'
+        env:
+          BUMP_SCOPE: ${{ matrix.scope }}
+          BUMP_REPORT: ${{ runner.temp }}/bump.md
+        run: node scripts/bump-provider-sdks.mjs
+
+      - name: Update lockfile
+        if: steps.open.outputs.count == '' || steps.open.outputs.count == '0'
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+
+      - name: Open PR
+        if: steps.open.outputs.count == '' || steps.open.outputs.count == '0'
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          # A PAT is required so the PR triggers CI (GITHUB_TOKEN-created PRs do not).
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: ${{ matrix.branch }}
+          title: ${{ matrix.title }}
+          body-path: ${{ runner.temp }}/bump.md
+          draft: ${{ matrix.draft }}
+          commit-message: ${{ matrix.title }}
+
+      - name: Enable auto-merge
+        if: matrix.auto_merge && steps.cpr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-number }}"
