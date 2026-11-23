@@ -57,8 +57,8 @@ interface ExecResponse {
 
 type FsRunCommand = (sandbox: Agent37Sandbox, command: string, options?: RunCommandOptions) => Promise<CommandResult>;
 
-// 48 KiB becomes 64 KiB of base64, leaving room for JSON and paths under exec's 128 KB request cap.
-const WRITE_CHUNK_BYTES = 48 * 1024;
+// 90 KiB becomes 120 KiB of base64, leaving ~5 KB for the command/JSON under exec's 128 KB cap.
+const WRITE_CHUNK_BYTES = 90 * 1024;
 // Base64 plus the read-status trailer stays below exec's 512 KB output cap.
 const READ_CHUNK_BYTES = 256 * 1024;
 
