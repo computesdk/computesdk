@@ -46,7 +46,7 @@ Optional:
 
 ```bash
 GRAVIXLAYER_BASE_URL=https://api.gravixlayer.ai
-GRAVIXLAYER_CLOUD=aws
+GRAVIXLAYER_CLOUD=gravix
 GRAVIXLAYER_REGION=us-central-1
 ```
 
