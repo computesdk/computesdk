@@ -5,6 +5,7 @@
  */
 
 import { get, head, list as tigrisList, put, remove } from '@tigrisdata/storage';
+import type { GetOptions } from '@tigrisdata/storage';
 import type { StorageProvider, StorageObject, UploadOptions, DownloadResult, ListOptions, ListResult } from '@computesdk/provider';
 
 /**
@@ -159,7 +160,7 @@ export function r2(config: R2Config): R2 {
 
     async download(bucket: string, key: string): Promise<DownloadResult> {
       try {
-        const result = await get(key, 'stream', withConfig(bucket));
+        const result = await get(key, 'stream', withConfig<GetOptions>(bucket));
         if (result.error) {
           throw new Error(result.error.message);
         }
