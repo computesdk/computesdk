@@ -35,15 +35,15 @@ Get an API key at <https://gravixlayer.ai>. The TypeScript SDK is
 | ------------ | ----------------------- | ------------------------------------------------ |
 | `apiKey`     | `GRAVIXLAYER_API_KEY`   | GravixLayer API key (required).                  |
 | `baseUrl`    | `GRAVIXLAYER_BASE_URL`  | API origin. Defaults to `https://api.gravixlayer.ai`. |
-| `cloud`      | `GRAVIXLAYER_CLOUD`     | Cloud for runtime and template placement. Defaults to `aws`. |
-| `region`     | `GRAVIXLAYER_REGION`    | Region for runtime and template placement. Defaults to `us-east-1`. |
+| `cloud`      | `GRAVIXLAYER_CLOUD`     | Cloud for runtime and template placement. Defaults to `gravix`. |
+| `region`     | `GRAVIXLAYER_REGION`    | Region for runtime and template placement. Defaults to `us-central-1`. |
 | `timeout`    | —                       | Request timeout in milliseconds.                 |
 | `maxRetries` | —                       | Retry budget. Defaults to `0`.                   |
 | `http2`      | —                       | Use HTTP/2. Defaults to `true`.                  |
 
 `create` takes `templateId` (an existing template), or `snapshotId`, plus
 `envs`, `timeout`, `metadata`, `cloud`, and `region`. Omitting `templateId`
-boots `base-small`. Omitting `cloud` and `region` uses `aws` and `us-east-1`.
+boots `base-small`. Omitting `cloud` and `region` uses `gravix` and `us-central-1`.
 Sizing comes from the template. `image` is not accepted: build a template from
 an image with `template.create({ name, fromImage })`, then pass its name as
 `templateId`. `sandbox.getInstance()` returns the GravixLayer

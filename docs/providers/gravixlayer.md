@@ -47,7 +47,7 @@ Optional:
 ```bash
 GRAVIXLAYER_BASE_URL=https://api.gravixlayer.ai
 GRAVIXLAYER_CLOUD=aws
-GRAVIXLAYER_REGION=us-east-1
+GRAVIXLAYER_REGION=us-central-1
 ```
 
 Get your API key at [gravixlayer.ai](https://gravixlayer.ai). Product docs: [docs.gravixlayer.ai](https://docs.gravixlayer.ai).

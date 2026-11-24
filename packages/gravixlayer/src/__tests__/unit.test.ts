@@ -393,15 +393,15 @@ describe('client', () => {
     await gravixlayer({
       apiKey: 'gk_test',
       baseUrl: 'https://example.test',
-      cloud: 'aws',
-      region: 'us-east-1',
+      cloud: 'gravix',
+      region: 'us-central-1',
       timeout: 30_000,
     }).sandbox.create()
     expect(h.state.clientOptions[0]).toEqual({
       apiKey: 'gk_test',
       baseUrl: 'https://example.test',
-      cloud: 'aws',
-      region: 'us-east-1',
+      cloud: 'gravix',
+      region: 'us-central-1',
       timeout: 30_000,
       maxRetries: 0,
       http2: true,
