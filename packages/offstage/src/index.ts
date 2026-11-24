@@ -1,6 +1,6 @@
 /**
- * offstage provider for ComputeSDK: real macOS sandboxes on Apple silicon,
- * over offstage's REST API (https://api.offstage.cloud/llms.txt).
+ * Offstage provider for ComputeSDK: real macOS sandboxes on Apple silicon,
+ * over Offstage's REST API (https://api.offstage.cloud/llms.txt).
  *
  * A create is one request and answers at once with a `pending` sandbox; a Mac
  * slot takes it in the background. The first command waits for that slot on
@@ -18,15 +18,15 @@ import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, Run
 export type OffstageSession = 'headless' | 'gui';
 
 export interface OffstageConfig {
-  /** offstage API key (`sk_offstage_...`) - if not provided, falls back to the OFFSTAGE_API_KEY environment variable */
+  /** Offstage API key (`sk_offstage_...`) - if not provided, falls back to the OFFSTAGE_API_KEY environment variable */
   apiKey?: string;
-  /** Base URL of the offstage API - falls back to OFFSTAGE_API_URL, then https://api.offstage.cloud */
+  /** Base URL of the Offstage API - falls back to OFFSTAGE_API_URL, then https://api.offstage.cloud */
   baseUrl?: string;
   /** `headless` (default) runs commands with no desktop; `gui` gives the sandbox a logged-in desktop session */
   session?: OffstageSession;
 }
 
-/** The sandbox as offstage's API returns it, plus the connection it was reached with. */
+/** The sandbox as Offstage's API returns it, plus the connection it was reached with. */
 export interface OffstageSandbox {
   id: string;
   name: string;
@@ -43,7 +43,7 @@ export interface OffstageSandbox {
   [key: string]: unknown;
 }
 
-/** A failed offstage API call: its `{error: {code, message, fix, requestId}}` envelope. */
+/** A failed Offstage API call: its `{error: {code, message, fix, requestId}}` envelope. */
 export class OffstageError extends Error {
   constructor(
     readonly status: number,
@@ -53,7 +53,7 @@ export class OffstageError extends Error {
     readonly requestId?: string,
   ) {
     super(
-      `offstage ${status} ${code}: ${detail}` +
+      `Offstage ${status} ${code}: ${detail}` +
       (fix ? ` Fix: ${fix}.` : '') +
       (requestId ? ` (request ${requestId})` : ''),
     );
@@ -68,11 +68,11 @@ const SLOT_WAIT_MS = 120_000;
 const RATE_LIMIT_WAIT_MS = 120_000;
 /** 429 codes that mean "not performed, send it again after Retry-After". */
 const RETRY_AFTER_CODES = new Set(['rate-limit', 'uploads-busy']);
-/** Exit code reported for a command offstage killed at its timeout (the API reports `exitCode: null`). */
+/** Exit code reported for a command Offstage killed at its timeout (the API reports `exitCode: null`). */
 const TIMEOUT_EXIT_CODE = 124;
 
 const FIXED_SHAPE_REASON =
-  'offstage sandboxes have one fixed shape (a macOS user account on an Apple silicon Mac) and POST /v1/sandboxes takes no CPU, memory or disk fields, so no standard size can be selected.';
+  'Offstage sandboxes have one fixed shape (a macOS user account on an Apple silicon Mac) and POST /v1/sandboxes takes no CPU, memory or disk fields, so no standard size can be selected.';
 
 interface Connection { apiKey: string; baseUrl: string }
 
@@ -80,7 +80,7 @@ function connect(config: OffstageConfig): Connection {
   const apiKey = config.apiKey || (typeof process !== 'undefined' && process.env?.OFFSTAGE_API_KEY) || '';
   if (!apiKey) {
     throw new Error(
-      'Missing offstage API key.\n\n' +
+      'Missing Offstage API key.\n\n' +
       'Create one at https://console.offstage.cloud\n' +
       'Then pass it: offstage({ apiKey: "sk_offstage_..." })\n' +
       'Or set OFFSTAGE_API_KEY in your environment.',
@@ -176,7 +176,7 @@ async function runForeground(sandbox: OffstageSandbox, command: string, options?
   const startTime = Date.now();
   const body: Record<string, unknown> = { cmd: command };
   if (options?.cwd) {
-    // offstage's `cwd` field is relative to the sandbox root, so an absolute directory is entered by the shell.
+    // Offstage's `cwd` field is relative to the sandbox root, so an absolute directory is entered by the shell.
     if (!options.cwd.startsWith('/')) body.cwd = options.cwd;
     else body.cmd = `cd "${escapeShellArg(options.cwd)}" || exit 1\n${command}`;
   }
@@ -193,7 +193,7 @@ async function runForeground(sandbox: OffstageSandbox, command: string, options?
   let exitCode: number;
   if (answer.timedOut) exitCode = TIMEOUT_EXIT_CODE;
   else if (typeof answer.exitCode === 'number') exitCode = answer.exitCode;
-  else throw new Error(`offstage: command ${answer.commandId} finished without an exit code`);
+  else throw new Error(`Offstage: command ${answer.commandId} finished without an exit code`);
   return { stdout: answer.stdout ?? '', stderr: answer.stderr ?? '', exitCode, durationMs: Date.now() - startTime };
 }
 
@@ -201,20 +201,20 @@ async function runForeground(sandbox: OffstageSandbox, command: string, options?
 async function shell(sandbox: OffstageSandbox, command: string, what: string): Promise<CommandResult> {
   const result = await runForeground(sandbox, command);
   if (result.exitCode !== 0) {
-    throw new Error(`offstage: failed to ${what}: ${(result.stderr || result.stdout).trim() || `exit code ${result.exitCode}`}`);
+    throw new Error(`Offstage: failed to ${what}: ${(result.stderr || result.stdout).trim() || `exit code ${result.exitCode}`}`);
   }
   return result;
 }
 
 /**
- * The file route for `path`. offstage's file routes address paths relative to
+ * The file route for `path`. Offstage's file routes address paths relative to
  * the sandbox root and refuse absolute ones; that is refused here, before any
  * request, so a probe of an absolute path never waits on the sandbox.
  */
 function filesPath(path: string): string {
   if (path.startsWith('/')) {
     throw new Error(
-      `offstage: readFile and writeFile take a path relative to the sandbox root, not the absolute path ${path}. ` +
+      `Offstage: readFile and writeFile take a path relative to the sandbox root, not the absolute path ${path}. ` +
       'To reach a file elsewhere on the Mac, write or read it under the root and move or copy it with runCommand.',
     );
   }
@@ -288,7 +288,7 @@ export const offstage = defineProvider<OffstageSandbox, OffstageConfig>({
       runCommand: async (sandbox: OffstageSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
         if (options?.background) {
           throw new Error(
-            'offstage does not support background commands: its API answers a command when the command ends, ' +
+            'Offstage does not support background commands: its API answers a command when the command ends, ' +
             'and ComputeSDK\'s shell process tier needs `setsid`, which macOS does not have. ' +
             'Run the command in the foreground (a long one is followed until it ends).',
           );
@@ -317,10 +317,10 @@ export const offstage = defineProvider<OffstageSandbox, OffstageConfig>({
       },
 
       getUrl: async (): Promise<string> => {
-        throw new Error('offstage does not support getUrl: sandboxes expose no ports to the internet.');
+        throw new Error('Offstage does not support getUrl: sandboxes expose no ports to the internet.');
       },
 
-      // readFile and writeFile carry the bytes over offstage's file routes. The
+      // readFile and writeFile carry the bytes over Offstage's file routes. The
       // other four run in the shell, whose working directory is the sandbox
       // root, so a relative path means the same file in all six.
       filesystem: {

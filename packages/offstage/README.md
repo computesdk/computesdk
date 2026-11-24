@@ -1,6 +1,6 @@
 # @computesdk/offstage
 
-[offstage](https://offstage.cloud) provider for ComputeSDK - real macOS sandboxes on Apple silicon for AI agents and CI. Each sandbox is its own macOS user account on a Mac, driven over HTTP: headless sandboxes run commands with Swift, Xcode, iOS simulators, Node and Python present, and GUI sandboxes run apps on their own desktop.
+[Offstage](https://offstage.cloud) provider for ComputeSDK - real macOS sandboxes on Apple silicon for AI agents and CI, with commands, files, Xcode, iOS simulators and GUI sessions. Each sandbox is its own macOS user account on a Mac, driven over HTTP: headless sandboxes run commands with Swift, Xcode, iOS simulators, Node and Python present, and GUI sandboxes run apps on their own desktop.
 
 ## Installation
 
@@ -10,13 +10,13 @@ npm install @computesdk/offstage
 
 ## Setup
 
-Create an API key in the [offstage console](https://console.offstage.cloud) (keys start with `sk_offstage_`), then set it:
+Create an API key in the [Offstage console](https://console.offstage.cloud) (keys start with `sk_offstage_`), then set it:
 
 ```bash
 OFFSTAGE_API_KEY=sk_offstage_your_api_key
 ```
 
-`OFFSTAGE_API_URL` optionally points the provider at another offstage API origin.
+`OFFSTAGE_API_URL` optionally points the provider at another Offstage API origin.
 
 ## Usage
 
@@ -43,9 +43,9 @@ await sandbox.destroy();
 
 ```typescript
 interface OffstageConfig {
-  /** offstage API key (sk_offstage_...) - if not provided, falls back to the OFFSTAGE_API_KEY env var */
+  /** Offstage API key (sk_offstage_...) - if not provided, falls back to the OFFSTAGE_API_KEY env var */
   apiKey?: string;
-  /** Base URL of the offstage API - falls back to OFFSTAGE_API_URL, then https://api.offstage.cloud */
+  /** Base URL of the Offstage API - falls back to OFFSTAGE_API_URL, then https://api.offstage.cloud */
   baseUrl?: string;
   /** 'headless' (default) runs commands with no desktop; 'gui' gives the sandbox a logged-in desktop */
   session?: 'headless' | 'gui';
@@ -60,14 +60,14 @@ interface OffstageConfig {
 | `name` | `name` | 1 to 48 lowercase letters, digits and inner hyphens, like `ios-build`. |
 | `session` | `session` | `'headless'` or `'gui'`; overrides the provider's `session` for this sandbox. |
 
-`create` is one request and returns at once. The sandbox starts out waiting for a free Mac slot, and its first command or file call waits for that slot on offstage's side, so there is nothing to poll.
+`create` is one request and returns at once. The sandbox starts out waiting for a free Mac slot, and its first command or file call waits for that slot on Offstage's side, so there is nothing to poll.
 
 ## Sessions
 
 - **`headless`** (default): the sandbox's macOS user with no desktop. For `swift build`, `swift test`, `xcodebuild`, iOS simulators (`xcrun simctl`), Node, Python and scripts.
 - **`gui`**: a logged-in desktop session, for apps with windows, screenshots and macOS UI tests. In a `gui` sandbox a command's `stdout` carries both output streams and `stderr` is empty.
 
-Every sandbox starts with macOS on Apple silicon, Xcode with iOS simulator runtimes, Swift, Apple clang, git, Node with npm, Python 3 and Rust. There is no `sudo` and no Homebrew; tools install into the home folder. See the [offstage docs](https://offstage.cloud/docs) for the current versions.
+Every sandbox starts with macOS on Apple silicon, Xcode with iOS simulator runtimes, Swift, Apple clang, git, Node with npm, Python 3 and Rust. There is no `sudo` and no Homebrew; tools install into the home folder. See the [Offstage docs](https://offstage.cloud/docs) for the current versions.
 
 ## Commands
 
@@ -100,12 +100,12 @@ const there = await sandbox.filesystem.exists('out/app.zip');
 await sandbox.filesystem.remove('out');
 ```
 
-- `readFile` and `writeFile` use offstage's file routes. They take paths made of letters, digits, `.`, `_`, `-` and `/`, with no `..` segment, and **reject absolute paths** such as `/tmp/a.txt`. To place a file elsewhere on the Mac, write it under the root and move it: `await sandbox.runCommand('mv a.txt /tmp/a.txt')`.
+- `readFile` and `writeFile` use Offstage's file routes. They take paths made of letters, digits, `.`, `_`, `-` and `/`, with no `..` segment, and **reject absolute paths** such as `/tmp/a.txt`. To place a file elsewhere on the Mac, write it under the root and move it: `await sandbox.runCommand('mv a.txt /tmp/a.txt')`.
 - `mkdir`, `readdir`, `exists` and `remove` run as shell commands from the sandbox root, so they take relative paths (the same files as above) and absolute paths.
 
 ## Standard sizes
 
-offstage does not support `sizeClass`. Every sandbox has the same fixed shape, a macOS user account on an Apple silicon Mac, and `POST /v1/sandboxes` takes no CPU, memory or disk fields.
+Offstage does not support `sizeClass`. Every sandbox has the same fixed shape, a macOS user account on an Apple silicon Mac, and `POST /v1/sandboxes` takes no CPU, memory or disk fields.
 
 | `sizeClass` | Status | Reason |
 | --- | --- | --- |
@@ -115,7 +115,7 @@ offstage does not support `sizeClass`. Every sandbox has the same fixed shape, a
 
 ## Errors
 
-A failed API call throws an `OffstageError` carrying offstage's error envelope: `status`, `code`, `detail`, and, when present, `fix` (what to do) and `requestId`. The message reads like `offstage 409 sandbox-closed: sandbox sbx_... is closed (idle) Fix: create a new sandbox. (request req_...)`.
+A failed API call throws an `OffstageError` carrying Offstage's error envelope: `status`, `code`, `detail`, and, when present, `fix` (what to do) and `requestId`. The message reads like `Offstage 409 sandbox-closed: sandbox sbx_... is closed (idle) Fix: create a new sandbox. (request req_...)`.
 
 ```typescript
 import { OffstageError } from '@computesdk/offstage';
@@ -149,14 +149,14 @@ Two answers are retried for you, because the call was not performed: `429 rate-l
 ## Limitations
 
 - **No port URLs.** `getUrl` throws: a sandbox exposes no ports to the internet.
-- **No background commands or live output.** `runCommand(..., { background: true })` throws. offstage's API answers a command when it ends, and ComputeSDK's shell process tier, which would serve `startProcess`, `onStdout` and `onStderr`, needs `setsid`, which macOS does not have.
+- **No background commands or live output.** `runCommand(..., { background: true })` throws. Offstage's API answers a command when it ends, and ComputeSDK's shell process tier, which would serve `startProcess`, `onStdout` and `onStderr`, needs `setsid`, which macOS does not have.
 - **`readFile` returns text.** File bytes are decoded as UTF-8.
 - **Rate limit.** A team may send 120 requests a minute; past that calls wait out the `Retry-After` and continue.
 - **No templates or snapshots** through ComputeSDK.
 
 ## Support
 
-- [offstage documentation](https://offstage.cloud/docs)
+- [Offstage documentation](https://offstage.cloud/docs)
 - [ComputeSDK issues](https://github.com/computesdk/computesdk/issues)
 
 ## License

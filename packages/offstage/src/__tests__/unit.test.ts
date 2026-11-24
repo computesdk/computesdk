@@ -16,7 +16,7 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
 const failure = (status: number, code: string, message: string, extra: Record<string, string> = {}, headers: Record<string, string> = {}) =>
   json(status, { error: { code, message, requestId: 'req_9', ...extra } }, headers);
 
-describe('offstage provider (mocked API)', () => {
+describe('Offstage provider (mocked API)', () => {
   const fetchMock = vi.fn();
   /** [method, url, init] of every request after the create. */
   const calls = () => fetchMock.mock.calls.slice(1).map(([url, init]) => [init.method, url, init] as const);
@@ -71,7 +71,7 @@ describe('offstage provider (mocked API)', () => {
 
     it('fails without a key before calling the API', async () => {
       vi.stubEnv('OFFSTAGE_API_KEY', '');
-      await expect(offstage({}).sandbox.create()).rejects.toThrow(/Missing offstage API key[\s\S]*OFFSTAGE_API_KEY/);
+      await expect(offstage({}).sandbox.create()).rejects.toThrow(/Missing Offstage API key[\s\S]*OFFSTAGE_API_KEY/);
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });
@@ -145,7 +145,7 @@ describe('offstage provider (mocked API)', () => {
     it('throws a 429 that carries no Retry-After', async () => {
       const sandbox = await createSandbox();
       fetchMock.mockResolvedValueOnce(failure(429, 'rate-limit', 'slow down'));
-      await expect(sandbox.runCommand('node -v')).rejects.toThrow(/offstage 429 rate-limit/);
+      await expect(sandbox.runCommand('node -v')).rejects.toThrow(/Offstage 429 rate-limit/);
       expect(calls()).toHaveLength(1);
     });
 
@@ -169,19 +169,19 @@ describe('offstage provider (mocked API)', () => {
       const error = await sandbox.runCommand('true').catch((e) => e);
       expect(error).toBeInstanceOf(OffstageError);
       expect(error).toMatchObject({ status: 409, code: 'sandbox-closed', fix: 'create a new sandbox', requestId: 'req_9' });
-      expect(error.message).toBe(`offstage 409 sandbox-closed: sandbox ${SBX} is closed (idle) Fix: create a new sandbox. (request req_9)`);
+      expect(error.message).toBe(`Offstage 409 sandbox-closed: sandbox ${SBX} is closed (idle) Fix: create a new sandbox. (request req_9)`);
     });
 
     it('surfaces a create refusal', async () => {
       fetchMock.mockResolvedValueOnce(failure(402, 'payment-method-required', 'not enough credit', { fix: 'buy credit in the console under Billing' }));
       await expect(offstage({ apiKey: 'sk_offstage_test' }).sandbox.create())
-        .rejects.toThrow('offstage 402 payment-method-required: not enough credit Fix: buy credit in the console under Billing.');
+        .rejects.toThrow('Offstage 402 payment-method-required: not enough credit Fix: buy credit in the console under Billing.');
     });
 
     it('reports a failure whose body is not JSON', async () => {
       const sandbox = await createSandbox();
       fetchMock.mockResolvedValueOnce(new Response('<html>bad gateway</html>', { status: 502, headers: { 'x-request-id': 'req_p' } }));
-      await expect(sandbox.runCommand('true')).rejects.toThrow('offstage 502 http-error: <html>bad gateway</html> (request req_p)');
+      await expect(sandbox.runCommand('true')).rejects.toThrow('Offstage 502 http-error: <html>bad gateway</html> (request req_p)');
     });
   });
 
@@ -209,7 +209,7 @@ describe('offstage provider (mocked API)', () => {
     it('throws when the file does not exist', async () => {
       const sandbox = await createSandbox();
       fetchMock.mockResolvedValueOnce(failure(404, 'file-not-found', 'missing.txt is not a file'));
-      await expect(sandbox.filesystem.readFile('missing.txt')).rejects.toThrow(/offstage 404 file-not-found/);
+      await expect(sandbox.filesystem.readFile('missing.txt')).rejects.toThrow(/Offstage 404 file-not-found/);
     });
 
     it('retries a file op on 409 sandbox-not-ready', async () => {

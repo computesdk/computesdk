@@ -2,4 +2,4 @@
 "@computesdk/offstage": patch
 ---
 
-Add offstage provider
+Add Offstage provider

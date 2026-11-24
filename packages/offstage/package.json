@@ -1,7 +1,7 @@
 {
   "name": "@computesdk/offstage",
   "version": "1.0.0",
-  "description": "offstage provider for ComputeSDK - real macOS sandboxes on Apple silicon for AI agents and CI, with commands, files, Xcode and iOS simulators",
+  "description": "Offstage provider for ComputeSDK - real macOS sandboxes on Apple silicon for AI agents and CI, with commands, files, Xcode, iOS simulators and GUI sessions",
   "author": "offstage",
   "license": "MIT",
   "main": "./dist/index.js",
