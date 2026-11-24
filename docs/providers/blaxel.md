@@ -33,6 +33,8 @@ Blaxel provider for ComputeSDK
 
 ## Lifecycle
 
+`pause()`/`resume()` preserve memory, processes and files. `pause()` asks for a standby and returns once the control plane records one newer than the sandbox's last activity, within 60 s; a sandbox that has just started can ignore the request and goes to standby once idle (about 15 s). `resume()` wakes it with one request.
+
 Snapshots declare whole-rootfs and memory preservation with the source kept. Restore with `snapshotId`; see [snapshot semantics and cleanup](../reference/compute.md#snapshot-capabilities).
 
 ## Standard sizes
