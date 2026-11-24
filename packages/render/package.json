@@ -38,7 +38,7 @@
   ],
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@renderinc/sdk": "^1.8.0",
+    "@renderinc/sdk": "^1.10.0",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

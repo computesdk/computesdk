@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "browser-use-sdk": "^3.4.3",
+    "browser-use-sdk": "^3.12.1",
     "computesdk": "workspace:*",
     "dotenv": "^16.0.0",
     "playwright-core": "^1.40.0"

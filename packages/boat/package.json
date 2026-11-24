@@ -32,7 +32,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "@boatdev/sdk": "^1.9.9"
+    "@boatdev/sdk": "^1.13.0"
   },
   "keywords": [
     "computesdk",

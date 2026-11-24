@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@luxorai/sandbox": "^1.5.2",
+    "@luxorai/sandbox": "^1.5.3",
     "computesdk": "workspace:*"
   },
   "keywords": [
