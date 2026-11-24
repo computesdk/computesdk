@@ -56,6 +56,13 @@ describe('Blaxel sandbox lifetime (mock-only)', () => {
 		expect(sent().expires).toBeUndefined();
 	});
 
+	it('keeps the 5m ttl floor for a timeout of zero or less', async () => {
+		await blaxel({}).instances.create({ timeout: 0 } as never);
+
+		expect(sent().ttl).toBe('300s');
+		expect(sent().expires).toBeUndefined();
+	});
+
 	it('sends no lifetime without a timeout', async () => {
 		await blaxel({}).instances.create({} as never);
 

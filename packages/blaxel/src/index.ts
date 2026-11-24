@@ -35,11 +35,12 @@ function toBlaxelTtl(timeoutMs: number | undefined, what: string): string | unde
  * The lifetime of a new sandbox. A timeout of 5 minutes or more is a ttl. A
  * shorter one is sent as an absolute `expires` date, which Blaxel accepts at
  * any distance, so the sandbox ends when the caller asked rather than at the
- * 5m ttl floor.
+ * 5m ttl floor. A timeout of zero or less keeps the 5m ttl floor, since an
+ * expires date at or before now would end the sandbox at once.
  */
 function toBlaxelLifetime(timeoutMs: number | undefined): { ttl?: string; expires?: Date } {
 	if (timeoutMs === undefined) return {};
-	if (Math.ceil(timeoutMs / 1000) >= BLAXEL_MIN_TTL_SECONDS) return { ttl: toBlaxelTtl(timeoutMs, 'sandbox') };
+	if (timeoutMs <= 0 || Math.ceil(timeoutMs / 1000) >= BLAXEL_MIN_TTL_SECONDS) return { ttl: toBlaxelTtl(timeoutMs, 'sandbox') };
 	return { expires: new Date(Date.now() + timeoutMs) };
 }
 
