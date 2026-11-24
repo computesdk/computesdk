@@ -16,6 +16,7 @@ vi.mock('@blaxel/core', () => ({
 	VolumeInstance: {},
 	getImage: vi.fn(),
 	listImages: vi.fn(),
+	listImageTags: vi.fn(),
 	deleteImage: vi.fn(),
 	deleteImageTag: vi.fn(),
 }));
@@ -29,8 +30,13 @@ const notFound = { data: undefined, error: { code: 404 }, response: { status: 40
 type Tag = { name: string; createdAt?: string; updatedAt?: string };
 type Event = { status: string; time: string; message?: string };
 
+const imageTags = new WeakMap<object, Tag[]>();
+
+/** A getImage summary; listImageTags returns `tags` while it is the latest getImage result. */
 function image(status: string, tags: Tag[], events: Event[] = []) {
-	return { data: { metadata: { name: 'img', resourceType: 'sandbox', status, events }, spec: { tags } }, error: undefined, response: { status: 200 } };
+	const result = { data: { metadata: { name: 'img', resourceType: 'sandbox', status, events }, spec: { tagCount: tags.length } }, error: undefined, response: { status: 200 } };
+	imageTags.set(result, tags);
+	return result;
 }
 
 const built1 = { status: 'BUILT', time: '2026-11-08T00:00:10Z' };
@@ -39,13 +45,20 @@ const built2 = { status: 'BUILT', time: '2026-11-09T18:00:10Z' };
 
 const fetchMock = vi.fn();
 
-beforeEach(() => {
+beforeEach(async () => {
 	vi.clearAllMocks();
 	vi.useFakeTimers();
 	vi.stubGlobal('fetch', fetchMock);
 	fetchMock.mockImplementation(async (url: string) => String(url).endsWith('/images?upload=true')
 		? new Response('{}', { status: 200, headers: { 'x-blaxel-upload-url': 'https://upload.test/ctx' } })
 		: new Response('', { status: 200 }));
+	const core = await mockedCore();
+	vi.mocked(core.listImageTags).mockImplementation(async () => {
+		const results = vi.mocked(core.getImage).mock.results;
+		const latest = await results[results.length - 1]?.value;
+		const tags = latest && imageTags.get(latest);
+		return (tags ? { data: { data: tags, meta: {} }, error: undefined, response: { status: 200 } } : notFound) as never;
+	});
 });
 
 afterEach(() => {
@@ -228,16 +241,26 @@ describe('blaxel template.list and delete', () => {
 
 	it('lists one template per sandbox image tag', async () => {
 		const core = await mockedCore();
-		vi.mocked(core.listImages).mockResolvedValue({
-			data: [
-				{ metadata: { name: 'oci-base', resourceType: 'sandbox' }, spec: { tags: [{ name: 'abc', createdAt: '2026-11-09T18:00:00Z' }] } },
-				{ metadata: { name: 'agent', resourceType: 'agent' }, spec: { tags: [{ name: 'x' }] } },
-			],
-		} as never);
+		vi.mocked(core.listImages)
+			.mockResolvedValueOnce({
+				data: { data: [{ metadata: { name: 'oci-base', resourceType: 'sandbox' }, spec: { tagCount: 2 } }], meta: { hasMore: true, nextCursor: 'p2' } },
+			} as never)
+			.mockResolvedValueOnce({
+				data: { data: [{ metadata: { name: 'agent', resourceType: 'agent' }, spec: { tagCount: 1 } }], meta: {} },
+			} as never);
+		vi.mocked(core.listImageTags)
+			.mockResolvedValueOnce({ data: { data: [{ name: 'abc', createdAt: '2026-11-09T18:00:00Z' }], meta: { hasMore: true, nextCursor: 't2' } }, error: undefined, response: { status: 200 } } as never)
+			.mockResolvedValueOnce({ data: { data: [{ name: 'def' }], meta: {} }, error: undefined, response: { status: 200 } } as never);
 
 		const templates = await blaxel({}).template!.list();
 
-		expect(templates).toEqual([expect.objectContaining({ id: 'sandbox/oci-base:abc', name: 'oci-base', provider: 'blaxel' })]);
+		expect(templates).toEqual([
+			expect.objectContaining({ id: 'sandbox/oci-base:abc', name: 'oci-base', provider: 'blaxel' }),
+			expect.objectContaining({ id: 'sandbox/oci-base:def', name: 'oci-base', provider: 'blaxel' }),
+		]);
+		expect(vi.mocked(core.listImages).mock.calls.map(([options]) => options?.query?.cursor)).toEqual([undefined, 'p2']);
+		expect(core.listImageTags).toHaveBeenCalledTimes(2);
+		expect(vi.mocked(core.listImageTags).mock.calls[1][0]).toEqual({ path: { resourceType: 'sandbox', imageName: 'oci-base' }, query: { cursor: 't2' } });
 	});
 
 	it('deletes the tag a template id names and ignores one already gone', async () => {

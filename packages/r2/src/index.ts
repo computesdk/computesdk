@@ -159,7 +159,7 @@ export function r2(config: R2Config): R2 {
 
     async download(bucket: string, key: string): Promise<DownloadResult> {
       try {
-        const result = await get(key, 'stream', withConfig(bucket));
+        const result = await get(key, 'stream', withConfig(bucket, {}));
         if (result.error) {
           throw new Error(result.error.message);
         }
