@@ -560,7 +560,10 @@ describe('groundbox templates and volumes', () => {
     const made = await provider.volume!.create({ name: 'data', sizeBytes: 1.5 * 2 ** 30 });
     expect(api.last().body).toEqual({ name: 'data', size_gb: 2 });
     expect(made).toMatchObject({ id: 'vol_abc12345', name: 'data', sizeGb: 2, status: 'ready' });
-    await expect(provider.volume!.create({ name: 'data' })).rejects.toThrow(/size/);
+    // No size: the default, 10 GB.
+    await provider.volume!.create({ name: 'scratch' });
+    expect(api.last().body).toEqual({ name: 'scratch', size_gb: 10 });
+    await expect(provider.volume!.create({ name: 'data', sizeBytes: -1 })).rejects.toThrow(/size/);
   });
 
   it('gets, lists and deletes volumes', async () => {

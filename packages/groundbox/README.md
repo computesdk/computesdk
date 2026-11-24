@@ -152,7 +152,7 @@ const sandbox = await compute.instances.create({
 });
 ```
 
-A volume's size is whole GB (`sizeBytes` is rounded up). It is read-write in one sandbox at a time, or read-only in any number. `volume.get`, `volume.list` and `volume.delete` are supported. Volumes are attached at create time only, and need the paid plan.
+A volume's size is whole GB (`sizeBytes` is rounded up); with no size it is 10 GB. It is read-write in one sandbox at a time, or read-only in any number. `volume.get`, `volume.list` and `volume.delete` are supported. Volumes are attached at create time only, and need the paid plan.
 
 ## Snapshots
 
