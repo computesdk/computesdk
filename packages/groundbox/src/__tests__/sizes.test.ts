@@ -35,7 +35,7 @@ describe('groundbox standard sizes', () => {
     expect(api.calls).toEqual([]);
     // The native fields still ask for it.
     await provider.instances.create({ cpus: 16, memory_gb: 32 });
-    expect(api.last().body).toEqual({ cpus: 16, memory_gb: 32 });
+    expect(api.last().body).toEqual({ cpus: 16, memory_gb: 32, user: 'root' });
   });
 
   it.each(SIZES)('asks for %s as exactly %i vCPU and %i MiB', async (sizeClass, vcpus, memoryMiB) => {
@@ -44,7 +44,7 @@ describe('groundbox standard sizes', () => {
     expect(provider.sizes.resolve(sizeClass)).toMatchObject({ status: 'supported', nativeOptions: { cpus: vcpus, memory_gb: memoryMiB / 1024 } });
 
     const instance = await provider.instances.create({ sizeClass, timeout: 5 * 60_000 });
-    expect(api.last().body).toEqual({ cpus: vcpus, memory_gb: memoryMiB / 1024, timeout_minutes: 5 });
+    expect(api.last().body).toEqual({ cpus: vcpus, memory_gb: memoryMiB / 1024, timeout_minutes: 5, user: 'root' });
     expect(instance.sizing).toEqual({ requested: { sizeClass, vcpus, memoryMiB }, resolved: { vcpus, memoryMiB }, provenance: 'adapter-declared' });
   });
 

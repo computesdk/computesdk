@@ -213,6 +213,10 @@ function toSpec(options: CreateInstanceOptions): CreateSandboxRequest {
     flex: options.flex,
     desktop: options.desktop,
   };
+  // Commands run as root unless the caller asks for the image's own user. A sandbox started
+  // from a snapshot keeps the user of the sandbox the snapshot was taken from.
+  const user = (options as { user?: 'root' | 'runner' }).user;
+  if (user !== undefined || options.snapshotId === undefined) (spec as { user?: string }).user = user ?? 'root';
   for (const key of Object.keys(spec) as (keyof CreateSandboxRequest)[]) if (spec[key] === undefined) delete spec[key];
   return spec;
 }
