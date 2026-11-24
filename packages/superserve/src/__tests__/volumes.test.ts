@@ -233,6 +233,55 @@ describe('Superserve volumes through the published native SDK', () => {
     expect(calls.filter((call) => call.method === 'GET')).toHaveLength(1);
   });
 
+  it.each(['delete', 'deletion-state', 'attachment-state'])(
+    'passes the remaining budget to a slow native %s request',
+    async (slowRequest) => {
+      vi.useFakeTimers();
+      let initial = true;
+      let observed = false;
+      let settled = false;
+      vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, options: RequestInit = {}) => {
+        if (initial) {
+          initial = false;
+          return Promise.resolve(new Response(JSON.stringify(volume)));
+        }
+        if (options.method === 'DELETE' && slowRequest !== 'delete') {
+          return Promise.resolve(observed
+            ? new Response(null, { status: 204 })
+            : new Response(JSON.stringify({ error: { code: slowRequest === 'deletion-state' ? 'volume_unavailable' : 'volume_conflict' } }),
+              { status: slowRequest === 'deletion-state' ? 503 : 409 }));
+        }
+        observed = true;
+        const signal = options.signal!;
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            signal.removeEventListener('abort', abort);
+            resolve(options.method === 'DELETE'
+              ? new Response(null, { status: 204 })
+              : new Response(JSON.stringify(slowRequest === 'deletion-state'
+                ? { ...volume, status: 'deleting' }
+                : [attachment({ status: 'revoking' })])));
+          }, 40_000);
+          const abort = () => {
+            clearTimeout(timer);
+            signal.removeEventListener('abort', abort);
+            reject(signal.reason);
+          };
+          signal.addEventListener('abort', abort, { once: true });
+          if (signal.aborted) abort();
+        });
+      }));
+      const result = superserve({ apiKey, baseUrl }).volume!.delete(volumeId).then(
+        () => { settled = true; },
+        (error) => { settled = true; return error; },
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(await result).toBeUndefined();
+    },
+  );
+
   it('aborts in-flight native retries at the aggregate deletion deadline', async () => {
     vi.useFakeTimers();
     const started = Date.now();

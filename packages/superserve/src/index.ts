@@ -171,22 +171,25 @@ async function deleteVolume(connection: ResolvedConfig, idOrName: string): Promi
   const timer = setTimeout(() => controller.abort(), 120_000);
   let lastError: unknown;
   const requireTime = () => {
-    if (controller.signal.aborted || Date.now() >= deadline) {
+    const remaining = deadline - Date.now();
+    if (controller.signal.aborted || remaining <= 0) {
       throw lastError ?? new Error('Timed out waiting for Superserve volume deletion.');
     }
+    return remaining;
   };
   try {
     for (;;) {
       requireTime();
       try {
-        await SuperserveVolume.deleteById(volume.id, { ...connection, signal: controller.signal });
+        // The instance method forwards request timeouts; the static shortcut does not.
+        await volume.delete({ signal: controller.signal, timeoutMs: requireTime() });
         return;
       } catch (error) {
         requireTime();
         lastError = error;
         try {
           if (error instanceof ConflictError && error.code === 'volume_conflict') {
-            const attachments = await volume.listAttachments({ signal: controller.signal });
+            const attachments = await volume.listAttachments({ signal: controller.signal, timeoutMs: requireTime() });
             const closing = attachments.filter((attachment) => attachment.status !== 'revoked');
             // Never wait for an active mount or hide an unrelated conflict.
             if (!closing.length || closing.some((attachment) =>
@@ -194,7 +197,7 @@ async function deleteVolume(connection: ResolvedConfig, idOrName: string): Promi
           } else if (error instanceof ServerError && error.statusCode === 503 && error.code === 'volume_unavailable') {
             // Cleanup advances in batches; a fresh deleting state is retryable,
             // but it is not confirmation that the original volume is gone.
-            const current = await volume.getInfo({ signal: controller.signal });
+            const current = await volume.getInfo({ signal: controller.signal, timeoutMs: requireTime() });
             if (current.status !== 'deleting') throw error;
           } else {
             throw error;
