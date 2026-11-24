@@ -6,7 +6,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 
-import { SANDBOX_API_IMAGE, SANDBOX_API_PATH, SandboxInstance, Snapshot, VolumeInstance, deleteImage, deleteImageTag, getImage, initialize, listImages, listImageTags, settings } from '@blaxel/core';
+import { SANDBOX_API_IMAGE, SANDBOX_API_PATH, SandboxInstance, Snapshot, VolumeInstance, deleteImage, deleteImageTag, getImage, getSandbox, initialize, listImages, listImageTags, settings } from '@blaxel/core';
 import type { ImageSummary as BlaxelImage, ImageTag as BlaxelImageTag } from '@blaxel/core';
 import { defineProvider, createConfigGate, createConfigStamp, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
 
@@ -42,6 +42,29 @@ function toBlaxelLifetime(timeoutMs: number | undefined): { ttl?: string; expire
 	if (timeoutMs === undefined) return {};
 	if (timeoutMs <= 0 || Math.ceil(timeoutMs / 1000) >= BLAXEL_MIN_TTL_SECONDS) return { ttl: toBlaxelTtl(timeoutMs, 'sandbox') };
 	return { expires: new Date(Date.now() + timeoutMs) };
+}
+
+/**
+ * The sandbox a create's volume is still mounted on, when Blaxel refused the
+ * create with VOLUME_ALREADY_ATTACHED and that sandbox is not going away.
+ * Blaxel frees the volume of a deleted sandbox once it is TERMINATED (or
+ * gone), so only a holder that is DELETING releases it within the settle
+ * window; a holder in any other state keeps it until it is deleted, and
+ * retrying the create cannot help.
+ */
+const VOLUME_HOLDER_RE = /VOLUME_ALREADY_ATTACHED[\s\S]*?attached to sandbox:([A-Za-z0-9._-]+)/;
+const VOLUME_RELEASING_STATUSES = new Set(['DELETING', 'TERMINATED']);
+
+async function liveVolumeHolder(errorDetail: string): Promise<string | undefined> {
+	const holder = VOLUME_HOLDER_RE.exec(errorDetail)?.[1];
+	if (!holder) return undefined;
+	try {
+		const status = String((await SandboxInstance.get(holder))?.status ?? '').toUpperCase();
+		return status && !VOLUME_RELEASING_STATUSES.has(status) ? holder : undefined;
+	} catch {
+		// Gone or unreadable: the next attempt may find the volume free.
+		return undefined;
+	}
 }
 
 /**
@@ -311,6 +334,16 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 							`Blaxel quota exceeded: ${errorDetail}`
 						);
 					}
+					// A volume mounted on a sandbox that keeps running stays
+					// attached: fail now instead of retrying for the whole
+					// volume settle window.
+					const holder = await liveVolumeHolder(errorDetail);
+					if (holder) {
+						throw Object.assign(
+							new Error(`Failed to create Blaxel sandbox: ${errorDetail} (sandbox ${holder} still holds the volume; a Blaxel volume mounts on one sandbox at a time)`),
+							{ volumeHeld: true },
+						);
+					}
 					throw new Error(
 						`Failed to create Blaxel sandbox: ${errorDetail}`
 					);
@@ -516,6 +549,22 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					})
 			},
 
+			// A Blaxel sandbox in standby keeps its memory, processes and files,
+			// and the next request wakes it. pause() asks for a standby through
+			// the sandbox's documented POST /standby, then waits for the control
+			// plane to record a standby that started after the call: the call
+			// answers 202 before the standby happens, and the platform can ignore
+			// it in documented cases (for example right after start), while the
+			// sandbox still goes to standby by itself once idle. resume() sends a
+			// request and waits for the answer. pause() holds the config gate only
+			// for each request, never across the waits between them.
+			pause: async (sandbox: SandboxInstance): Promise<void> => waitForStandby(sandbox),
+			resume: async (sandbox: SandboxInstance): Promise<void> =>
+				withBlaxelInstance(sandbox, async () => {
+					await sandbox.fs.ls('/');
+				}),
+			pauseCapabilities: { memory: true },
+
 			// Provider-specific typed getInstance method
 			getInstance: (sandbox: SandboxInstance): SandboxInstance => {
 				return sandbox;
@@ -638,6 +687,70 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 		}
 	}
 });
+
+// Well under the 120 s that callers such as benchmark harnesses give a whole
+// pause step, so a missing standby surfaces as this error, not their timeout.
+const STANDBY_TIMEOUT_MS = 60_000;
+const STANDBY_POLL_MS = 500;
+
+/**
+ * Asks the sandbox for a standby, then polls the control plane (not the
+ * sandbox, which a request would wake) until it records a standby that
+ * started after the call. The first read gives the sandbox's last activity
+ * (`lastUsedAt`); a standby counts only once
+ * `lastUsedAt` has moved past it, so a standby recorded before the call, or a
+ * state read that lags the sandbox, is not taken for this pause. Only server
+ * timestamps are compared: `lastUsedAt` has whole-second precision, so a
+ * comparison with the local clock could miss a fresh standby. Each poll
+ * enters the config gate under the sandbox's own config and leaves it before
+ * the sleep, so calls under another config are not held up for the whole wait.
+ */
+async function waitForStandby(sandbox: SandboxInstance): Promise<void> {
+	const name = sandbox.metadata?.name;
+	if (!name) throw new Error('Cannot pause a Blaxel sandbox that has no name');
+	const deadline = Date.now() + STANDBY_TIMEOUT_MS;
+	let baseline: number | undefined;
+	let first = true;
+	let state: string | undefined;
+	while (Date.now() < deadline) {
+		const { data, error } = await withBlaxelInstance(sandbox, () => getSandbox({ path: { sandboxName: name } }));
+		if (error !== undefined) throw new Error(`Failed to pause Blaxel sandbox ${name}: ${describeError(error)}`);
+		state = data?.state;
+		const lastUsedAt = parseTime(data?.lastUsedAt);
+		if (first) {
+			first = false;
+			baseline = lastUsedAt;
+			await requestStandby(sandbox);
+		} else if (state === 'STANDBY' && lastUsedAt !== undefined && (baseline === undefined || lastUsedAt > baseline)) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, STANDBY_POLL_MS));
+	}
+	throw new Error(`Blaxel sandbox ${name} did not reach standby within ${STANDBY_TIMEOUT_MS / 1000} s (state ${state ?? 'unknown'})`);
+}
+
+/**
+ * Asks the sandbox to go to standby now through its documented POST /standby
+ * (https://docs.blaxel.ai/api-reference/system/put-the-sandbox-in-standby).
+ * Best effort: a 202 only means the request was accepted, and the platform
+ * can ignore it in the cases that page lists (for example right after start),
+ * so the caller still waits for the control plane to record the standby. A
+ * failed call only means the sandbox goes to standby by itself once idle.
+ */
+async function requestStandby(sandbox: SandboxInstance): Promise<void> {
+	try {
+		await withBlaxelInstance(sandbox, () =>
+			sandbox.system.client.post({ baseUrl: sandbox.system.url, url: '/standby' }),
+		);
+	} catch {
+		// Non-fatal: see above.
+	}
+}
+
+function parseTime(value: string | undefined): number | undefined {
+	const time = value ? Date.parse(value) : NaN;
+	return Number.isNaN(time) ? undefined : time;
+}
 
 /**
  * Map a Blaxel workspace snapshot to the provider-agnostic snapshot shape.
