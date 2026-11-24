@@ -575,15 +575,13 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 			list: async (config: BlaxelConfig, options?: ListTemplatesOptions): Promise<BlaxelTemplateInfo[]> =>
 				withBlaxelConfig(config, async () => {
 					if (options?.limit === 0) return [];
-					const images = await listAllImages();
-					const templates = (
-						await Promise.all(
-							images
-								.filter(image => image.metadata?.resourceType === SANDBOX_IMAGE_TYPE)
-								.map(async image =>
-									toTemplateInfos(image, image.metadata?.name ? await listAllTags(image.metadata.name) : [])),
-						)
-					).flat();
+					const templates: BlaxelTemplateInfo[] = [];
+					// One image at a time: every tag request must finish inside this config's gate.
+					for (const image of await listAllImages()) {
+						if (image.metadata?.resourceType !== SANDBOX_IMAGE_TYPE || !image.metadata.name) continue;
+						templates.push(...toTemplateInfos(image, await listAllTags(image.metadata.name)));
+						if (options?.limit !== undefined && templates.length >= options.limit) break;
+					}
 					return options?.limit === undefined ? templates : templates.slice(0, options.limit);
 				}),
 
