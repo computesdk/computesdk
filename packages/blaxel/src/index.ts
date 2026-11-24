@@ -14,9 +14,10 @@ import type { CommandResult, InstanceInfo, CreateInstanceOptions, InstanceSizeCl
 
 /**
  * Blaxel rejects sandboxes with a ttl under 5 minutes
- * (`ttl 120s is too short: the minimum is 5m`). Any timeout below the floor
- * is raised to it — the platform's own destroy still ends the box early, so
- * billing stays on actual use.
+ * (`ttl 120s is too short: the minimum is 5m`). A ttl below the floor (a
+ * preview's, or one passed through provider options) is raised to it; a
+ * sandbox `timeout` below it is sent as an absolute `expires` date instead
+ * (see toBlaxelLifetime).
  */
 export const BLAXEL_MIN_TTL_SECONDS = 300;
 
@@ -28,6 +29,19 @@ function toBlaxelTtl(timeoutMs: number | undefined, what: string): string | unde
 		`blaxel: ${what} ttl ${seconds}s is below the 5m provider minimum — raised to ${BLAXEL_MIN_TTL_SECONDS}s`
 	);
 	return `${BLAXEL_MIN_TTL_SECONDS}s`;
+}
+
+/**
+ * The lifetime of a new sandbox. A timeout of 5 minutes or more is a ttl. A
+ * shorter one is sent as an absolute `expires` date, which Blaxel accepts at
+ * any distance, so the sandbox ends when the caller asked rather than at the
+ * 5m ttl floor. A timeout of zero or less keeps the 5m ttl floor, since an
+ * expires date at or before now would end the sandbox at once.
+ */
+function toBlaxelLifetime(timeoutMs: number | undefined): { ttl?: string; expires?: Date } {
+	if (timeoutMs === undefined) return {};
+	if (timeoutMs <= 0 || Math.ceil(timeoutMs / 1000) >= BLAXEL_MIN_TTL_SECONDS) return { ttl: toBlaxelTtl(timeoutMs, 'sandbox') };
+	return { expires: new Date(Date.now() + timeoutMs) };
 }
 
 /**
@@ -235,7 +249,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 				}
 				const memory = config.memory;
 				const region = config.region;
-				const ttl = toBlaxelTtl(optTimeout, 'sandbox');
+				const lifetime = toBlaxelLifetime(optTimeout);
 
 			return withBlaxelConfig(config, async () => {
 			try {
@@ -270,18 +284,19 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					}
 				} else {
 					// A `ttl` inside providerOptions would spread over the clamped
-					// value — lift it out and apply the same 5m floor.
+					// value — lift it out and apply the same 5m floor. It replaces
+					// the timeout's lifetime, an `expires` date included.
 					const { ttl: optionTtl, ...restProviderOptions } = providerOptions;
-					const effectiveTtl = optionTtl === undefined
-						? ttl
-						: (toBlaxelTtl(parseBlaxelTtl(optionTtl), 'sandbox') ?? (optionTtl as string));
+					const effectiveLifetime = optionTtl === undefined
+						? lifetime
+						: { ttl: toBlaxelTtl(parseBlaxelTtl(optionTtl), 'sandbox') ?? (optionTtl as string) };
 					// Create new Blaxel sandbox
 					sandbox = await SandboxInstance.createIfNotExists({
 						image,
 						memory,
 						envs: Object.entries(envs || {}).map(([name, value]) => ({ name, value: value as string })),
 						...(metadata?.labels && { labels: metadata.labels }),
-						ttl: effectiveTtl,
+						...effectiveLifetime,
 						ports: config.ports?.map(port => ({ target: port, protocol: 'HTTP' })),
 						...(region && { region }),
 						...(unifiedVolumes && {
