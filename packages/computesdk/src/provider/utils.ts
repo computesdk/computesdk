@@ -120,11 +120,22 @@ export function errorText(err: unknown): string {
 }
 
 /**
+ * Whether a provider marked a volume error as one that waiting cannot fix
+ * (`volumeHeld: true`): the volume is mounted on another sandbox that is
+ * still running, not one that is detaching.
+ */
+function isVolumeHeld(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { volumeHeld?: unknown }).volumeHeld === true;
+}
+
+/**
  * Retry a volume operation while the provider reports the volume still
  * attached. `sandbox.destroy()` returns before the control plane finishes
  * unmounting, so a volume delete issued right after can 400/409 on a volume
  * that detaches moments later — callers get a settled answer instead of
- * racing the provider's async detach.
+ * racing the provider's async detach. An error the provider marks
+ * `volumeHeld: true` (a sandbox that keeps running holds the volume) is
+ * rethrown at once.
  */
 export async function withVolumeSettle<T>(
   fn: () => Promise<T>,
@@ -137,7 +148,7 @@ export async function withVolumeSettle<T>(
       return await fn();
     } catch (err) {
       const text = errorText(err);
-      if (!VOLUME_ATTACHED_RE.test(text) || Date.now() >= deadline) throw err;
+      if (isVolumeHeld(err) || !VOLUME_ATTACHED_RE.test(text) || Date.now() >= deadline) throw err;
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
   }
