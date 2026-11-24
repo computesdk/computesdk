@@ -52,7 +52,7 @@
     "url": "https://github.com/computesdk/computesdk/issues"
   },
   "dependencies": {
-    "isorun": "^1.0.0",
+    "isorun": "^1.0.3",
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*"
   },
