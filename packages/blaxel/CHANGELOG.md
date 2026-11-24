@@ -1,5 +1,51 @@
 # @computesdk/blaxel
 
+## 1.6.50
+
+### Patch Changes
+
+- 5d88b89: Add `pause` and `resume` for Blaxel sandboxes. A sandbox in standby keeps its memory, processes and files. `pause` asks for a standby through the sandbox's `POST /standby`, then waits up to 60 s for the control plane to record a standby newer than the sandbox's last activity (the call answers before the standby happens, and the platform can ignore it, for example right after start, in which case the sandbox goes to standby by itself once idle). `resume` wakes it with one request.
+- 14cd714: A sandbox `timeout` under 5 minutes is now sent to Blaxel as an absolute `expires` date instead of being raised to the 5m ttl minimum, so the sandbox ends when the caller asked. Timeouts of 5 minutes or more, preview ttls and a `ttl` passed through provider options are unchanged.
+- 05ed179: Fail fast when a Blaxel create mounts a volume that a running sandbox holds: the adapter marks that error `volumeHeld: true` and `withVolumeSettle` rethrows such errors at once instead of retrying for the 180 s settle window. A holder that is being deleted is still waited for.
+- d1d9432: Adapt to the bumped provider SDKs:
+
+  - @computesdk/blaxel: `@blaxel/core` 0.3.41 returns paginated image summaries — tags moved to `listImageTags`, so template listing and build polling page those endpoints instead of reading `spec.tags`.
+  - @computesdk/r2, @computesdk/s3: `@tigrisdata/storage` 3.25 added `includeMetadata` `get` overloads — the download call now pins the bare-stream overload so `result.data` stays a `ReadableStream`.
+
+- 2ff9301: Bump provider SDKs to their latest npm releases:
+
+  - @computesdk/aws: `@aws-sdk/client-bedrock-agentcore` 3.1078.0 -> 3.1176.0
+  - @computesdk/aws: `@aws-sdk/client-ec2` 3.1078.0 -> 3.1176.0
+  - @computesdk/aws: `@aws-sdk/client-s3` 3.1078.0 -> 3.1176.0
+  - @computesdk/aws: `@aws-sdk/client-ssm` 3.1078.0 -> 3.1176.0
+  - @computesdk/aws: `@aws-sdk/types` 3.973.15 -> 3.975.1
+  - @computesdk/beam: `@beamcloud/beam-js` ^1.0.22 -> ^1.1.6
+  - @computesdk/blaxel: `@blaxel/core` ^0.3.21 -> ^0.3.41
+  - @computesdk/boat: `@boatdev/sdk` ^1.9.9 -> ^1.13.0
+  - @computesdk/browserbase: `@browserbasehq/sdk` ^2.0.0 -> ^2.29.0
+  - @computesdk/browseruse: `browser-use-sdk` ^3.4.3 -> ^3.12.1
+  - @computesdk/createos-sandbox: `@nodeops-createos/sandbox` ^0.8.1 -> ^0.8.3
+  - @computesdk/freestyle: `freestyle` ^0.2.11 -> ^0.2.24
+  - @computesdk/gravixlayer: `gravixlayer` ^0.1.51 -> ^0.1.54
+  - @computesdk/isorun: `isorun` ^1.0.0 -> ^1.0.3
+  - @computesdk/lightning: `@lightningai/sdk` ^2026.7.8 -> ^2026.11.20
+  - @computesdk/miosa: `@miosa/sdk` ^3.7.14 -> ^3.9.0
+  - @computesdk/modal: `modal` 0.11.0 -> 0.11.2
+  - @computesdk/novita: `novita-sandbox` ^2.1.1 -> ^2.1.5
+  - @computesdk/r2: `@tigrisdata/storage` ^3.6.0 -> ^3.25.0
+  - @computesdk/railway: `railway` ^3.1.1 -> ^3.17.0
+  - @computesdk/render: `@renderinc/sdk` ^1.8.0 -> ^1.10.0
+  - @computesdk/s3: `@tigrisdata/storage` ^3.6.0 -> ^3.25.0
+  - @computesdk/tangle: `@tangle-network/sandbox` 1.0.501 -> 1.0.588
+  - @computesdk/tenki: `@luxorai/sandbox` ^1.5.2 -> ^1.5.3
+  - @computesdk/tensorlake: `tensorlake` ^0.5.158 -> ^0.5.165
+  - @computesdk/tigris: `@tigrisdata/storage` ^3.6.0 -> ^3.25.0
+  - @computesdk/vercel: `@vercel/sandbox` ^4.0.0 -> ^4.1.0
+
+- Updated dependencies [05ed179]
+  - computesdk@4.1.24
+  - @computesdk/provider@2.1.30
+
 ## 1.6.49
 
 ### Patch Changes

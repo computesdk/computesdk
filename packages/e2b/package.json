@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/e2b",
-  "version": "1.7.78",
+  "version": "1.7.79",
   "description": "E2B sandbox adapter for ComputeSDK. Run commands and work with files in Linux microVMs.",
   "author": "Garrison",
   "license": "MIT",

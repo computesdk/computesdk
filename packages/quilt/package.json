@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/quilt",
-  "version": "1.0.27",
+  "version": "1.0.28",
   "description": "Quilt sandbox adapter for ComputeSDK. Run commands in tenant-scoped Linux sandboxes with published services and snapshots.",
   "author": "ComputeSDK",
   "license": "MIT",

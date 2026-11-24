@@ -1,5 +1,13 @@
 # @computesdk/ec2-firecrab
 
+## 1.0.13
+
+### Patch Changes
+
+- Updated dependencies [05ed179]
+  - computesdk@4.1.24
+  - @computesdk/provider@2.1.30
+
 ## 1.0.12
 
 ### Patch Changes

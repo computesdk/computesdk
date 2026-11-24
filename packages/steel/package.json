@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/steel",
-  "version": "0.2.31",
+  "version": "0.2.32",
   "description": "Steel browser adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Garrison",
   "license": "MIT",
