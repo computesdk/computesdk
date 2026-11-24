@@ -729,7 +729,7 @@ async function buildBlaxelTemplate(options: BlaxelCreateTemplateOptions): Promis
 		// it does. A tag the image already had counts only once no new tag has
 		// shown up for TEMPLATE_TAG_SETTLE_MS after the build result, since an
 		// identical build reuses its tag without saying so.
-		const tags = data === undefined ? [] : await listAllTags(name);
+		const tags = data === undefined || !result ? [] : await listAllTags(name);
 		if (result && builtSeenAt === undefined) builtSeenAt = Date.now();
 		const settled = builtSeenAt !== undefined && Date.now() - builtSeenAt >= TEMPLATE_TAG_SETTLE_MS;
 		const tag = tags.find(t => t.name && !tagsBefore.has(t.name)) ?? (settled ? newestTag(tags) : undefined);
