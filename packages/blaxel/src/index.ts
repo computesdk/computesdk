@@ -31,6 +31,29 @@ function toBlaxelTtl(timeoutMs: number | undefined, what: string): string | unde
 }
 
 /**
+ * The sandbox a create's volume is still mounted on, when Blaxel refused the
+ * create with VOLUME_ALREADY_ATTACHED and that sandbox is not going away.
+ * Blaxel frees the volume of a deleted sandbox once it is TERMINATED (or
+ * gone), so only a holder that is DELETING releases it within the settle
+ * window; a holder in any other state keeps it until it is deleted, and
+ * retrying the create cannot help.
+ */
+const VOLUME_HOLDER_RE = /VOLUME_ALREADY_ATTACHED[\s\S]*?attached to sandbox:([A-Za-z0-9._-]+)/;
+const VOLUME_RELEASING_STATUSES = new Set(['DELETING', 'TERMINATED']);
+
+async function liveVolumeHolder(errorDetail: string): Promise<string | undefined> {
+	const holder = VOLUME_HOLDER_RE.exec(errorDetail)?.[1];
+	if (!holder) return undefined;
+	try {
+		const status = String((await SandboxInstance.get(holder))?.status ?? '').toUpperCase();
+		return status && !VOLUME_RELEASING_STATUSES.has(status) ? holder : undefined;
+	} catch {
+		// Gone or unreadable: the next attempt may find the volume free.
+		return undefined;
+	}
+}
+
+/**
  * A `ttl` passed through provider options (`'300s'`, `'5m'`, `'1h'`; a
  * bare number is taken as milliseconds) in ms — undefined when the value
  * is not a shape we can normalize, in which case it passes through as-is.
@@ -294,6 +317,16 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					if (errorDetail.includes('quota') || errorDetail.includes('limit')) {
 						throw new Error(
 							`Blaxel quota exceeded: ${errorDetail}`
+						);
+					}
+					// A volume mounted on a sandbox that keeps running stays
+					// attached: fail now instead of retrying for the whole
+					// volume settle window.
+					const holder = await liveVolumeHolder(errorDetail);
+					if (holder) {
+						throw Object.assign(
+							new Error(`Failed to create Blaxel sandbox: ${errorDetail} (sandbox ${holder} still holds the volume; a Blaxel volume mounts on one sandbox at a time)`),
+							{ volumeHeld: true },
 						);
 					}
 					throw new Error(
