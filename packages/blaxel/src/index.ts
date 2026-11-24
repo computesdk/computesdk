@@ -579,7 +579,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					// One image at a time: every tag request must finish inside this config's gate.
 					for (const image of await listAllImages()) {
 						if (image.metadata?.resourceType !== SANDBOX_IMAGE_TYPE || !image.metadata.name) continue;
-						templates.push(...toTemplateInfos(image, await listAllTags(image.metadata.name)));
+						templates.push(...toTemplateInfos(image, await listAllTags(image.metadata.name, image.metadata.sourceWorkspace)));
 						if (options?.limit !== undefined && templates.length >= options.limit) break;
 					}
 					return options?.limit === undefined ? templates : templates.slice(0, options.limit);
@@ -765,13 +765,13 @@ async function listAllImages(): Promise<BlaxelImage[]> {
 }
 
 /** All tags of one image — the catalog lists them off the image summary. */
-async function listAllTags(imageName: string): Promise<BlaxelImageTag[]> {
+async function listAllTags(imageName: string, sourceWorkspace?: string): Promise<BlaxelImageTag[]> {
 	const tags: BlaxelImageTag[] = [];
 	let cursor: string | undefined;
 	do {
 		const { data } = await listImageTags({
 			path: { resourceType: SANDBOX_IMAGE_TYPE, imageName },
-			query: { cursor },
+			query: { cursor, sourceWorkspace: sourceWorkspace || undefined },
 			throwOnError: true,
 		});
 		tags.push(...(data?.data ?? []));
