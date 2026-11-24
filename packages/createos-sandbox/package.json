@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/createos-sandbox",
-  "version": "0.1.34",
+  "version": "0.1.35",
   "description": "CreateOS sandbox adapter for ComputeSDK. Run code in NodeOps VMs with pause, resume, and fork support.",
   "author": "NodeOps Inc.",
   "license": "MIT",

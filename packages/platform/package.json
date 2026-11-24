@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/platform",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "Compatibility exports for ComputeSDK Sandbox Router, including sandbox placement, quotes, and credits.",
   "author": "ComputeSDK",
   "license": "MIT",

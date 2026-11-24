@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/runtime",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Runtime sandbox adapter for ComputeSDK. Run agent code in Firecracker microVMs.",
   "author": "Runtime <support@withruntime.com>",
   "license": "MIT",

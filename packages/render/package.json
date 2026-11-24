@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/render",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Render sandbox adapter for ComputeSDK. Stream commands, transfer files, and manage snapshots.",
   "author": "ComputeSDK",
   "license": "MIT",

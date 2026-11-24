@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/s3",
-  "version": "1.2.30",
+  "version": "1.2.31",
   "description": "Amazon S3 adapter for ComputeSDK. Work with object storage through an S3-compatible API.",
   "author": "Garrison",
   "license": "MIT",
