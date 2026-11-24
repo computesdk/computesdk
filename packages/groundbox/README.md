@@ -81,6 +81,7 @@ Without a key, the first call fails with the setup steps.
 | `image` | A Docker image to start from, such as `node:22-slim`, with no template made first. The first sandbox from an image is queued while the image is turned into a disk, and `create` waits for it |
 | `snapshotId` | A kept snapshot (`snap_...`) to start from: see Snapshots. The sandbox has the snapshot's size |
 | `volumes` | `{ volume, mountPath, readOnly? }` mounts, four at most. See Volumes |
+| `user` | Who commands run as: `root` (the default here) or `runner`, the image's own user, which has sudo with no password. Either way the home folder is `/home/runner`. A sandbox started from a snapshot keeps its source's user |
 | `allow_hosts` | Egress allowlist: host names, wildcards (`*.npmjs.org`), IPv4 addresses and IPv4 networks |
 | `deny_hosts` | Egress deny list, in the same form: everything but these. With both lists, a denied entry wins |
 | `secrets`, `env_from_secrets` | Team secrets given to every command as variables, by name: `secrets: ['NPM_TOKEN']`, or `env_from_secrets: { TOKEN: 'NPM_TOKEN' }` for another variable name. The key needs `secrets:use` |
