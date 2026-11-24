@@ -31,7 +31,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "@lizard-build/sdk": "^0.1.60"
+    "@lizard-build/sdk": "^1.0.23"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",

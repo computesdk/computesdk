@@ -40,7 +40,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "sandbox0": "^0.9.5"
+    "sandbox0": "^0.10.8"
   },
   "devDependencies": {
     "@computesdk/test-utils": "workspace:*",

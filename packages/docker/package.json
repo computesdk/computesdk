@@ -30,7 +30,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "dockerode": "^4.0.8"
+    "dockerode": "^5.0.1"
   },
   "keywords": [
     "computesdk",

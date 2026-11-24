@@ -32,7 +32,7 @@
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
     "dotenv": "^16.0.0",
-    "notte-sdk": "^0.0.3",
+    "notte-sdk": "^1.10.16",
     "playwright-core": "^1.40.0"
   },
   "keywords": [

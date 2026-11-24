@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@kubernetes/client-node": "^1.2.0",
+    "@kubernetes/client-node": "^2.0.2",
     "computesdk": "workspace:*"
   },
   "keywords": [

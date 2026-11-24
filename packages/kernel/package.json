@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@onkernel/sdk": "^0.49.0",
+    "@onkernel/sdk": "^0.154.0",
     "computesdk": "workspace:*"
   },
   "keywords": [
