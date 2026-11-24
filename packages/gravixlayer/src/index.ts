@@ -388,6 +388,29 @@ function bindRuntime(client: GravixLayer, info: RuntimeInfo): Runtime {
   return new Runtime(client.runtime, info)
 }
 
+// `storage.buckets.create` returns while the managed bucket is still
+// `provisioning`; a mount attempted before `active` is rejected with
+// `bucket not active`. `volume.create` must hand back an attachable volume,
+// so it waits — prod buckets activate in ~2s; the deadline covers a slow
+// provision. Unknown non-active statuses keep polling until the deadline so
+// a state added later degrades to a timeout, not a silent early return.
+const BUCKET_ACTIVE_TIMEOUT_MS = 60_000
+
+async function waitForBucketActive(client: GravixLayer, idOrName: string): Promise<void> {
+  const deadline = Date.now() + BUCKET_ACTIVE_TIMEOUT_MS
+  for (;;) {
+    const bucket = await client.storage.buckets.get(idOrName)
+    if (bucket.status === 'active') return
+    if (bucket.status === 'failed' || bucket.status === 'error' || bucket.status === 'deleted') {
+      throw new Error(`GravixLayer bucket ${idOrName} reached terminal status '${bucket.status}' before becoming active`)
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`GravixLayer bucket ${idOrName} did not reach 'active' within ${BUCKET_ACTIVE_TIMEOUT_MS}ms (status: ${bucket.status})`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 750))
+  }
+}
+
 async function publishedUrl(sandbox: Runtime, port: number): Promise<string> {
   let ports = publishedUrls.get(sandbox)
   const existing = ports?.get(port)
@@ -951,6 +974,7 @@ const createGravixLayerProvider = defineProvider<
       create: async (config: GravixLayerConfig, options: CreateVolumeOptions) => {
         const client = getClient(config)
         const bucket = await client.storage.buckets.create(options.name)
+        if (bucket.status !== 'active') await waitForBucketActive(client, bucket.id ?? bucket.name)
         return { id: bucket.id, name: bucket.name, native: bucket }
       },
 
