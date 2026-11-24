@@ -5,7 +5,7 @@
  */
 
 import { get, head, list as tigrisList, put, remove } from '@tigrisdata/storage';
-import type { HeadResponse, ListResponse } from '@tigrisdata/storage';
+import type { GetOptions, HeadResponse, ListResponse } from '@tigrisdata/storage';
 import type { StorageProvider, StorageObject, UploadOptions, DownloadResult, ListOptions, ListResult } from '@computesdk/provider';
 
 /**
@@ -107,7 +107,7 @@ export function s3(config: S3Config): S3 {
 
     async download(bucket: string, key: string): Promise<DownloadResult> {
       try {
-        const result = await get(key, 'stream', withConfig(bucket));
+        const result = await get(key, 'stream', withConfig<GetOptions>(bucket));
         if (result.error) {
           throw new Error(result.error.message);
         }
