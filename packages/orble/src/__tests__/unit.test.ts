@@ -66,6 +66,12 @@ describe('orble provider', () => {
     expect(calls[2]).toMatchObject({ url: 'https://orble.example/v1/boxes/k7f2', method: 'DELETE' });
   });
 
+  it('fails create when the box is gone before it is kept awake', async () => {
+    const calls = mockFetch([{ body: box }, { status: 404, raw: '' }, { body: {} }]);
+    await expect(orble(config).instances.create({ keepAwake: true } as any)).rejects.toThrow('not found');
+    expect(calls[2]).toMatchObject({ method: 'DELETE' });
+  });
+
   it('creates a micro box through the native size', async () => {
     const calls = mockFetch([{ body: { ...box, vcpus: 1, mem_mib: 2048 } }]);
     await orble(config).instances.create({ size: 'micro' } as any);

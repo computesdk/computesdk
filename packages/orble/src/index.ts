@@ -289,7 +289,9 @@ export const orble = defineProvider<OrbleSandbox, OrbleConfig>({
         if (options?.keepAwake === true) {
           const name = data.name;
           try {
-            data = (await request<OrbleBoxData>(auth, 'PATCH', boxPath(name), { keep_awake: true })) ?? data;
+            const awake = await request<OrbleBoxData>(auth, 'PATCH', boxPath(name), { keep_awake: true });
+            if (!awake) throw new Error(`Orble box ${name} not found when keeping it awake`);
+            data = awake;
           } catch (error) {
             await request(auth, 'DELETE', boxPath(name)).catch(() => undefined);
             throw error;
