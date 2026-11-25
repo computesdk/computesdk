@@ -3,7 +3,7 @@ import * as net from 'node:net';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CONNECT_TIMEOUT_MS, SESSIONS_PER_ORIGIN, send } from '../transport';
+import { CONNECT_TIMEOUT_MS, SESSIONS_PER_ORIGIN, STREAM_IDLE_TIMEOUT_MS, send } from '../transport';
 import { runWithProvider } from './child-process';
 import { json, killSession, startApi, until, type FakeApi, type Reply, type Seen } from './fake-api';
 
@@ -129,7 +129,7 @@ describe('HTTP/2 pool', () => {
       await expect(call(silent.url, 'POST', false)).rejects.toThrow(/took more than 10000 ms[\s\S]*\(tried twice\)/);
       // At most two bounds: the first session's, then the one the second try waited on.
       expect(Date.now() - start).toBeLessThan(2_000);
-      expect(delays.every((delay) => delay === CONNECT_TIMEOUT_MS)).toBe(true);
+      expect(delays.every((delay) => delay === CONNECT_TIMEOUT_MS || delay === STREAM_IDLE_TIMEOUT_MS)).toBe(true);
       // The pool, plus at least one session opened to replace a dropped one.
       await until(() => silent.connections() > SESSIONS_PER_ORIGIN);
     } finally {
@@ -144,6 +144,99 @@ describe('HTTP/2 pool', () => {
     const start = Date.now();
     await expect(get(url)).rejects.toThrow(/ECONNREFUSED/);
     expect(Date.now() - start).toBeLessThan(1_000);
+  });
+});
+
+describe('a request that stops making progress', () => {
+  let api: FakeApi;
+  const realSetTimeout = globalThis.setTimeout;
+  const BOUND_MS = 200;
+  const quiet: Reply = () => {};
+
+  beforeEach(async () => {
+    api = await startApi();
+    // The bound is 90 s; shorten it so the tests do not wait it out.
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((handler: () => void, delay?: number, ...rest: unknown[]) =>
+      realSetTimeout(handler, delay === STREAM_IDLE_TIMEOUT_MS ? BOUND_MS : delay, ...rest)) as typeof setTimeout);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await api.close();
+  });
+
+  it('gives up on a GET that gets no answer, sends it again elsewhere, and puts nothing more on the quiet connection', async () => {
+    api.reply(quiet, ok);
+    expect((await get(api.url)).status).toBe(200);
+    expect(api.requests).toHaveLength(2);
+    const quietSession = api.requests[0].session;
+    // Compared by identity: toBe deep-compares differing objects for its message, which throws on a destroyed session.
+    expect(api.requests[1].session === quietSession).toBe(false);
+
+    api.otherwise(() => ok);
+    await Promise.all(Array.from({ length: 2 * SESSIONS_PER_ORIGIN }, () => get(api.url)));
+    expect(api.requests.slice(1).every(({ session }) => session !== quietSession)).toBe(true);
+  });
+
+  it('does not send a command POST again once it went quiet', async () => {
+    api.reply(quiet);
+    await expect(call(api.url, 'POST', false)).rejects.toThrow(/no progress for 90000 ms[\s\S]*not sent again/);
+    expect(api.requests).toHaveLength(1);
+  });
+
+  it('waits for an answer that keeps coming, however long it takes in all', async () => {
+    api.reply((_seen, stream) => {
+      stream.respond({ ':status': 200 });
+      let left = 8;
+      const tick = setInterval(() => {
+        stream.write('.');
+        left -= 1;
+        if (left === 0) {
+          clearInterval(tick);
+          stream.end();
+        }
+      }, BOUND_MS / 2);
+    });
+    const start = Date.now();
+    expect((await get(api.url)).body.toString()).toBe('........');
+    expect(Date.now() - start).toBeGreaterThan(3 * BOUND_MS);
+    expect(api.requests).toHaveLength(1);
+  });
+
+  it('waits for a body that keeps going out, however long it takes in all', async () => {
+    // Reads the body in small steps, so flow control lets it out a window at a time.
+    const server = http2.createServer();
+    const sessions = new Set<http2.ServerHttp2Session>();
+    server.on('session', (session) => sessions.add(session));
+    server.on('stream', (stream) => {
+      let received = 0;
+      stream.pause();
+      const tick = setInterval(() => {
+        stream.resume();
+        setImmediate(() => stream.pause());
+      }, BOUND_MS / 4);
+      stream.on('data', (chunk: Buffer) => {
+        received += chunk.length;
+      });
+      stream.on('end', () => {
+        clearInterval(tick);
+        stream.respond({ ':status': 200 });
+        stream.end(String(received));
+      });
+    });
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    const { port } = server.address() as net.AddressInfo;
+    const body = 'a'.repeat(1024 * 1024);
+    try {
+      const start = Date.now();
+      const answer = await send({ method: 'PUT', url: new URL(`http://127.0.0.1:${port}/v1/sandboxes/sbx_1/files?path=big`), headers: {}, body, idempotent: true });
+      expect(answer.body.toString()).toBe(String(body.length));
+      expect(Date.now() - start).toBeGreaterThan(2 * BOUND_MS);
+    } finally {
+      // server.close() waits for every open session, and the client pool keeps its sessions open.
+      for (const session of sessions) session.destroy();
+      await new Promise<void>((done) => server.close(() => done()));
+    }
   });
 });
 

@@ -26,7 +26,18 @@ export const SESSIONS_PER_ORIGIN = 16;
  */
 export const CONNECT_TIMEOUT_MS = 10_000;
 
-const { NGHTTP2_NO_ERROR, NGHTTP2_REFUSED_STREAM } = http2.constants;
+/**
+ * How long a request may go without progress before it is given up: its body
+ * going out, or its answer coming in. The API answers every request within
+ * 50 s (a command's long poll holds it that long at most), so a request quiet
+ * for longer has lost its connection. A connection that NAT or a load
+ * balancer dropped while idle gives no sign of it, and without this bound a
+ * request on it would wait for the OS to give up on retransmits, about
+ * 15 minutes on Linux.
+ */
+export const STREAM_IDLE_TIMEOUT_MS = 90_000;
+
+const { NGHTTP2_CANCEL, NGHTTP2_NO_ERROR, NGHTTP2_REFUSED_STREAM } = http2.constants;
 
 interface Pooled {
   readonly session: ClientHttp2Session;
@@ -155,11 +166,36 @@ function attempt(entry: Pooled, request: HttpRequest): Promise<HttpAnswer> {
     let responseHeaders: IncomingHttpHeaders = {};
     let failure: unknown;
     const chunks: Buffer[] = [];
+
+    // While the body goes out, progress is read from the connection's byte
+    // count: a body's write callbacks only fire once all of it has gone.
+    let bodySent = request.body === undefined;
+    let written = entry.session.socket.bytesWritten;
+    const idle = setTimeout(() => {
+      // The session is gone, and the stream closes with it.
+      if (entry.session.destroyed) return;
+      if (!bodySent && entry.session.socket.bytesWritten !== written) {
+        written = entry.session.socket.bytesWritten;
+        idle.refresh();
+        return;
+      }
+      failure = new Error(`no progress for ${STREAM_IDLE_TIMEOUT_MS} ms, so the connection is presumed lost`);
+      // No new request goes on this connection; the ones on it end by this same bound.
+      entry.session.close();
+      stream.close(NGHTTP2_CANCEL);
+    }, STREAM_IDLE_TIMEOUT_MS);
+    // Like the connect timer: the session holds the process open while a request waits.
+    idle.unref();
+
     stream.on('response', (received) => {
       status = Number(received[':status']);
       responseHeaders = received;
+      idle.refresh();
     });
-    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+    stream.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+      idle.refresh();
+    });
     stream.on('error', (error) => {
       failure = error;
     });
@@ -167,6 +203,7 @@ function attempt(entry: Pooled, request: HttpRequest): Promise<HttpAnswer> {
     // can still end its readable side cleanly, so only a NO_ERROR close
     // after a response is a complete answer.
     stream.on('close', () => {
+      clearTimeout(idle);
       entry.streams -= 1;
       if (entry.streams === 0) entry.session.unref();
       if (status !== undefined && failure === undefined && stream.rstCode === NGHTTP2_NO_ERROR) {
@@ -180,7 +217,12 @@ function attempt(entry: Pooled, request: HttpRequest): Promise<HttpAnswer> {
       );
       reject(new Unanswered(cause, status !== undefined, !stream.pending, stream.rstCode === NGHTTP2_REFUSED_STREAM));
     });
-    if (request.body !== undefined) stream.end(request.body);
+    if (request.body !== undefined) {
+      stream.end(request.body, () => {
+        bodySent = true;
+        idle.refresh();
+      });
+    }
   });
 }
 

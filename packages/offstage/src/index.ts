@@ -21,6 +21,7 @@ import { defineProvider, escapeShellArg } from '@computesdk/provider';
 import type { CommandResult, CreateInstanceOptions, FileEntry, InstanceInfo, RunCommandOptions } from '@computesdk/provider';
 
 import { DeferredCreate, placeholderId } from './lazy-create';
+import { LazyHandles } from './lazy-handles';
 import { preconnect, send } from './transport';
 
 import type { HttpAnswer } from './transport';
@@ -192,14 +193,8 @@ type FirstRun = CommandAnswer | { error: ErrorEnvelope & { code: string } };
 /** The create of each lazily created handle. */
 const deferredCreates = new WeakMap<OffstageSandbox, DeferredCreate<Record<string, unknown>, FirstRun | undefined>>();
 
-/**
- * Lazy handles by API key and placeholder id, so that `getById` and `destroy`,
- * which only get an id, find the sandbox behind a placeholder. The key is part
- * of the entry: one tenant's id never reaches another tenant's handle. An
- * entry stays until its sandbox is destroyed through the placeholder.
- */
-const lazyHandles = new Map<string, OffstageSandbox>();
-const lazyKey = (apiKey: string, id: string): string => `${apiKey} ${id}`;
+/** What each lazy handle's placeholder id stands for (lazy-handles.ts). */
+const lazyHandles = new LazyHandles<OffstageSandbox>();
 
 function lazyCreateEnabled(config: OffstageConfig): boolean {
   if (config.lazyCreate !== undefined) return config.lazyCreate;
@@ -215,9 +210,10 @@ const madeNothing = (error: unknown): boolean =>
   error instanceof OffstageError && error.status !== undefined && error.status >= 400 && error.status < 500;
 
 function lazySandbox(conn: Connection, body: Record<string, unknown>): OffstageSandbox {
+  const placeholder = placeholderId();
   // Placeholders until the first call creates the sandbox and fills its record in.
   const sandbox = withConnection({
-    id: placeholderId(),
+    id: placeholder,
     name: typeof body.name === 'string' ? body.name : '',
     session: body.session as OffstageSession,
     state: 'pending',
@@ -238,9 +234,10 @@ function lazySandbox(conn: Connection, body: Record<string, unknown>): OffstageS
     const { run: first, ...record } = jsonOf<OffstageSandbox & { run?: FirstRun }>(res);
     // Filled in place: the framework and the caller hold this object.
     Object.assign(sandbox, record);
+    lazyHandles.created(conn.apiKey, placeholder, sandbox.id);
     return first;
   }, madeNothing));
-  lazyHandles.set(lazyKey(conn.apiKey, sandbox.id), sandbox);
+  lazyHandles.add(conn.apiKey, placeholder, sandbox);
   return sandbox;
 }
 
@@ -382,11 +379,13 @@ export const offstage = defineProvider<OffstageSandbox, OffstageConfig>({
 
       getById: async (config: OffstageConfig, sandboxId: string) => {
         const conn = connect(config);
-        // A placeholder names no sandbox yet: looking it up creates it, so the caller gets a real one.
-        const handle = lazyHandles.get(lazyKey(conn.apiKey, sandboxId));
-        if (handle !== undefined) {
-          await ensureCreated(handle);
-          sandboxId = handle.id;
+        const lazy = lazyHandles.get(conn.apiKey, sandboxId);
+        if (lazy !== undefined && 'handle' in lazy) {
+          // A placeholder that names no sandbox yet: looking it up creates it, so the caller gets a real one.
+          await ensureCreated(lazy.handle);
+          sandboxId = lazy.handle.id;
+        } else if (lazy !== undefined) {
+          sandboxId = lazy.id;
         }
         try {
           const res = await request(conn, 'GET', `/v1/sandboxes/${encodeURIComponent(sandboxId)}`);
@@ -417,19 +416,20 @@ export const offstage = defineProvider<OffstageSandbox, OffstageConfig>({
 
       destroy: async (config: OffstageConfig, sandboxId: string) => {
         const conn = connect(config);
-        const key = lazyKey(conn.apiKey, sandboxId);
-        const handle = lazyHandles.get(key);
+        const lazy = lazyHandles.get(conn.apiKey, sandboxId);
         let id = sandboxId;
-        if (handle !== undefined) {
-          const deferred = deferredCreates.get(handle)!;
+        if (lazy !== undefined && 'handle' in lazy) {
+          const deferred = deferredCreates.get(lazy.handle)!;
           // From here no call on the handle can start a create.
           deferred.cancel();
           // Never used, or its create failed: there is no sandbox to destroy.
           if (!deferred.started || !(await deferred.settled())) {
-            lazyHandles.delete(key);
+            lazyHandles.forget(conn.apiKey, sandboxId);
             return;
           }
-          id = handle.id;
+          id = lazy.handle.id;
+        } else if (lazy !== undefined) {
+          id = lazy.id;
         }
         try {
           await request(conn, 'DELETE', `/v1/sandboxes/${encodeURIComponent(id)}`);
@@ -437,7 +437,8 @@ export const offstage = defineProvider<OffstageSandbox, OffstageConfig>({
           // Already gone.
           if (!(error instanceof OffstageError && error.status === 404)) throw error;
         }
-        lazyHandles.delete(key);
+        // Through the placeholder or the real id: either way the placeholder names nothing now.
+        lazyHandles.forget(conn.apiKey, sandboxId);
       },
 
       runCommand: async (sandbox: OffstageSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {

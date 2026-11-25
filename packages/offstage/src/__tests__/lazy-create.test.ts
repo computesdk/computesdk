@@ -137,6 +137,18 @@ describe('lazyCreate', () => {
     expect(routes().slice(2)).toEqual([['DELETE', '/v1/sandboxes/sbx_a'], ['DELETE', '/v1/sandboxes/sbx_b']]);
   });
 
+  it('destroy through the real id leaves the placeholder naming nothing', async () => {
+    const compute = provider();
+    const sandbox = await compute.sandbox.create();
+    const placeholder = sandbox.sandboxId;
+    api.reply(created(FINISHED), json(200, { ...RECORD, state: 'closed' }), failure(404, 'not-found', 'no such sandbox'));
+    await sandbox.runCommand('true');
+    await compute.sandbox.destroy(SBX);
+    // Looked up as an ordinary id, which names no sandbox.
+    expect(await compute.sandbox.getById(placeholder)).toBeNull();
+    expect(routes()).toEqual([['POST', '/v1/sandboxes'], ['DELETE', `/v1/sandboxes/${SBX}`], ['GET', `/v1/sandboxes/${placeholder}`]]);
+  });
+
   it('destroy waits for a create in flight and deletes what it made', async () => {
     const sandbox = await provider().sandbox.create();
     api.reply({ status: 201, json: { ...RECORD, run: FINISHED }, delayMs: 50 }, json(200, { ...RECORD, state: 'closed' }));
