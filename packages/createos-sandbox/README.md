@@ -58,7 +58,7 @@ control plane validates it; `0`/omitted = the shape's default disk).
 | `sandbox.getUrl({port})` | per-sandbox ingress URL |
 | `filesystem.readFile` / `writeFile` | `GET/PUT /v1/sandboxes/:id/files` |
 | `filesystem.mkdir` / `readdir` / `exists` / `remove` | synthesised via `runCommand` |
-| `snapshot.create` / `list` / `delete` | pause → `fork({ start_paused: true })` → resume / list paused / `destroy` |
+| `snapshot.create` / `list` / `delete` | native full snapshots via `sandbox.createSnapshot` and `client.snapshots` |
 
 Template builds (`/v1/templates`) are **not** exposed through the ComputeSDK
 provider surface — ComputeSDK's public `Provider` type can't carry the
@@ -85,11 +85,9 @@ await native.attachDisk({ diskId: "my-bucket", mountPath: "/mnt/data" });
 - **`runCommand` env/cwd are synthesised** — createos-sandbox drops per-exec env
   server-side, so `env`/`cwd` are injected by wrapping the command in an inline
   `sh -c` script. Sandbox-level env should be set at create time (`envs`).
-- **Snapshots are paused forks** — createos forks only from a paused sandbox,
-  so `snapshot.create` briefly pauses the source, forks it into a paused copy
-  (the snapshot, with its own id) and resumes the source. `create({ snapshotId })`
-  forks that copy into a fresh sandbox; `snapshot.delete` destroys it. A
-  snapshot taken while a process is running captures its memory state too.
+- **Snapshot restores** preserve memory and the root filesystem. Pass the snapshot
+  ID to `sandbox.create({ snapshotId })` to start an independent sandbox.
+  Existing paused-fork snapshot IDs remain usable.
 - **`getUrl` turns on ingress** — sandboxes are created with ingress off
   (pass `ingressEnabled: true` to enable it at create); `getUrl` enables it on
   demand the first time a URL is requested. Ingress currently serves a non-CA

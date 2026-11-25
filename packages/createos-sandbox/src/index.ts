@@ -18,13 +18,8 @@
  *  - The control plane drops per-exec env server-side (env is sandbox-level,
  *    set at create time), so per-command `env`/`cwd` are synthesised by
  *    wrapping the command in an inline `sh -c` script.
- *  - createos has no standalone snapshot object; a paused sandbox is the
- *    forkable artifact. `snapshot.create` pauses the source, forks it into a
- *    paused copy (the snapshot, with its own id) and resumes the source.
- *    `create({ snapshotId })` forks that paused copy into a fresh sandbox;
- *    `snapshot.delete` destroys it.
- *  - Pause and paused forks keep memory: files (including /tmp and /dev/shm)
- *    and running processes survive `pause`/`resume` and snapshot restores.
+ *  - Full snapshots preserve memory and rootfs. Each snapshot can restore multiple
+ *    independent sandboxes, including after the source has been destroyed.
  *
  * Error policy: provider operations fail loudly when the provider boundary is
  * broken. Only a genuine 404 (`CreateosSandboxNotFoundError`) is mapped to the
@@ -34,7 +29,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import { CreateosSandboxClient, CreateosSandboxNotFoundError, Sandbox } from "@nodeops-createos/sandbox";
+import { CreateosSandboxClient, CreateosSandboxNotFoundError, pollUntil, Sandbox } from "@nodeops-createos/sandbox";
 import type {
   CreateSandboxRequest,
   ForkSandboxRequest,
@@ -183,7 +178,7 @@ export interface CreateosCreateOptions extends CreateInstanceOptions {
   envs?: Record<string, string>;
   /** Explicit sandbox name (control mints one if omitted). */
   name?: string;
-  /** Snapshot id (paused sandbox) to fork from — bypasses cold create. */
+  /** Reusable snapshot id (or a legacy paused-fork id) to restore. */
   snapshotId?: string;
 }
 
@@ -454,7 +449,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
     if (opts.snapshotId !== undefined) {
       return {
         status: "unsupported",
-        reason: "A CreateOS snapshot restore forks the paused source, which keeps its own shape; drop snapshotId to boot a standard size.",
+        reason: "A CreateOS snapshot restore keeps the original shape; drop snapshotId to boot a standard size.",
       };
     }
     const shape = CREATEOS_SIZE_SHAPES[profile.sizeClass];
@@ -484,32 +479,28 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         const client = resolveClient(config);
         const opts = (options ?? {}) as CreateosCreateOptions;
 
-        // A snapshot id is a paused sandbox: fork it into a fresh sandbox.
         if (opts.snapshotId) {
-          const source = await client.getSandbox(opts.snapshotId);
-          const forked = await source.fork(toForkRequest(opts));
-          // Surface lifecycle failures: a fork that never reaches "running"
-          // (or hits a terminal state) must not be reported as success.
-          await forked.waitUntilRunning();
-          sandboxConfig.set(forked, config);
-          // ForkSandboxRequest carries no `disks` field — attach requested
-          // volumes post-fork through the runtime disk API instead. Destroy
-          // the fork on failure — it is already running, and the caller gets
-          // no instance handle to clean up with.
-          if (isUnifiedVolumeMounts(opts.volumes)) {
-            try {
+          const overrides = toForkRequest(opts);
+          // Older releases returned sandbox ids for their paused-fork snapshots.
+          const restored = opts.snapshotId.startsWith("sb-")
+            ? await (await client.getSandbox(opts.snapshotId)).fork(overrides)
+            : await client.createSandbox({ ...overrides, snapshot_id: opts.snapshotId });
+          try {
+            await restored.waitUntilRunning();
+            if (isUnifiedVolumeMounts(opts.volumes)) {
               for (const m of opts.volumes) {
                 const ref = resolveVolumeRef(m.volume);
                 const subPath = (m as { subPath?: string }).subPath;
-                await forked.attachDisk({ diskId: ref.id ?? ref.name!, mountPath: m.mountPath, ...(subPath ? { subPath } : {}) });
-                await waitForDiskMounted(forked, m.mountPath);
+                await restored.attachDisk({ diskId: ref.id ?? ref.name!, mountPath: m.mountPath, ...(subPath ? { subPath } : {}) });
+                await waitForDiskMounted(restored, m.mountPath);
               }
-            } catch (err) {
-              await forked.destroy().catch(() => {});
-              throw err;
             }
+          } catch (err) {
+            await restored.destroy().catch(() => {});
+            throw err;
           }
-          return { instance: forked, instanceId: forked.id };
+          sandboxConfig.set(restored, config);
+          return { instance: restored, instanceId: restored.id };
         }
 
         const shape = await resolveShape(client, opts, config);
@@ -731,8 +722,6 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
     },
 
     snapshot: {
-      // Paused forks are full VM snapshots: the whole rootfs (tmpfs included)
-      // and running processes come back in the restore.
       capabilities: { scope: "rootfs", memory: true, destroysSource: false },
       create: async (
         config: CreateosConfig,
@@ -741,57 +730,62 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       ) => {
         const client = resolveClient(config);
         const source = await client.getSandbox(sandboxId);
-        // createos forks only from a paused sandbox, so the snapshot is a
-        // paused fork (`start_paused`): a point-in-time copy with its own id
-        // that outlives the source. The source is paused just long enough to
-        // fork, then resumed — it keeps running like on other providers.
-        const wasPaused = source.status === "paused";
-        if (!wasPaused) {
-          await source.pause();
-          await source.waitUntilPaused();
-        }
-        let snapshot: Sandbox | undefined;
+        const snapshot = await source.createSnapshot({ type: "full", name: options?.name });
         try {
-          snapshot = await source.fork({ start_paused: true });
-          await snapshot.waitUntilPaused();
-        } catch (err) {
-          if (snapshot) await snapshot.destroy().catch(() => {});
-          if (!wasPaused) await source.resume().catch(() => {});
-          throw err;
-        }
-        if (!wasPaused) {
-          try {
-            await source.resume();
-            await source.waitUntilRunning();
-          } catch (err) {
-            await snapshot.destroy().catch(() => {});
-            throw err;
+          if (snapshot.status !== "ready") {
+            let current = snapshot;
+            await pollUntil({
+              poll: async () => {
+                if (current.status === "creating") current = await client.snapshots.get(snapshot.id);
+                return current;
+              },
+              done: (view) => view.status === "ready",
+              failed: (view) => view.status === "failed" || view.status === "deleting"
+                ? `Snapshot ${view.id} entered state ${view.status}` : undefined,
+              timeoutMs: 120_000,
+            });
           }
+        } catch (error) {
+          await client.snapshots.delete(snapshot.id).catch(() => {});
+          throw new Error(`Snapshot ${snapshot.id} did not become ready`, { cause: error });
         }
         return {
           id: snapshot.id,
           provider: PROVIDER_NAME,
-          createdAt: new Date(),
+          createdAt: new Date(snapshot.created_at),
           metadata: { name: options?.name, sourceSandboxId: sandboxId, ...options?.metadata },
         };
       },
-      list: async (config: CreateosConfig, _options?: ListSnapshotsOptions) => {
+      list: async (config: CreateosConfig, options?: ListSnapshotsOptions) => {
         const client = resolveClient(config);
-        // The typed status filter excludes "paused", so list all and filter.
-        const all = await client.listSandboxes({ limit: 500 });
-        return all
-          .filter((s) => s.status === "paused")
-          .map((s) => ({
-            id: s.id,
-            provider: PROVIDER_NAME,
-            createdAt: new Date(s.data.paused_at ?? s.data.created_at),
-          }));
+        const [snapshots, sandboxes] = await Promise.all([
+          client.snapshots.list(), client.listSandboxes({ limit: 500 }),
+        ]);
+        const sourceId = options?.instanceId ?? options?.sandboxId;
+        const entries = [
+          ...snapshots.filter((s) => !sourceId || s.sandbox_id === sourceId).map((s) => ({
+            id: s.id, provider: PROVIDER_NAME, createdAt: new Date(s.created_at),
+            metadata: { name: s.name, sourceSandboxId: s.sandbox_id },
+          })),
+          ...sandboxes.filter((s) => s.status === "paused" && s.data.forked_from &&
+            (!sourceId || s.data.forked_from === sourceId)).map((s) => ({
+            id: s.id, provider: PROVIDER_NAME, createdAt: new Date(s.data.paused_at ?? s.data.created_at),
+          })),
+        ];
+        return entries.slice(0, options?.limit);
       },
       delete: async (config: CreateosConfig, snapshotId: string) => {
         const client = resolveClient(config);
         try {
-          const sandbox = await client.getSandbox(snapshotId);
-          await sandbox.destroy();
+          if (snapshotId.startsWith("sb-")) {
+            const legacy = await client.getSandbox(snapshotId);
+            if (legacy.status !== "paused" || !legacy.data.forked_from) {
+              throw new Error(`Sandbox ${snapshotId} is not a paused fork snapshot`);
+            }
+            await legacy.destroy();
+          } else {
+            await client.snapshots.delete(snapshotId);
+          }
         } catch (e) {
           if (isNotFound(e)) return; // already gone
           throw e;
