@@ -9,6 +9,7 @@ import {
   AuthenticationError,
   ConflictError,
   NotFoundError,
+  ServerError,
   Sandbox as SuperserveSandbox,
   Snapshot as SuperserveSnapshot,
   Template as SuperserveTemplate,
@@ -166,27 +167,54 @@ async function deleteVolume(connection: ResolvedConfig, idOrName: string): Promi
   // Names can be reused while closing leases settle. Resolve once so retries
   // and attachment checks stay bound to the original volume.
   const deadline = Date.now() + 120_000;
-  for (;;) {
-    try {
-      await SuperserveVolume.deleteById(volume.id, connection);
-      return;
-    } catch (error) {
-      if (!(error instanceof ConflictError) || error.code !== 'volume_conflict') throw error;
-      let attachments;
-      try {
-        attachments = await volume.listAttachments();
-      } catch (lookupError) {
-        if (lookupError instanceof NotFoundError) return;
-        throw lookupError;
-      }
-      const closing = attachments.filter((attachment) => attachment.status !== 'revoked');
-      // A destroyed sandbox can leave a closing lease briefly. Never wait on
-      // an active mount, or turn another kind of conflict into successful cleanup.
-      if (!closing.length || closing.some((attachment) =>
-        attachment.status !== 'detaching' && attachment.status !== 'revoking') ||
-        Date.now() >= deadline) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 3_000));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000);
+  let lastError: unknown;
+  const requireTime = () => {
+    const remaining = deadline - Date.now();
+    if (controller.signal.aborted || remaining <= 0) {
+      throw lastError ?? new Error('Timed out waiting for Superserve volume deletion.');
     }
+    return remaining;
+  };
+  try {
+    for (;;) {
+      requireTime();
+      try {
+        // The instance method forwards request timeouts; the static shortcut does not.
+        await volume.delete({ signal: controller.signal, timeoutMs: requireTime() });
+        return;
+      } catch (error) {
+        requireTime();
+        lastError = error;
+        try {
+          if (error instanceof ConflictError && error.code === 'volume_conflict') {
+            const attachments = await volume.listAttachments({ signal: controller.signal, timeoutMs: requireTime() });
+            const closing = attachments.filter((attachment) => attachment.status !== 'revoked');
+            // Never wait for an active mount or hide an unrelated conflict.
+            if (!closing.length || closing.some((attachment) =>
+              attachment.status !== 'detaching' && attachment.status !== 'revoking')) throw error;
+          } else if (error instanceof ServerError && error.statusCode === 503 && error.code === 'volume_unavailable') {
+            // Cleanup advances in batches; a fresh deleting state is retryable,
+            // but it is not confirmation that the original volume is gone.
+            const current = await volume.getInfo({ signal: controller.signal, timeoutMs: requireTime() });
+            if (current.status !== 'deleting') throw error;
+          } else {
+            throw error;
+          }
+        } catch (lookupError) {
+          if (lookupError instanceof NotFoundError) return;
+          throw lookupError;
+        }
+        requireTime();
+        await new Promise((resolve) => setTimeout(resolve, Math.min(3_000, deadline - Date.now())));
+      }
+    }
+  } catch (error) {
+    if (controller.signal.aborted || Date.now() >= deadline) throw lastError ?? error;
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

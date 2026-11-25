@@ -182,6 +182,147 @@ describe('Superserve volumes through the published native SDK', () => {
     expect(await result).toMatchObject({ code: 'volume_conflict' });
   });
 
+  it('waits for batched deletion to finish and observes only the original UUID', async () => {
+    vi.useFakeTimers();
+    let observations = 0;
+    let settled = false;
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, options: RequestInit = {}) => {
+      const url = String(input);
+      const method = options.method || 'GET';
+      calls.push({ url, method, apiKey: new Headers(options.headers).get('X-API-Key'), body: undefined });
+      if (method === 'DELETE') {
+        return new Response(JSON.stringify({ error: { code: 'volume_unavailable' } }), { status: 503 });
+      }
+      if (url === baseUrl + '/volumes/test-volume') return new Response(JSON.stringify(volume));
+      expect(url).toBe(baseUrl + '/volumes/' + volumeId);
+      observations++;
+      return observations === 1
+        ? new Response(JSON.stringify({ ...volume, status: 'deleting' }))
+        : new Response(JSON.stringify({ error: { code: 'volume_not_found' } }), { status: 404 });
+    }));
+    const result = superserve({ apiKey, baseUrl }).volume!.delete('test-volume').then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(observations).toBe(1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await result;
+    expect(observations).toBe(2);
+    expect(calls.filter((call) => call.method === 'DELETE').every((call) => call.url === baseUrl + '/volumes/' + volumeId)).toBe(true);
+    expect(calls.filter((call) => call.url.endsWith('/test-volume'))).toHaveLength(1);
+  });
+
+  it.each(['ready', 'error'])('does not treat a %s volume as deletion progress after a 503', async (status) => {
+    vi.useFakeTimers();
+    respond(volume);
+    for (let attempt = 0; attempt < 3; attempt++) respond({ error: { code: 'volume_unavailable' } }, 503);
+    respond({ ...volume, status });
+    const result = superserve({ apiKey, baseUrl }).volume!.delete(volumeId).catch((error) => error);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await result).toMatchObject({ statusCode: 503, code: 'volume_unavailable' });
+    expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(3);
+    expect(calls.filter((call) => call.method === 'GET')).toHaveLength(2);
+  });
+
+  it('does not inspect or retry an unrelated server failure as deletion progress', async () => {
+    vi.useFakeTimers();
+    respond(volume);
+    for (let attempt = 0; attempt < 3; attempt++) respond({ error: { code: 'backend_error' } }, 503);
+    const result = superserve({ apiKey, baseUrl }).volume!.delete(volumeId).catch((error) => error);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await result).toMatchObject({ code: 'backend_error' });
+    expect(calls.filter((call) => call.method === 'GET')).toHaveLength(1);
+  });
+
+  it.each(['delete', 'deletion-state', 'attachment-state'])(
+    'passes the remaining budget to a slow native %s request',
+    async (slowRequest) => {
+      vi.useFakeTimers();
+      let initial = true;
+      let observed = false;
+      let settled = false;
+      vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, options: RequestInit = {}) => {
+        if (initial) {
+          initial = false;
+          return Promise.resolve(new Response(JSON.stringify(volume)));
+        }
+        if (options.method === 'DELETE' && slowRequest !== 'delete') {
+          return Promise.resolve(observed
+            ? new Response(null, { status: 204 })
+            : new Response(JSON.stringify({ error: { code: slowRequest === 'deletion-state' ? 'volume_unavailable' : 'volume_conflict' } }),
+              { status: slowRequest === 'deletion-state' ? 503 : 409 }));
+        }
+        observed = true;
+        const signal = options.signal!;
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            signal.removeEventListener('abort', abort);
+            resolve(options.method === 'DELETE'
+              ? new Response(null, { status: 204 })
+              : new Response(JSON.stringify(slowRequest === 'deletion-state'
+                ? { ...volume, status: 'deleting' }
+                : [attachment({ status: 'revoking' })])));
+          }, 40_000);
+          const abort = () => {
+            clearTimeout(timer);
+            signal.removeEventListener('abort', abort);
+            reject(signal.reason);
+          };
+          signal.addEventListener('abort', abort, { once: true });
+          if (signal.aborted) abort();
+        });
+      }));
+      const result = superserve({ apiKey, baseUrl }).volume!.delete(volumeId).then(
+        () => { settled = true; },
+        (error) => { settled = true; return error; },
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(await result).toBeUndefined();
+    },
+  );
+
+  it('aborts in-flight native retries at the aggregate deletion deadline', async () => {
+    vi.useFakeTimers();
+    const started = Date.now();
+    const startedCalls: number[] = [];
+    const signals: AbortSignal[] = [];
+    let initial = true;
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, options: RequestInit = {}) => {
+      if (initial) {
+        initial = false;
+        return Promise.resolve(new Response(JSON.stringify(volume)));
+      }
+      startedCalls.push(Date.now());
+      const signal = options.signal!;
+      signals.push(signal);
+      return new Promise<Response>((resolve, reject) => {
+        const finish = () => {
+          signal.removeEventListener('abort', abort);
+          resolve(options.method === 'DELETE'
+            ? new Response(JSON.stringify({ error: { code: 'volume_unavailable' } }), { status: 503 })
+            : new Response(JSON.stringify({ ...volume, status: 'deleting' })));
+        };
+        const timer = setTimeout(finish, 20_000);
+        const abort = () => {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', abort);
+          reject(signal.reason);
+        };
+        signal.addEventListener('abort', abort, { once: true });
+        if (signal.aborted) abort();
+      });
+    }));
+    const result = superserve({ apiKey, baseUrl }).volume!.delete(volumeId).catch((error) => error);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(await result).toMatchObject({ code: 'volume_unavailable' });
+    expect(signals.at(-1)?.aborted).toBe(true);
+    expect(startedCalls.every((time) => time < started + 120_000)).toBe(true);
+    const requestCount = startedCalls.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(startedCalls).toHaveLength(requestCount);
+  });
+
   it('passes unified handles and read-only mounts through native create-time attachment', async () => {
     const provider = superserve({ apiKey, baseUrl });
     respond(sandbox, 201);
