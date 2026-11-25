@@ -85,7 +85,7 @@ const result = await sandbox.runCommand('node -v');     // creates the sandbox a
 - Errors from the create surface on that first call. A create Offstage refused (no credit, a bad `name`, a command it would not accept) made nothing: the call gets the error and the next call tries again. A create whose answer was lost on the way is never sent again, as it may have made a sandbox, and every later call gets the same error.
 - A first command that could not run after the sandbox was made, for example because the sandbox closed while waiting for a slot, throws an `OffstageError` with its `code` and no `status`. A first command that is still waiting for a slot is sent again the ordinary way.
 - Destroying a handle that was never used sends nothing. Destroying it while its create is in flight waits for the create and then destroys the sandbox it made. A handle destroyed before it was created rejects every later call.
-- Calls that are wrong in themselves (an absolute path to `readFile` or `writeFile`, a background command) are refused without creating the sandbox.
+- Calls that are wrong in themselves (an absolute path to `readFile` or `writeFile`) are refused without creating the sandbox.
 
 **The id is a placeholder.** `sandbox.sandboxId` (and `instanceId`) is a client-side id such as `lazy_6b4c…` for the whole life of the handle, before and after the sandbox exists, because ComputeSDK fixes it when `create()` returns. `destroy(id)` and `getById(id)` accept it, but only in the process that created the handle and only with the same API key. To store the sandbox or pass it to another process, read the real id from `(await sandbox.getInfo()).id` (or `sandbox.getInstance().id` once the sandbox exists). Until the first call, `getInstance()` holds placeholder values and `list()` does not show the sandbox.
 
@@ -177,17 +177,17 @@ The provider talks to Offstage over HTTP/2, through a pool of 16 connections per
 | `getById` | ✅ | |
 | `list` | ✅ | Sandboxes that are waiting for a slot or running. |
 | `destroy` | ✅ | Kills everything the sandbox runs and wipes its macOS account. |
-| `runCommand` | ✅ | `cwd`, `env`, `timeout`. |
+| `runCommand` | ✅ | `cwd`, `env`, `timeout`, `background`. |
 | `getInfo` | ✅ | |
 | `filesystem` | ✅ | `readFile` and `writeFile` over the file routes; the rest through the shell. |
 | `getUrl` | ❌ | Sandboxes expose no ports to the internet. |
-| Background commands, `startProcess`, live output (`onStdout`/`onStderr`) | ❌ | See Limitations. |
+| `startProcess`, live output (`onStdout`/`onStderr`) | ❌ | See Limitations. |
 | `sizeClass` | ❌ | One fixed shape. |
 
 ## Limitations
 
 - **No port URLs.** `getUrl` throws: a sandbox exposes no ports to the internet.
-- **No background commands or live output.** `runCommand(..., { background: true })` throws. Offstage's API answers a command when it ends, and ComputeSDK's shell process tier, which would serve `startProcess`, `onStdout` and `onStderr`, needs `setsid`, which macOS does not have.
+- **No live output or `startProcess`.** Offstage's API answers a command when it ends, and ComputeSDK's shell process tier, which would serve `startProcess`, `onStdout` and `onStderr`, needs `setsid`, which macOS does not have. `runCommand(..., { background: true })` works: the command is detached with `nohup`, its output is discarded, and the call returns at once with exit code 0.
 - **`readFile` returns text.** File bytes are decoded as UTF-8.
 - **Rate limit.** A team may send 120 requests a minute; past that calls wait out the `Retry-After` and continue.
 - **No templates or snapshots** through ComputeSDK.

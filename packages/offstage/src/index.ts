@@ -152,7 +152,7 @@ async function request(
   init: { json?: unknown; body?: string; headers?: Record<string, string>; idempotent?: boolean } = {},
 ): Promise<HttpAnswer> {
   const url = new URL(`${conn.baseUrl}${path}`);
-  const headers: Record<string, string> = { authorization: `Bearer ${conn.apiKey}` };
+  const headers: Record<string, string> = { authorization: `Bearer ${conn.apiKey}`, 'user-agent': 'computesdk-offstage' };
   if (init.json !== undefined) headers['content-type'] = 'application/json';
   if (init.body !== undefined) headers['content-type'] = 'application/octet-stream';
   Object.assign(headers, init.headers);
@@ -441,12 +441,9 @@ export const offstage = defineProvider<OffstageSandbox, OffstageConfig>({
       },
 
       runCommand: async (sandbox: OffstageSandbox, command: string, options?: RunCommandOptions): Promise<CommandResult> => {
+        // A background command is detached from the request with nohup: the API answers at once and the command keeps running.
         if (options?.background) {
-          throw new Error(
-            'Offstage does not support background commands: its API answers a command when the command ends, ' +
-            'and ComputeSDK\'s shell process tier needs `setsid`, which macOS does not have. ' +
-            'Run the command in the foreground (a long one is followed until it ends).',
-          );
+          return runForeground(sandbox, `nohup sh -c "${escapeShellArg(command)}" >/dev/null 2>&1 &`, { ...options, background: false });
         }
         return runForeground(sandbox, command, options);
       },

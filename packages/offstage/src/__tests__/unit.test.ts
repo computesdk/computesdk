@@ -143,10 +143,11 @@ describe('Offstage provider (local API)', () => {
       expect(await sandbox.runCommand('sleep 600', { timeout: 1000 })).toMatchObject({ exitCode: 124, stdout: 'partial' });
     });
 
-    it('refuses background commands without calling the API', async () => {
+    it('detaches a background command with nohup and answers at once', async () => {
       const sandbox = await createSandbox();
-      await expect(sandbox.runCommand('sleep 5', { background: true })).rejects.toThrow(/does not support background commands/);
-      expect(calls()).toHaveLength(0);
+      api.reply(json(200, FINISHED));
+      expect(await sandbox.runCommand('sleep 5; echo "done"', { background: true })).toMatchObject({ exitCode: 0 });
+      expect(bodyOf(calls()[0]).cmd).toBe('nohup sh -c "sleep 5; echo \\"done\\"" >/dev/null 2>&1 &');
     });
   });
 

@@ -174,7 +174,6 @@ describe('lazyCreate', () => {
   it('refuses a call that is wrong in itself without creating the sandbox', async () => {
     const sandbox = await provider().sandbox.create();
     await expect(sandbox.filesystem.readFile('/etc/hosts')).rejects.toThrow(/relative to the sandbox root/);
-    await expect(sandbox.runCommand('sleep 5', { background: true })).rejects.toThrow(/does not support background commands/);
     expect(api.requests).toHaveLength(0);
   });
 
