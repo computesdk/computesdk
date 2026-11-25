@@ -3,22 +3,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Ways the Daytona sizeClass mapping can fail:
 // - wrong shape: a class sends CPU/RAM/disk other than its profile, or in the
 //   wrong unit (Daytona takes vCPU and GiB, not MiB);
-// - silent default boot: resources are sent without an image, so Daytona boots
-//   the default snapshot (1 vCPU / 1 GiB / 3 GiB) and ignores them; or a
-//   snapshot/template source wins over the requested size;
+// - snapshot source wins: a v2 snapshot (memory + disk) fixes the size, so a
+//   sized create from one must be refused;
 // - dropped field: the create path drops `resources` or `image`, or flattens
 //   them where the SDK does not read them;
 // - wrong refusal: a class above Daytona's 4 vCPU / 8 GiB sandbox limit is
 //   accepted, or a class Daytona offers is refused;
 // - conflict accepted: sizeClass combined with native cpu/memory/resources.
-const mocks = vi.hoisted(() => ({ create: vi.fn() }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), createFromSnapshot: vi.fn() }));
 
-vi.mock('@daytonaio/sdk', () => ({
-  DaytonaNotFoundError: class extends Error {},
-  Sandbox: class {},
+vi.mock('@daytona/sdk', () => ({
   Daytona: class {
-    create = mocks.create;
+    v2 = { create: mocks.create, createFromSnapshot: mocks.createFromSnapshot };
   },
+}));
+
+vi.mock('@daytona/sdk/v2', () => ({
+  NotFoundError: class extends Error {},
+  Sandbox: class {},
 }));
 
 import { daytona } from '../index';
@@ -42,29 +44,32 @@ describe('daytona sizeClass', () => {
     const support = p.sizes.resolve(sizeClass);
     expect(support.status).toBe('supported');
     if (support.status !== 'supported') return;
-    expect(support.nativeOptions).toEqual({ image: 'node:22', resources });
+    expect(support.nativeOptions).toEqual({ resources });
     expect(support.resolved).toEqual(resolved);
 
     const result = await p.instances.create({ sizeClass });
     expect(result.sizing).toMatchObject({ requested: { sizeClass }, resolved });
     expect(mocks.create).toHaveBeenCalledTimes(1);
-    const [params] = mocks.create.mock.calls[0];
+    const [image, params] = mocks.create.mock.calls[0];
+    expect(image).toBeUndefined();
     expect(params.resources).toEqual(resources);
-    expect(params.image).toBe('node:22');
+    expect(params.image).toBeUndefined();
     expect(params.snapshot).toBeUndefined();
     expect(params.sizeClass).toBeUndefined();
   });
 
-  it('keeps a caller image and the sizeImage override', async () => {
-    await provider().instances.create({ sizeClass: 'md', image: 'python:3.12' });
-    expect(mocks.create.mock.calls[0][0]).toMatchObject({
-      image: 'python:3.12', resources: { cpu: 2, memory: 4, disk: 20 },
-    });
+  it('keeps a caller image, a template image and the sizeImage override', async () => {
+    await provider().instances.create({ sizeClass: 'md', image: 'python:3.12' } as any);
+    expect(mocks.create.mock.calls[0][0]).toBe('python:3.12');
+    expect(mocks.create.mock.calls[0][1]).toMatchObject({ resources: { cpu: 2, memory: 4, disk: 20 } });
 
     await daytona({ apiKey: 'test-key', sizeImage: 'ubuntu:24.04' }).instances.create({ sizeClass: 'sm' });
-    expect(mocks.create.mock.calls[1][0]).toMatchObject({
-      image: 'ubuntu:24.04', resources: { cpu: 1, memory: 2, disk: 10 },
-    });
+    expect(mocks.create.mock.calls[1][0]).toBe('ubuntu:24.04');
+    expect(mocks.create.mock.calls[1][1]).toMatchObject({ resources: { cpu: 1, memory: 2, disk: 10 } });
+
+    await provider().instances.create({ sizeClass: 'md', templateId: 'img-a' });
+    expect(mocks.create.mock.calls[2][0]).toBe('img-a');
+    expect(mocks.create.mock.calls[2][1]).toMatchObject({ resources: { cpu: 2, memory: 4, disk: 20 } });
   });
 
   it.each(['xl', '2xl', '3xl'] as const)('refuses %s above the sandbox limit without creating', async sizeClass => {
@@ -75,12 +80,13 @@ describe('daytona sizeClass', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
-  it.each([{ templateId: 'snap-a' }, { snapshotId: 'snap-a' }, { snapshot: 'snap-a' }])(
+  it.each([{ snapshotId: 'snap-a' }, { snapshot: 'snap-a' }])(
     'refuses a snapshot source that fixes resources (%j)', async source => {
       const support = provider().sizes.resolve('md', source as any);
       expect(support).toMatchObject({ status: 'unsupported', reason: expect.stringMatching(/snapshot/) });
       await expect(provider().instances.create({ sizeClass: 'md', ...source } as any)).rejects.toThrow(/snapshot/);
       expect(mocks.create).not.toHaveBeenCalled();
+      expect(mocks.createFromSnapshot).not.toHaveBeenCalled();
     },
   );
 
@@ -93,10 +99,15 @@ describe('daytona sizeClass', () => {
   );
 
   it('leaves non-sized creates unchanged', async () => {
-    await provider().instances.create({ templateId: 'snap-a' });
-    const [params] = mocks.create.mock.calls[0];
-    expect(params.snapshot).toBe('snap-a');
+    await provider().instances.create({ templateId: 'img-a' });
+    const [image, params] = mocks.create.mock.calls[0];
+    expect(image).toBe('img-a');
     expect(params.resources).toBeUndefined();
-    expect(params.image).toBeUndefined();
+
+    mocks.createFromSnapshot.mockResolvedValue({ id: 'sb-snap' });
+    await provider().instances.create({ snapshotId: 'snap-a' });
+    const [snapshot, snapParams] = mocks.createFromSnapshot.mock.calls[0];
+    expect(snapshot).toBe('snap-a');
+    expect(snapParams.resources).toBeUndefined();
   });
 });
