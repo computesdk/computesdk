@@ -39,10 +39,12 @@ export DAYTONA_API_KEY=your_api_key_here
 interface DaytonaConfig {
   /** Daytona API key - if not provided, will use DAYTONA_API_KEY env var */
   apiKey?: string;
-  /** Default runtime environment (e.g. 'node', 'python') */
+  /** Unused on Daytona v2, which boots sandboxes from images */
   runtime?: string;
-  /** Execution timeout in milliseconds */
+  /** Sandbox create wait in milliseconds */
   timeout?: number;
+  /** Registry image (e.g. 'node:22') built and booted for a `sizeClass` create without an `image`; defaults to the Daytona platform image */
+  sizeImage?: string;
 }
 ```
 

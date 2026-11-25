@@ -7,7 +7,7 @@ runProviderTestSuite({
   name: 'daytona',
   provider: daytona({}),
   supportsFilesystem: true,
-  // Streaming and processes ride the framework's shell tier over executeCommand.
+  // Streaming and processes ride the framework's shell tier over exec.
   supportsStreaming: true,
   supportsProcesses: true,
   expectProcessRuntime: live ? { streaming: 'shell', processes: 'shell' } : undefined,
