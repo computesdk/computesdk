@@ -4,7 +4,7 @@
 
 import { Daytona } from '@daytona/sdk';
 import type { DaytonaV2Client } from '@daytona/sdk';
-import { NotFoundError, Sandbox as DaytonaSandbox } from '@daytona/sdk/v2';
+import { ImageBuilder, NotFoundError, Sandbox as DaytonaSandbox } from '@daytona/sdk/v2';
 import type { CreateSandboxOptions } from '@daytona/sdk/v2';
 import { resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, errorText } from '@computesdk/provider';
 import { defineProvider, escapeShellArg, InstanceSizeError } from '@computesdk/provider';
@@ -23,13 +23,13 @@ export interface DaytonaConfig {
   runtime?: string;
   /** Sandbox create wait in milliseconds */
   timeout?: number;
-  /** Image booted for a `sizeClass` create without an `image`; defaults to the Daytona platform image */
+  /** Registry image (e.g. 'node:22') built and booted for a `sizeClass` create without an `image`; defaults to the Daytona platform image */
   sizeImage?: string;
 }
 
-/** Daytona's documented per-sandbox maximum (https://www.daytona.io/docs/en/sandboxes). */
-const DAYTONA_MAX_VCPUS = 4;
-const DAYTONA_MAX_MEMORY_GIB = 8;
+/** Daytona v2's per-sandbox plan maximum (https://www.daytona.com/docs/limits). */
+const DAYTONA_MAX_VCPUS = 64;
+const DAYTONA_MAX_MEMORY_GIB = 128;
 
 /** Disk (GiB) the ComputeSDK platform requests for each Daytona size. */
 const DAYTONA_SIZE_DISK_GIB: Readonly<Partial<Record<InstanceSizeClass, number>>> = Object.freeze({
@@ -37,9 +37,6 @@ const DAYTONA_SIZE_DISK_GIB: Readonly<Partial<Record<InstanceSizeClass, number>>
   md: 20,
   lg: 40,
 });
-
-/** Stop/start/pause/resume can outlast the SDK's default wait. */
-const LIFECYCLE_TIMEOUT_S = 300;
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -167,11 +164,14 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
           if (timeout) createOptions.waitSeconds = Math.ceil(timeout / 1000);
 
           // v2 snapshots (memory + disk) boot through createFromSnapshot;
-          // templates are v2 images, the successor of v0 snapshots.
+          // templates are registered v2 images, the successor of v0 snapshots.
+          // A native `image` is a registry ref (as on v0), which v2 only boots via a build.
           const snapshot = snapshotId || nativeSnapshot;
           const session = snapshot
             ? await d.createFromSnapshot(snapshot, createOptions as any)
-            : await d.create(templateId || nativeImage, createOptions as CreateSandboxOptions);
+            : nativeImage && !templateId
+              ? await d.createFromBuild(ImageBuilder.fromRegistry(nativeImage), createOptions as any)
+              : await d.create(templateId || undefined, createOptions as CreateSandboxOptions);
 
           return { instance: session, instanceId: session.id };
         } catch (error) {
@@ -308,14 +308,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
 
       getInstance: (sandbox: DaytonaSandbox): DaytonaSandbox => sandbox,
 
-      // Daytona v2 sandboxes are VMs: pause keeps memory, so running processes survive.
-      pause: async (sandbox: DaytonaSandbox): Promise<void> => {
-        await sandbox.pause({ timeoutSeconds: LIFECYCLE_TIMEOUT_S });
-      },
-      resume: async (sandbox: DaytonaSandbox): Promise<void> => {
-        await sandbox.resume({ timeoutSeconds: LIFECYCLE_TIMEOUT_S });
-      },
-      pauseCapabilities: { memory: true },
+      // Daytona v2 Linux sandboxes are ephemeral: no stop/start or pause/resume.
     },
 
     // v2 snapshots capture memory and disk of a running sandbox.

@@ -7,18 +7,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 //   sized create from one must be refused;
 // - dropped field: the create path drops `resources` or `image`, or flattens
 //   them where the SDK does not read them;
-// - wrong refusal: a class above Daytona's 4 vCPU / 8 GiB sandbox limit is
-//   accepted, or a class Daytona offers is refused;
+// - wrong refusal: a class Daytona v2 offers (up to 64 vCPU / 128 GiB) is refused;
 // - conflict accepted: sizeClass combined with native cpu/memory/resources.
-const mocks = vi.hoisted(() => ({ create: vi.fn(), createFromSnapshot: vi.fn() }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), createFromSnapshot: vi.fn(), createFromBuild: vi.fn() }));
 
 vi.mock('@daytona/sdk', () => ({
   Daytona: class {
-    v2 = { create: mocks.create, createFromSnapshot: mocks.createFromSnapshot };
+    v2 = { create: mocks.create, createFromSnapshot: mocks.createFromSnapshot, createFromBuild: mocks.createFromBuild };
   },
 }));
 
 vi.mock('@daytona/sdk/v2', () => ({
+  ImageBuilder: { fromRegistry: (ref: string) => ({ registryRef: ref }) },
   NotFoundError: class extends Error {},
   Sandbox: class {},
 }));
@@ -32,6 +32,7 @@ describe('daytona sizeClass', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.create.mockResolvedValue({ id: 'sb-test' });
+    mocks.createFromBuild.mockResolvedValue({ id: 'sb-build' });
   });
 
   it.each([
@@ -59,26 +60,27 @@ describe('daytona sizeClass', () => {
   });
 
   it('keeps a caller image, a template image and the sizeImage override', async () => {
+    // Registry refs are not v2 create sources; they boot through a registry build.
     await provider().instances.create({ sizeClass: 'md', image: 'python:3.12' } as any);
-    expect(mocks.create.mock.calls[0][0]).toBe('python:3.12');
-    expect(mocks.create.mock.calls[0][1]).toMatchObject({ resources: { cpu: 2, memory: 4, disk: 20 } });
+    expect(mocks.createFromBuild.mock.calls[0][0]).toEqual({ registryRef: 'python:3.12' });
+    expect(mocks.createFromBuild.mock.calls[0][1]).toMatchObject({ resources: { cpu: 2, memory: 4, disk: 20 } });
 
     await daytona({ apiKey: 'test-key', sizeImage: 'ubuntu:24.04' }).instances.create({ sizeClass: 'sm' });
-    expect(mocks.create.mock.calls[1][0]).toBe('ubuntu:24.04');
-    expect(mocks.create.mock.calls[1][1]).toMatchObject({ resources: { cpu: 1, memory: 2, disk: 10 } });
+    expect(mocks.createFromBuild.mock.calls[1][0]).toEqual({ registryRef: 'ubuntu:24.04' });
+    expect(mocks.createFromBuild.mock.calls[1][1]).toMatchObject({ resources: { cpu: 1, memory: 2, disk: 10 } });
+    expect(mocks.createFromBuild.mock.calls[1][1].image).toBeUndefined();
 
     await provider().instances.create({ sizeClass: 'md', templateId: 'img-a' });
-    expect(mocks.create.mock.calls[2][0]).toBe('img-a');
-    expect(mocks.create.mock.calls[2][1]).toMatchObject({ resources: { cpu: 2, memory: 4, disk: 20 } });
+    expect(mocks.create.mock.calls[0][0]).toBe('img-a');
+    expect(mocks.create.mock.calls[0][1]).toMatchObject({ resources: { cpu: 2, memory: 4, disk: 20 } });
   });
 
-  it.each(['xl', '2xl', '3xl'] as const)('refuses %s above the sandbox limit without creating', async sizeClass => {
-    const p = provider();
-    const support = p.sizes.resolve(sizeClass);
-    expect(support).toMatchObject({ status: 'unsupported', reason: expect.stringMatching(/4 vCPU.*8 GiB/) });
-    await expect(p.instances.create({ sizeClass })).rejects.toMatchObject({ code: 'unsupported' });
-    expect(mocks.create).not.toHaveBeenCalled();
-  });
+  it.each([['xl', 8, 16], ['2xl', 16, 32], ['3xl', 32, 64]] as const)(
+    'accepts %s within the v2 sandbox limit', async (sizeClass, cpu, memory) => {
+      const support = provider().sizes.resolve(sizeClass);
+      expect(support).toMatchObject({ status: 'supported', nativeOptions: { resources: { cpu, memory } } });
+    },
+  );
 
   it.each([{ snapshotId: 'snap-a' }, { snapshot: 'snap-a' }])(
     'refuses a snapshot source that fixes resources (%j)', async source => {
@@ -116,6 +118,7 @@ describe('daytona v2 create options', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.create.mockResolvedValue({ id: 'sb-test' });
+    mocks.createFromBuild.mockResolvedValue({ id: 'sb-build' });
   });
 
   it('maps port numbers to v2 PortMapping objects', async () => {

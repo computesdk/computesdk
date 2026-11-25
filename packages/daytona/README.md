@@ -43,7 +43,7 @@ interface DaytonaConfig {
   runtime?: string;
   /** Sandbox create wait in milliseconds */
   timeout?: number;
-  /** Image booted for a `sizeClass` create without an `image`; defaults to the Daytona platform image */
+  /** Registry image (e.g. 'node:22') built and booted for a `sizeClass` create without an `image`; defaults to the Daytona platform image */
   sizeImage?: string;
 }
 ```
