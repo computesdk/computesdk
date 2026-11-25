@@ -299,6 +299,20 @@ function strArray(v: unknown): string[] | undefined {
   return Array.isArray(v) ? (v as string[]) : undefined;
 }
 
+async function cleanupUnreadySnapshot(id: string, failure: unknown, remove: () => Promise<unknown>): Promise<never> {
+  try {
+    await remove();
+  } catch (cleanupError) {
+    if (!isNotFound(cleanupError)) {
+      throw new AggregateError(
+        [failure, cleanupError],
+        `Snapshot ${id} did not become ready and cleanup failed. Retry deletion of ${id} when its state permits.`,
+      );
+    }
+  }
+  throw new Error(`Snapshot ${id} did not become ready`, { cause: failure });
+}
+
 /** Pure map: ComputeSDK create options → createos-sandbox fork request body. */
 export function toForkRequest(opts: CreateosCreateOptions): ForkSandboxRequest {
   const req: ForkSandboxRequest = {
@@ -730,6 +744,18 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
       ) => {
         const client = resolveClient(config);
         const source = await client.getSandbox(sandboxId);
+        const metadata = { name: options?.name, sourceSandboxId: sandboxId, ...options?.metadata };
+        // Native capture requires a running source. Fork a paused source in place
+        // so guest code cannot advance between the caller's pause and capture.
+        if (source.status === "paused") {
+          const copy = await source.fork({ start_paused: true });
+          try {
+            await copy.waitUntilPaused();
+          } catch (error) {
+            return cleanupUnreadySnapshot(copy.id, error, () => copy.destroy());
+          }
+          return { id: copy.id, provider: PROVIDER_NAME, createdAt: new Date(copy.data.created_at), metadata };
+        }
         const snapshot = await source.createSnapshot({ type: "full", name: options?.name });
         try {
           if (snapshot.status !== "ready") {
@@ -746,14 +772,13 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
             });
           }
         } catch (error) {
-          await client.snapshots.delete(snapshot.id).catch(() => {});
-          throw new Error(`Snapshot ${snapshot.id} did not become ready`, { cause: error });
+          return cleanupUnreadySnapshot(snapshot.id, error, () => client.snapshots.delete(snapshot.id));
         }
         return {
           id: snapshot.id,
           provider: PROVIDER_NAME,
           createdAt: new Date(snapshot.created_at),
-          metadata: { name: options?.name, sourceSandboxId: sandboxId, ...options?.metadata },
+          metadata,
         };
       },
       list: async (config: CreateosConfig, options?: ListSnapshotsOptions) => {
@@ -763,7 +788,7 @@ export const createosSandbox = defineProvider<Sandbox, CreateosConfig>({
         ]);
         const sourceId = options?.instanceId ?? options?.sandboxId;
         const entries = [
-          ...snapshots.filter((s) => !sourceId || s.sandbox_id === sourceId).map((s) => ({
+          ...snapshots.filter((s) => s.status === "ready" && (!sourceId || s.sandbox_id === sourceId)).map((s) => ({
             id: s.id, provider: PROVIDER_NAME, createdAt: new Date(s.created_at),
             metadata: { name: s.name, sourceSandboxId: s.sandbox_id },
           })),

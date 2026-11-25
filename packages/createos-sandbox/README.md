@@ -87,7 +87,8 @@ await native.attachDisk({ diskId: "my-bucket", mountPath: "/mnt/data" });
   `sh -c` script. Sandbox-level env should be set at create time (`envs`).
 - **Snapshot restores** preserve memory and the root filesystem. Pass the snapshot
   ID to `sandbox.create({ snapshotId })` to start an independent sandbox.
-  Existing paused-fork snapshot IDs remain usable.
+  A paused source produces a paused fork and stays paused. Both kinds of
+  snapshot ID can be restored or deleted.
 - **`getUrl` turns on ingress** — sandboxes are created with ingress off
   (pass `ingressEnabled: true` to enable it at create); `getUrl` enables it on
   demand the first time a URL is requested. Ingress currently serves a non-CA
