@@ -50,6 +50,7 @@ prefer.
 - `templateId` or `snapshotId`: an Orble snapshot to start the box from, one of yours or Orble's
   (`orble snapshots` lists them). The box is at least the snapshot's size.
 - `name`: the box's name.
+- `keepAwake`: `true` turns off idle suspension, for a box that serves apps or runs work on its own.
 
 Commands and file operations run as `root`, from `/root`, by default. Set `user: 'agent'` (or `ORBLE_USER=agent`) to
 run them as the box's own user, from `/home/agent`, where SSH logins and agents work; a command's own `user` option,

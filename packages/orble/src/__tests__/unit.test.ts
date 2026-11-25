@@ -53,6 +53,19 @@ describe('orble provider', () => {
     expect(ORBLE_SIZES.xs).toEqual({ size: 'micro', vcpus: 1, memoryMiB: 2048 });
   });
 
+  it('keeps a box awake when asked, after creating it', async () => {
+    const calls = mockFetch([{ body: box }, { body: { ...box, keep_awake: true } }]);
+    await orble(config).instances.create({ size: 's', keepAwake: true } as any);
+    expect(calls[0]).toMatchObject({ method: 'POST', body: { size: 's' } });
+    expect(calls[1]).toMatchObject({ url: 'https://orble.example/v1/boxes/k7f2', method: 'PATCH', body: { keep_awake: true } });
+  });
+
+  it('deletes the box when keeping it awake fails', async () => {
+    const calls = mockFetch([{ body: box }, { status: 500, raw: 'boom' }, { body: {} }]);
+    await expect(orble(config).instances.create({ keepAwake: true } as any)).rejects.toThrow();
+    expect(calls[2]).toMatchObject({ url: 'https://orble.example/v1/boxes/k7f2', method: 'DELETE' });
+  });
+
   it('creates a micro box through the native size', async () => {
     const calls = mockFetch([{ body: { ...box, vcpus: 1, mem_mib: 2048 } }]);
     await orble(config).instances.create({ size: 'micro' } as any);
