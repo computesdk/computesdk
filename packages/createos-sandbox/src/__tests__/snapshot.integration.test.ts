@@ -1,6 +1,6 @@
 /**
  * Live test for the CreateOS snapshot lifecycle the conformance suite can't
- * reach: snapshot.create (paused fork), restore via create({ snapshotId })
+ * reach: snapshot.create (native full snapshot), restore via create({ snapshotId })
  * after the source is gone, parallel restores, isolation from post-snapshot
  * mutations, snapshot.list / delete, and the getInstance() escape hatch.
  *
@@ -31,7 +31,7 @@ describe.skipIf(!live)("createos snapshot / restore (live)", () => {
 
     const snap = await provider.snapshot!.create(source.sandboxId, { name: "computesdk-live" });
     snapshotId = snap.id;
-    expect(snap.id).toMatch(/^sb-/);
+    expect(snap.id).not.toMatch(/^sb-/);
     expect(snap.id).not.toBe(source.sandboxId);
 
     // The source is back up and accepts work; mutations after the snapshot
