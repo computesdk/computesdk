@@ -64,6 +64,7 @@ describe('groundbox instances', () => {
       volumes: [{ volume: { id: 'vol_abc12345' }, mountPath: '/data', readOnly: true }],
     });
     expect(api.last().body).toEqual({
+      user: 'root',
       cpus: 4,
       memory_gb: 8,
       disk_gb: 40,
@@ -88,7 +89,7 @@ describe('groundbox instances', () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(api.calls[0]!.body).toEqual({ image: 'python:3.12-slim' });
+    expect(api.calls[0]!.body).toEqual({ image: 'python:3.12-slim', user: 'root' });
     expect(api.calls.filter((call) => call.method === 'GET')).toHaveLength(2);
   });
 
@@ -155,10 +156,18 @@ describe('groundbox instances', () => {
     expect(api.last().method).toBe('DELETE');
   });
 
+  it('runs commands as root unless asked for the image user', async () => {
+    const { api, provider } = await setup();
+    await provider.instances.create({});
+    expect(api.last().body).toEqual({ user: 'root' });
+    await provider.instances.create({ user: 'runner' } as never);
+    expect(api.last().body).toEqual({ user: 'runner' });
+  });
+
   it('passes egress deny lists, secrets and the timeout action through', async () => {
     const { api, provider } = await setup();
     await provider.instances.create({ deny_hosts: ['*.example.com'], secrets: ['NPM_TOKEN'], env_from_secrets: { TOKEN: 'GH_TOKEN' }, on_timeout: 'stop' });
-    expect(api.last().body).toEqual({ deny_hosts: ['*.example.com'], secrets: ['NPM_TOKEN'], env_from_secrets: { TOKEN: 'GH_TOKEN' }, on_timeout: 'stop' });
+    expect(api.last().body).toEqual({ deny_hosts: ['*.example.com'], secrets: ['NPM_TOKEN'], env_from_secrets: { TOKEN: 'GH_TOKEN' }, on_timeout: 'stop', user: 'root' });
   });
 
   it('starts from a kept snapshot, waiting while it is restored', async () => {
@@ -174,6 +183,7 @@ describe('groundbox instances', () => {
       vi.useRealTimers();
     }
     expect(api.calls[0]!.body).toEqual({ snapshot_id: 'snap_abc12345', cpus: 1, memory_gb: 1 });
+    // A sandbox from a snapshot keeps its source's user: none is sent unless asked for.
   });
 
   it('does not wait for a flex sandbox that is queued for room', async () => {
@@ -560,7 +570,10 @@ describe('groundbox templates and volumes', () => {
     const made = await provider.volume!.create({ name: 'data', sizeBytes: 1.5 * 2 ** 30 });
     expect(api.last().body).toEqual({ name: 'data', size_gb: 2 });
     expect(made).toMatchObject({ id: 'vol_abc12345', name: 'data', sizeGb: 2, status: 'ready' });
-    await expect(provider.volume!.create({ name: 'data' })).rejects.toThrow(/size/);
+    // No size: the default, 10 GB.
+    await provider.volume!.create({ name: 'scratch' });
+    expect(api.last().body).toEqual({ name: 'scratch', size_gb: 10 });
+    await expect(provider.volume!.create({ name: 'data', sizeBytes: -1 })).rejects.toThrow(/size/);
   });
 
   it('gets, lists and deletes volumes', async () => {

@@ -1,5 +1,12 @@
 # @computesdk/agentcore
 
+## 0.1.30
+
+### Patch Changes
+
+- Updated dependencies [2ff9301]
+  - @computesdk/aws@1.0.19
+
 ## 0.1.29
 
 ### Patch Changes

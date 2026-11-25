@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/hyperbrowser",
-  "version": "0.2.32",
+  "version": "0.2.33",
   "description": "Hyperbrowser adapter for ComputeSDK. Create cloud browser sessions and connect over CDP.",
   "author": "Garrison",
   "license": "MIT",

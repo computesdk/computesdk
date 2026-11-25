@@ -1,5 +1,13 @@
 # @computesdk/provider
 
+## 2.1.30
+
+### Patch Changes
+
+- Updated dependencies [05ed179]
+  - computesdk@4.1.24
+  - daemond@0.1.10
+
 ## 2.1.29
 
 ### Patch Changes

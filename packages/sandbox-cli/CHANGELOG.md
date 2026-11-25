@@ -1,5 +1,13 @@
 # @computesdk/sandbox-cli
 
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [05ed179]
+  - computesdk@4.1.24
+  - @computesdk/provider@2.1.30
+
 ## 0.1.7
 
 ### Patch Changes

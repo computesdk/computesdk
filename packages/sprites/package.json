@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/sprites",
-  "version": "0.1.41",
+  "version": "0.1.42",
   "description": "Sprites sandbox adapter for ComputeSDK. Run commands and work with files in Sprites cloud sandboxes.",
   "author": "Garrison",
   "license": "MIT",

@@ -101,6 +101,9 @@ const IMAGE_WAIT_MS = 35 * 60_000;
 /** How long `snapshot.waitUntilReady` waits by default, and `snapshot.delete` retries one still being made. */
 const SNAPSHOT_WAIT_MS = 10 * 60_000;
 const SNAPSHOT_DELETE_RETRY_MS = 60_000;
+/** The size of a volume made with no size given, in GB. */
+export const DEFAULT_VOLUME_GB = 10;
+
 /** A command's timeout: 60 seconds unless one is given, one hour at most. */
 const DEFAULT_COMMAND_TIMEOUT_S = 60;
 const MAX_COMMAND_TIMEOUT_S = 3600;
@@ -213,6 +216,10 @@ function toSpec(options: CreateInstanceOptions): CreateSandboxRequest {
     flex: options.flex,
     desktop: options.desktop,
   };
+  // Commands run as root unless the caller asks for the image's own user. A sandbox started
+  // from a snapshot keeps the user of the sandbox the snapshot was taken from.
+  const user = (options as { user?: 'root' | 'runner' }).user;
+  if (user !== undefined || options.snapshotId === undefined) (spec as { user?: string }).user = user ?? 'root';
   for (const key of Object.keys(spec) as (keyof CreateSandboxRequest)[]) if (spec[key] === undefined) delete spec[key];
   return spec;
 }
@@ -697,8 +704,9 @@ export const groundbox = defineProvider<GroundboxInstance, GroundboxConfig, Temp
 
     volume: {
       create: async (config, options: CreateVolumeOptions) => {
-        const sizeGb = options.size_gb ?? options.sizeGb ?? (options.sizeBytes === undefined ? undefined : Math.ceil(options.sizeBytes / 2 ** 30));
-        if (typeof sizeGb !== 'number') throw new Error('A Groundbox volume needs a size: pass sizeBytes (rounded up to whole GB)');
+        // A volume made with no size gets DEFAULT_VOLUME_GB, so `volume.create({ name })` works as it does on other providers.
+        const sizeGb = options.size_gb ?? options.sizeGb ?? (options.sizeBytes === undefined ? DEFAULT_VOLUME_GB : Math.ceil(options.sizeBytes / 2 ** 30));
+        if (typeof sizeGb !== 'number' || !Number.isFinite(sizeGb) || sizeGb <= 0) throw new Error('A Groundbox volume size is a positive number: pass sizeBytes (rounded up to whole GB)');
         return toVolume(await clientFor(config).create_volume({ name: options.name, size_gb: sizeGb }));
       },
       get: async (config, volumeIdOrName) => {

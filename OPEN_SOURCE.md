@@ -55,6 +55,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **Northflank** | `NORTHFLANK_TOKEN`, `NORTHFLANK_PROJECT_ID` | Cloud sandboxes with preview URLs |
 | **Novita** | `NOVITA_API_KEY` | Cloud sandboxes with native command streaming, filesystem access, snapshots, and template builds |
 | **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
+| **Orble** | `ORBLE_API_KEY` | Linux VMs with sudo and Docker, memory snapshots, pause/resume, and port URLs |
 | **Promigence** | `PROMIGENCE_API_KEY` | Production-grade sandboxes for AI agents, with filesystem and streaming output |
 | **Render** | `RENDER_API_KEY`, `RENDER_WORKSPACE_ID` | Render Sandboxes (beta) with native command streaming, file transfer and snapshots |
 | **Runloop** | `RUNLOOP_API_KEY` | Code execution, automation |
@@ -284,6 +285,7 @@ npm install @computesdk/miosa            # MIOSA provider
 npm install @computesdk/mosaic           # Mosaic provider
 npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/novita           # Novita Sandbox provider
+npm install @computesdk/orble            # Orble provider
 npm install @computesdk/platform         # ComputeSDK Platform hosted sandboxes (managed compute or own keys)
 npm install @computesdk/promigence       # Promigence provider
 npm install @computesdk/render           # Render Sandboxes provider
@@ -341,6 +343,7 @@ See individual provider READMEs for details:
 - **[@computesdk/neevcloud](./packages/neevcloud)** - Secure cloud sandboxes with command execution, filesystem, snapshots, and preview URLs
 - **[@computesdk/novita](./packages/novita)** - Novita cloud sandboxes with native streaming, filesystem access, snapshots, and template management
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
+- **[@computesdk/orble](./packages/orble)** - Linux VMs with sudo and Docker, memory snapshots, pause/resume, and port URLs
 - **[@computesdk/platform](./packages/platform)** - ComputeSDK Platform hosted sandboxes: managed compute or your own provider keys, one API and sandbox ID space
 - **[@computesdk/promigence](./packages/promigence)** - Production-grade sandboxes for AI agents, with filesystem and streaming output
 - **[@computesdk/render](./packages/render)** - Render Sandboxes (beta) with native command streaming, file transfer and snapshots

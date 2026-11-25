@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/promigence",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Promigence sandbox adapter for ComputeSDK. Run agent code with streaming command output and filesystem access.",
   "author": "Promigence AI, Inc. <support@promigence.ai>",
   "license": "MIT",
