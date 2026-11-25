@@ -1,5 +1,12 @@
 # @computesdk/gravixlayer
 
+## 1.0.26
+
+### Patch Changes
+
+- a76eb1a: Bump `gravixlayer` to ^0.1.53. Default placement changes from `aws` / `us-east-1` to `gravix` / `us-central-1` when `cloud`/`region` (or `GRAVIXLAYER_CLOUD`/`GRAVIXLAYER_REGION`) are not set. Set them explicitly to keep the previous placement. Docs and test fixtures updated to match.
+- a76eb1a: `volume.create` now waits for the backing bucket to reach `active` before returning. Buckets come back `provisioning` and stay unmountable for a short window, so a `volume.create` → `sandbox.volumes.mount` sequence raced and failed with `bucket not active`. The wait is bounded (60s) and throws on terminal statuses (`failed`, `error`, `deleted`) instead of polling forever.
+
 ## 1.0.25
 
 ### Patch Changes

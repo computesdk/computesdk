@@ -1,5 +1,11 @@
 # @computesdk/superserve
 
+## 0.2.30
+
+### Patch Changes
+
+- aab16ea: Handle asynchronous Superserve volume deletion and apply the remaining deletion budget to native requests.
+
 ## 0.2.29
 
 ### Patch Changes
