@@ -125,6 +125,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             namespace: _namespace,
             directory: _directory,
             volumes,
+            ports,
             // v0-only create fields with no v2 equivalent.
             runtime: _runtime,
             language: _language,
@@ -149,6 +150,9 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
             }),
           };
 
+          if (Array.isArray(ports) && ports.length > 0) {
+            createOptions.ports = ports.map((port: number | { port: number }) => typeof port === 'number' ? { port } : port);
+          }
           if (envs && Object.keys(envs).length > 0) createOptions.env = envs;
           if (name) createOptions.name = name;
 
@@ -173,7 +177,7 @@ export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes('unauthorized') || error.message.includes('API key')) {
-              throw new Error(`Daytona authentication failed. Please check your DAYTONA_API_KEY environment variable.`);
+              throw new Error(`Daytona authentication failed. Please check your DAYTONA_API_KEY environment variable (${error.message})`);
             }
             if (error.message.includes('quota') || error.message.includes('limit')) {
               throw new Error(`Daytona quota exceeded. Please check your usage at https://daytona.io/`);

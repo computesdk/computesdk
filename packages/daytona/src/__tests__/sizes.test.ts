@@ -111,3 +111,15 @@ describe('daytona sizeClass', () => {
     expect(snapParams.resources).toBeUndefined();
   });
 });
+
+describe('daytona v2 create options', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.create.mockResolvedValue({ id: 'sb-test' });
+  });
+
+  it('maps port numbers to v2 PortMapping objects', async () => {
+    await provider().instances.create({ ports: [3000, 8080] } as any);
+    expect(mocks.create.mock.calls[0][1].ports).toEqual([{ port: 3000 }, { port: 8080 }]);
+  });
+});
