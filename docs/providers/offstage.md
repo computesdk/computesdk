@@ -38,6 +38,14 @@ Create an API key in the [Offstage console](https://console.offstage.cloud) (key
 OFFSTAGE_API_KEY=sk_offstage_your_api_key
 ```
 
+Other environment variables, all optional:
+
+| Variable | Effect |
+| --- | --- |
+| `OFFSTAGE_API_URL` | Points the provider at another Offstage API origin. |
+| `OFFSTAGE_LAZY_CREATE` | `1` or `true` turns on [lazy create](#lazy-create) for providers that do not set `lazyCreate`. |
+| `OFFSTAGE_PRECONNECT` | `0` or `false` stops the provider from opening its [connections](#connections) when it is imported. |
+
 ## Usage
 
 ```typescript
@@ -69,6 +77,8 @@ interface OffstageConfig {
   baseUrl?: string;
   /** 'headless' (default) runs commands with no desktop; 'gui' gives the sandbox a logged-in desktop */
   session?: 'headless' | 'gui';
+  /** Defer each create to the sandbox's first use (see Lazy create) - falls back to OFFSTAGE_LAZY_CREATE, then off */
+  lazyCreate?: boolean;
 }
 ```
 
@@ -81,6 +91,25 @@ interface OffstageConfig {
 | `session` | `session` | `'headless'` or `'gui'`; overrides the provider's `session` for this sandbox. |
 
 `create` is one request and returns at once. The sandbox starts out waiting for a free Mac slot, and its first command or file call waits for that slot on Offstage's side, so there is nothing to poll.
+
+### Lazy create
+
+With `lazyCreate: true` (or `OFFSTAGE_LAZY_CREATE=1`), `create()` makes no request at all. The first command sends one request that creates the sandbox and runs the command, using the `run` field of `POST /v1/sandboxes`, which saves a round trip:
+
+```typescript
+const compute = offstage({ apiKey: process.env.OFFSTAGE_API_KEY, lazyCreate: true });
+
+const sandbox = await compute.instances.create();      // no request
+const result = await sandbox.runCommand('node -v');     // creates the sandbox and runs node -v
+```
+
+- The first `runCommand`, and the first `mkdir`, `readdir`, `exists` or `remove` (which run as commands), ride the create. Any other first call (`getInfo`, `getUrl`, `readFile`, `writeFile`, `getById` with the placeholder id) creates the sandbox before doing its own work. Concurrent first calls share one create.
+- Errors from the create surface on that first call. A create Offstage refused (no credit, a bad `name`, a command it would not accept) made nothing: the call gets the error and the next call tries again. A create whose answer was lost on the way is never sent again, as it may have made a sandbox, and every later call gets the same error.
+- A first command that could not run after the sandbox was made, for example because the sandbox closed while waiting for a slot, throws an `OffstageError` with its `code` and no `status`. A first command that is still waiting for a slot is sent again the ordinary way.
+- Destroying a handle that was never used sends nothing. Destroying it while its create is in flight waits for the create and then destroys the sandbox it made. A handle destroyed before it was created rejects every later call.
+- Calls that are wrong in themselves (an absolute path to `readFile` or `writeFile`, a background command) are refused without creating the sandbox.
+
+**The id is a placeholder.** `sandbox.sandboxId` (and `instanceId`) is a client-side id such as `lazy_6b4c…` for the whole life of the handle, before and after the sandbox exists, because ComputeSDK fixes it when `create()` returns. `destroy(id)` and `getById(id)` accept it, but only in the process that created the handle and only with the same API key. To store the sandbox or pass it to another process, read the real id from `(await sandbox.getInfo()).id` (or `sandbox.getInstance().id` once the sandbox exists). Until the first call, `getInstance()` holds placeholder values and `list()` does not show the sandbox.
 
 ## Sessions
 
@@ -151,11 +180,22 @@ try {
 
 Two answers are retried for you, because the call was not performed: `429 rate-limit` is sent again after the seconds its `Retry-After` header gives, and `409 sandbox-not-ready` (the sandbox is still waiting for a Mac slot) is sent again for up to two minutes.
 
+A call that gets no answer at all (its connection failed) throws an `Error` whose message starts `Offstage: <METHOD> <path> got no answer:`, with the network error as its `cause`. See [Connections](#connections) for when such a call is sent again first.
+
+## Connections
+
+The provider talks to Offstage over HTTP/2, through a pool of 16 connections per API origin shared by every sandbox in the process. A burst of creates rides a few connection handshakes instead of one each and is spread over the pool instead of queueing behind one connection.
+
+- **Opened on import.** When the module is imported with an Offstage key in `OFFSTAGE_API_KEY`, the pool to `OFFSTAGE_API_URL` (or the default API) starts connecting, so code that creates the provider inside its own timer does not pay the TLS handshake on its first request. Nothing connects without a key. The import never fails because of it. `OFFSTAGE_PRECONNECT=0` turns it off.
+- **No hold on the process.** Idle connections do not keep Node running, so a script exits once its work is done; a connection holds the process open only while one of its requests waits for an answer.
+- **Replaced when they fail.** A connection that errors, closes or is told to go away leaves the pool, and the next request opens its replacement. A connection that has not connected after 10 seconds is dropped, so a request never waits on an unreachable API for longer than that per try.
+- **Sent again only when safe.** A request whose connection dies before the answer begins is sent once more, on another connection, when that cannot do anything twice: when it never left the process, when Offstage refused the stream unprocessed, or when it is a `GET`, `PUT`, `DELETE` or a create (creates carry an `Idempotency-Key`). A command, and a lazy create that carries one, is not sent again once it may have reached Offstage: it could run twice. An answer cut off midway is never sent again.
+
 ## Supported Operations
 
 | Method | Supported | Notes |
 | --- | --- | --- |
-| `create` | ✅ | One request. `timeout`, `name`, `session`. |
+| `create` | ✅ | One request, or none with `lazyCreate`. `timeout`, `name`, `session`. |
 | `getById` | ✅ | |
 | `list` | ✅ | Sandboxes that are waiting for a slot or running. |
 | `destroy` | ✅ | Kills everything the sandbox runs and wipes its macOS account. |
@@ -173,3 +213,4 @@ Two answers are retried for you, because the call was not performed: `429 rate-l
 - **`readFile` returns text.** File bytes are decoded as UTF-8.
 - **Rate limit.** A team may send 120 requests a minute; past that calls wait out the `Retry-After` and continue.
 - **No templates or snapshots** through ComputeSDK.
+- **Node.js only.** The provider uses `node:http2`, so it does not run in edge runtimes that only offer `fetch`.
