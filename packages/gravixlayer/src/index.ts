@@ -26,7 +26,7 @@ import type {
   CreateVolumeOptions,
   ListVolumesOptions,
 } from '@computesdk/provider'
-import { GravixLayer, Runtime, TemplateBuilder, type RuntimeInfo } from 'gravixlayer'
+import { GravixLayer, Runtime, TemplateBuilder, type RuntimeInfo, type StorageBucket } from 'gravixlayer'
 
 export type { Runtime as GravixLayerRuntime }
 
@@ -386,6 +386,32 @@ function rememberTimeout(sandbox: Runtime, timeoutMs: number | undefined): Runti
 
 function bindRuntime(client: GravixLayer, info: RuntimeInfo): Runtime {
   return new Runtime(client.runtime, info)
+}
+
+// `storage.buckets.create` returns while the managed bucket is still
+// `provisioning`; a mount attempted before `active` is rejected with
+// `bucket not active`. `volume.create` must hand back an attachable volume,
+// so it waits — prod buckets activate in ~2s; the deadline covers a slow
+// provision. Unknown non-active statuses keep polling until the deadline so
+// a state added later degrades to a timeout, not a silent early return.
+const BUCKET_ACTIVE_TIMEOUT_MS = 60_000
+
+async function waitForBucketActive(client: GravixLayer, bucketId: string): Promise<StorageBucket> {
+  const deadline = Date.now() + BUCKET_ACTIVE_TIMEOUT_MS
+  for (;;) {
+    const bucket = await client.storage.buckets.get(bucketId)
+    if (bucket.status === 'active') return bucket
+    if (bucket.status === 'failed' || bucket.status === 'error' || bucket.status === 'deleted') {
+      // The bucket exists but can never be mounted — best-effort cleanup so
+      // it doesn't linger as an orphan the caller can't reach.
+      await client.storage.buckets.delete(bucket.id).catch(() => false)
+      throw new Error(`GravixLayer bucket ${bucketId} reached terminal status '${bucket.status}' before becoming active`)
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`GravixLayer bucket ${bucketId} did not reach 'active' within ${BUCKET_ACTIVE_TIMEOUT_MS}ms (status: ${bucket.status}); the bucket still exists — delete it via storage.buckets.delete('${bucketId}')`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 750))
+  }
 }
 
 async function publishedUrl(sandbox: Runtime, port: number): Promise<string> {
@@ -951,7 +977,8 @@ const createGravixLayerProvider = defineProvider<
       create: async (config: GravixLayerConfig, options: CreateVolumeOptions) => {
         const client = getClient(config)
         const bucket = await client.storage.buckets.create(options.name)
-        return { id: bucket.id, name: bucket.name, native: bucket }
+        const ready = bucket.status === 'active' ? bucket : await waitForBucketActive(client, bucket.id)
+        return { id: ready.id, name: ready.name, native: ready }
       },
 
       get: async (config: GravixLayerConfig, idOrName: string) => {

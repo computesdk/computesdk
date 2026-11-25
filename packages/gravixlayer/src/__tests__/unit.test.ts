@@ -47,6 +47,13 @@ const h = vi.hoisted(() => {
     }>,
     templateOffset: 0,
     builders: [] as MockBuilder[],
+    /** Status `buckets.create` reports; prod returns 'provisioning'. */
+    bucketCreateStatus: 'provisioning',
+    /**
+     * Statuses `buckets.get` returns; the last one repeats forever once the
+     * queue drains to it, 'active' when never scripted.
+     */
+    bucketGetStatuses: [] as string[],
   }
 
   const record = (method: string, ...args: unknown[]) => state.calls.push({ method, args })
@@ -274,6 +281,30 @@ const h = vi.hoisted(() => {
         if (state.templateDeleteMissing) throw new NotFoundError('No such template.')
       }),
     }
+    storage = {
+      buckets: {
+        create: vi.fn(async (name: string) => {
+          record('buckets.create', name)
+          return { id: 'bucket_1', name, status: state.bucketCreateStatus }
+        }),
+        get: vi.fn(async (idOrName: string) => {
+          record('buckets.get', idOrName)
+          const status =
+            state.bucketGetStatuses.length > 1
+              ? state.bucketGetStatuses.shift()!
+              : (state.bucketGetStatuses[0] ?? 'active')
+          return { id: 'bucket_1', name: 'vol', status }
+        }),
+        list: vi.fn(async () => {
+          record('buckets.list')
+          return { buckets: [] }
+        }),
+        delete: vi.fn(async (id: string) => {
+          record('buckets.delete', id)
+          return true
+        }),
+      },
+    }
 
     constructor(options: Record<string, unknown>) {
       state.clientOptions.push(options)
@@ -318,6 +349,8 @@ beforeEach(() => {
   h.state.templatePages = []
   h.state.templateOffset = 0
   h.state.builders = []
+  h.state.bucketCreateStatus = 'provisioning'
+  h.state.bucketGetStatuses = []
   delete process.env.GRAVIXLAYER_API_KEY
   delete process.env.GRAVIXLAYER_BASE_URL
   delete process.env.GRAVIXLAYER_CLOUD
@@ -393,15 +426,15 @@ describe('client', () => {
     await gravixlayer({
       apiKey: 'gk_test',
       baseUrl: 'https://example.test',
-      cloud: 'aws',
-      region: 'us-east-1',
+      cloud: 'gravix',
+      region: 'us-central-1',
       timeout: 30_000,
     }).sandbox.create()
     expect(h.state.clientOptions[0]).toEqual({
       apiKey: 'gk_test',
       baseUrl: 'https://example.test',
-      cloud: 'aws',
-      region: 'us-east-1',
+      cloud: 'gravix',
+      region: 'us-central-1',
       timeout: 30_000,
       maxRetries: 0,
       http2: true,
@@ -990,5 +1023,45 @@ describe('getInstance', () => {
   it('returns the native Runtime handle', async () => {
     const sandbox = await provider().sandbox.create()
     expect(sandbox.getInstance().runtimeId).toBe('rt_new')
+  })
+})
+
+describe('volume', () => {
+  it('returns a bucket that was already active without polling', async () => {
+    h.state.bucketCreateStatus = 'active'
+    const vol = await provider().volume!.create({ name: 'vol' })
+
+    expect(vol).toMatchObject({ id: 'bucket_1', name: 'vol' })
+    expect(vol.native).toMatchObject({ status: 'active' })
+    expect(calls('buckets.create')).toHaveLength(1)
+    expect(calls('buckets.get')).toHaveLength(0)
+  })
+
+  it('waits out the provisioning window and returns the active bucket', async () => {
+    h.state.bucketGetStatuses = ['provisioning', 'active']
+    const vol = await provider().volume!.create({ name: 'vol' })
+
+    expect(vol.native).toMatchObject({ status: 'active' })
+    expect(calls('buckets.get').map((call) => call.args[0])).toEqual(['bucket_1', 'bucket_1'])
+  })
+
+  it('cleans up and throws on a terminal bucket status', async () => {
+    h.state.bucketGetStatuses = ['provisioning', 'failed']
+
+    await expect(provider().volume!.create({ name: 'vol' })).rejects.toThrow(/terminal status 'failed'/)
+    expect(calls('buckets.delete').map((call) => call.args[0])).toEqual(['bucket_1'])
+  })
+
+  it('throws a cleanup-hint error when the bucket never activates', async () => {
+    h.state.bucketGetStatuses = ['provisioning']
+    vi.useFakeTimers()
+    try {
+      const pending = provider().volume!.create({ name: 'vol' })
+      const failure = expect(pending).rejects.toThrow(/bucket_1.*still exists/)
+      await vi.advanceTimersByTimeAsync(61_000)
+      await failure
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
