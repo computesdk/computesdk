@@ -439,6 +439,65 @@ describe('luxor provider (mocked SDK)', () => {
     await expect(provider.sandbox.destroy('gone')).resolves.toBeUndefined();
   });
 
+  it('destroy closes the session create returned without fetching it first', async () => {
+    const held = Object.assign(new FakeSession(), { id: 'sbx_held' });
+    vi.spyOn(FakeLuxorSandbox.prototype, 'createAndWait').mockResolvedValueOnce(held);
+    const get = vi.spyOn(FakeLuxorSandbox.prototype, 'get');
+    const provider = tenki({ apiKey: 'tk_test' });
+    const sandbox = await provider.sandbox.create();
+    await sandbox.destroy();
+    expect(held.closed).toBe(true);
+    expect(get).not.toHaveBeenCalled();
+
+    // A destroyed session is forgotten, so a repeat destroy looks the id up.
+    await provider.sandbox.destroy('sbx_held');
+    expect(get).toHaveBeenCalledWith('sbx_held');
+  });
+
+  it('destroy reuses the session getById fetched', async () => {
+    const fetched = Object.assign(new FakeSession(), { id: 'sbx_fetched' });
+    const get = vi.spyOn(FakeLuxorSandbox.prototype, 'get').mockResolvedValueOnce(fetched);
+    const provider = tenki({ apiKey: 'tk_test' });
+    await provider.sandbox.getById('sbx_fetched');
+    await provider.sandbox.destroy('sbx_fetched');
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(fetched.closed).toBe(true);
+  });
+
+  it('destroy does not reuse a session held under other credentials', async () => {
+    const held = Object.assign(new FakeSession(), { id: 'sbx_other_key' });
+    vi.spyOn(FakeLuxorSandbox.prototype, 'createAndWait').mockResolvedValueOnce(held);
+    const get = vi.spyOn(FakeLuxorSandbox.prototype, 'get');
+    await tenki({ apiKey: 'tk_a' }).sandbox.create();
+    await tenki({ apiKey: 'tk_b' }).sandbox.destroy('sbx_other_key');
+    expect(get).toHaveBeenCalledWith('sbx_other_key');
+    expect(held.closed).toBe(false);
+  });
+
+  it('destroy keeps a held session for a retry when close fails', async () => {
+    const held = Object.assign(new FakeSession(), { id: 'sbx_retry' });
+    vi.spyOn(FakeLuxorSandbox.prototype, 'createAndWait').mockResolvedValueOnce(held);
+    vi.spyOn(held, 'close').mockRejectedValueOnce(new Error('[unavailable] connection reset'));
+    const get = vi.spyOn(FakeLuxorSandbox.prototype, 'get');
+    const sandbox = await tenki({ apiKey: 'tk_test' }).sandbox.create();
+    await expect(sandbox.destroy()).rejects.toThrow('connection reset');
+    await sandbox.destroy();
+    expect(held.closed).toBe(true);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('destroy forgets a held session the server no longer has', async () => {
+    const held = Object.assign(new FakeSession(), { id: 'sbx_expired' });
+    vi.spyOn(FakeLuxorSandbox.prototype, 'createAndWait').mockResolvedValueOnce(held);
+    vi.spyOn(held, 'close').mockRejectedValueOnce(new SessionNotFoundError('gone'));
+    const get = vi.spyOn(FakeLuxorSandbox.prototype, 'get');
+    const provider = tenki({ apiKey: 'tk_test' });
+    const sandbox = await provider.sandbox.create();
+    await expect(sandbox.destroy()).resolves.toBeUndefined();
+    await provider.sandbox.destroy('sbx_expired');
+    expect(get).toHaveBeenCalledWith('sbx_expired');
+  });
+
   it('prefers LUXOR credentials and keeps LUXORAI/TENKI fallbacks', async () => {
     const envNames = [
       'LUXOR_API_KEY', 'LUXOR_AUTH_TOKEN', 'LUXOR_API_ENDPOINT', 'LUXOR_API_URL',
