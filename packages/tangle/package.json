@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@tangle-network/sandbox": "1.0.588",
+    "@tangle-network/sandbox": "1.0.619",
     "computesdk": "workspace:*"
   },
   "devDependencies": {

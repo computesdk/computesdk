@@ -33,7 +33,7 @@
   "dependencies": {
     "@computesdk/provider": "workspace:*",
     "computesdk": "workspace:*",
-    "railway": "^3.17.0"
+    "railway": "^3.19.1"
   },
   "keywords": [
     "computesdk",
