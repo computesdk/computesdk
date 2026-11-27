@@ -3108,8 +3108,8 @@ importers:
         specifier: workspace:*
         version: link:../provider
       '@luxorai/sandbox':
-        specifier: ^1.5.3
-        version: 1.5.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+        specifier: ^1.6.0
+        version: 1.6.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       computesdk:
         specifier: workspace:*
         version: link:../computesdk
@@ -5036,9 +5036,9 @@ packages:
     resolution: {integrity: sha512-eOuJ1SVYXrzKC7xMOfTX8nnsJZ/p2g97paS/1shFgRn/y85/kNlyrzG9RXwkie5+RNXe049Eqvv4mi5fmz2zEw==}
     engines: {node: '>=18'}
 
-  '@luxorai/sandbox@1.5.3':
-    resolution: {integrity: sha512-XeHXcfjkXGNb5Gj1yablmILgF7zjN7rnj43WToWFbRMCL1e3qO06YIpSQltjemhbKcuRRy277p0x0pY/EyyWJA==}
-    engines: {node: '>=18'}
+  '@luxorai/sandbox@1.6.0':
+    resolution: {integrity: sha512-jIWdCPgzD+JPuKVvhel+GgxR7Fw/X247jON/iaaHoskeHsXEcsEFU1xZxAoKtzye0U7yrpRoOhT/zrZDS+QzLw==}
+    engines: {node: '>=22'}
 
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
@@ -12151,7 +12151,7 @@ snapshots:
 
   '@lizard-build/sdk@0.1.60': {}
 
-  '@luxorai/sandbox@1.5.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
+  '@luxorai/sandbox@1.6.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
       '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)

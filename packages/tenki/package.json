@@ -18,7 +18,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsup",
@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@computesdk/provider": "workspace:*",
-    "@luxorai/sandbox": "^1.5.3",
+    "@luxorai/sandbox": "^1.6.0",
     "computesdk": "workspace:*"
   },
   "keywords": [
