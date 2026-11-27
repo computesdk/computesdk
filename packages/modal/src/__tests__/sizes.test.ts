@@ -2,8 +2,8 @@
  * Modal standard size mapping (mock-only; no API keys, no sandboxes).
  *
  * Ways the mapping could fail, each covered below:
- * 1. Wrong shape: `cpu` taken as vCPUs, but Modal counts physical cores
- *    (1 core = 2 vCPUs), doubling every size; or memory not the profile's MiB.
+ * 1. Wrong shape: the VM's CPU limit does not match its guest vCPU count, the
+ *    VM reserves peak CPU, or memory does not match the profile.
  * 2. Shape is only a floor: without `cpuLimit`/`memoryLimitMiB` Modal lets the
  *    Sandbox burst (default CPU limit is the request + 16 cores).
  * 3. Silent default boot: the resolver's nativeOptions never reach
@@ -48,8 +48,8 @@ import { modal } from '../index';
 
 const DISK_MIB = 524288;
 const profiles = [
-  ['xs', 1, 1024, 0.5], ['sm', 1, 2048, 0.5], ['md', 2, 4096, 1], ['lg', 4, 8192, 2],
-  ['xl', 8, 16384, 4], ['2xl', 16, 32768, 8], ['3xl', 32, 65536, 16],
+  ['xs', 1, 1024], ['sm', 1, 2048], ['md', 2, 4096], ['lg', 4, 8192],
+  ['xl', 8, 16384], ['2xl', 16, 32768], ['3xl', 32, 65536],
 ] as const;
 
 let n = 0;
@@ -66,20 +66,20 @@ describe('Modal standard size mapping (mock-only)', () => {
     expect(h.state.calls).toEqual([]);
   });
 
-  it.each(profiles)('resolves %s to %i vCPU (%i MiB) as %f physical cores with matching limits', (sizeClass, vcpus, memoryMiB, cores) => {
+  it.each(profiles)('resolves %s to a %i-vCPU VM with %i MiB', (sizeClass, vcpus, memoryMiB) => {
     expect(provider().sizes.resolve(sizeClass)).toMatchObject({
       status: 'supported',
-      nativeOptions: { cpu: cores, cpuLimit: cores, memoryMiB, memoryLimitMiB: memoryMiB },
+      nativeOptions: { cpu: 0.125, cpuLimit: vcpus, memoryMiB, memoryLimitMiB: memoryMiB },
       resolved: { vcpus, memoryMiB, diskMiB: DISK_MIB },
       provenance: 'adapter-declared',
     });
   });
 
-  it.each(profiles)('forwards %s resources to sandboxes.create', async (sizeClass, vcpus, memoryMiB, cores) => {
+  it.each(profiles)('forwards %s resources to sandboxes.create', async (sizeClass, vcpus, memoryMiB) => {
     const sandbox = await provider().instances.create({ sizeClass, envs: { A: '1' } });
     const [call] = creates();
     const params = call.args[2];
-    expect(params).toMatchObject({ cpu: cores, cpuLimit: cores, memoryMiB, memoryLimitMiB: memoryMiB, runtime: 'vm', env: { A: '1' } });
+    expect(params).toMatchObject({ cpu: 0.125, cpuLimit: vcpus, memoryMiB, memoryLimitMiB: memoryMiB, runtime: 'vm', env: { A: '1' } });
     expect(params).not.toHaveProperty('sizeClass');
     expect(sandbox.sizing).toEqual({
       requested: { sizeClass, vcpus, memoryMiB }, resolved: { vcpus, memoryMiB, diskMiB: DISK_MIB }, provenance: 'adapter-declared',
@@ -88,12 +88,14 @@ describe('Modal standard size mapping (mock-only)', () => {
 
   it.each([{ snapshotId: 'im-snap' }, { templateId: 'python:3.13-slim' }])('forwards resources on the image source branch %j', async source => {
     await provider().instances.create({ sizeClass: 'lg', ...source });
-    expect(creates()[0].args[2]).toMatchObject({ cpu: 2, cpuLimit: 2, memoryMiB: 8192, memoryLimitMiB: 8192 });
+    expect(creates()[0].args[2]).toMatchObject({ cpu: 0.125, cpuLimit: 4, memoryMiB: 8192, memoryLimitMiB: 8192 });
   });
 
-  it('keeps unrelated native options such as gpu/runtime', async () => {
-    await provider().instances.create({ sizeClass: 'md', gpu: 'T4' } as any);
-    expect(creates()[0].args[2]).toMatchObject({ cpu: 1, memoryMiB: 4096, gpu: 'T4', runtime: 'gvisor' });
+  it.each([{ gpu: 'T4' }, { runtime: 'gvisor' }] as const)('preserves gVisor quotas with %j', async options => {
+    await provider().instances.create({ sizeClass: 'md', ...options });
+    expect(creates()[0].args[2]).toMatchObject({
+      ...options, cpu: 1, cpuLimit: 1, memoryMiB: 4096, runtime: 'gvisor',
+    });
   });
 
   it.each([

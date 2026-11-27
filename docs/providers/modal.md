@@ -71,24 +71,26 @@ await sandbox.destroy();
 
 ### Standard sizes
 
-`sizeClass` requests an exact CPU/RAM shape. Modal's `cpu` counts physical
-cores (1 core = 2 vCPUs), so each size sets half its vCPUs as cores, and sets
-the request and the limit to the same value so the Sandbox does not burst past
-the size:
+`sizeClass` sets the guest vCPU count and memory for Modal VMs. The CPU
+request is 0.125 physical cores, the Modal Sandbox default, and CPU can burst
+up to the limit. Modal uses the whole-core limit to size the VM's guest vCPUs.
 
 ```typescript
 const sandbox = await compute.instances.create({ sizeClass: 'md' });
 ```
 
-| `sizeClass` | `cpu` / `cpuLimit` (cores) | `memoryMiB` / `memoryLimitMiB` |
+| `sizeClass` | VM guest vCPUs / `cpuLimit` (cores) | `memoryMiB` / `memoryLimitMiB` |
 | --- | ---: | ---: |
-| `xs` | 0.5 | 1024 |
-| `sm` | 0.5 | 2048 |
-| `md` | 1 | 4096 |
-| `lg` | 2 | 8192 |
-| `xl` | 4 | 16384 |
-| `2xl` | 8 | 32768 |
-| `3xl` | 16 | 65536 |
+| `xs` | 1 | 1024 |
+| `sm` | 1 | 2048 |
+| `md` | 2 | 4096 |
+| `lg` | 4 | 8192 |
+| `xl` | 8 | 16384 |
+| `2xl` | 16 | 32768 |
+| `3xl` | 32 | 65536 |
+
+For gVisor, including GPU Sandboxes by default, the CPU request and limit
+both use half the tier's vCPU count in physical cores.
 
 Sandbox disk cannot be resized: the VM runtime's root filesystem is a fixed
 512 GiB, reported as `resolved.diskMiB: 524288`. Sizes apply to the default
