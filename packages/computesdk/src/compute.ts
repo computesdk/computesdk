@@ -7,6 +7,7 @@
 import { platform } from './router/provider';
 
 import { assertInstanceSizeSupported, hasInstanceSizeRequest, validateInstanceSizeOptions } from './sizes';
+import { assertRegionSupported, getRegionClass } from './regions';
 
 import type {
   Instance as InstanceInterface,
@@ -61,6 +62,7 @@ interface ProviderVolumeManager {
 export interface DirectProvider {
   /** Legacy providers may use this name for unrelated data; guarded before standard-size use. */
   readonly sizes?: unknown;
+  readonly regions?: unknown;
   readonly name?: string;
   /** Instance lifecycle manager (canonical). */
   readonly instances?: ProviderInstanceManager;
@@ -87,7 +89,7 @@ export interface ExplicitComputeConfig {
   providerStrategy?: 'priority' | 'round-robin';
   /**
    * Retry the next provider when create fails (legacy creates only).
-   * A defined sizeClass pins one normally selected provider: unknown capability,
+   * A defined sizeClass or regionClass pins one normally selected provider: unknown capability,
    * invalid/conflicting requests, and native auth/capacity/create errors never
    * reroute, even when true. Native errors retain their original identity.
    */
@@ -270,6 +272,7 @@ class ComputeManager {
 
   private async createWithFallback(options?: CreateInstanceOptions): Promise<InstanceInterface> {
     if (hasInstanceSizeRequest(options)) validateInstanceSizeOptions(options!);
+    if (options?.regionClass !== undefined) getRegionClass(options.regionClass);
     const preferredProviderName = options?.provider;
     // `provider` is routing metadata consumed by ComputeManager. `kind` is
     // reserved vocabulary (not yet in the type): strip it too so callers
@@ -277,13 +280,14 @@ class ComputeManager {
     // create options, where strict validators (e.g. Sail) reject it.
     const { provider: _providerName, kind: _kind, ...providerOptions } = options || {};
     const candidates = this.getCreateCandidates(preferredProviderName);
-    const canFallback = this.fallbackOnError && !preferredProviderName && providerOptions.sizeClass === undefined;
+    const canFallback = this.fallbackOnError && !preferredProviderName && providerOptions.sizeClass === undefined && providerOptions.regionClass === undefined;
     const errors: string[] = [];
     const providerErrors: unknown[] = [];
 
     for (const [index, provider] of candidates.entries()) {
       try {
         assertInstanceSizeSupported(provider, providerOptions);
+        assertRegionSupported(provider, providerOptions);
         const instance = await getInstanceManager(provider)!.create(providerOptions);
         if (
           providerOptions?.egress &&

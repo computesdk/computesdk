@@ -95,6 +95,11 @@ const SNAPSHOT_TIMEOUT_S = 900;
  */
 export const daytona = defineProvider<DaytonaSandbox, DaytonaConfig>({
   name: 'daytona',
+  // https://www.daytona.io/docs/en/regions: the shared US region is `us`, with no area within it.
+  regions: {
+    support: () => ({ placement: 'selectable', regions: { us: ['us'] } }),
+    nativeOptions: region => ({ target: region }),
+  },
   sizes: (config, profile, options) => {
     const native = options as Record<string, unknown> | undefined;
     if (native?.disk !== undefined || native?.gpu !== undefined) {

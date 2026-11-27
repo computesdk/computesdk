@@ -90,6 +90,7 @@ export { compute } from './compute';
 export type { CallableCompute, ExplicitComputeConfig, ComputeCreateVolumeOptions } from './compute';
 
 export * from './sizes';
+export * from './regions';
 
 // Shared provider framework and built-in ComputeSDK router.
 export * from './provider/index';

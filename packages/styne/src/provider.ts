@@ -742,6 +742,8 @@ async function destroySandbox(client: ClientConfig, id: string): Promise<void> {
 
 const defineStyne = defineProvider<StyneInstance, StyneConfig, StyneTemplate, Snapshot>({
   name: 'styne',
+  // Styne's only serving region is `ash` (Ashburn, US East); `ams` is accepted but served in Ashburn.
+  regions: { support: () => ({ placement: 'fixed', regions: { 'us-east': ['ash'] } }) },
   // A sandbox is a clone of its template, so it has the template's size: `size` picks one of the four standard
   // templates, and a snapshot, an image or another template keeps the size it was made with.
   sizes: (_config, profile, options) => {

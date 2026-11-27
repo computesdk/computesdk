@@ -16,6 +16,7 @@ These references describe the common interfaces used by direct adapters. For hos
 * [compute](reference/compute.md)
 * [compute.instances](reference/compute.instances.md)
 * [Sandbox sizes](reference/sizes.md)
+* [Sandbox regions](reference/regions.md)
 
 ## Contributing
 

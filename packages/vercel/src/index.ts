@@ -154,6 +154,11 @@ const resolveVercelSize: InstanceSizeResolver<VercelConfig> = (_config, profile,
 export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
   sizes: resolveVercelSize,
+  // https://vercel.com/docs/regions; iad1 is the SDK's DEFAULT_SANDBOX_REGION.
+  regions: {
+    support: () => ({ placement: 'selectable', regions: { 'us-east': ['iad1', 'cle1'], 'us-west': ['sfo1', 'pdx1'] } }),
+    nativeOptions: region => ({ region }),
+  },
   methods: {
     instances: {
       create: async (config: VercelConfig, options?: CreateInstanceOptions) => {

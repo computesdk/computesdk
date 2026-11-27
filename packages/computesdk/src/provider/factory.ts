@@ -50,6 +50,8 @@ import { withVolumeSettle } from './utils.js';
 import { ShellFileSystem } from './shell-filesystem';
 import { InstanceSizeError, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeMetadata } from '../sizes';
 import { applyInstanceSizePatch, createInstanceSizeManager, type InstanceSizeResolver } from './sizes.js';
+import { RegionError, getRegionClass, type RegionManager, type RegionPlacement } from '../regions';
+import { applyRegionPatch, createRegionManager, type RegionResolver } from './regions.js';
 
 type DaemonStreamState = {
   token: string;
@@ -411,6 +413,8 @@ export interface ProviderConfig<TInstance = any, TConfig = any, TTemplate = any,
   name: string;
   /** Pure local standard-size capability and native request resolution. */
   sizes?: InstanceSizeResolver<TConfig>;
+  /** Pure local standard-region placement and native request resolution. */
+  regions?: RegionResolver<TConfig>;
   methods: {
     /** Instance lifecycle methods (canonical key). */
     instances?: InstanceMethods<TInstance, TConfig>;
@@ -473,6 +477,8 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   /** Set at create when `CreateInstanceOptions.egress` was passed. */
   egress?: InstanceEgressInfo;
   sizing?: InstanceSizeMetadata;
+  /** Set at create when `CreateInstanceOptions.regionClass` was passed. */
+  regionPlacement?: RegionPlacement;
   /** Present only when the provider implements runtime attach. */
   readonly attachVolume?: (volume: string | Volume, mountPath: string) => Promise<void>;
   /** Present only when the provider implements runtime detach. */
@@ -1119,7 +1125,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     private config: TConfig,
     private providerName: string,
     private methods: InstanceMethods<TInstance, TConfig>,
-    private providerInstance: Provider & { readonly sizes: InstanceSizeManager },
+    private providerInstance: Provider & { readonly sizes: InstanceSizeManager; readonly regions: RegionManager },
     private runtimeMode: 'shell' | 'daemond' = 'shell'
   ) {
     if (methods.pause && methods.resume) {
@@ -1166,6 +1172,17 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
       // sizeClass is SDK-only, even if a custom resolver accidentally includes it.
       delete options.sizeClass;
     }
+    let regionPlacement: RegionPlacement | undefined;
+    if (options?.regionClass !== undefined && this.providerInstance.regions.routed) {
+      getRegionClass(options.regionClass);
+    } else if (options?.regionClass !== undefined) {
+      const resolution = this.providerInstance.regions.resolve(getRegionClass(options.regionClass));
+      if (resolution.status !== 'supported') throw new RegionError(resolution.status, resolution.reason, resolution);
+      const { status: _status, nativeOptions, ...placement } = resolution;
+      regionPlacement = Object.freeze(placement);
+      const { regionClass: _regionClass, ...nativeRequest } = options;
+      options = applyRegionPatch(nativeRequest, nativeOptions);
+    }
 
     const signal = options?.signal;
     const runCreate = () => this.methods.create(this.config, options).then(normalizeInstanceResult);
@@ -1194,6 +1211,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
 
     const instance = this.wrap(result);
     if (sizing) Object.defineProperty(instance, 'sizing', { value: sizing, enumerable: true, writable: false });
+    if (regionPlacement) Object.defineProperty(instance, 'regionPlacement', { value: regionPlacement, enumerable: true, writable: false });
 
     if (options?.egress && typeof options.egress === 'object' && !Array.isArray(options.egress)) {
       throwIfAborted(signal);
@@ -1344,6 +1362,7 @@ class GeneratedVolumeManager<TVolume extends Volume, TConfig> implements Provide
 class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extends Volume = Volume> implements Provider<TInstance, TTemplate, TSnapshot, TVolume> {
   readonly name: string;
   readonly sizes: InstanceSizeManager;
+  readonly regions: RegionManager;
   readonly instances: ProviderInstanceManager<TInstance>;
   /** @deprecated Use `instances`. Always the same manager object. */
   readonly sandbox: ProviderInstanceManager<TInstance>;
@@ -1356,6 +1375,8 @@ class GeneratedProvider<TInstance, TConfig, TTemplate, TSnapshot, TVolume extend
     this.name = providerConfig.name;
     this.sizes = createInstanceSizeManager(config, providerConfig.sizes);
     Object.defineProperty(this, 'sizes', { writable: false, configurable: false });
+    this.regions = createRegionManager(config, providerConfig.regions);
+    Object.defineProperty(this, 'regions', { writable: false, configurable: false });
 
     const instanceMethods = providerConfig.methods.instances ?? providerConfig.methods.sandbox;
     if (!instanceMethods) {

@@ -3,7 +3,7 @@
  */
 
 import { Sandbox as E2BSandbox, Template as E2BTemplate, Volume as E2BVolume } from 'e2b';
-import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError } from '@computesdk/provider';
+import { defineProvider, resolveVolumeRef, isUnifiedVolumeMounts, withVolumeSettle, InstanceSizeError, type RegionClass } from '@computesdk/provider';
 
 import type {
   CommandResult, InstanceInfo, CreateInstanceOptions, CreateTemplateOptions, FileEntry, InstanceSizeClass,
@@ -44,6 +44,11 @@ export interface E2BConfig {
  * boots its own team template. `scripts/provider-setup.mjs e2b` builds these
  * (node:22, same names as the other template-sized providers).
  */
+/** E2B deployments by E2B_DOMAIN. Only the default (us-west-1) is listed; other regions need E2B to enable them. */
+const E2B_DOMAIN_REGIONS: Readonly<Record<string, { id: string; area: RegionClass }>> = {
+  'e2b.app': { id: 'us-west-1', area: 'us-west' },
+};
+
 export const E2B_SIZE_TEMPLATES: Readonly<Partial<Record<InstanceSizeClass, string>>> = Object.freeze({
   sm: 'csdk-node22-1cpu-2gb',
   md: 'csdk-node22-2cpu-4gb',
@@ -88,6 +93,15 @@ function missingSizeTemplate(config: E2BConfig, templateId: unknown, error: unkn
 
 export const e2b = defineProvider<E2BSandbox, E2BConfig>({
   name: 'e2b',
+  // Each E2B region is its own deployment with its own key, picked by E2B_DOMAIN.
+  regions: {
+    support: () => {
+      const region = E2B_DOMAIN_REGIONS[process.env.E2B_DOMAIN || 'e2b.app'];
+      return region
+        ? { placement: 'per-account', regions: { [region.area]: [region.id] } }
+        : { placement: 'unknown', regions: {}, reason: `E2B domain ${process.env.E2B_DOMAIN} is not a known region.` };
+    },
+  },
   sizes: (config, profile, options) => {
     if (options?.cpuCount !== undefined || options?.memoryMB !== undefined) {
       throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native E2B cpuCount/memoryMB');

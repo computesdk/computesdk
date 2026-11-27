@@ -13,7 +13,7 @@
  * `execution: "exec"` (or ARCHIL_EXECUTION=exec) plus a disk id.
  */
 
-import { defineProvider, InstanceSizeError } from '@computesdk/provider';
+import { defineProvider, InstanceSizeError, type RegionClass } from '@computesdk/provider';
 import { Archil as ArchilClient, ArchilError } from 'disk';
 import type {
   CreateSandboxRequest as ArchilSandboxRequest,
@@ -42,6 +42,13 @@ const ARCHIL_MAX_EXEC_COMMAND_BYTES = 102_400;
 const ARCHIL_MAX_READ_CHUNK_BYTES = 2 * 1024 * 1024;
 
 // Per-region color overrides. Default is "green" for any region not listed here.
+/** https://docs.archil.com: Archil's US regions by standard area. */
+const ARCHIL_US_REGIONS: Readonly<Record<string, RegionClass>> = {
+  'aws-us-east-1': 'us-east',
+  'aws-us-west-2': 'us-west',
+  'gcp-us-central1': 'us-central',
+};
+
 const REGION_COLORS: Record<string, string> = {
   'gcp-us-central1': 'blue',
 };
@@ -636,6 +643,16 @@ function resolveSizingExecution(
 
 const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
   name: 'archil',
+  // Each Archil key works in one region, so the config's region is where every sandbox runs.
+  regions: {
+    support: (config) => {
+      const region = config.region ?? process.env.ARCHIL_REGION;
+      const area = region ? ARCHIL_US_REGIONS[region] : undefined;
+      return area
+        ? { placement: 'per-account', regions: { [area]: [region!] } }
+        : { placement: 'per-account', regions: {}, ...(region ? {} : { reason: 'No Archil region is configured.' }) };
+    },
+  },
   sizes: (config, profile, options) => {
     if (options?.sandbox !== undefined && (options.sandbox === null || typeof options.sandbox !== 'object' || Array.isArray(options.sandbox))) {
       throw new InstanceSizeError('invalid', 'sandbox must be an object when requesting sizeClass');

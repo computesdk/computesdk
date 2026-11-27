@@ -182,6 +182,11 @@ const NATIVE_SIZE_FIELDS = ['cpu', 'vcpus', 'cpus', 'memory', 'memoryMiB', 'memo
 
 export const agent37 = defineProvider<Agent37Sandbox, Agent37Config>({
   name: 'agent37',
+  // Agent37's US region is `us`, with no area within it.
+  regions: {
+    support: () => ({ placement: 'selectable', regions: { us: ['us'] } }),
+    nativeOptions: region => ({ region }),
+  },
   sizes: (_config, profile, options) => {
     if (NATIVE_SIZE_FIELDS.some((field) => options?.[field] !== undefined)) {
       throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Agent37 cpu/memory fields');
