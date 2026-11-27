@@ -16,10 +16,15 @@ type ModalNativeSandbox = Sandbox;
 const DEFAULT_IMAGE = 'node:22';
 const DEFAULT_APP_NAME = 'computesdk-modal';
 const DEFAULT_DAEMON_SSE_PORT = 38989;
-/** Modal's `cpu` counts physical cores; one physical core is 2 vCPUs. */
-const VCPUS_PER_MODAL_CORE = 2;
+const DEFAULT_MODAL_CPU_REQUEST = 0.125;
+// The gVisor CPU quota uses physical cores, with two vCPUs per core.
+const GVISOR_VCPUS_PER_CORE = 2;
 /** Sandbox disk cannot be resized: the VM rootfs is a fixed 512 GiB (gVisor's default quota is the same). */
 const MODAL_SANDBOX_DISK_MIB = 512 * 1024;
+
+function resolveSandboxRuntime(options: Pick<SandboxCreateParams, 'runtime' | 'gpu'>): NonNullable<SandboxCreateParams['runtime']> {
+  return options.runtime ?? (options.gpu ? 'gvisor' : 'vm');
+}
 
 function mergeExposedPorts(primary?: number[], fallback?: number[], daemonSsePort?: number | false): number[] {
   const daemonPort = daemonSsePort === false ? undefined : (daemonSsePort ?? DEFAULT_DAEMON_SSE_PORT);
@@ -168,8 +173,6 @@ async function resolveSandboxPath(
 
 const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
   name: 'modal',
-  // Request and limit both equal the profile, so the Sandbox neither gets less
-  // nor bursts past it (Modal's default CPU limit is the request + 16 cores).
   sizes: (_config, profile, options) => {
     const native = (options ?? {}) as Partial<SandboxCreateParams>;
     if (native.memoryLimitMiB !== undefined) {
@@ -180,10 +183,14 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
         experimental.vm_sidecar_memory_reserve_mib !== undefined) {
       return { status: 'unsupported', reason: 'A VM sidecar memory reserve is carved out of the Sandbox memory, leaving the main VM below the standard size.' };
     }
-    const cores = profile.vcpus / VCPUS_PER_MODAL_CORE;
+    const isVm = resolveSandboxRuntime(native) === 'vm';
+    // The guest VM gets one vCPU per whole core of the CPU limit. Keep the
+    // default request so CPU usage can burst up to that limit.
+    const cpuLimit = isVm ? profile.vcpus : profile.vcpus / GVISOR_VCPUS_PER_CORE;
+    const cpu = isVm ? DEFAULT_MODAL_CPU_REQUEST : cpuLimit;
     return {
       status: 'supported',
-      nativeOptions: { cpu: cores, cpuLimit: cores, memoryMiB: profile.memoryMiB, memoryLimitMiB: profile.memoryMiB },
+      nativeOptions: { cpu, cpuLimit, memoryMiB: profile.memoryMiB, memoryLimitMiB: profile.memoryMiB },
       resolved: { vcpus: profile.vcpus, memoryMiB: profile.memoryMiB, diskMiB: MODAL_SANDBOX_DISK_MIB },
     };
   },
@@ -233,7 +240,7 @@ const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
           const sandboxOptions: SandboxCreateParams = {
             ...(providerOptions as Partial<SandboxCreateParams>),
           };
-          sandboxOptions.runtime ??= sandboxOptions.gpu ? 'gvisor' : 'vm';
+          sandboxOptions.runtime = resolveSandboxRuntime(sandboxOptions);
 
           const ports = mergeExposedPorts(optPorts, config.ports, optDaemonSsePort ?? config.daemonSsePort);
           if (ports && ports.length > 0) sandboxOptions.encryptedPorts = ports;
