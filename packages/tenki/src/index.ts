@@ -124,6 +124,29 @@ function rememberSession(session: Session, config: LuxorConfig): Session {
   return session;
 }
 
+/**
+ * Sessions this process created or fetched by id, keyed by credentials and id.
+ * sandbox.destroy() passes only the id, so destroy closes the held Session in
+ * one TerminateSession round trip instead of a GetSession first, which also
+ * releases that Session's data-plane connection and credential renewal. Held
+ * weakly so sandboxes that are never destroyed here can still be collected.
+ */
+const heldSessions = new Map<string, WeakRef<Session>>();
+const heldSessionCleanup = new FinalizationRegistry<string>((key) => {
+  if (!heldSessions.get(key)?.deref()) heldSessions.delete(key);
+});
+
+function heldSessionKey(config: LuxorConfig, sandboxId: string): string {
+  return `${clientKey(config)}::${sandboxId}`;
+}
+
+function holdSession(session: Session, config: LuxorConfig): Session {
+  const key = heldSessionKey(config, session.id);
+  heldSessions.set(key, new WeakRef(session));
+  heldSessionCleanup.register(session, key);
+  return rememberSession(session, config);
+}
+
 function mapStatus(state: SessionState): InstanceInfo["status"] {
   switch (state) {
     case "RUNNING":
@@ -375,14 +398,14 @@ const luxorProvider = defineProvider<Session, LuxorConfig>({
       create: async (config, options) => {
         const client = getClient(config);
         const session = await client.createAndWait(toCreateOptions(config, options));
-        return { instance: rememberSession(session, config), instanceId: session.id };
+        return { instance: holdSession(session, config), instanceId: session.id };
       },
 
       getById: async (config, sandboxId) => {
         const client = getClient(config);
         try {
           const session = await client.get(sandboxId);
-          return { instance: rememberSession(session, config), instanceId: session.id };
+          return { instance: holdSession(session, config), instanceId: session.id };
         } catch (err) {
           if (isMissingSession(err)) return null;
           throw err;
@@ -397,14 +420,15 @@ const luxorProvider = defineProvider<Session, LuxorConfig>({
       },
 
       destroy: async (config, sandboxId) => {
-        const client = getClient(config);
+        const key = heldSessionKey(config, sandboxId);
+        const held = heldSessions.get(key)?.deref();
         try {
-          const session = await client.get(sandboxId);
-          await session.close();
+          await (held ?? (await getClient(config).get(sandboxId))).close();
         } catch (err) {
-          if (isMissingSession(err)) return; // already gone
-          throw err;
+          if (!isMissingSession(err)) throw err; // a held Session stays for a retry
         }
+        // Closed or already gone; keep an entry a concurrent getById replaced.
+        if (heldSessions.get(key)?.deref() === held) heldSessions.delete(key);
       },
 
       runCommand: (sandbox, command, options) => runShell(sandbox, command, options),
