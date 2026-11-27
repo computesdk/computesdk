@@ -96,6 +96,6 @@ export type { InstanceSizeClass, InstanceSizeProfile, InstanceSizeResources, Ins
 export { applyInstanceSizePatch } from './sizes';
 export { createRegionManager, applyRegionPatch } from './regions';
 export type { RegionResolver } from './regions';
-export { RegionError, REGION_CLASSES, isRegionClass, isRegionManager, regionIdsFor } from '../regions';
-export type { RegionClass, RegionPlacementKind, RegionSupport, RegionPlacement, RegionResolution, RegionManager, RegionErrorCode } from '../regions';
+export { RegionError, REGION_CLASSES, REGION_MODES, isRegionClass, isRegionManager, regionIdsFor } from '../regions';
+export type { RegionClass, RegionMode, RegionPlacementKind, RegionSupport, RegionPlacement, RegionResolution, RegionManager, RegionErrorCode } from '../regions';
 export * from './shell-scripts';

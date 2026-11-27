@@ -15,6 +15,15 @@ export type RegionPlacementKind = 'selectable' | 'per-account' | 'fixed' | 'prov
 
 export type RegionErrorCode = 'invalid' | 'conflict' | 'unsupported' | 'unknown';
 
+/**
+ * How strictly `regionClass` applies.
+ * - `prefer` (default): place in the first listed area the provider can serve, else where the provider defaults.
+ * - `only`: place in a listed area or fail before create.
+ */
+export type RegionMode = 'prefer' | 'only';
+
+export const REGION_MODES: readonly RegionMode[] = Object.freeze(['prefer', 'only']);
+
 /** Adapter-declared placement for one provider config. Pure local data, never an availability check. */
 export interface RegionSupport {
   readonly placement: RegionPlacementKind;
@@ -26,16 +35,29 @@ export interface RegionSupport {
   readonly reason?: string;
 }
 
+/** Where a create with `regionClass` was placed, from the adapter's declaration. */
 export interface RegionPlacement {
-  readonly requested: RegionClass;
-  readonly placement: Exclude<RegionPlacementKind, 'provider-placed' | 'unknown'>;
-  /** The provider's own region id the instance was placed in. */
-  readonly region: string;
+  /** The requested areas, in preference order. */
+  readonly requested: readonly RegionClass[];
+  readonly mode: RegionMode;
+  /** The requested area the instance was placed in; null when no preference could be met. */
+  readonly matched: RegionClass | null;
+  readonly placement: RegionPlacementKind;
+  /** The provider's own region id; null when the provider's default placement was used. */
+  readonly region: string | null;
   readonly provenance: 'adapter-declared';
 }
 
 export type RegionResolution =
-  | (RegionPlacement & { readonly status: 'supported'; readonly nativeOptions: Readonly<Record<string, unknown>> })
+  | {
+    readonly status: 'supported';
+    readonly requested: RegionClass;
+    readonly placement: Exclude<RegionPlacementKind, 'provider-placed' | 'unknown'>;
+    /** The provider's own region id for the area. */
+    readonly region: string;
+    readonly nativeOptions: Readonly<Record<string, unknown>>;
+    readonly provenance: 'adapter-declared';
+  }
   | {
     readonly status: 'unsupported' | 'unknown';
     readonly requested: RegionClass;
@@ -53,7 +75,7 @@ export interface RegionManager {
   resolve(regionClass: RegionClass): RegionResolution;
 }
 
-/** fallback=false: a region request never silently lands somewhere else. */
+/** fallback=false: an `only` region request never silently lands somewhere else. */
 export class RegionError extends Error {
   readonly fallback = false;
   constructor(readonly code: RegionErrorCode, message: string, readonly resolution?: RegionResolution) {
@@ -88,21 +110,82 @@ export function isRegionManager(value: unknown): value is RegionManager {
     'support' in value && typeof value.support === 'function';
 }
 
-/** Guard custom/legacy providers too: a provider with no region contract must not ignore a request. */
+/** Areas in preference order from a single area or an ordered list. */
+export function getRegionClasses(value: unknown): readonly RegionClass[] {
+  const list = Array.isArray(value) ? value : [value];
+  if (list.length === 0) throw new RegionError('invalid', 'expected at least one standard region');
+  return Object.freeze([...new Set(list.map(getRegionClass))]);
+}
+
+export function getRegionMode(value: unknown): RegionMode {
+  if (value === undefined) return 'prefer';
+  if (typeof value !== 'string' || !(REGION_MODES as readonly string[]).includes(value)) {
+    throw new RegionError('invalid', `regionMode must be one of ${REGION_MODES.join(', ')}`);
+  }
+  return value as RegionMode;
+}
+
+export interface RegionRequest {
+  readonly requested: readonly RegionClass[];
+  readonly mode: RegionMode;
+}
+
+/** Validate `regionClass` and `regionMode`; undefined when no region was requested. */
+export function getRegionRequest(options?: { readonly regionClass?: unknown; readonly regionMode?: unknown }): RegionRequest | undefined {
+  if (options?.regionClass === undefined) {
+    if (options?.regionMode !== undefined) throw new RegionError('invalid', 'regionMode needs a regionClass');
+    return undefined;
+  }
+  return { requested: getRegionClasses(options.regionClass), mode: getRegionMode(options.regionMode) };
+}
+
+/**
+ * Resolve a request against an adapter's declaration: the first listed area it can serve wins.
+ * With `only`, no match throws; with `prefer`, no match keeps the provider's default placement.
+ */
+export function resolveRegionRequest(
+  manager: RegionManager,
+  request: RegionRequest,
+): { readonly placement: RegionPlacement; readonly nativeOptions: Readonly<Record<string, unknown>> } {
+  const misses: Exclude<RegionResolution, { status: 'supported' }>[] = [];
+  for (const area of request.requested) {
+    const resolution = manager.resolve(area);
+    if (resolution.status === 'supported') {
+      return {
+        placement: Object.freeze({
+          requested: request.requested, mode: request.mode, matched: area,
+          placement: resolution.placement, region: resolution.region, provenance: 'adapter-declared' as const,
+        }),
+        nativeOptions: resolution.nativeOptions,
+      };
+    }
+    misses.push(resolution);
+  }
+  const first = misses[0]!;
+  if (request.mode === 'only') {
+    const code = misses.some(miss => miss.status === 'unsupported') ? 'unsupported' : 'unknown';
+    throw new RegionError(code, misses.map(miss => miss.reason).filter((r, i, all) => all.indexOf(r) === i).join(' '), first);
+  }
+  return {
+    placement: Object.freeze({
+      requested: request.requested, mode: request.mode, matched: null,
+      placement: first.placement, region: null, provenance: 'adapter-declared' as const,
+    }),
+    nativeOptions: Object.freeze({}),
+  };
+}
+
+/** Guard custom/legacy providers too: an `only` request must not reach a provider that cannot honor it. */
 export function assertRegionSupported(
   provider: { readonly name?: string; readonly regions?: unknown },
   options?: import('./types/universal-instance').CreateInstanceOptions,
 ): void {
-  if (options?.regionClass === undefined) return;
-  const regionClass = getRegionClass(options.regionClass);
+  const request = getRegionRequest(options);
+  if (request?.mode !== 'only') return;
   const regions = provider.regions;
   if (!isRegionManager(regions)) {
     throw new RegionError('unknown', `provider "${provider.name ?? 'custom'}" declares no region placement`);
   }
   if (regions.routed) return;
-  const resolution = regions.resolve(regionClass);
-  if (resolution?.status !== 'supported') {
-    throw new RegionError(resolution?.status === 'unsupported' ? 'unsupported' : 'unknown',
-      resolution?.reason ?? 'provider returned an invalid region resolution', resolution);
-  }
+  resolveRegionRequest(regions, request);
 }

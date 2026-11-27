@@ -50,7 +50,7 @@ import { withVolumeSettle } from './utils.js';
 import { ShellFileSystem } from './shell-filesystem';
 import { InstanceSizeError, hasInstanceSizeRequest, validateInstanceSizeOptions, type InstanceSizeManager, type InstanceSizeMetadata } from '../sizes';
 import { applyInstanceSizePatch, createInstanceSizeManager, type InstanceSizeResolver } from './sizes.js';
-import { RegionError, getRegionClass, type RegionManager, type RegionPlacement } from '../regions';
+import { getRegionRequest, resolveRegionRequest, type RegionManager, type RegionPlacement } from '../regions';
 import { applyRegionPatch, createRegionManager, type RegionResolver } from './regions.js';
 
 type DaemonStreamState = {
@@ -477,7 +477,7 @@ class GeneratedInstance<TInstance = any> implements ProviderInstance<TInstance> 
   /** Set at create when `CreateInstanceOptions.egress` was passed. */
   egress?: InstanceEgressInfo;
   sizing?: InstanceSizeMetadata;
-  /** Set at create when `CreateInstanceOptions.regionClass` was passed. */
+  /** Set at create when `CreateInstanceOptions.regionClass` was resolved locally. */
   regionPlacement?: RegionPlacement;
   /** Present only when the provider implements runtime attach. */
   readonly attachVolume?: (volume: string | Volume, mountPath: string) => Promise<void>;
@@ -1173,15 +1173,12 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
       delete options.sizeClass;
     }
     let regionPlacement: RegionPlacement | undefined;
-    if (options?.regionClass !== undefined && this.providerInstance.regions.routed) {
-      getRegionClass(options.regionClass);
-    } else if (options?.regionClass !== undefined) {
-      const resolution = this.providerInstance.regions.resolve(getRegionClass(options.regionClass));
-      if (resolution.status !== 'supported') throw new RegionError(resolution.status, resolution.reason, resolution);
-      const { status: _status, nativeOptions, ...placement } = resolution;
-      regionPlacement = Object.freeze(placement);
-      const { regionClass: _regionClass, ...nativeRequest } = options;
-      options = applyRegionPatch(nativeRequest, nativeOptions);
+    const regionRequest = getRegionRequest(options);
+    if (regionRequest && !this.providerInstance.regions.routed) {
+      const resolved = resolveRegionRequest(this.providerInstance.regions, regionRequest);
+      regionPlacement = resolved.placement;
+      const { regionClass: _regionClass, regionMode: _regionMode, ...nativeRequest } = options!;
+      options = applyRegionPatch(nativeRequest, resolved.nativeOptions);
     }
 
     const signal = options?.signal;

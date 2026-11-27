@@ -64,7 +64,26 @@ describe('standard regions', () => {
     const { provider, create } = adapter(selectable as RegionResolver<Record<string, unknown>>);
     const instance = await provider.instances.create({ regionClass: 'us-west' });
     expect(create.mock.calls[0][1]).toEqual({ region: 'sfo1' });
-    expect(instance.regionPlacement).toEqual({ requested: 'us-west', placement: 'selectable', region: 'sfo1', provenance: 'adapter-declared' });
+    expect(instance.regionPlacement).toEqual({
+      requested: ['us-west'], mode: 'prefer', matched: 'us-west', placement: 'selectable', region: 'sfo1', provenance: 'adapter-declared',
+    });
+  });
+
+  it('takes the first listed area the provider can serve', async () => {
+    const { provider, create } = adapter(selectable as RegionResolver<Record<string, unknown>>);
+    const instance = await provider.instances.create({ regionClass: ['us-south', 'us-west', 'us-east'] });
+    expect(create.mock.calls[0][1]).toEqual({ region: 'sfo1' });
+    expect(instance.regionPlacement).toMatchObject({ requested: ['us-south', 'us-west', 'us-east'], matched: 'us-west' });
+  });
+
+  it.each([
+    ['unsupported area', selectable, 'selectable'],
+    ['undeclared adapter', undefined, 'unknown'],
+  ] as const)('creates at the provider default when a preference cannot be met (%s)', async (_label, regions, placement) => {
+    const { provider, create } = adapter(regions as RegionResolver<Record<string, unknown>> | undefined);
+    const instance = await provider.instances.create({ regionClass: 'us-south', name: 'n' });
+    expect(create.mock.calls[0][1]).toEqual({ name: 'n' });
+    expect(instance.regionPlacement).toMatchObject({ requested: ['us-south'], mode: 'prefer', matched: null, placement, region: null });
   });
 
   it('leaves create untouched without regionClass', async () => {
@@ -75,10 +94,13 @@ describe('standard regions', () => {
   });
 
   it.each([
-    ['unknown', undefined, { regionClass: 'us-west' }],
-    ['unsupported', selectable, { regionClass: 'us-south' }],
+    ['unknown', undefined, { regionClass: 'us-west', regionMode: 'only' }],
+    ['unsupported', selectable, { regionClass: ['us-south', 'us-central'], regionMode: 'only' }],
     ['conflict', selectable, { regionClass: 'us-west', region: 'iad1' }],
     ['invalid', selectable, { regionClass: 'us-west-1' }],
+    ['invalid', selectable, { regionClass: [] }],
+    ['invalid', selectable, { regionClass: 'us-west', regionMode: 'strict' }],
+    ['invalid', selectable, { regionMode: 'only' }],
   ] as const)('fails %s before create', async (code, regions, options) => {
     const { provider, create } = adapter(regions as RegionResolver<Record<string, unknown>> | undefined);
     await expect(provider.instances.create(options as never)).rejects.toMatchObject({ name: 'RegionError', code, fallback: false });
@@ -91,11 +113,18 @@ describe('standard regions', () => {
     expect(create.mock.calls[0][1]).toEqual({ region: 'iad1' });
   });
 
-  it('pins the selected provider and does not fall back in compute', async () => {
+  it('passes a preference to a provider with no region contract without the SDK-only fields', async () => {
+    const legacy: DirectProvider = { name: 'legacy', sandbox: { create: vi.fn(async () => ({ sandboxId: 'sb_1' }) as never), getById: vi.fn(), destroy: vi.fn() } };
+    const client = compute({ provider: legacy });
+    await client.instances.create({ regionClass: 'us-east', name: 'n' });
+    expect(legacy.sandbox!.create).toHaveBeenCalledWith({ name: 'n' });
+  });
+
+  it('pins the selected provider and does not fall back in compute with regionMode only', async () => {
     const legacy: DirectProvider = { name: 'legacy', sandbox: { create: vi.fn(), getById: vi.fn(), destroy: vi.fn() } };
     const next: DirectProvider = { name: 'next', sandbox: { create: vi.fn(), getById: vi.fn(), destroy: vi.fn() } };
     const client = compute({ providers: [legacy, next], fallbackOnError: true });
-    await expect(client.instances.create({ regionClass: 'us-east' })).rejects.toBeInstanceOf(RegionError);
+    await expect(client.instances.create({ regionClass: 'us-east', regionMode: 'only' })).rejects.toBeInstanceOf(RegionError);
     expect(legacy.sandbox!.create).not.toHaveBeenCalled();
     expect(next.sandbox!.create).not.toHaveBeenCalled();
   });
@@ -112,10 +141,18 @@ describe('hosted platform regionClass', () => {
     return fetcher;
   }
 
-  it('forwards regionClass in the create body', async () => {
+  it('forwards regionClass as an ordered list, without regionMode unless set', async () => {
     const fetcher = stubFetch();
     await platform({ apiKey: 'csdk_test' }).instances.create({ regionClass: 'us-west', size: 'small' } as never);
-    expect(JSON.parse(fetcher.mock.calls[0][1]?.body as string)).toMatchObject({ regionClass: 'us-west', size: 'small' });
+    const body = JSON.parse(fetcher.mock.calls[0][1]?.body as string);
+    expect(body).toMatchObject({ regionClass: ['us-west'], size: 'small' });
+    expect(body).not.toHaveProperty('regionMode');
+  });
+
+  it('forwards regionMode only', async () => {
+    const fetcher = stubFetch();
+    await platform({ apiKey: 'csdk_test' }).instances.create({ regionClass: ['us-west', 'us-east'], regionMode: 'only' } as never);
+    expect(JSON.parse(fetcher.mock.calls[0][1]?.body as string)).toMatchObject({ regionClass: ['us-west', 'us-east'], regionMode: 'only' });
   });
 
   it('omits regionClass when not requested', async () => {

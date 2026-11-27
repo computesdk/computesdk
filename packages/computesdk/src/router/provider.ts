@@ -4,7 +4,7 @@
  * host trust, SSE parsing and error handling with `@computesdk/cli`'s
  * transport in `client.ts`.
  */
-import { REGION_CLASSES, getRegionClass } from '../regions';
+import { REGION_CLASSES, getRegionRequest } from '../regions';
 import { randomUUID } from 'node:crypto';
 import { defineProvider } from '../provider/index';
 import type {
@@ -172,7 +172,7 @@ const RESOURCE_ALIASES: Record<string, 'cpus' | 'memoryMb' | 'ephemeralDiskMb'> 
 const KNOWN_CREATE_KEYS = new Set([
   'size', 'maxPrice', 'orderType', 'providerOrder', 'secrets', 'disk', 'label',
   'idempotencyKey', 'timeout', 'image', 'templateId', 'snapshotId', 'name',
-  'envs', 'signal', 'provider', 'kind', 'type', 'regionClass',
+  'envs', 'signal', 'provider', 'kind', 'type', 'regionClass', 'regionMode',
 ]);
 
 const VALID_SIZES: ReadonlySet<string> = new Set(['small', 'medium', 'large', 'xlarge', '2xlarge', '3xlarge']);
@@ -211,7 +211,11 @@ function buildCreateBody(config: PlatformConfig, options?: CreateInstanceOptions
   if (orderType) body.orderType = orderType;
   const providerOrder = opts.providerOrder ?? config.defaults?.providerOrder;
   if (providerOrder) body.providerOrder = providerOrder;
-  if (opts.regionClass !== undefined) body.regionClass = getRegionClass(opts.regionClass);
+  const regionRequest = getRegionRequest(opts);
+  if (regionRequest) {
+    body.regionClass = regionRequest.requested;
+    if (opts.regionMode !== undefined) body.regionMode = regionRequest.mode;
+  }
 
   if (opts.timeout !== undefined) body.timeoutMs = opts.timeout;
   const image = opts.image ?? opts.templateId;
