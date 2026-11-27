@@ -28,6 +28,7 @@ interface SailConfig {
   apiKey?: string;
   app?: string;
   image?: ImageSpec | Image;
+  region?: string;
 }
 ```
 
@@ -37,6 +38,11 @@ interface SailConfig {
 - `image` defaults to Sail's AMD64 Devbox builtin, which includes Node.js and
   Bun. Pass another Sail image when the workload needs a different runtime or
   architecture. Per-create OCI image strings request AMD64.
+- `region` is the Sail region new Sailboxes are created in, such as
+  `sail({ region: 'us-east' })`. Choose the region closest to your client to
+  lower command and file latency. When omitted, Sail uses its default region.
+  A Sailbox stays in its region for its whole life, and a `snapshotId` restore
+  does not take a region.
 - Creates inherit Sail's image resource limits (8 vCPUs, 64 GiB memory limit,
   and 256 GiB disk limit by default). Explicit `size: 's' | 'm' | 'l'` and
   `memoryGib` options override those limits for that create; omitted options
