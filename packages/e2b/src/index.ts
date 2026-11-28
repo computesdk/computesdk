@@ -97,10 +97,10 @@ export const e2b = defineProvider<E2BSandbox, E2BConfig>({
   regions: {
     support: (_config, options) => {
       const native = options as { domain?: unknown; apiUrl?: unknown } | undefined;
-      if (native?.apiUrl !== undefined || process.env.E2B_API_URL) {
+      if (native?.apiUrl || process.env.E2B_API_URL) {
         return { placement: 'unknown', regions: {}, reason: 'An E2B apiUrl override does not say which region it serves.' };
       }
-      const domain = typeof native?.domain === 'string' ? native.domain : process.env.E2B_DOMAIN || 'e2b.app';
+      const domain = (typeof native?.domain === 'string' && native.domain) || process.env.E2B_DOMAIN || 'e2b.app';
       const region = E2B_DOMAIN_REGIONS[domain];
       return region
         ? { placement: 'per-account', regions: { [region.area]: [region.id] } }
