@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/briq",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Briq sandbox adapter for ComputeSDK. Run commands, work with files, and publish ports from microVMs.",
   "author": "Briq",
   "license": "MIT",

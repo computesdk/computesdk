@@ -1,5 +1,13 @@
 # @computesdk/browseruse
 
+## 0.2.35
+
+### Patch Changes
+
+- Updated dependencies [b9a5708]
+  - computesdk@4.1.25
+  - @computesdk/provider@2.1.31
+
 ## 0.2.34
 
 ### Patch Changes

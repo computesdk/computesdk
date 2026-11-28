@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/styne-browser",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Styne browser provider for ComputeSDK - cloud browser sessions via Styne",
   "license": "MIT",
   "type": "module",

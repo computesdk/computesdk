@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/blaxel",
-  "version": "1.6.51",
+  "version": "1.6.52",
   "description": "Blaxel sandbox adapter for ComputeSDK. Run code in isolated cloud sandboxes.",
   "author": "ComputeSDK",
   "license": "MIT",

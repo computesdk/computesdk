@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/agentuity",
-  "version": "0.0.38",
+  "version": "0.0.39",
   "description": "Agentuity sandbox adapter for ComputeSDK. Run code, work with files, and manage snapshots and checkpoints.",
   "author": "Garrison",
   "license": "MIT",

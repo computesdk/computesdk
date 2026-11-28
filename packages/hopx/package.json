@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/hopx",
-  "version": "0.2.54",
+  "version": "0.2.55",
   "description": "HopX sandbox adapter for ComputeSDK. Run code and work with files in isolated Linux sandboxes.",
   "author": "ComputeSDK",
   "license": "MIT",

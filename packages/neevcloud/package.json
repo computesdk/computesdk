@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/neevcloud",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "description": "NeevCloud sandbox adapter for ComputeSDK. Run commands, work with files, and open preview URLs.",
   "author": "NeevCloud",
   "license": "MIT",

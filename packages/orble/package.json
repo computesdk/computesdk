@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/orble",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Orble provider for ComputeSDK - Linux VMs with sudo and Docker, memory snapshots, pause/resume, and port URLs",
   "author": "Orble",
   "license": "MIT",

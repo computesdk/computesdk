@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/aws",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "AWS sandbox adapters for ComputeSDK. Run code on Amazon EC2 or in Bedrock AgentCore Code Interpreter.",
   "author": "Garrison",
   "license": "MIT",

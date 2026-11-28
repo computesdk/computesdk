@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/gravixlayer",
-  "version": "1.0.26",
+  "version": "1.0.27",
   "description": "GravixLayer sandbox adapter for ComputeSDK. Run commands, work with files, publish ports, and manage snapshots.",
   "author": "Gravix Layer",
   "license": "MIT",

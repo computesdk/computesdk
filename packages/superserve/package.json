@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/superserve",
-  "version": "0.2.30",
+  "version": "0.2.31",
   "description": "Superserve sandbox adapter for ComputeSDK. Run code in Firecracker microVMs.",
   "author": "Superserve",
   "license": "MIT",

@@ -1,5 +1,13 @@
 # @computesdk/sail
 
+## 1.0.30
+
+### Patch Changes
+
+- Updated dependencies [b9a5708]
+  - computesdk@4.1.25
+  - @computesdk/provider@2.1.31
+
 ## 1.0.29
 
 ### Patch Changes
