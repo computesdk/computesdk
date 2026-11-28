@@ -93,13 +93,18 @@ function missingSizeTemplate(config: E2BConfig, templateId: unknown, error: unkn
 
 export const e2b = defineProvider<E2BSandbox, E2BConfig>({
   name: 'e2b',
-  // Each E2B region is its own deployment with its own key, picked by E2B_DOMAIN.
+  // Each E2B region is its own deployment with its own key, picked by the domain (E2B_DOMAIN or a native `domain`).
   regions: {
-    support: () => {
-      const region = E2B_DOMAIN_REGIONS[process.env.E2B_DOMAIN || 'e2b.app'];
+    support: (_config, options) => {
+      const native = options as { domain?: unknown; apiUrl?: unknown } | undefined;
+      if (native?.apiUrl !== undefined || process.env.E2B_API_URL) {
+        return { placement: 'unknown', regions: {}, reason: 'An E2B apiUrl override does not say which region it serves.' };
+      }
+      const domain = typeof native?.domain === 'string' ? native.domain : process.env.E2B_DOMAIN || 'e2b.app';
+      const region = E2B_DOMAIN_REGIONS[domain];
       return region
         ? { placement: 'per-account', regions: { [region.area]: [region.id] } }
-        : { placement: 'unknown', regions: {}, reason: `E2B domain ${process.env.E2B_DOMAIN} is not a known region.` };
+        : { placement: 'unknown', regions: {}, reason: `E2B domain ${domain} is not a known region.` };
     },
   },
   sizes: (config, profile, options) => {

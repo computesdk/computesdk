@@ -648,6 +648,9 @@ const _provider = defineProvider<ArchilSandbox, ArchilConfig>({
     support: (config) => {
       const region = config.region ?? process.env.ARCHIL_REGION;
       const area = region ? ARCHIL_US_REGIONS[region] : undefined;
+      if (area && config.baseUrl && config.baseUrl.replace(/\/+$/, '') !== regionToBaseUrl(region!)) {
+        return { placement: 'unknown', regions: {}, reason: 'An Archil baseUrl override does not say which region it serves.' };
+      }
       return area
         ? { placement: 'per-account', regions: { [area]: [region!] } }
         : { placement: 'per-account', regions: {}, ...(region ? {} : { reason: 'No Archil region is configured.' }) };

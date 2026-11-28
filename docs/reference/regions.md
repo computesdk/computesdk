@@ -65,6 +65,8 @@ With `prefer`, an area that doesn't match is skipped, and if none match the inst
 
 Every other adapter is `unknown` until it declares a placement.
 
+A declaration can depend on create options: options that bypass region selection make it `unknown`. These are Blaxel `sandboxId`/`snapshotId`, Vercel `failoverRegions`, an E2B `apiUrl`/`E2B_API_URL` override (a native `domain` is looked up like `E2B_DOMAIN`), and an Archil `baseUrl` that isn't the configured region's URL.
+
 ## Errors
 
 A failed request throws `RegionError` (`fallback: false`) before create:
