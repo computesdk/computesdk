@@ -37,8 +37,8 @@ export interface SailConfig {
   app?: string;
   /** Image used by created Sailboxes. Defaults to Sail's AMD64 Devbox builtin. */
   image?: ImageSpec | Image;
-  /** Sail region for created Sailboxes, such as `us-east`. Defaults to Sail's default region. */
-  region?: string;
+  /** Sail region for created Sailboxes. Defaults to Sail's default region, `us-west`. */
+  region?: 'us-west' | 'us-east';
 }
 
 const PROVIDER = 'sail';
