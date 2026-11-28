@@ -261,11 +261,6 @@ describe('sail provider', () => {
     expect(h.state.createArgs[0]).not.toHaveProperty('region');
   });
 
-  it('rejects an unknown region at type check time', () => {
-    // @ts-expect-error Sail has no eu-west region.
-    expect(sail({ app: 'demo', apiKey: 'key', region: 'eu-west' })).toBeDefined();
-  });
-
   it.each([0, -1, NaN, Infinity, 4_294_967_295_001])('rejects invalid lifetime %s before creating a box', async (timeout) => {
     await expect(provider().sandbox.create({ timeout })).rejects.toThrow(/timeout/);
     expect(h.state.createArgs).toHaveLength(0);

@@ -71,7 +71,7 @@ interface SailConfig {
   apiKey?: string;
   app?: string;
   image?: ImageSpec | Image;
-  region?: 'us-west' | 'us-east';
+  region?: string;
 }
 ```
 
