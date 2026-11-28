@@ -6,6 +6,7 @@
  */
 
 import { assertInstanceSizeSupported } from '../sizes';
+import { assertRegionSupported } from '../regions';
 import type { CreateInstanceOptions } from './types/index.js';
 
 /**
@@ -109,6 +110,7 @@ export function defineInfraProvider<TInstance, TConfig = any>(
       
       create: async (options) => {
         assertInstanceSizeSupported({ name: config.name }, options);
+        assertRegionSupported({ name: config.name }, options);
         return await config.methods.create(providerConfig, options);
       },
       

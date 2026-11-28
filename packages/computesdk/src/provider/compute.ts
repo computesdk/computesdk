@@ -7,6 +7,7 @@
 
 import type { Provider } from './types';
 import { assertInstanceSizeSupported } from '../sizes';
+import { assertRegionSupported } from '../regions';
 
 /**
  * Configuration for creating a compute instance with a provider
@@ -67,6 +68,7 @@ export function createCompute<TInstance = any>(
   const instances: Provider<TInstance>['instances'] = {
     create: async options => {
       assertInstanceSizeSupported(provider, options);
+      assertRegionSupported(provider, options);
       return provider.instances.create(options);
     },
     getById: id => provider.instances.getById(id),

@@ -168,6 +168,14 @@ async function resolveSandboxPath(
 
 const _modal = defineProvider<ModalSandbox, ModalInternalConfig>({
   name: 'modal',
+  // https://modal.com/docs/guide/region-selection: Modal's own names are the standard areas.
+  regions: {
+    support: () => ({
+      placement: 'selectable',
+      regions: { 'us-east': ['us-east'], 'us-central': ['us-central'], 'us-south': ['us-south'], 'us-west': ['us-west'], us: ['us'] },
+    }),
+    nativeOptions: region => ({ regions: [region] }),
+  },
   // Request and limit both equal the profile, so the Sandbox neither gets less
   // nor bursts past it (Modal's default CPU limit is the request + 16 cores).
   sizes: (_config, profile, options) => {

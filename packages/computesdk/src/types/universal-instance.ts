@@ -447,6 +447,18 @@ export interface CreateInstanceOptions extends InstanceResourceOptions {
    */
   sizeClass?: import('../sizes').InstanceSizeClass;
   /**
+   * Standard US placement area (`us`, `us-east`, `us-central`, `us-south`, `us-west`),
+   * or an ordered list of them. Never aliases a provider-native `region`.
+   * A preference by default: the first listed area the provider can serve wins, else the
+   * provider's default placement. See `regionMode`.
+   */
+  regionClass?: import('../regions').RegionClass | readonly import('../regions').RegionClass[];
+  /**
+   * `prefer` (default) or `only`. With `only`, a provider that cannot place in a listed area,
+   * or does not declare where it runs, fails before create, and compute does not fall back.
+   */
+  regionMode?: import('../regions').RegionMode;
+  /**
    * Select the provider's ephemeral compute surface when it offers both
    * ephemeral and persistent instances.
    *
@@ -582,6 +594,8 @@ export interface Instance {
 
   /** Create-time request mapping only; absent on legacy creates and reattached instances. */
   readonly sizing?: import('../sizes').InstanceSizeMetadata;
+  /** Set at create when `regionClass` was resolved locally; `matched: null` means no preference could be met. */
+  readonly regionPlacement?: import('../regions').RegionPlacement;
 
   /**
    * Attach a volume to this running instance — present only on providers

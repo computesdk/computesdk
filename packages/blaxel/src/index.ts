@@ -187,6 +187,13 @@ const BLAXEL_UNMAPPED_SIZES: Readonly<Partial<Record<InstanceSizeClass, { status
  */
 export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	name: 'blaxel',
+	// https://docs.blaxel.ai/Infrastructure/Regions
+	regions: {
+		support: (_config, options) => options?.sandboxId !== undefined || options?.snapshotId !== undefined
+			? { placement: 'unknown', regions: {}, reason: 'An existing Blaxel sandbox or snapshot fork keeps its own region; drop sandboxId/snapshotId to place by regionClass.' }
+			: { placement: 'selectable', regions: { 'us-east': ['us-was-1'], 'us-west': ['us-pdx-1'] } },
+		nativeOptions: region => ({ region }),
+	},
 	sizes: (_config, profile, options) => {
 		if ((options as { memory?: unknown } | undefined)?.memory !== undefined) {
 			throw new InstanceSizeError('conflict', 'cannot combine sizeClass with native Blaxel memory');
@@ -248,7 +255,7 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 					}
 				}
 				const memory = config.memory;
-				const region = config.region;
+				const region = (providerOptions as { region?: string }).region ?? config.region;
 				const lifetime = toBlaxelLifetime(optTimeout);
 
 			return withBlaxelConfig(config, async () => {

@@ -91,4 +91,6 @@ export type * from './types';
 export { createInstanceSizeManager } from './sizes';
 export type { InstanceSizeResolver, InstanceSizeSupport } from './sizes';
 export { InstanceSizeError, INSTANCE_SIZE_PROFILES, isInstanceSizeManager, isValidInstanceSizeShape, INSTANCE_SIZE_MEMORY_TOLERANCE, instanceSizeMemoryFloorMiB, nextInstanceSizeVcpus } from 'computesdk';
+export { createRegionManager, applyRegionPatch, RegionError, REGION_CLASSES, REGION_MODES, isRegionClass, isRegionManager, regionIdsFor } from 'computesdk';
+export type { RegionResolver, RegionClass, RegionMode, RegionPlacementKind, RegionSupport, RegionPlacement, RegionResolution, RegionManager, RegionErrorCode } from 'computesdk';
 export type { InstanceSizeClass, InstanceSizeProfile, InstanceSizeResources, InstanceSizeManager, InstanceSizeResolution, InstanceSizeMetadata, InstanceSizeStatus, InstanceSizeErrorCode, InstanceSizeNativeOptions, InstanceSizeNativeValue } from 'computesdk';

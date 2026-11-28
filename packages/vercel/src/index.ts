@@ -151,9 +151,19 @@ const resolveVercelSize: InstanceSizeResolver<VercelConfig> = (_config, profile,
   return { status: 'supported', nativeOptions: { resources: { vcpus } }, resolved: { vcpus, memoryMiB, diskMiB } };
 };
 
+const hasFailover = (value: unknown): boolean =>
+  Array.isArray(value) ? value.length > 0 : value !== undefined;
+
 export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   name: 'vercel',
   sizes: resolveVercelSize,
+  // https://vercel.com/docs/regions; iad1 is the SDK's DEFAULT_SANDBOX_REGION.
+  regions: {
+    support: (_config, options) => hasFailover((options as { failoverRegions?: unknown } | undefined)?.failoverRegions)
+      ? { placement: 'unknown', regions: {}, reason: 'Vercel failoverRegions can move the sandbox outside the requested area; drop failoverRegions to place by regionClass.' }
+      : { placement: 'selectable', regions: { 'us-east': ['iad1', 'cle1'], 'us-west': ['sfo1', 'pdx1'] } },
+    nativeOptions: region => ({ region }),
+  },
   methods: {
     instances: {
       create: async (config: VercelConfig, options?: CreateInstanceOptions) => {
