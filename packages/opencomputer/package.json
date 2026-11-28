@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/opencomputer",
-  "version": "1.0.30",
+  "version": "1.0.31",
   "description": "OpenComputer sandbox adapter for ComputeSDK. Run code in persistent VMs with checkpoints and preview URLs.",
   "author": "ComputeSDK",
   "license": "MIT",

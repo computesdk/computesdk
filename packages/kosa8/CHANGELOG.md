@@ -1,5 +1,13 @@
 # @computesdk/kosa8
 
+## 1.0.11
+
+### Patch Changes
+
+- Updated dependencies [b9a5708]
+  - computesdk@4.1.25
+  - @computesdk/provider@2.1.31
+
 ## 1.0.10
 
 ### Patch Changes

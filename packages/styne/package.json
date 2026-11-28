@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/styne",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Styne provider for ComputeSDK - microVM sandboxes with streaming commands, files, memory snapshots, templates and volumes",
   "author": "Styne AI",
   "license": "MIT",

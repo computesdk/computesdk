@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/daytona",
-  "version": "1.7.60",
+  "version": "1.7.61",
   "description": "Daytona sandbox adapter for ComputeSDK. Run commands and work with files in cloud sandboxes.",
   "author": "Garrison",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/r2",
-  "version": "1.2.32",
+  "version": "1.2.33",
   "description": "Cloudflare R2 adapter for ComputeSDK. Work with S3-compatible object storage.",
   "author": "Garrison",
   "license": "MIT",

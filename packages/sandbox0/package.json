@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/sandbox0",
-  "version": "1.0.31",
+  "version": "1.0.32",
   "description": "Sandbox0 adapter for ComputeSDK. Run commands and work with files in persistent sandboxes.",
   "author": "Sandbox0 Team",
   "license": "MIT",

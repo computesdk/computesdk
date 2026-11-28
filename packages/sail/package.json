@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/sail",
-  "version": "1.0.29",
+  "version": "1.0.30",
   "description": "Sail sandbox adapter for ComputeSDK. Run commands, work with files, and publish ports from Firecracker microVMs.",
   "author": "Sail Research",
   "license": "MIT",

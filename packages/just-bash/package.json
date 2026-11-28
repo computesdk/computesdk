@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/just-bash",
-  "version": "0.4.41",
+  "version": "0.4.42",
   "description": "Local just-bash adapter for ComputeSDK. Run Bash commands against a virtual filesystem.",
   "author": "ComputeSDK",
   "license": "MIT",

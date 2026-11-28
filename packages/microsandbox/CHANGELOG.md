@@ -1,5 +1,13 @@
 # @computesdk/microsandbox
 
+## 0.1.36
+
+### Patch Changes
+
+- Updated dependencies [b9a5708]
+  - computesdk@4.1.25
+  - @computesdk/provider@2.1.31
+
 ## 0.1.35
 
 ### Patch Changes

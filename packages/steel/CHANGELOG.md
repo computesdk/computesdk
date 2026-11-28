@@ -1,5 +1,13 @@
 # @computesdk/steel
 
+## 0.2.33
+
+### Patch Changes
+
+- Updated dependencies [b9a5708]
+  - computesdk@4.1.25
+  - @computesdk/provider@2.1.31
+
 ## 0.2.32
 
 ### Patch Changes

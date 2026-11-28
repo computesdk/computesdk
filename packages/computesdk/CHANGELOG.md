@@ -1,5 +1,12 @@
 # computesdk
 
+## 4.1.25
+
+### Patch Changes
+
+- b9a5708: Add standard US regions (`us`, `us-east`, `us-central`, `us-south`, `us-west`) as an opt-in `regionClass` create option (one area or an ordered list; a preference unless `regionMode: 'only'`), with `provider.regions` placement declarations for Vercel, Blaxel, Modal, Daytona, Agent37, Archil, E2B and Styne. The hosted platform provider forwards `regionClass` and `regionMode`.
+  - daemond@0.1.10
+
 ## 4.1.24
 
 ### Patch Changes

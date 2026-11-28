@@ -1,5 +1,24 @@
 # @computesdk/blaxel
 
+## 1.6.52
+
+### Patch Changes
+
+- deba50c: Bump provider SDKs to their latest npm releases:
+
+  - @computesdk/aws: `@aws-sdk/client-bedrock-agentcore` 3.1178.0 -> 3.1179.0
+  - @computesdk/aws: `@aws-sdk/client-ec2` 3.1178.0 -> 3.1179.0
+  - @computesdk/aws: `@aws-sdk/client-s3` 3.1178.0 -> 3.1179.0
+  - @computesdk/aws: `@aws-sdk/client-ssm` 3.1178.0 -> 3.1179.0
+  - @computesdk/blaxel: `@blaxel/core` ^0.3.41 -> ^0.3.42
+  - @computesdk/boat: `@boatdev/sdk` ^1.13.2 -> ^1.14.0
+  - @computesdk/tangle: `@tangle-network/sandbox` 1.0.619 -> 1.0.668
+
+- b9a5708: Add standard US regions (`us`, `us-east`, `us-central`, `us-south`, `us-west`) as an opt-in `regionClass` create option (one area or an ordered list; a preference unless `regionMode: 'only'`), with `provider.regions` placement declarations for Vercel, Blaxel, Modal, Daytona, Agent37, Archil, E2B and Styne. The hosted platform provider forwards `regionClass` and `regionMode`.
+- Updated dependencies [b9a5708]
+  - computesdk@4.1.25
+  - @computesdk/provider@2.1.31
+
 ## 1.6.51
 
 ### Patch Changes

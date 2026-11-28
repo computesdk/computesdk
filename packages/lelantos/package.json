@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/lelantos",
-  "version": "0.2.29",
+  "version": "0.2.30",
   "description": "Lelantos sandbox adapter for ComputeSDK. Run code in European Firecracker microVMs with per-port preview URLs.",
   "author": "Lelantos",
   "license": "MIT",

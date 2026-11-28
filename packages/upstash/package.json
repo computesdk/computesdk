@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/upstash",
-  "version": "0.3.38",
+  "version": "0.3.39",
   "description": "Upstash Box adapter for ComputeSDK. Run commands and work with files in cloud sandboxes.",
   "author": "Garrison",
   "license": "MIT",

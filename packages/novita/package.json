@@ -1,6 +1,6 @@
 {
   "name": "@computesdk/novita",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "Novita sandbox adapter for ComputeSDK. Stream commands, work with files, and manage snapshots.",
   "license": "MIT",
   "main": "./dist/index.js",
