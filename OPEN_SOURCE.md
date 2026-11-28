@@ -54,6 +54,7 @@ Install provider packages and pass instances into `compute.setConfig`:
 | **NeevCloud** | `NEEV_API_KEY`, `NEEV_ORG_ID`, `NEEV_PROJECT_ID` | Cloud sandboxes with snapshots, streaming exec and preview URLs |
 | **Northflank** | `NORTHFLANK_TOKEN`, `NORTHFLANK_PROJECT_ID` | Cloud sandboxes with preview URLs |
 | **Novita** | `NOVITA_API_KEY` | Cloud sandboxes with native command streaming, filesystem access, snapshots, and template builds |
+| **Offstage** | `OFFSTAGE_API_KEY` | Real macOS sandboxes on Apple silicon for AI agents and CI, with commands, files, Xcode, iOS simulators and GUI sessions |
 | **OpenComputer** | `OPENCOMPUTER_API_KEY` | Persistent cloud VMs with checkpoints and preview URLs |
 | **Orble** | `ORBLE_API_KEY` | Linux VMs with sudo and Docker, memory snapshots, pause/resume, and port URLs |
 | **Promigence** | `PROMIGENCE_API_KEY` | Production-grade sandboxes for AI agents, with filesystem and streaming output |
@@ -285,6 +286,7 @@ npm install @computesdk/miosa            # MIOSA provider
 npm install @computesdk/mosaic           # Mosaic provider
 npm install @computesdk/northflank       # Northflank provider
 npm install @computesdk/novita           # Novita Sandbox provider
+npm install @computesdk/offstage         # Offstage macOS sandboxes
 npm install @computesdk/orble            # Orble provider
 npm install @computesdk/platform         # ComputeSDK Platform hosted sandboxes (managed compute or own keys)
 npm install @computesdk/promigence       # Promigence provider
@@ -343,6 +345,7 @@ See individual provider READMEs for details:
 - **[@computesdk/neevcloud](./packages/neevcloud)** - Secure cloud sandboxes with command execution, filesystem, snapshots, and preview URLs
 - **[@computesdk/novita](./packages/novita)** - Novita cloud sandboxes with native streaming, filesystem access, snapshots, and template management
 - **[@computesdk/northflank](./packages/northflank)** - Cloud sandboxes with preview URLs
+- **[@computesdk/offstage](./packages/offstage)** - Real macOS sandboxes on Apple silicon for AI agents and CI, with commands, files, Xcode, iOS simulators and GUI sessions
 - **[@computesdk/orble](./packages/orble)** - Linux VMs with sudo and Docker, memory snapshots, pause/resume, and port URLs
 - **[@computesdk/platform](./packages/platform)** - ComputeSDK Platform hosted sandboxes: managed compute or your own provider keys, one API and sandbox ID space
 - **[@computesdk/promigence](./packages/promigence)** - Production-grade sandboxes for AI agents, with filesystem and streaming output
