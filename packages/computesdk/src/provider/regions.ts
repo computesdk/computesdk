@@ -2,13 +2,14 @@ import {
   RegionError, getRegionClass, regionIdsFor,
   type RegionClass, type RegionManager, type RegionResolution, type RegionSupport,
 } from '../regions';
+import type { CreateInstanceOptions } from '../types/universal-instance';
 
 /** Provider-owned, synchronous and side-effect-free: no credential checks or API calls. */
 export interface RegionResolver<TConfig> {
   /** Pass `regionClass` through to create for the provider's own router instead of resolving it here. */
   routed?: boolean;
-  /** Where this config can place instances. */
-  support(config: TConfig): RegionSupport;
+  /** Where this config (and, at create, these options) can place instances. Options that bypass region selection should report `unknown`. */
+  support(config: TConfig, options?: CreateInstanceOptions): RegionSupport;
   /** Native create options that place on `region`, one of the ids from `support`. Required for `selectable`. */
   nativeOptions?(region: string, config: TConfig): Readonly<Record<string, unknown>>;
 }
@@ -18,10 +19,10 @@ const UNKNOWN: RegionSupport = Object.freeze({
 });
 
 export function createRegionManager<TConfig>(config: TConfig, resolver?: RegionResolver<TConfig>): RegionManager {
-  const support = (): RegionSupport => resolver?.support(config) ?? UNKNOWN;
-  const resolve = (regionClass: RegionClass): RegionResolution => {
+  const support = (options?: CreateInstanceOptions): RegionSupport => resolver?.support(config, options) ?? UNKNOWN;
+  const resolve = (regionClass: RegionClass, options?: CreateInstanceOptions): RegionResolution => {
     const requested = getRegionClass(regionClass);
-    const declared = support();
+    const declared = support(options);
     const base = { requested, provenance: 'adapter-declared' as const };
     if (declared.placement === 'unknown' || declared.placement === 'provider-placed') {
       return Object.freeze({

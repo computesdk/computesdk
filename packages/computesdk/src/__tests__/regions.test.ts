@@ -107,6 +107,21 @@ describe('standard regions', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('lets the declaration depend on create options that bypass region selection', async () => {
+    const attach: RegionResolver<Record<string, unknown>> = {
+      support: (_config, options) => options?.sandboxId !== undefined
+        ? { placement: 'unknown', regions: {}, reason: 'attached' }
+        : { placement: 'selectable', regions: { 'us-west': ['sfo1'] } },
+      nativeOptions: region => ({ region }),
+    };
+    const { provider, create } = adapter(attach);
+    await expect(provider.instances.create({ regionClass: 'us-west', regionMode: 'only', sandboxId: 'sb_0' })).rejects.toMatchObject({ code: 'unknown' });
+    expect(create).not.toHaveBeenCalled();
+    const instance = await provider.instances.create({ regionClass: 'us-west', sandboxId: 'sb_0' });
+    expect(create.mock.calls[0][1]).toEqual({ sandboxId: 'sb_0' });
+    expect(instance.regionPlacement).toMatchObject({ matched: null, placement: 'unknown' });
+  });
+
   it('allows a native selector that matches the resolved id', async () => {
     const { provider, create } = adapter(selectable as RegionResolver<Record<string, unknown>>);
     await provider.instances.create({ regionClass: 'us-east', region: 'iad1' });

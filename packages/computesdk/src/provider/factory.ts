@@ -1175,7 +1175,7 @@ class GeneratedInstanceManager<TInstance, TConfig> implements ProviderInstanceMa
     let regionPlacement: RegionPlacement | undefined;
     const regionRequest = getRegionRequest(options);
     if (regionRequest && !this.providerInstance.regions.routed) {
-      const resolved = resolveRegionRequest(this.providerInstance.regions, regionRequest);
+      const resolved = resolveRegionRequest(this.providerInstance.regions, regionRequest, options);
       regionPlacement = resolved.placement;
       const { regionClass: _regionClass, regionMode: _regionMode, ...nativeRequest } = options!;
       options = applyRegionPatch(nativeRequest, resolved.nativeOptions);

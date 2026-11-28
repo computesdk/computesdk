@@ -189,7 +189,9 @@ export const blaxel = defineProvider<SandboxInstance, BlaxelConfig, any, any>({
 	name: 'blaxel',
 	// https://docs.blaxel.ai/Infrastructure/Regions
 	regions: {
-		support: () => ({ placement: 'selectable', regions: { 'us-east': ['us-was-1'], 'us-west': ['us-pdx-1'] } }),
+		support: (_config, options) => options?.sandboxId !== undefined || options?.snapshotId !== undefined
+			? { placement: 'unknown', regions: {}, reason: 'An existing Blaxel sandbox or snapshot fork keeps its own region; drop sandboxId/snapshotId to place by regionClass.' }
+			: { placement: 'selectable', regions: { 'us-east': ['us-was-1'], 'us-west': ['us-pdx-1'] } },
 		nativeOptions: region => ({ region }),
 	},
 	sizes: (_config, profile, options) => {

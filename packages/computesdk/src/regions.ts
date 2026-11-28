@@ -71,8 +71,9 @@ export interface RegionManager {
   readonly contract: 'computesdk.regions.v1';
   /** The provider routes `regionClass` itself (the hosted platform); it is passed through, not resolved locally. */
   readonly routed?: boolean;
-  support(): RegionSupport;
-  resolve(regionClass: RegionClass): RegionResolution;
+  /** `options` are the create options, for adapters where some (e.g. attaching to an existing instance) bypass region selection. */
+  support(options?: import('./types/universal-instance').CreateInstanceOptions): RegionSupport;
+  resolve(regionClass: RegionClass, options?: import('./types/universal-instance').CreateInstanceOptions): RegionResolution;
 }
 
 /** fallback=false: an `only` region request never silently lands somewhere else. */
@@ -146,10 +147,11 @@ export function getRegionRequest(options?: { readonly regionClass?: unknown; rea
 export function resolveRegionRequest(
   manager: RegionManager,
   request: RegionRequest,
+  options?: import('./types/universal-instance').CreateInstanceOptions,
 ): { readonly placement: RegionPlacement; readonly nativeOptions: Readonly<Record<string, unknown>> } {
   const misses: Exclude<RegionResolution, { status: 'supported' }>[] = [];
   for (const area of request.requested) {
-    const resolution = manager.resolve(area);
+    const resolution = manager.resolve(area, options);
     if (resolution.status === 'supported') {
       return {
         placement: Object.freeze({
@@ -187,5 +189,5 @@ export function assertRegionSupported(
     throw new RegionError('unknown', `provider "${provider.name ?? 'custom'}" declares no region placement`);
   }
   if (regions.routed) return;
-  resolveRegionRequest(regions, request);
+  resolveRegionRequest(regions, request, options);
 }
