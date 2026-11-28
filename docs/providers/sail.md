@@ -71,6 +71,7 @@ interface SailConfig {
   apiKey?: string;
   app?: string;
   image?: ImageSpec | Image;
+  region?: string;
 }
 ```
 
@@ -78,6 +79,12 @@ interface SailConfig {
 `computesdk`, and is created on first use when missing. `image` defaults to
 Sail's ARM64 Devbox builtin, which includes Node.js and Bun. Pass a different
 image when the workload needs another runtime or architecture.
+
+`region` is the Sail region new Sailboxes are created in, such as
+`sail({ region: 'us-east' })`. Sail's regions are `us-west` (the default) and
+`us-east`. Choose the region closest to your client to lower command and file
+latency. When omitted, Sail uses its default region. A Sailbox stays in its
+region for its whole life, and a `snapshotId` restore does not take a region.
 
 Create accepts a standard `sizeClass`, Sail's `vcpuCount` (1 to 64), the
 deprecated Sailbox `size` values `s`, `m`, and `l`, optional `memoryGib`, a

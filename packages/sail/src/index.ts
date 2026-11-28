@@ -37,6 +37,8 @@ export interface SailConfig {
   app?: string;
   /** Image used by created Sailboxes. Defaults to Sail's AMD64 Devbox builtin. */
   image?: ImageSpec | Image;
+  /** Sail region for created Sailboxes, such as `us-east`. Defaults to Sail's default region, `us-west`. */
+  region?: 'us-west' | 'us-east' | (string & {});
 }
 
 const PROVIDER = 'sail';
@@ -484,6 +486,7 @@ export const sail = defineProvider<Sailbox, SailConfig>({
           image: options?.image !== undefined
             ? Image.fromRegistry(options.image, { architecture: 'amd64' })
             : config.image ?? Image.devbox('amd64'),
+          ...(config.region === undefined ? {} : { region: config.region }),
           ...(options?.size === undefined ? {} : { size: options.size as SailboxSize }),
           ...(options?.vcpuCount === undefined ? {} : { vcpuCount: options.vcpuCount }),
           ...(options?.memoryGib === undefined ? {} : { memoryLimitGib: options.memoryGib }),

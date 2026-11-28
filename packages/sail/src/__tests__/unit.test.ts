@@ -248,6 +248,19 @@ describe('sail provider', () => {
     expect(h.state.createArgs[0].maxLifetimeSeconds).toBeUndefined();
   });
 
+  it('creates Sailboxes in the configured region and omits it by default', async () => {
+    await sail({ app: 'demo', apiKey: 'key', region: 'us-east' }).sandbox.create();
+    await provider().sandbox.create();
+    expect(h.state.createArgs[0]).toMatchObject({ region: 'us-east' });
+    expect(h.state.createArgs[1]).not.toHaveProperty('region');
+  });
+
+  it('does not send the configured region with a checkpoint restore', async () => {
+    await sail({ app: 'demo', apiKey: 'key', region: 'us-east' }).sandbox.create({ snapshotId: 'ckpt_1' });
+    expect(h.state.createArgs[0]).toMatchObject({ checkpointId: 'ckpt_1' });
+    expect(h.state.createArgs[0]).not.toHaveProperty('region');
+  });
+
   it.each([0, -1, NaN, Infinity, 4_294_967_295_001])('rejects invalid lifetime %s before creating a box', async (timeout) => {
     await expect(provider().sandbox.create({ timeout })).rejects.toThrow(/timeout/);
     expect(h.state.createArgs).toHaveLength(0);
