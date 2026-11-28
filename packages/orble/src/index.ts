@@ -283,8 +283,20 @@ export const orble = defineProvider<OrbleSandbox, OrbleConfig>({
     instances: {
       create: async (config: OrbleConfig, options?: CreateInstanceOptions) => {
         const auth = resolveConfig(config);
-        const data = await request<OrbleBoxData>(auth, 'POST', '/v1/boxes', createBody(options));
+        let data = await request<OrbleBoxData>(auth, 'POST', '/v1/boxes', createBody(options));
         if (!data) throw new Error('Orble API returned no box on create');
+        // `keepAwake: true` turns off idle suspension, for a box that serves or runs work on its own. Create can't set it.
+        if (options?.keepAwake === true) {
+          const name = data.name;
+          try {
+            const awake = await request<OrbleBoxData>(auth, 'PATCH', boxPath(name), { keep_awake: true });
+            if (!awake) throw new Error(`Orble box ${name} not found when keeping it awake`);
+            data = awake;
+          } catch (error) {
+            await request(auth, 'DELETE', boxPath(name)).catch(() => undefined);
+            throw error;
+          }
+        }
         return { instance: toSandbox(auth, data), instanceId: data.name };
       },
 
