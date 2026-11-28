@@ -156,7 +156,9 @@ export const vercel = defineProvider<VercelSandbox, VercelConfig>({
   sizes: resolveVercelSize,
   // https://vercel.com/docs/regions; iad1 is the SDK's DEFAULT_SANDBOX_REGION.
   regions: {
-    support: () => ({ placement: 'selectable', regions: { 'us-east': ['iad1', 'cle1'], 'us-west': ['sfo1', 'pdx1'] } }),
+    support: (_config, options) => (options as { failoverRegions?: unknown } | undefined)?.failoverRegions !== undefined
+      ? { placement: 'unknown', regions: {}, reason: 'Vercel failoverRegions can move the sandbox outside the requested area; drop failoverRegions to place by regionClass.' }
+      : { placement: 'selectable', regions: { 'us-east': ['iad1', 'cle1'], 'us-west': ['sfo1', 'pdx1'] } },
     nativeOptions: region => ({ region }),
   },
   methods: {
